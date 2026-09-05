@@ -141,7 +141,7 @@ kind: "package-reference"
 这些限制说明服务何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是任务积压。
 
 - **Compare-and-set 仅限单进程**——按 Session 划分的队列只串行化一个服务实例；storage-domain 不提供跨进程条件写，因此多个 Host 进程写入同一存储根目录时仍可能丢失更新。
-- **没有持久 Session 删除级联**——Session persistence 没有删除接口，且 `session/disposed`/`api-session/removed` 表示 detach 而非持久删除。因此服务会保留空行，并可能在带外移除日志后留下遗留行，而不会在 detach 时删除仍有效的反馈。
+- **没有协调式 Session 删除级联**——显式 `session.delete` 拥有规范日志与 Workspace 引用，但不会征用消息反馈存储；`session/disposed`/`api-session/removed` 仍表示 detach 而非持久删除。因此服务会保留空行，并可能在日志移除后留下遗留行，而不会在 detach 时删除仍有效的反馈。
 - **Header 身份不是内容指纹**——只有 `{createdAt, cwd}` 不同时才能识别复用；本契约无法区分保留相同 header 身份的克隆日志。
 - **调用方边界受信任**——`list`/`put`/`delete` 不携带已认证的 actor 或审计身份。在加入授权与归属信息前，部署方必须只通过受信任或另行认证的边界暴露 Host gateway。
 - **行边界**——`maxNoteBytes` 只限制单条备注，单个 Session 行的条目数和聚合保留字节尚无上限；由部署决定的行边界，延后到具体消费方明确策略时处理。

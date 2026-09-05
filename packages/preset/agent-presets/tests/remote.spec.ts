@@ -1,10 +1,9 @@
 /**
  * The agent-preset Remote namespace: the path-free roster a client reads, the
- * composition view behind the read-only viewer, and the per-session switch —
- * which is the only one of the three that mutates an agent.
+ * composition viewer/editor, and the per-session switch.
  */
 
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -226,16 +225,19 @@ describe('authoring over Remote', () => {
   it('rejects empty source, target, and delete ids before authoring', async () => {
     const ctx = await harness()
     const copy = vi.spyOn(ctx.agentPresets, 'copy')
+    const write = vi.spyOn(ctx.agentPresets, 'write')
     const remove = vi.spyOn(ctx.agentPresets, 'remove')
 
     for (const operation of [
       () => ctx.agentPresets.remoteExportCopy('', 'mine'),
       () => ctx.agentPresets.remoteExportCopy('standard', ''),
+      () => ctx.agentPresets.remoteExportWrite('', VALID),
       () => ctx.agentPresets.remoteExportDelete(''),
     ]) {
       await expect(operation()).rejects.toMatchObject({ code: 'gateway/bad-request' })
     }
     expect(copy).not.toHaveBeenCalled()
+    expect(write).not.toHaveBeenCalled()
     expect(remove).not.toHaveBeenCalled()
   })
 
@@ -253,6 +255,27 @@ describe('authoring over Remote', () => {
 
     await ctx.agentPresets.remoteExportDelete('mine')
     await expect(ctx.agentPresets.resolve('mine')).rejects.toThrow(/not found/)
+  })
+
+  it('writes a custom composition and refuses a shipped preset', async () => {
+    const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    const ctx = await harness({
+      default: 'standard',
+      roots: [{ path: join(FIXTURES, 'system'), trust: 'system' }, { path: userRoot, trust: 'user' }],
+      includeShippedRoot: false,
+      includeUserRoot: false,
+    })
+    await ctx.agentPresets.remoteExportCopy('standard', 'mine')
+    const changed = `${VALID}# changed\n`
+
+    await ctx.agentPresets.remoteExportWrite('mine', changed)
+
+    expect(await readFile(join(userRoot, 'mine', COMPOSITION_FILE), 'utf8')).toBe(changed)
+    const failure = await remoteFailure(ctx.agentPresets.remoteExportWrite('standard', changed))
+    expect(failure).toMatchObject({
+      code: 'agent-preset/read-only',
+      details: { agentPreset: 'standard' },
+    })
   })
 
   it('preserves not-found details for an unknown copy source', async () => {

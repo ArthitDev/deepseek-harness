@@ -1,13 +1,9 @@
 /**
- * Agent-preset management controller: the roster as a list, a copy dialog as
- * the only way a preset is created, and a read-only viewer over the shipped
- * compositions.
+ * Agent-preset management controller: the roster as a list, a copy dialog,
+ * a read-only viewer over shipped compositions, and a custom-preset editor.
  *
- * The browser edits no composition text. A new preset is a host-side copy of
- * an existing one (`{ from, id, name? }` is all that crosses the wire), and
- * everything after creation happens in the preset's own files — which is why
- * the page's other job is getting the user TO those files: open the directory
- * where the host has a desktop, show its path where it does not.
+ * A new preset is a host-side copy of an existing one. Composition writes name
+ * only that copied preset's id; the Host resolves its user-root path.
  *
  * The host stays the single fact source. Every mutation writes through the
  * wire and the page re-reads the roster afterwards, because a copy changes
@@ -60,7 +56,7 @@ export interface CopyDraft {
   error: string | null
 }
 
-/** The read-only composition viewer over one shipped preset. */
+/** The composition viewer or editor over one preset. */
 export interface PresetView {
   /** The preset whose composition is shown. */
   id: string
@@ -68,6 +64,67 @@ export interface PresetView {
   title: string
   /** Composition text exactly as stored. */
   content: string
+  /** Current editor text. */
+  draft: string
+  /** Prompt text currently stored in the composition. */
+  savedDraft: string
+  /** Whether this document belongs to the writable user root. */
+  editable: boolean
+  /** Whether a write is in flight. */
+  saving: boolean
+  /** Last write failure, kept beside the draft. */
+  error: string | null
+}
+
+interface PersonaTextField {
+  readonly prompt: string
+  readonly startLine: number
+  readonly endLine: number
+  readonly newline: string
+}
+
+/** Locate the persona prompt without parsing or rewriting the rest of the YAML. */
+function personaTextField(content: string): PersonaTextField {
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
+  const lines = content.split(/\r?\n/)
+  const persona = lines.findIndex(line => /^- id:\s*persona\s*$/.test(line))
+  if (persona < 0) throw new Error('This preset has no "persona" row.')
+  const rowEnd = lines.findIndex((line, index) => index > persona && /^-\s/.test(line))
+  const limit = rowEnd < 0 ? lines.length : rowEnd
+  const startLine = lines.findIndex((line, index) =>
+    index > persona && index < limit && /^ {4}text:/.test(line))
+  if (startLine < 0) throw new Error('The "persona" row has no config.text system prompt.')
+
+  const value = lines[startLine]?.replace(/^ {4}text:\s*/, '') ?? ''
+  if (!/^[>|][+-]?(?:\s+#.*)?$/.test(value)) {
+    const trimmed = value.trim()
+    const prompt = trimmed.startsWith("'") && trimmed.endsWith("'")
+      ? trimmed.slice(1, -1).replace(/''/g, "'")
+      : trimmed.startsWith('"') && trimmed.endsWith('"')
+        ? JSON.parse(trimmed) as string
+        : trimmed
+    return { prompt, startLine, endLine: startLine + 1, newline }
+  }
+
+  let endLine = startLine + 1
+  while (endLine < limit) {
+    const line = lines[endLine] ?? ''
+    if (line !== '' && !line.startsWith('      ')) break
+    endLine += 1
+  }
+  const promptLines = lines.slice(startLine + 1, endLine)
+    .map(line => line === '' ? '' : line.slice(6))
+  while (promptLines.at(-1) === '') promptLines.pop()
+  return { prompt: promptLines.join('\n'), startLine, endLine, newline }
+}
+
+/** Replace only the persona prompt, encoding arbitrary text as a YAML literal. */
+export function replacePersonaPrompt(content: string, prompt: string): string {
+  const field = personaTextField(content)
+  const lines = content.split(/\r?\n/)
+  const replacement = ['    text: |-', ...prompt.replace(/\r\n?/g, '\n').split('\n').map(line => `      ${line}`)]
+  lines.splice(field.startLine, field.endLine - field.startLine, ...replacement)
+  return lines.join(field.newline)
 }
 
 /** Page snapshot. */
@@ -83,7 +140,7 @@ export interface AgentPresetSectionState {
   rows: readonly PresetRow[]
   /** The open copy dialog, or null. */
   copy: CopyDraft | null
-  /** The open read-only viewer, or null. */
+  /** The open composition viewer or editor, or null. */
   view: PresetView | null
   /** The preset awaiting delete confirmation. */
   pendingDelete: string | null
@@ -157,6 +214,12 @@ export class AgentPresetSectionController {
     this.set({ copy: { ...copy, ...patch } })
   }
 
+  private patchView(patch: Partial<PresetView>): void {
+    const { view } = this.store.getSnapshot()
+    if (view === null) return
+    this.set({ view: { ...view, ...patch } })
+  }
+
   /**
    * Load the roster. An empty roster means the deployment composes no
    * presets, which is a valid deployment rather than a failure — the section
@@ -197,7 +260,7 @@ export class AgentPresetSectionController {
   }
 
   /**
-   * Open one shipped preset's composition in the read-only viewer.
+   * Open one preset's composition in the viewer or editor.
    * @param id - the preset to view.
    * @returns once the composition loaded or the failure is on the page.
    */
@@ -208,13 +271,52 @@ export class AgentPresetSectionController {
       this.set({ error: result.error.message })
       return
     }
-    const { name, content } = result.value
-    this.set({ view: { id, title: name ?? id, content } })
+    const { name, content, trust } = result.value
+    let draft = content
+    if (trust === 'user') {
+      try {
+        draft = personaTextField(content).prompt
+      } catch (error: unknown) {
+        this.set({ error: error instanceof Error ? error.message : String(error) })
+        return
+      }
+    }
+    this.set({
+      view: {
+        id, title: name ?? id, content, draft, savedDraft: draft,
+        editable: trust === 'user', saving: false, error: null,
+      },
+    })
   }
 
-  /** Close the read-only viewer. */
+  /** Close the viewer or editor unless its write is in flight. */
   closeView(): void {
+    if (this.store.getSnapshot().view?.saving === true) return
     this.set({ view: null })
+  }
+
+  /**
+   * Replace the open editor draft.
+   * @param content The complete composition text shown in the editor.
+   */
+  setViewContent(content: string): void {
+    this.patchView({ draft: content, error: null })
+  }
+
+  /** Persist the open custom preset's composition. */
+  async saveView(): Promise<void> {
+    const view = this.store.getSnapshot().view
+    if (view === null || !view.editable || view.saving || view.draft === view.savedDraft) return
+    this.patchView({ saving: true, error: null })
+    const content = replacePersonaPrompt(view.content, view.draft)
+    const result = await this.ctx.remote.agentPresets.write(view.id, content)
+    if (!result.ok) {
+      this.patchView({ saving: false, error: result.error.message })
+      return
+    }
+    this.patchView({ saving: false, content, savedDraft: view.draft })
+    await this.load()
+    this.rosterChanged()
   }
 
   /**
@@ -275,9 +377,7 @@ export class AgentPresetSectionController {
     this.set({ copy: null })
     await this.load()
     this.rosterChanged()
-    // A preset is its files from here on (the dialog collected nothing
-    // else), so landing in them is the completion, not a follow-up.
-    await this.openLocation(draft.id)
+    await this.view(draft.id)
   }
 
   /**

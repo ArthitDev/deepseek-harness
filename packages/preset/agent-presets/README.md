@@ -70,7 +70,7 @@ The value is read when a session is created, so a changed default affects only s
 
 ### Authoring presets
 
-Authoring is copy-only: creating a preset copies an existing preset's whole directory — composition, display metadata, skill directories, assets — into the first `user` root. The copy keeps the source's description but gets its own id and an optional display name, so no caller supplies composition text and a copy grants nothing the roster did not already carry. After creation, everything happens in the preset's own files.
+Authoring starts with a copy: creating a preset copies an existing preset's whole directory — composition, display metadata, skill directories, assets — into the first `user` root. The copy keeps the source's description but gets its own id and an optional display name. The authenticated browser can then atomically replace that user preset's `agent.cordis.yml`; it sends only the preset id and text, while the Host resolves the exact path and refuses shipped presets or paths outside the first user root. A composition may contain executable `!!js`, so editing one carries the same trust as shell access. Metadata, skills, and assets remain ordinary files in the preset directory.
 
 A copy is refused when the id is not `[a-z0-9][a-z0-9-]*` (the id becomes a directory name), when the id is already taken (a copy never overwrites), or when the source is unknown. Deleting removes only locally authored presets; presets that ship with the deployment are not removable. A session already running on a deleted preset keeps running on it.
 
@@ -108,7 +108,7 @@ This section explains the design behind the roster and the standing mount; obser
 | [`src/composition-inventory.ts`](src/composition-inventory.ts) | Flattened composition rows for plugin-listing surfaces: file reads with evaluated disabled gates, mount reads with fiber states |
 | [`src/preset.ts`](src/preset.ts) | Vocabulary: preset id rule, `AgentPreset` and `PresetRoot`, error types |
 | [`src/mount.ts`](src/mount.ts) | Subtree mounting, host base-URL handling, mount audit, `write()` suppression |
-| [`src/authoring.ts`](src/authoring.ts) | Copy/delete/read of locally authored presets, permission tightening |
+| [`src/authoring.ts`](src/authoring.ts) | Copy/read/write/delete of locally authored presets, permission tightening |
 | [`src/metadata.ts`](src/metadata.ts) | `preset.yml` display metadata |
 | [`src/session.ts`](src/session.ts) | `agent-preset/selected` event and the `agentPreset` Session projection |
 | [`src/types.ts`](src/types.ts) | Client-safe wire payloads and cordis event declaration |

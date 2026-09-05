@@ -21,6 +21,7 @@ import {
   assertStoredId, assertVersion, materializeCreateHeader, validateStoredEvents,
   type SessionAccess, type SessionHandle,
   type SessionLocation, type SessionPersistenceCreateOptions,
+  type SessionPersistenceDeleteOptions,
   type SessionPersistenceListOptions, type SessionPersistenceOpenOptions,
   type SessionPersistenceSnapshot, type SessionPersistenceStatOptions,
   type SessionPersistenceRevision as PersistenceRevision,
@@ -254,6 +255,35 @@ class JsonlSessionPersistence extends SessionPersistence {
     } catch (error) {
       this.tracker.releaseClaim(id)
       throw error
+    }
+  }
+
+  /**
+   * Permanently delete one validated Session directory without touching its cwd.
+   * @param id - the stored Session to delete.
+   * @param options - optional cancellation observed before filesystem commit.
+   * @returns `true` when the Session existed and was deleted.
+   */
+  async delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<boolean> {
+    options?.signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    options?.signal?.throwIfAborted()
+    this.tracker.claimWrite(id)
+    try {
+      if (await this.stat(id, options) === undefined) return false
+      const path = await this.findLog(id, options?.signal)
+      if (path === undefined) return false
+      options?.signal?.throwIfAborted()
+      this.coldLogMemo.delete(id)
+      try {
+        await rm(dirname(path), { recursive: true })
+        return true
+      } catch (error: unknown) {
+        if (isENOENT(error)) return false
+        throw error
+      }
+    } finally {
+      this.tracker.releaseClaim(id)
     }
   }
 

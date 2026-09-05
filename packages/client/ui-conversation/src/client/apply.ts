@@ -9,6 +9,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: pulls the theme service merge (ctx.theme).
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { UiConversation } from './conversation/assembly.ts'
 import type { ViewTab } from './contract/views.ts'
 import type {
@@ -28,6 +30,7 @@ import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
+import { ThemeToggle, type ThemeMode, type ThemeToggleInjected } from './skeleton/ThemeToggle.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { resolveActiveView } from './view-selection.ts'
@@ -106,6 +109,23 @@ export function apply(ctx: Context): void {
   const submissionPolicy = new ComposerSubmissionPolicy(
     ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
   )
+  const theme = ctx.get('theme')
+  if (theme !== undefined) {
+    const themeMode = createSnapshotStore<ThemeMode>(theme.getTheme().active.colorScheme)
+    ctx.on('theme/change', (snapshot) => { themeMode.set(snapshot.active.colorScheme) })
+    ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+      name: 'conversation.session.header.utilities',
+      id: 'theme-toggle',
+      order: 100,
+      locale: NS,
+      inject: (): ThemeToggleInjected => ({
+        hooks: { themeMode },
+        toggleTheme: () => {
+          theme.setTheme(theme.getTheme().active.colorScheme === 'dark' ? 'light' : 'dark')
+        },
+      }),
+    }, ThemeToggle))
+  }
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',

@@ -25,6 +25,8 @@ interface StoredProbeSession {
 class PersistenceProbe extends SessionPersistence {
   private readonly stored = new Map<string, StoredProbeSession>()
 
+  override delete(): Promise<boolean> { return Promise.resolve(false) }
+
   override async create(header: SessionHeader): Promise<SessionHandle> {
     const entry: StoredProbeSession = { header, events: [] }
     this.stored.set(header.id, entry)

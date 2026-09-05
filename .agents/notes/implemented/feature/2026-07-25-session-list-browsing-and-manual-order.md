@@ -19,7 +19,7 @@ The group-by menu offers two modes, WorkSpace / In one list. WorkSpace mode rend
 ### Row interactions
 
 - Session rows show a detail card after a 500ms hover dwell (full title / relative time / status line; the status line has only running/idle until the wire grows a status field). The card and the row menu are mutually exclusive: no card while a menu is open or a drag is in flight.
-- Session-row … menu: Rename / Fork session / Delete session; Rename and Fork are wired, while Delete remains visual-only. The workspace-header … menu's Rename / Delete workspace actions are both wired. Menus close when the pointer leaves them.
+- Session-row … menu: Rename / Fork session / Archive session / Delete session; all four actions are wired, with permanent deletion owned by [Permanent Web Session deletion](2026-09-04-web-session-permanent-deletion.md). The workspace-header … menu's Rename / Delete workspace actions are both wired. Menus close when the pointer leaves them.
 - Supporting primitives: `Menu` gains label entries, danger rows, and `closeOnPointerLeave`; a new `HoverCard` (portaled placement, open delay, disabled guard).
 
 ### workspace.rename
@@ -53,7 +53,7 @@ ui-sidebar shrinks to the column-geometry shell: brand row, fold state machine, 
 - Manual order is the sole authority over the Host workspace account: activity never mutates `WorkspaceView.sessionIds`. A later browser-local recent-update view may promote active rows without changing that account; its separate semantics are defined in [Workspace Sidebar Order and Folding](2026-08-11-workspace-sidebar-order-and-folding.md).
 - The two-fact shell/region contract funnels every future workspace-domain feature (Delete confirmation, cross-group moves, Ungrouped adoption) into the single ui-workspace package; ui-sidebar no longer evolves with session-list features.
 - Flat mode supports neither reordering nor a create-in-workspace entry point (switching back to grouped view is required) — an accepted scope reduction.
-- Wiring session Delete and growing the wire status enum remain future iterations.
+- Growing the wire status enum remains a future iteration; Session Delete is now wired by [Permanent Web Session deletion](2026-09-04-web-session-permanent-deletion.md).
 
 ## Testing
 

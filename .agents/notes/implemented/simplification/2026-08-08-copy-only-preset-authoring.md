@@ -28,3 +28,5 @@ Authoring is a host-side copy, and files are the editor. `agentPreset.write` bec
 ## Alternatives considered
 
 Keeping write with a better editor (CodeMirror etc.): still arbitrary capability over the wire, still the race source, and still a worse editor than the user's own. Patch-semantics copies ("standard plus this diff"): no such layer exists below the bundle plane, and the repo's own shipped presets chose full copies deliberately. Browser-side `session/openWorkspacePath` with a returned path: breaks the README's no-arbitrary-target invariant the moment the path is a request parameter.
+
+Superseded for user-preset composition writes by [browser-editable user preset compositions](../feature/2026-09-04-browser-editable-user-preset-compositions.md). Its copy-first creation, built-in immutability, path-free requests, and location-action decisions remain current.

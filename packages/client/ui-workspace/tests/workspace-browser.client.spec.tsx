@@ -77,6 +77,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     searchResultLimit: 20,
     renameSession: vi.fn(async () => {}),
     forkSession: vi.fn(),
+    deleteSession: vi.fn(async () => {}),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
@@ -429,6 +430,33 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
     expect(screen.getByText('kept-s')).toBeTruthy()
     expect(screen.queryByText('gone-s')).toBeNull()
+  })
+
+  it('confirms permanent session deletion before calling the host action', async () => {
+    let finishDelete!: () => void
+    const deleteSession = vi.fn(() => new Promise<void>((resolve) => { finishDelete = resolve }))
+    mount({
+      useSessions: hook(sessionState([summary('delete-s', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['delete-s'])])),
+      deleteSession,
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: t('actions.session.aria', { name: 'delete-s' }) }))
+    fireEvent.click(screen.getByRole('menuitem', { name: t('menu.deleteSession') }))
+
+    const dialog = screen.getByRole('dialog', { name: t('delete.session') })
+    expect(dialog.textContent).toContain(t('delete.sessionDesc', { name: 'delete-s' }))
+    expect(deleteSession).not.toHaveBeenCalled()
+
+    const confirm = screen.getByRole('button', { name: t('delete.session') })
+    fireEvent.click(confirm)
+    expect(deleteSession).toHaveBeenCalledOnce()
+    expect(deleteSession).toHaveBeenCalledWith(sid('delete-s'))
+    expect(confirm.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(t('delete.sessionPending'))
+
+    await act(async () => { finishDelete() })
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: t('delete.session') })).toBeNull() })
   })
 
   it('logs and keeps the tree when the archive call rejects', async () => {

@@ -38,7 +38,7 @@ import type SettingsService from '@deepseek-ai/dsh-settings'
 import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { discoverPresets, SHIPPED_PRESET_ROOT, USER_PRESET_DIR } from './discovery.ts'
-import { copyComposition, deleteComposition, presetExists, readComposition } from './authoring.ts'
+import { copyComposition, deleteComposition, presetExists, readComposition, writeComposition } from './authoring.ts'
 import { livePresetMounts, mountPreset, serviceForAgent, standingMountFor } from './mount.ts'
 import {
   fileComposition, mountedCompositionRows,
@@ -80,7 +80,7 @@ export {
   inactiveRows, leakedServices, livePresetMounts, mountPreset, serviceForAgent, standingMountFor,
   type JoinedPresetMount, type PresetMount,
 } from './mount.ts'
-export { copyComposition, deleteComposition, readComposition, writableRoot } from './authoring.ts'
+export { copyComposition, deleteComposition, readComposition, writableRoot, writeComposition } from './authoring.ts'
 export { agentPresetProjectionDefinition } from './session.ts'
 export type { AgentPreset, Config, PresetRoot, PresetTrust } from './preset.ts'
 
@@ -523,13 +523,36 @@ export class AgentPresets extends TypertRemoteService {
   }
 
   /**
+   * Replace one locally authored preset's composition.
+   * @param id - preset id resolved against the Host's configured roots.
+   * @param content - complete `agent.cordis.yml` text to store.
+   * @returns once the atomic write commits.
+   * @throws when the preset is unknown, ships with the deployment, or lies
+   * outside the writable user root.
+   */
+  async write(id: string, content: string): Promise<void> {
+    await writeComposition(this.resolvedRoots, await this.resolve(id), content)
+    this.standing.delete(id)
+  }
+
+  /**
+   * Replace one locally authored preset's composition through the Remote API.
+   * @param agentPreset - preset id resolved by the Host.
+   * @param content - complete `agent.cordis.yml` text to store.
+   * @returns once the atomic write commits.
+   */
+  @Remote('write')
+  async remoteExportWrite(agentPreset: string, content: string): Promise<void> {
+    validatePresetId(agentPreset, 'agentPreset')
+    await this.write(agentPreset, content)
+  }
+
+  /**
    * Create a locally authored preset by copying an existing one whole.
    *
-   * Copy is the only authoring write. Composition text never crosses this
-   * seam: the source is named by id and its directory is copied as it stands,
-   * so the copy is exactly as loadable as its source and authoring grants no
-   * capability the roster did not already carry. The copy is NOT mounted to
-   * validate — a source that mounts today yields a copy that mounts today.
+   * The source is named by id and its directory is copied as it stands. The
+   * copy is NOT mounted to validate: a source that mounts today yields a copy
+   * that mounts today.
    * @param from - the preset the copy starts from; shipped presets are the
    * primary source, so any trust is accepted.
    * @param id - the new preset's id, which becomes its directory name.
@@ -748,9 +771,8 @@ export class AgentPresets extends TypertRemoteService {
     const pending = this.standing.get(preset.id)
     if (pending !== undefined) {
       const mounted = await pending
-      // Files are the only composition editor (authoring is copy/delete), so
-      // the stamp is what notices an edit: a changed file starts the next
-      // generation here, for this and later sessions. An unreadable stamp
+      // The stamp notices edits made outside this service: a changed file
+      // starts the next generation here, for this and later sessions. An unreadable stamp
       // serves the current generation — a mount must survive its file
       // disappearing, and failing the session over a stat would not.
       const current = await compositionStamp(preset.path)

@@ -5,7 +5,7 @@ import z from '@deepseek-ai/schemastery'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { canOpenNativePath, openNativePath } from '@deepseek-ai/dsh-native-command'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
+import { SessionAlreadyOwnedError, type SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
@@ -34,6 +34,8 @@ import type {
   SessionControlFrame,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionDeleteRequest,
+  SessionDeleteValue,
   SessionFollowFrame,
   SessionFollowRequest,
   SessionForkRequest,
@@ -94,6 +96,7 @@ export class SessionController extends TypertRemoteService {
     'attachments',
     'llm',
     'sessions',
+    'sessionPersistence',
     'sessionProjections',
     'sessionQuery',
     'typert',
@@ -114,6 +117,7 @@ export class SessionController extends TypertRemoteService {
   private readonly openPath: (path: string, signal: AbortSignal) => Promise<void>
   private readonly canOpenPath: () => boolean
   private readonly promotions = new Set<Promise<void>>()
+  private readonly deletions = new Set<SessionId>()
 
   /**
    * @param ctx - Host context containing the Session capability assembly.
@@ -146,7 +150,7 @@ export class SessionController extends TypertRemoteService {
       ctx.emit('api-session/added', this.listState.summaryFor(session))
     })
     ctx.on('session/disposed', (session) => {
-      ctx.emit('api-session/removed', session.id)
+      if (!this.deletions.has(session.id)) ctx.emit('api-session/removed', session.id)
     })
     ctx.on('agent/status', ({ agent, status }) => {
       ctx.emit('api-session/status', agent.id, status === 'running')
@@ -242,6 +246,56 @@ export class SessionController extends TypertRemoteService {
   @Remote('create')
   create(request: SessionCreateRequest): Promise<SessionCreateValue> {
     return this.commands.create(request)
+  }
+
+  /**
+   * Stop an owned Web Agent and permanently delete its stored Session log.
+   * The Session cwd and project files remain untouched.
+   * @param request - Session identity to delete.
+   * @param signal - cancellation observed before storage commit.
+   * @returns confirmation after durable deletion and list removal.
+   */
+  @Remote('delete')
+  async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue> {
+    signal.throwIfAborted()
+    const sessionId = request.sessionId
+    const hadLiveAgent = this.ctx.agents.get(sessionId) !== undefined
+    const known = await this.ctx.sessionPersistence.stat(sessionId, { signal })
+    if (known === undefined && !hadLiveAgent) {
+      throw new RemoteError('session/not-found', `session "${sessionId}" not found`, { sessionId })
+    }
+    if (this.deletions.has(sessionId)) {
+      throw new RemoteError('session/agent-busy', `session "${sessionId}" deletion is already in progress`, {
+        reason: 'wait for the current deletion to finish',
+      })
+    }
+    this.deletions.add(sessionId)
+    try {
+      await this.agents.deleteSession(sessionId, async () => {
+        signal.throwIfAborted()
+        await this.ctx.workspaceRegistry.forgetSession(sessionId)
+        signal.throwIfAborted()
+        const deleted = await this.ctx.sessionPersistence.delete(sessionId, { signal })
+        if (!deleted && !hadLiveAgent) {
+          throw new RemoteError('session/not-found', `session "${sessionId}" not found`, { sessionId })
+        }
+      })
+      this.ctx.emit('api-session/removed', sessionId)
+      return { deleted: true }
+    } catch (error: unknown) {
+      if (error instanceof RemoteError) throw error
+      if (error instanceof SessionAlreadyOwnedError) {
+        throw new RemoteError('session/agent-busy', error.message, { reason: 'Session storage is in use' })
+      }
+      if (signal.aborted) throw new RemoteError('gateway/cancelled', 'session deletion was aborted', {})
+      throw new RemoteError(
+        'gateway/internal',
+        `failed to delete session "${sessionId}": ${errorChain(error)}`,
+        {},
+      )
+    } finally {
+      this.deletions.delete(sessionId)
+    }
   }
 
   /**

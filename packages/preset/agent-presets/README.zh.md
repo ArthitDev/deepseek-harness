@@ -70,7 +70,7 @@ agent-presets:
 
 ### 创作 preset
 
-创作即复制：创建 preset 会复制某个既有 preset 的整个目录——组装、展示元数据、skill 目录与资产——放进第一个 `user` 根目录。副本保留来源的描述，但拥有自己的 id 与可选显示名，因此调用方从不提供组装文本，一次复制也不会授予名单尚未携带的任何能力。创建之后的一切都发生在 preset 自己的文件里。
+创作从复制开始：创建 preset 会复制某个既有 preset 的整个目录——组装、展示元数据、skill 目录与资产——放进第一个 `user` 根目录。副本保留来源的描述，但拥有自己的 id 与可选显示名。经过认证的浏览器随后可以原子替换该用户 preset 的 `agent.cordis.yml`；请求只发送 preset id 与文本，由 Host 解析精确路径，并拒绝随附 preset 或第一个用户根目录之外的路径。组装可以包含可执行的 `!!js`，因此编辑它与 shell 访问具有同等信任。元数据、skill 与资产仍是 preset 目录中的普通文件。
 
 以下情况会拒绝复制：id 不符合 `[a-z0-9][a-z0-9-]*`（id 会成为目录名）、id 已被占用（复制从不覆写）、或来源未知。删除只移除本地创作的 preset；随部署提供的 preset 不可删除。已在被删除 preset 上运行的会话会继续运行。
 
@@ -108,7 +108,7 @@ agent-presets:
 | [`src/composition-inventory.ts`](src/composition-inventory.ts) | 面向插件清单表面的压平组合行：文件读取（求值 disabled 门）与挂载读取（携带 fiber 状态） |
 | [`src/preset.ts`](src/preset.ts) | 词汇体系：preset id 规则、`AgentPreset` 与 `PresetRoot`、错误类型 |
 | [`src/mount.ts`](src/mount.ts) | 子树挂载、宿主 base-URL 处理、挂载审计、`write()` 抑制 |
-| [`src/authoring.ts`](src/authoring.ts) | 本地创作 preset 的复制/删除/读取、权限收紧 |
+| [`src/authoring.ts`](src/authoring.ts) | 本地创作 preset 的复制/读取/写入/删除、权限收紧 |
 | [`src/metadata.ts`](src/metadata.ts) | `preset.yml` 展示元数据 |
 | [`src/session.ts`](src/session.ts) | `agent-preset/selected` 事件与 `agentPreset` Session 投影 |
 | [`src/types.ts`](src/types.ts) | client-safe 的线上载荷与 cordis 事件声明 |

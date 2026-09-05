@@ -3,7 +3,7 @@
 /** Locale keys these surfaces render. */
 export type AgentPresetSettingsKey =
   | 'error' | 'userTrust' | 'seatHint' | 'headerHint'
-  | 'nav' | 'sectionIntro' | 'builtIn' | 'setDefault' | 'view'
+  | 'nav' | 'sectionIntro' | 'builtIn' | 'setDefault' | 'view' | 'edit' | 'editSystemPrompt' | 'save' | 'saving'
   | 'presetStandardName' | 'presetStandardDescription'
   | 'presetPtcName' | 'presetPtcDescription'
   | 'presetMinimalName' | 'presetMinimalDescription'
@@ -12,7 +12,7 @@ export type AgentPresetSettingsKey =
   | 'displayName' | 'displayNamePlaceholder'
   | 'inUse' | 'noDescription' | 'builtInGroup' | 'customGroup'
   | 'brokenBadge' | 'brokenNoCopy' | 'switchRefused'
-  | 'composition' | 'cancel' | 'close' | 'retry'
+  | 'composition' | 'systemPrompt' | 'systemPromptHelp' | 'cancel' | 'close' | 'retry'
   | 'copyTitle' | 'copyIntro' | 'create' | 'creating' | 'creatorDraft'
   | 'openLocation' | 'showLocation' | 'revealedPathLabel'
   | 'idRequired' | 'idInvalid' | 'idTaken'
@@ -31,6 +31,10 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   builtIn: 'Built-in',
   setDefault: 'Set as default',
   view: 'View',
+  edit: 'Edit',
+  editSystemPrompt: 'Edit system prompt',
+  save: 'Save',
+  saving: 'Saving…',
   presetStandardName: 'Standard mode',
   presetStandardDescription:
     'Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.',
@@ -59,13 +63,15 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   switchRefused: 'Could not switch to {name}: {reason}',
   copyOf: 'Copied from',
   composition: 'Composition (agent.cordis.yml)',
+  systemPrompt: 'System prompt',
+  systemPromptHelp: 'Edit the persona prompt. The preset tools and YAML structure stay unchanged.',
   cancel: 'Cancel',
   close: 'Close',
   retry: 'Retry',
   copyTitle: 'Duplicate preset',
   copyIntro:
     'The whole preset is copied on this machine. The identifier becomes its directory name and cannot '
-    + 'be changed later; everything else is edited in the preset\'s own files.',
+    + 'be changed later; its composition opens in the editor after creation.',
   create: 'Create',
   creating: 'Creating…',
   creatorDraft: 'Draft a custom preset with Creator mode',
@@ -93,6 +99,10 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   builtIn: '内置',
   setDefault: '设为默认',
   view: '查看',
+  edit: '编辑',
+  editSystemPrompt: '编辑系统提示词',
+  save: '保存',
+  saving: '正在保存…',
   presetStandardName: '标准模式',
   presetStandardDescription: '功能完整的编码 Agent，支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。',
   presetPtcName: 'PTC 模式',
@@ -117,11 +127,13 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   switchRefused: '无法切换到「{name}」：{reason}',
   copyOf: '复制自',
   composition: '组装（agent.cordis.yml）',
+  systemPrompt: '系统提示词',
+  systemPromptHelp: '只编辑角色提示词；预设工具和 YAML 结构保持不变。',
   cancel: '取消',
   close: '关闭',
   retry: '重试',
   copyTitle: '复制预设',
-  copyIntro: '整个预设会在本机复制一份。标识符将成为目录名，事后无法更改；其余内容之后直接在预设自己的文件里编辑。',
+  copyIntro: '整个预设会在本机复制一份。标识符将成为目录名，事后无法更改；创建后会直接打开组装编辑器。',
   create: '创建',
   creating: '正在创建…',
   creatorDraft: '用「创造模式」创作自定义预设',

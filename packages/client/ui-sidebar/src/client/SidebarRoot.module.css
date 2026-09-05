@@ -130,7 +130,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 24px;
+  height: 28px;
   min-width: 0;
 }
 
@@ -146,7 +146,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  height: 24px;
+  height: 28px;
   font-size: 18px;
   font-weight: 600;
   line-height: 24px;
@@ -166,13 +166,14 @@
   align-items: flex-start;
   justify-content: center;
   gap: 1px;
-  height: 24px;
+  height: 28px;
   white-space: nowrap;
 }
 
 .localBuildTitle {
-  font-size: 12px;
-  line-height: 13px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 16px;
   letter-spacing: 0;
 }
 
@@ -238,7 +239,7 @@
   color: var(--dsw-alias-label-primary-inverted);
   background: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 500;
   line-height: 10px;
   white-space: nowrap;

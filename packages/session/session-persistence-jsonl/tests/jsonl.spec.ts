@@ -429,6 +429,17 @@ describe('JsonlSessionPersistence: durability and crash semantics', () => {
   })
   afterEach(async () => { await ctx.fiber.dispose() })
 
+  it('deletes only the session-owned directory and keeps its project directory', async () => {
+    const m = meta('delete-layout', '/work')
+    await writeLog(ctx.sessionPersistence, m, oneTurnLog())
+    const project = projectDir(root, m.cwd)
+    const owned = sessionDir(root, m.cwd, m.id)
+
+    expect(await ctx.sessionPersistence.delete(m.id)).toBe(true)
+    await expect(stat(owned)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await stat(project)).isDirectory()).toBe(true)
+  })
+
   it('lazy materialization: create() writes no file until the first append', async () => {
     const m = meta('lazy', '/work')
     const handle = await ctx.sessionPersistence.create(m)

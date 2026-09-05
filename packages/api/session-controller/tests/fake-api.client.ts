@@ -124,6 +124,7 @@ export class FakeApiClient {
   onSearch: (payload: unknown) => Promise<RemoteResult<{ items: SessionSearchItem[]; hasMore: boolean }>> =
     () => Promise.resolve(ok({ items: [], hasMore: false }))
   onCreate: (payload: unknown) => Promise<RemoteResult<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-new' as SessionId }))
+  onDelete: (payload: unknown) => Promise<RemoteResult<{ deleted: true }>> = () => Promise.resolve(ok({ deleted: true }))
   onSelectModel: (payload: SessionSelectModelRequest) => Promise<RemoteResult<SessionSelectModelValue>> =
     payload => Promise.resolve(ok({
       selected: {
@@ -216,6 +217,7 @@ export class FakeApiClient {
           return this.record('session.search', payload, this.onSearch(payload))
         },
         create: payload => this.record('session.create', payload, this.onCreate(payload)),
+        delete: payload => this.record('session.delete', payload, this.onDelete(payload)),
         selectModel: payload => this.record(
           'session.selectModel',
           payload,

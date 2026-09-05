@@ -18,18 +18,15 @@ it('ships install metadata with the built web application', async () => {
     scope: '/',
     display: 'fullscreen',
     icons: [{
-      src: '/favicon.svg',
-      sizes: 'any',
-      type: 'image/svg+xml',
+      src: '/new-logo.png',
+      sizes: '1280x1280',
+      type: 'image/png',
       purpose: 'any',
     }],
   })
 })
 
-it('ships a favicon that switches to a light mark under dark color scheme', async () => {
-  const favicon = await readFile(join(DIST_ROOT, 'favicon.svg'), 'utf8')
-  // The light fill must live inside the dark-scheme media query, so the icon
-  // stays black in light mode and only turns white under a dark scheme.
-  expect(favicon).toMatch(/@media \(prefers-color-scheme: dark\)\s*{\s*path\s*{[^}]*fill:\s*#fff/i)
-  expect(favicon).toContain('fill="#000"')
+it('ships the PNG favicon', async () => {
+  const favicon = await readFile(join(DIST_ROOT, 'new-logo.png'))
+  expect(favicon.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
 })

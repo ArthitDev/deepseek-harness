@@ -8,7 +8,7 @@ English | [中文](2026-08-10-message-feedback-sidecar.zh.md)
 
 The existing `/feedback` command records an immutable Session-level `feedback/record` event. That event can release a pending telemetry prefix under `FEEDBACK_ONLY`, so it is the wrong authority for an editable positive/negative rating and optional note attached to one assistant message. Message feedback needs independent update and delete semantics without entering the canonical Session log, changing a projection, reaching model context, or implicitly consenting to telemetry.
 
-A sidecar keyed only by `SessionId` can outlive the log lifecycle it describes when an id is recreated with a different header identity. A Session-wide revision also makes unrelated message edits conflict, while plain storage-domain read/put has no cross-process compare-and-swap. Session disposal is only live-store detach, not durable deletion, and the current Session persistence seam exposes no deletion operation that could own a truthful cascade.
+A sidecar keyed only by `SessionId` can outlive the log lifecycle it describes when an id is recreated with a different header identity. A Session-wide revision also makes unrelated message edits conflict, while plain storage-domain read/put has no cross-process compare-and-swap. Session disposal is only live-store detach, not durable deletion. The later [permanent Session deletion](../feature/2026-09-04-web-session-permanent-deletion.md) owns the canonical log and Workspace references, but message-feedback remains a separate retention domain rather than an implicit cascade participant.
 
 ## Decision
 
@@ -26,7 +26,7 @@ A per-Session mutation queue encloses lifecycle inspection, sidecar read, confli
 
 `maxNoteBytes` is a required deployment choice and bounds the UTF-8 byte length of an optional note; the Web Host bundle sets it explicitly to `8192`. The package publishes the Host `messageFeedback.list`, `messageFeedback.put`, and `messageFeedback.delete` contract directly through `TypertRemoteService` and `@Remote`. Client Remote aggregate mounting and UI remain separately owned and deferred; their later adapter stays a thin consumer of this Host contract.
 
-The service performs no fake deletion cascade. `session/disposed` and `host/session-removed` describe detach from live ownership, not durable Session deletion, and Session persistence currently has no deletion API. Sidecar rows can therefore remain after out-of-band log removal; a different `{createdAt, cwd}` prevents such an orphan from becoming feedback for a later Session that reuses the id.
+The service performs no fake deletion cascade. `session/disposed` and `host/session-removed` describe detach from live ownership, not durable Session deletion. The explicit `session.delete` endpoint does not enlist message-feedback storage, so sidecar rows can remain after log removal; a different `{createdAt, cwd}` prevents such an orphan from becoming feedback for a later Session that reuses the id.
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ The service performs no fake deletion cascade. `session/disposed` and `host/sess
 
 **Extend `KvTable` with cross-process compare-and-swap in this change.** Rejected because the shipped storage-domain backends expose no common conditional-write primitive. A process-local queue matches the supported one-Host topology; a real multi-process guarantee requires a backend-level atomic contract and is separate work.
 
-**Delete feedback on Session disposal.** Rejected because disposal includes ordinary detach and rollback paths. Treating it as durable deletion would lose feedback while the Session log still exists; cleanup waits for a real Session deletion authority.
+**Delete feedback on Session disposal.** Rejected because disposal includes ordinary detach and rollback paths. Treating it as durable deletion would lose feedback while the Session log still exists; any future coordinated cleanup must attach to explicit `session.delete`, not generic disposal.
 
 ## Consequences
 

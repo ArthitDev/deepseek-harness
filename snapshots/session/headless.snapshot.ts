@@ -190,11 +190,9 @@ async function writeSessionFixtures(
   const replacements = mode === 'refresh'
     ? refreshFixtureReplacements(actualLogs.map(harvested), prior)
     : []
-  const fresh = actualLogs.map((log, index) => scrubSessionSnapshot(tokenizeSessionFixtureCwd(
-    mode === 'refresh'
-      ? stabilizeRefreshLog(log.content, prior[index] as string, replacements, ctx)
-      : log.content,
-  )))
+  const fresh = actualLogs.map((log, index) => scrubSessionSnapshot(mode === 'refresh'
+    ? stabilizeRefreshLog(tokenizeSessionFixtureCwd(log.content), prior[index] as string, replacements, ctx)
+    : tokenizeSessionFixtureCwd(log.content)))
   const output = redactSessionSnapshotIds(stabilizeFixtureMessageIds(fresh, prior))
   await Promise.all(output.map((content, index) => writeFile(join(scenario.dir, names[index] as string), content)))
 

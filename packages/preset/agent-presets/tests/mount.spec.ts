@@ -691,8 +691,7 @@ describe('editing a composition file', () => {
     const first = await agentOn(scoped, 'sess-gen-first', 'edited')
     expect(toolNames(scoped, first)).toEqual(['before'])
 
-    // Files are the only composition editor now (authoring is copy/delete),
-    // so the standing mount notices the file's stamp changing on its own.
+    // The standing mount notices an external file edit from its stamp alone.
     await writeFile(path, rowFor('afterwards'))
 
     const second = await agentOn(scoped, 'sess-gen-second', 'edited')

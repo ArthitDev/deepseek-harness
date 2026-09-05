@@ -67,6 +67,8 @@ A session joins the project of the directory it runs in: create a session in a p
 
 Hide a session from the grouping when it should stop appearing there: it disappears from the visible list, while its session, history, and place in the project stay intact. Remove a project when it is no longer needed: it leaves the list, and its folder, files, and session histories are never touched — those sessions become ungrouped. Adding the same directory again afterwards starts a fresh project without the old sessions.
 
+Permanent Session deletion is a separate Session-controller action. Before the stored log is removed, `forgetSession(id)` detaches that id from every project account and from the global archive set; it never touches a project directory or user file. If either step fails, the Session history remains available for a retry.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -157,7 +159,7 @@ Independent of live requests: the package never touches a request prefix, so it 
 
 These limits define when the project list is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
-- **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and session deletion or folder removal are separate, absent capabilities ([decision](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)).
+- **Project removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped. Permanent Session deletion is a separate controller action, while folder removal remains absent ([decision](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)).
 - **A session joins only with a recorded directory** — a session belongs to a project only when its record carries a directory that resolves to the project's path; sessions without one stay ungrouped, and a session from another directory cannot be moved in.
 - **External changes are seen late** — if another process deletes or damages a directory, the project reflects it only at the next refresh or restart.
 - **Archiving is one-way** — a hidden session keeps its history and its place, but no unarchive action exists yet; the archive set is a durable display filter.

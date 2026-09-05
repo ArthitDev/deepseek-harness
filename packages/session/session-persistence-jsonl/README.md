@@ -74,6 +74,8 @@ A session is materialized lazily: `create(header)` writes nothing and returns th
 
 `open(id, 'read')` returns a handle whose `read(offset?, length?)` serves validated contiguous slices; the artifact is re-scanned on demand under a bounded stable read, so a slice never contains a torn tail. A torn final Zstandard frame is partially decoded: complete JSONL records already flushed into it are recovered into the logical log, and the write handle's first mutation truncates the torn bytes and durably rewrites the recovered records ahead of its own batch. `open(id, 'write')` primes the handle with the validated stored prefix, so resume's whole-log read costs no second parse before the first append. A bounded memo keyed by session id and the stat-derived revision lets an immediately following open reuse the parsed log — the cold observe-then-resume handoff parses once — and every local mutation invalidates its id. `stat(id)` and `list()` read only the header line and one `fs.stat`, carrying `sizeBytes` and a best-effort stat-derived revision (device, inode, size, nanosecond timestamps) without parsing the log. With `compression: 'none'`, the log is newline-delimited text an external reader can consume directly; the compressed default must be read through the backend.
 
+`delete(id)` claims the same single-writer slot as a write handle, so it rejects while that Session still has an active writer. It removes only the encoded Session's owned directory under `root`, never the recorded `cwd` or project files; an unknown or already-deleted id returns `false`, and a successfully deleted id can be created again. Cancellation is checked before filesystem removal, and the claim is always released after success or failure.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -146,7 +148,6 @@ These limits define when this backend is a poor fit or needs special operational
 - **Only the configured encoding and current `SESSION_FORMAT_VERSION` (v0) load** — changing compression requires a separate or fresh root, or selecting raw mode; the pre-release format has no migration.
 - **The flat-file storage layout does not load** — use a separate root or move pre-release artifacts into the project/session directory layout before loading.
 - **Compressed files are not directly line-readable** — use the backend to load them, or select `compression: 'none'` before writing a fresh root when external line readers are required.
-- **Nothing deletes session files** — logs accumulate under `root` until removed externally; the seam has no deletion API.
 - **One live writer per session, in-process only** — the write-handle claim excludes a second writer inside the owning backend instance; another instance or process must not write the same session until that handle closes (the durable cross-process lease is the seam's planned next layer).
 - **POSIX materialization requires hard-link support** — first append uses `link()` so same-id races fail instead of overwriting a committed log; Windows uses write-through rename without replacement.
 

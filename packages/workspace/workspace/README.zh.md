@@ -67,6 +67,8 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 当会话不应再出现在分组中时隐藏它：它会从可见列表中消失，但其会话、历史与在项目中的位置都保持不变。项目不再需要时移除它：它离开列表，而其文件夹、文件与会话历史绝不受影响——这些会话变成 Ungrouped。之后再次添加同一目录会从空项目开始，不会带回旧会话。
 
+永久删除 Session 是另一项独立的 Session controller 操作。移除已存储日志前，`forgetSession(id)` 会先从每个项目记账与全局归档集合中摘除该 id；它绝不触碰项目目录或用户文件。任一步骤失败时，Session 历史仍可用于重试。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -157,7 +159,7 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 这些限制说明项目列表何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是任务积压。
 
-- **移除绝不删除数据**——移除项目会保留其文件夹、文件与会话历史；这些会话变成 Ungrouped，而会话删除与文件夹移除是彼此独立且尚未提供的功能（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
+- **移除项目绝不删除数据**——移除项目会保留其文件夹、文件与会话历史；这些会话变成 Ungrouped。永久删除 Session 是另一项独立的 controller 操作，文件夹移除仍未提供（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
 - **只有带记录目录的会话才能加入**——只有记录中带有可解析为项目路径的目录的会话才属于项目；没有目录的会话保持 Ungrouped，来自其他目录的会话无法移入。
 - **外部变更延迟可见**——如果另一进程删除或损坏目录，项目只能在下次刷新或重启后反映出来。
 - **归档是单向的**——被隐藏的会话保留其历史与位置，但目前没有取消归档操作；归档集合是持久的显示过滤器。

@@ -33,6 +33,11 @@ const READY: AgentPresetSectionState = {
   revealedPaths: {},
 }
 
+const SYSTEM_VIEW = {
+  id: 'standard', title: '标准模式', content: '- id: tool-bash\n', draft: '- id: tool-bash\n',
+  savedDraft: '- id: tool-bash\n', editable: false, saving: false, error: null,
+}
+
 /**
  * Render the section over a fixed snapshot, with every action a spy.
  * @param state - the snapshot to render.
@@ -50,6 +55,8 @@ function renderSection(
     ...options.creator === false ? {} : { startCreatorDraft: vi.fn() },
     view: vi.fn(() => Promise.resolve()),
     closeView: vi.fn(),
+    setViewContent: vi.fn(),
+    saveView: vi.fn(() => Promise.resolve()),
     beginCopy: vi.fn(),
     cancelCopy: vi.fn(),
     setCopyId: vi.fn(),
@@ -143,18 +150,17 @@ describe('the preset list', () => {
     expect(actions.makeDefault).not.toHaveBeenCalled()
   })
 
-  it('offers View on a shipped row and the location on a custom one', () => {
+  it('offers View on a shipped row and Edit plus location on a custom one', () => {
     renderSection()
 
-    // A shipped preset is the composition a copy starts from — reading it is
-    // the point. A custom preset is edited in its files, so its row leads
-    // there instead; there is no editor for either.
+    // A shipped preset is the read-only composition a copy starts from. A
+    // custom preset has both the composition editor and its directory action.
     const standard = rowFor('standard')
     expect(within(standard).getByRole('button', { name: `${en.view}: ${en.presetStandardName}` })).toBeTruthy()
     expect(within(standard).queryByRole('button', { name: `${en.openLocation}: ${en.presetStandardName}` })).toBeNull()
     const mine = rowFor('mine')
     expect(within(mine).getByRole('button', { name: `${en.openLocation}: mine` })).toBeTruthy()
-    expect(within(mine).queryByRole('button', { name: `${en.view}: mine` })).toBeNull()
+    expect(within(mine).getByRole('button', { name: `${en.edit}: mine` })).toBeTruthy()
   })
 
   it('offers Delete only for a locally authored preset', () => {
@@ -399,7 +405,7 @@ describe('the copy dialog', () => {
 
 describe('the read-only viewer', () => {
   it('shows the composition text under the preset\'s name', () => {
-    renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: tool-bash\n' } })
+    renderSection({ view: SYSTEM_VIEW })
 
     const dialog = screen.getByRole('dialog')
     expect(dialog.getAttribute('aria-label')).toBe(`${en.view} · ${en.presetStandardName}`)
@@ -408,13 +414,13 @@ describe('the read-only viewer', () => {
   })
 
   it('keeps the loaded title when the viewed row leaves the roster', () => {
-    renderSection({ view: { id: 'retired', title: 'Retired mode', content: '- id: tool-bash\n' } })
+    renderSection({ view: { ...SYSTEM_VIEW, id: 'retired', title: 'Retired mode' } })
 
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(`${en.view} · Retired mode`)
   })
 
   it('closes through the controller', () => {
-    const actions = renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: x\n' } })
+    const actions = renderSection({ view: SYSTEM_VIEW })
 
     fireEvent.click(within(screen.getByRole('dialog')).getByText(en.close))
 
@@ -422,11 +428,34 @@ describe('the read-only viewer', () => {
   })
 
   it('dismisses on Escape', () => {
-    const actions = renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: x\n' } })
+    const actions = renderSection({ view: SYSTEM_VIEW })
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(actions.closeView).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the custom preset editor', () => {
+  it('edits and saves the system prompt while preserving a write error', () => {
+    const actions = renderSection({
+      view: {
+        id: 'mine', title: 'mine', content: '- id: persona\n', draft: 'New prompt', savedDraft: 'Old prompt',
+        editable: true, saving: false, error: 'disk full',
+      },
+    })
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe(`${en.editSystemPrompt} · mine`)
+    expect(within(dialog).getByText(en.systemPromptHelp)).toBeTruthy()
+    const editor = within(dialog).getByRole('textbox', { name: en.systemPrompt })
+    expect(editor).toHaveProperty('value', 'New prompt')
+    expect(within(dialog).getByRole('alert').textContent).toBe('disk full')
+    fireEvent.change(editor, { target: { value: 'Changed: # plain text' } })
+    fireEvent.click(within(dialog).getByText(en.save))
+
+    expect(actions.setViewContent).toHaveBeenCalledWith('Changed: # plain text')
+    expect(actions.saveView).toHaveBeenCalledTimes(1)
   })
 })
 

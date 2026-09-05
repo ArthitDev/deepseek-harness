@@ -87,6 +87,9 @@
       "path": "../ui-settings"
     },
     {
+      "path": "../ui-theme"
+    },
+    {
       "path": "../../util/crypto"
     },
     {

@@ -1,14 +1,12 @@
 /**
- * Copying, reading, and deleting locally authored presets.
+ * Copying, reading, writing, and deleting locally authored presets.
  *
  * Authoring is confined to a `user` root: the shipped `.system` set is part of
  * the deployment, and letting a browser rewrite it would turn "reset to a known
  * preset" into something the same caller could have broken first.
  *
- * The only authoring write is a whole-directory copy of an existing preset.
- * No caller supplies composition text: the inputs are ids the host resolves
- * against its own roots plus an optional display name, so authoring grants no
- * capability the copied preset did not already carry.
+ * Browser writes name a preset id rather than a path. The Host resolves that
+ * id and confines writes to the first `user` root.
  * @module @deepseek-ai/dsh-agent-presets/authoring
  */
 
@@ -17,6 +15,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { COMPOSITION_FILE } from './discovery.ts'
 import { METADATA_FILE, renderPresetMetadata } from './metadata.ts'
 import { PRESET_ID, type AgentPreset, type PresetRoot } from './preset.ts'
 
@@ -164,6 +163,33 @@ export async function copyComposition(
   return dir
 }
 
+/** Resolve the exact composition path the first user root owns. */
+function writableCompositionPath(roots: readonly PresetRoot[], preset: AgentPreset): string {
+  if (preset.trust !== 'user') {
+    throw notWritable(preset.id, 'it ships with the deployment')
+  }
+  const path = resolve(writableRoot(roots, preset.id), preset.id, COMPOSITION_FILE)
+  if (!isAbsolute(preset.path) || resolve(preset.path) !== path) {
+    throw notWritable(preset.id, 'it does not live under the writable preset root')
+  }
+  return path
+}
+
+/**
+ * Atomically replace one locally authored preset's composition.
+ * @param roots - configured roots; the first `user` root owns writable presets.
+ * @param preset - resolved preset whose path must match that root and id.
+ * @param content - complete `agent.cordis.yml` text to store.
+ * @throws when the preset ships with the deployment or lies outside the writable root.
+ */
+export async function writeComposition(
+  roots: readonly PresetRoot[],
+  preset: AgentPreset,
+  content: string,
+): Promise<void> {
+  await writeFileAtomic(writableCompositionPath(roots, preset), content, { mode: 0o600, dirMode: 0o700 })
+}
+
 /**
  * Delete a locally authored preset.
  *
@@ -178,14 +204,5 @@ export async function deleteComposition(
   roots: readonly PresetRoot[],
   preset: AgentPreset,
 ): Promise<void> {
-  if (preset.trust !== 'user') {
-    throw notWritable(preset.id, 'it ships with the deployment')
-  }
-  const dir = join(writableRoot(roots, preset.id), preset.id)
-  // Belt and braces over the id pattern: the resolved directory must still be
-  // the one the writable root owns, whatever discovery reported.
-  if (!isAbsolute(preset.path) || !preset.path.startsWith(dir)) {
-    throw notWritable(preset.id, 'it does not live under the writable preset root')
-  }
-  await rm(dir, { recursive: true, force: true })
+  await rm(dirname(writableCompositionPath(roots, preset)), { recursive: true, force: true })
 }

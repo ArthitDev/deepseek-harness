@@ -14,6 +14,7 @@ const contexts: Context[] = []
 // The policy only requires the service's presence; it flushes through
 // `ctx.sessions`, so no handle is ever opened in these tests.
 class TestPersistence extends SessionPersistence {
+  override delete(): Promise<boolean> { return Promise.resolve(false) }
   create(): Promise<SessionHandle> { return Promise.reject(new Error('not used')) }
   open(): Promise<SessionHandle> { return Promise.reject(new Error('not used')) }
   flush(): Promise<void> { return Promise.resolve() }

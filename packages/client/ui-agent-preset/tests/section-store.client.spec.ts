@@ -24,6 +24,8 @@ interface FakeOptions {
   failRead?: string
   /** Reject `copy` with this message. */
   failCopy?: string
+  /** Reject `write` with this message. */
+  failWrite?: string
   /** Reject `openDocument` with this message. */
   failOpen?: string
   /** Reject `remove` with this message. */
@@ -85,6 +87,15 @@ function fakeCtx(
             ...preset.name === undefined ? {} : { name: preset.name },
           })
         },
+        write: (agentPreset: string, content: string) => {
+          record('write', { agentPreset, content })
+          if (options.failWrite !== undefined) return remoteFail(options.failWrite)
+          const preset = presets.get(agentPreset)
+          /* v8 ignore next -- every test writes an id the fake store holds */
+          if (preset === undefined) return remoteFail(`unknown preset ${agentPreset}`)
+          preset.content = content
+          return remoteOk(undefined)
+        },
         // Arity is checked against the declaration, not against which arguments
         // carry a value, so a short call rejects instead of answering. Reject
         // one here too: the real face would, and a lenient double hid it once.
@@ -140,9 +151,21 @@ function fakeCtx(
 }
 
 function seed(): Map<string, FakePreset> {
+  const standard = [
+    '- id: persona',
+    "  name: '@deepseek-ai/dsh-persona'",
+    '  config:',
+    '    text: >-',
+    '      Standard prompt.',
+    '',
+    '- id: tool-bash',
+    "  name: '@deepseek-ai/dsh-tool-bash'",
+    '',
+  ].join('\n')
+  const mine = standard.replace('Standard prompt.', 'Original prompt.').replace(/tool-bash/g, 'tool-read')
   return new Map<string, FakePreset>([
-    ['standard', { trust: 'system', content: '- id: tool-bash\n', name: '标准模式' }],
-    ['mine', { trust: 'user', content: '- id: tool-read\n' }],
+    ['standard', { trust: 'system', content: standard, name: '标准模式' }],
+    ['mine', { trust: 'user', content: mine }],
   ])
 }
 
@@ -228,8 +251,10 @@ describe('the read-only viewer', () => {
 
     await controller.view('standard')
 
+    const content = seed().get('standard')?.content
     expect(controller.store.getSnapshot().view).toEqual({
-      id: 'standard', title: '标准模式', content: '- id: tool-bash\n',
+      id: 'standard', title: '标准模式', content, draft: content, savedDraft: content,
+      editable: false, saving: false, error: null,
     })
   })
 
@@ -261,6 +286,33 @@ describe('the read-only viewer', () => {
 
     expect(controller.store.getSnapshot().view).toBeNull()
     expect(controller.store.getSnapshot().error).toBe('no peeking')
+  })
+
+  it('writes only the system prompt and keeps a refused draft open', async () => {
+    const success = harness()
+    await success.controller.load()
+    await success.controller.view('mine')
+    success.controller.setViewContent('Changed: # stays text\nSecond line')
+    await success.controller.saveView()
+
+    const written = success.calls.find(call => call.method === 'write')?.payload as { content: string }
+    expect(written.content).toContain('    text: |-\n      Changed: # stays text\n      Second line\n')
+    expect(written.content).toContain("- id: tool-read\n  name: '@deepseek-ai/dsh-tool-read'")
+    expect(success.controller.store.getSnapshot().view).toMatchObject({
+      draft: 'Changed: # stays text\nSecond line',
+      savedDraft: 'Changed: # stays text\nSecond line',
+    })
+    expect(success.rosterChanges()).toBe(1)
+
+    const refused = harness({ failWrite: 'disk full' })
+    await refused.controller.load()
+    await refused.controller.view('mine')
+    refused.controller.setViewContent('Unsaved prompt')
+    await refused.controller.saveView()
+
+    expect(refused.controller.store.getSnapshot().view).toMatchObject({
+      draft: 'Unsaved prompt', savedDraft: 'Original prompt.', saving: false, error: 'disk full',
+    })
   })
 
 })
@@ -341,7 +393,7 @@ describe('the copy blocker', () => {
 })
 
 describe('submitting a copy', () => {
-  it('copies, re-reads the roster, announces the change, and opens the files', async () => {
+  it('copies, re-reads the roster, announces the change, and opens the editor', async () => {
     const { controller, calls, rosterChanges } = harness()
     await controller.load()
     controller.beginCopy('standard')
@@ -356,10 +408,7 @@ describe('submitting a copy', () => {
     expect(rosterChanges()).toBe(1)
     expect(calls.find(call => call.method === 'copy')?.payload)
       .toEqual({ from: 'standard', id: 'my-copy', name: '我的模式' })
-    // A preset is its files from here on, so landing in them completes the
-    // copy rather than following it.
-    expect(calls.find(call => call.method === 'openAgentPresetDirectory')?.payload)
-      .toEqual({ agentPreset: 'my-copy' })
+    expect(state.view).toMatchObject({ id: 'my-copy', editable: true })
   })
 
   it('omits an empty name so the copy falls back to its id', async () => {
@@ -375,7 +424,7 @@ describe('submitting a copy', () => {
       .toEqual({ from: 'standard', id: 'my-copy' })
   })
 
-  it('reveals the new directory as text where the host has no desktop', async () => {
+  it('opens the new editor where the host has no desktop', async () => {
     const { controller } = harness({ hasDocument: false })
     await controller.load()
     controller.beginCopy('standard')
@@ -383,7 +432,7 @@ describe('submitting a copy', () => {
 
     await controller.confirmCopy()
 
-    expect(controller.store.getSnapshot().revealedPaths['my-copy']).toBe('/presets/my-copy')
+    expect(controller.store.getSnapshot().view).toMatchObject({ id: 'my-copy', editable: true })
   })
 
   it('keeps the dialog open with the refusal on it', async () => {

@@ -514,13 +514,29 @@ async read(id: string): Promise<string>
 @Remote('read') async readDocument(agentPreset: string): Promise<AgentPresetDocument>
 
 /**
+ * Replace one locally authored preset's composition.
+ * @param id - preset id resolved against the Host's configured roots.
+ * @param content - complete `agent.cordis.yml` text to store.
+ * @returns once the atomic write commits.
+ * @throws when the preset is unknown, ships with the deployment, or lies
+ * outside the writable user root.
+ */
+async write(id: string, content: string): Promise<void>
+
+/**
+ * Replace one locally authored preset's composition through the Remote API.
+ * @param agentPreset - preset id resolved by the Host.
+ * @param content - complete `agent.cordis.yml` text to store.
+ * @returns once the atomic write commits.
+ */
+@Remote('write') async remoteExportWrite(agentPreset: string, content: string): Promise<void>
+
+/**
  * Create a locally authored preset by copying an existing one whole.
  *
- * Copy is the only authoring write. Composition text never crosses this
- * seam: the source is named by id and its directory is copied as it stands,
- * so the copy is exactly as loadable as its source and authoring grants no
- * capability the roster did not already carry. The copy is NOT mounted to
- * validate — a source that mounts today yields a copy that mounts today.
+ * The source is named by id and its directory is copied as it stands. The
+ * copy is NOT mounted to validate: a source that mounts today yields a copy
+ * that mounts today.
  * @param from - the preset the copy starts from; shipped presets are the
  * primary source, so any trust is accepted.
  * @param id - the new preset's id, which becomes its directory name.

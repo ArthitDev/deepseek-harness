@@ -179,6 +179,8 @@ export function apply(ctx: ClientContext): void {
     load: () => section.load(),
     view: (id: string) => section.view(id),
     closeView: () => { section.closeView() },
+    setViewContent: (content: string) => { section.setViewContent(content) },
+    saveView: () => section.saveView(),
     beginCopy: (from: string) => { section.beginCopy(from) },
     cancelCopy: () => { section.cancelCopy() },
     setCopyId: (id: string) => { section.setCopyId(id) },

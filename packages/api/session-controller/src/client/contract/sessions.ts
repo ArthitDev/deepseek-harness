@@ -38,6 +38,11 @@ export interface ISessions {
     sessionId?: SessionId
   }): Promise<SessionId>
   /**
+   * Permanently delete a Session from the Host. Its project files remain.
+   * @param id - Session identity to delete.
+   */
+  delete(id: SessionId): Promise<void>
+  /**
    * Select a session as current.
    * @param id - session id (must exist in the list; unknown ids fail loud).
    */

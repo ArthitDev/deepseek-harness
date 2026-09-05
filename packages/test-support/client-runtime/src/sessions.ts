@@ -198,7 +198,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'refresh' | 'search' | 'fork'
+      | 'clear' | 'refresh' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -426,6 +426,12 @@ export class TestSessions implements ISessions {
     const id = await this.createStub(opts)
     this.require(id)
     return id
+  }
+
+  /** Delete a fixture Session through its existing teardown path. */
+  async delete(id: SessionId): Promise<void> {
+    this.calls.push({ method: 'delete', args: [id] })
+    await this.remove(id)
   }
 
   /**

@@ -70,4 +70,4 @@ The skill's own `cordis_mount` snippet was executed verbatim through the tool re
 
 ## Related
 
-Supersedes the creator-guidance bullet in [broken presets are roster rows](2026-08-09-broken-preset-roster-rows.md), whose health-check decision remains current — this note reverses only its "the agent cannot start sessions; the settings page's red marking is the user's check" conclusion. Authoring's copy-only shape is owned by [copy-only preset authoring](../simplification/2026-08-08-copy-only-preset-authoring.md).
+Supersedes the creator-guidance bullet in [broken presets are roster rows](2026-08-09-broken-preset-roster-rows.md), whose health-check decision remains current — this note reverses only its "the agent cannot start sessions; the settings page's red marking is the user's check" conclusion. Current copy-first authoring and browser writes are owned by [browser-editable user preset compositions](../feature/2026-09-04-browser-editable-user-preset-compositions.md).

@@ -208,6 +208,28 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
       }
     })
 
+    it('delete is idempotent, refuses an active writer, and releases the id for reuse', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('delete-me', '/work')
+        expect(await persistence.delete(m.id)).toBe(false)
+        const writer = await persistence.create(m)
+        await writer.append(oneTurnLog())
+        await expect(persistence.delete(m.id)).rejects.toBeInstanceOf(SessionAlreadyOwnedError)
+        await writer.close()
+
+        expect(await persistence.delete(m.id)).toBe(true)
+        expect(await persistence.delete(m.id)).toBe(false)
+        expect(await persistence.stat(m.id)).toBeUndefined()
+        expect((await persistence.list()).some(item => item.header.id === m.id)).toBe(false)
+        await expect(persistence.open(m.id, 'read')).rejects.toBeInstanceOf(SessionPersistenceNotFoundError)
+        const reused = await persistence.create(m)
+        await reused.close()
+      } finally {
+        await dispose()
+      }
+    })
+
     it('write ownership is single-holder per instance and released by close', async () => {
       const { persistence, dispose } = await make()
       try {

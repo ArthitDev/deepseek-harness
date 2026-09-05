@@ -1,19 +1,18 @@
 /**
  * Agent-presets settings section: the roster as cards, a copy dialog as the
- * only way a preset is created, and a read-only viewer over the shipped
- * compositions.
+ * only way a preset is created, a read-only viewer over shipped compositions,
+ * and an editor over custom compositions.
  *
- * The browser edits no composition text — a shipped preset opens read-only to
- * be READ (it is the known-good composition a copy starts from), and a custom
- * preset is edited in its own files, which is what the location action leads
- * to. Deleting a preset leaves running sessions alone: a composition is
- * mounted once at session creation and nothing re-reads the file.
+ * A shipped preset stays the known-good source a copy starts from. A custom
+ * preset can be edited in the browser or in its own files. Deleting or editing
+ * a preset leaves running sessions on their mounted generation.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Button, IconBrowseOutline16, IconCopyOutline16, IconFolderOpenOutline16, IconPlusOutline16, IconTrashOutline16, Modal, Tooltip,
+  Button, IconBrowseOutline16, IconCopyOutline16, IconEditOutline16, IconFolderOpenOutline16,
+  IconPlusOutline16, IconTrashOutline16, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -29,10 +28,14 @@ export interface AgentPresetSectionInjected {
   }
   /** Read the roster; called once when the section first renders. */
   load: () => Promise<void>
-  /** Open one shipped preset's composition in the read-only viewer. */
+  /** Open one preset's composition in the viewer or editor. */
   view: (id: string) => Promise<void>
-  /** Close the read-only viewer. */
+  /** Close the viewer or editor. */
   closeView: () => void
+  /** Replace the open custom preset's editor draft. */
+  setViewContent: (content: string) => void
+  /** Persist the open custom preset's editor draft. */
+  saveView: () => Promise<void>
   /** Open the copy dialog over one preset. */
   beginCopy: (from: string) => void
   /** Close the copy dialog, discarding the draft. */
@@ -312,10 +315,10 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                       <code className={css.cardId}>{row.id}</code>
                     </button>
                     <div className={css.cardFoot}>
-                      {/* Shipped presets are the compositions a copy starts
-                        from, so READING one is the point; a custom preset is
-                        edited in its files instead, which the location action
-                        leads to. A broken shipped preset has no readable
+                      {/* Shipped presets are the read-only compositions a copy
+                        starts from; a custom preset gets an editor and keeps a
+                        location action for its other files. A broken shipped
+                        preset has no readable
                         composition to offer, so its viewer is withheld; a
                         broken custom one keeps the location action — the
                         files are where it gets fixed. */}
@@ -334,15 +337,26 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                           )
                           : null
                         : (
-                          <button
-                            type="button"
-                            className={css.iconButton}
-                            data-tip={state.hasDocument ? t('openLocation') : t('showLocation')}
-                            aria-label={`${state.hasDocument ? t('openLocation') : t('showLocation')}: ${text.name}`}
-                            onClick={() => { void props.openLocation(row.id) }}
-                          >
-                            <IconFolderOpenOutline16 />
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={t('edit')}
+                              aria-label={`${t('edit')}: ${text.name}`}
+                              onClick={() => { void props.view(row.id) }}
+                            >
+                              <IconEditOutline16 />
+                            </button>
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={state.hasDocument ? t('openLocation') : t('showLocation')}
+                              aria-label={`${state.hasDocument ? t('openLocation') : t('showLocation')}: ${text.name}`}
+                              onClick={() => { void props.openLocation(row.id) }}
+                            >
+                              <IconFolderOpenOutline16 />
+                            </button>
+                          </>
                         )}
                       <button
                         type="button"
@@ -399,19 +413,47 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
       <Modal
         open={state.view !== null}
         onClose={() => { props.closeView() }}
-        title={state.view === null ? '' : `${t('view')} · ${viewedTitle}`}
+        title={state.view === null ? '' : `${t(state.view.editable ? 'editSystemPrompt' : 'view')} · ${viewedTitle}`}
         closeLabel={t('close')}
-        description={t('composition')}
+        description={t(state.view?.editable === true ? 'systemPromptHelp' : 'composition')}
         className={css.dialog as string}
-        footer={(
-          <Button variant="outline" autoFocus onClick={() => { props.closeView() }}>
-            {t('close')}
-          </Button>
-        )}
+        footer={state.view?.editable === true
+          ? (
+            <>
+              <Button variant="outline" disabled={state.view.saving} onClick={() => { props.closeView() }}>
+                {t('cancel')}
+              </Button>
+              <Button
+                disabled={state.view.saving || state.view.draft === state.view.savedDraft}
+                onClick={() => { void props.saveView() }}
+              >
+                {state.view.saving ? t('saving') : t('save')}
+              </Button>
+            </>
+          )
+          : (
+            <Button variant="outline" autoFocus onClick={() => { props.closeView() }}>
+              {t('close')}
+            </Button>
+          )}
       >
         {state.view === null
           ? null
-          : <pre className={css.viewerCode}>{state.view.content}</pre>}
+          : state.view.editable
+            ? (
+              <div className={css.editorFields}>
+                <textarea
+                  className={css.editor}
+                  aria-label={t('systemPrompt')}
+                  value={state.view.draft}
+                  spellCheck={false}
+                  autoFocus
+                  onChange={(event) => { props.setViewContent(event.target.value) }}
+                />
+                {state.view.error === null ? null : <p className={css.error} role="alert">{state.view.error}</p>}
+              </div>
+            )
+            : <pre className={css.viewerCode}>{state.view.content}</pre>}
       </Modal>
       <Modal
         open={state.pendingDelete !== null}
