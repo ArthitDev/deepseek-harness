@@ -24,6 +24,8 @@ interface FakeOptions {
   failRead?: string
   /** Reject `copy` with this message. */
   failCopy?: string
+  /** Reject `create` with this message. */
+  failCreate?: string
   /** Reject `write` with this message. */
   failWrite?: string
   /** Reject `openDocument` with this message. */
@@ -114,6 +116,16 @@ function fakeCtx(
             content: source.content,
             ...name === undefined ? {} : { name },
           })
+          return remoteOk(undefined)
+        },
+        create: (...args: [from: string, id: string, name: string | undefined, content: string]) => {
+          if (args.length !== 4) {
+            return Promise.reject(new Error(`client api: agentPresets/create expected 4 argument(s), got ${String(args.length)}`))
+          }
+          const [from, id, name, content] = args
+          record('create', { from, id, ...name === undefined ? {} : { name }, content })
+          if (options.failCreate !== undefined) return remoteFail(options.failCreate)
+          presets.set(id, { trust: 'user', content, ...name === undefined ? {} : { name } })
           return remoteOk(undefined)
         },
         deletePreset: async (id: string) => {
@@ -372,6 +384,42 @@ describe('the copy dialog', () => {
     controller.setCopyName('renamed')
 
     expect(copyOf(controller).error).toBeNull()
+  })
+})
+
+describe('direct creation', () => {
+  it('creates from the default capabilities with the drafted system prompt', async () => {
+    const { controller, calls, presets, rosterChanges } = harness()
+    await controller.load()
+    controller.beginCreate()
+    controller.setCreateId('red-team')
+    controller.setCreateName('Red Team')
+    controller.setCreatePrompt('Work only within the authorized scope.\nKeep evidence.')
+
+    await controller.confirmCreate()
+
+    const created = presets.get('red-team')
+    expect(created?.content).toContain(
+      '    text: |-\n      Work only within the authorized scope.\n      Keep evidence.\n')
+    expect(created?.content).toContain("- id: tool-bash\n  name: '@deepseek-ai/dsh-tool-bash'")
+    expect(calls.find(call => call.method === 'create')?.payload).toMatchObject({
+      from: 'standard', id: 'red-team', name: 'Red Team',
+    })
+    expect(controller.store.getSnapshot().create).toBeNull()
+    expect(rosterChanges()).toBe(1)
+  })
+
+  it('keeps the draft open when creation is refused', async () => {
+    const { controller } = harness({ failCreate: 'disk full' })
+    await controller.load()
+    controller.beginCreate()
+    controller.setCreateId('red-team')
+
+    await controller.confirmCreate()
+
+    expect(controller.store.getSnapshot().create).toMatchObject({
+      id: 'red-team', saving: false, error: 'disk full',
+    })
   })
 })
 

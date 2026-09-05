@@ -1,9 +1,10 @@
 /**
- * Agent-preset management controller: the roster as a list, a copy dialog,
+ * Agent-preset management controller: the roster as a list, create and copy dialogs,
  * a read-only viewer over shipped compositions, and a custom-preset editor.
  *
- * A new preset is a host-side copy of an existing one. Composition writes name
- * only that copied preset's id; the Host resolves its user-root path.
+ * Direct creation keeps the default preset's tools and replaces its persona
+ * prompt in one Host operation. Composition writes name only a preset id; the
+ * Host resolves its user-root path.
  *
  * The host stays the single fact source. Every mutation writes through the
  * wire and the page re-reads the roster afterwards, because a copy changes
@@ -53,6 +54,20 @@ export interface CopyDraft {
   /** Whether the copy is in flight. */
   saving: boolean
   /** The last copy failure, cleared by the next edit. */
+  error: string | null
+}
+
+/** A preset created directly from an id, display name, and system prompt. */
+export interface CreateDraft {
+  /** New preset id being typed; the directory name, so it is required. */
+  id: string
+  /** Display name being typed; empty falls back to the id. */
+  name: string
+  /** Persona prompt stored in the new preset. */
+  prompt: string
+  /** Whether creation is in flight. */
+  saving: boolean
+  /** Last creation failure, cleared by the next edit. */
   error: string | null
 }
 
@@ -145,6 +160,8 @@ export interface AgentPresetSectionState {
   rows: readonly PresetRow[]
   /** The open copy dialog, or null. */
   copy: CopyDraft | null
+  /** The open direct-create dialog, or null. */
+  create: CreateDraft | null
   /** The open composition viewer or editor, or null. */
   view: PresetView | null
   /** The preset awaiting delete confirmation. */
@@ -165,6 +182,7 @@ const INITIAL: AgentPresetSectionState = {
   hasDocument: false,
   rows: [],
   copy: null,
+  create: null,
   view: null,
   pendingDelete: null,
   deleting: false,
@@ -180,7 +198,7 @@ const INITIAL: AgentPresetSectionState = {
  * @returns the blocking reason's locale key, or undefined when submittable.
  */
 export function draftBlocker(
-  draft: CopyDraft,
+  draft: Pick<CopyDraft, 'id'>,
   rows: readonly PresetRow[],
 ): 'idRequired' | 'idInvalid' | 'idTaken' | undefined {
   if (draft.id === '') return 'idRequired'
@@ -219,6 +237,12 @@ export class AgentPresetSectionController {
     this.set({ copy: { ...copy, ...patch } })
   }
 
+  private patchCreate(patch: Partial<CreateDraft>): void {
+    const { create } = this.store.getSnapshot()
+    if (create === null) return
+    this.set({ create: { ...create, ...patch } })
+  }
+
   private patchView(patch: Partial<PresetView>): void {
     const { view } = this.store.getSnapshot()
     if (view === null) return
@@ -246,7 +270,7 @@ export class AgentPresetSectionController {
     const hasDocument = described.ok && described.value
     if (presets.length === 0) {
       // Nothing to manage leaves nothing to keep a dialog open over.
-      this.set({ status: 'unavailable', rows: [], authorable, hasDocument, copy: null, view: null })
+      this.set({ status: 'unavailable', rows: [], authorable, hasDocument, copy: null, create: null, view: null })
       return
     }
     // A reveal outlives a reload but not its preset: a path for a row the
@@ -320,6 +344,71 @@ export class AgentPresetSectionController {
       return
     }
     this.patchView({ saving: false, content, savedDraft: view.draft })
+    await this.load()
+    this.rosterChanged()
+  }
+
+  /** Open the direct-create dialog. */
+  beginCreate(): void {
+    this.set({
+      error: null,
+      create: { id: '', name: '', prompt: '', saving: false, error: null },
+    })
+  }
+
+  /** Close the direct-create dialog, discarding its draft. */
+  cancelCreate(): void {
+    if (this.store.getSnapshot().create?.saving === true) return
+    this.set({ create: null })
+  }
+
+  /** Update the new preset id.
+   * @param id - new preset id typed into the dialog. */
+  setCreateId(id: string): void {
+    this.patchCreate({ id, error: null })
+  }
+
+  /** Update the new preset display name.
+   * @param name - display name typed into the dialog. */
+  setCreateName(name: string): void {
+    this.patchCreate({ name, error: null })
+  }
+
+  /** Update the new preset persona prompt.
+   * @param prompt - persona prompt typed into the dialog. */
+  setCreatePrompt(prompt: string): void {
+    this.patchCreate({ prompt, error: null })
+  }
+
+  /** Create a preset from the current default's capabilities and the drafted prompt. */
+  async confirmCreate(): Promise<void> {
+    const draft = this.store.getSnapshot().create
+    if (draft === null || draft.saving) return
+    const state = this.store.getSnapshot()
+    if (draftBlocker(draft, state.rows) !== undefined) return
+    const source = state.rows.find(row => row.isDefault && row.broken === undefined)
+    if (source === undefined) return
+    this.patchCreate({ saving: true, error: null })
+    const document = await this.ctx.remote.agentPresets.read(source.id)
+    if (!document.ok) {
+      this.patchCreate({ saving: false, error: document.error.message })
+      return
+    }
+    let content: string
+    try {
+      content = replacePersonaPrompt(document.value.content, draft.prompt)
+    } catch (error: unknown) {
+      this.patchCreate({ saving: false, error: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    const name = draft.name.trim()
+    const result = await this.ctx.remote.agentPresets.create(
+      source.id, draft.id, name === '' ? undefined : name, content)
+    if (!result.ok) {
+      this.patchCreate({ saving: false, error: result.error.message })
+      return
+    }
+    this.set({ create: null })
     await this.load()
     this.rosterChanged()
   }

@@ -547,6 +547,19 @@ async write(id: string, content: string): Promise<void>
 async copy(from: string, id: string, name?: string): Promise<void>
 
 /**
+ * Create a locally authored preset with a complete composition while
+ * retaining the source preset's other files.
+ * @param from - source preset whose tools, skills, and assets are retained.
+ * @param id - new preset id and directory name.
+ * @param name - display name; undefined falls back to the id.
+ * @param content - complete composition stored in the new preset.
+ * @returns once the preset directory and composition are stored.
+ * @throws when the source is unknown, the id is unusable or already taken,
+ * or the deployment configures no writable root.
+ */
+async create(from: string, id: string, name: string | undefined, content: string): Promise<void>
+
+/**
  * Copy one preset through the Remote API.
  * @param from - the source preset id.
  * @param id - the new preset id.
@@ -556,6 +569,18 @@ async copy(from: string, id: string, name?: string): Promise<void>
  * details when the copy is refused.
  */
 @Remote('copy') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>
+
+/**
+ * Create one preset with caller-supplied composition through the Remote API.
+ * @param from - source preset whose non-composition files are retained.
+ * @param id - new preset id.
+ * @param name - display name, or undefined to use the id.
+ * @param content - complete composition for the new preset.
+ * @returns once the complete preset is stored.
+ * @throws {RemoteError} with the corresponding stable preset code and
+ * details when creation is refused.
+ */
+@Remote('create') async remoteExportCreate( from: string, id: string, name: string | undefined, content: string, ): Promise<void>
 
 /**
  * Delete a locally authored preset.

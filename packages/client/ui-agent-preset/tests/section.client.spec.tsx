@@ -12,7 +12,7 @@ import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { AgentPresetSection } from '../src/client/AgentPresetSection.tsx'
 import type { AgentPresetSectionProps } from '../src/client/AgentPresetSection.tsx'
-import type { AgentPresetSectionState, CopyDraft } from '../src/client/section-store.ts'
+import type { AgentPresetSectionState, CopyDraft, CreateDraft } from '../src/client/section-store.ts'
 import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -27,6 +27,7 @@ const READY: AgentPresetSectionState = {
     { id: 'mine', trust: 'user', isDefault: false },
   ],
   copy: null,
+  create: null,
   view: null,
   pendingDelete: null,
   deleting: false,
@@ -62,6 +63,12 @@ function renderSection(
     setCopyId: vi.fn(),
     setCopyName: vi.fn(),
     confirmCopy: vi.fn(() => Promise.resolve()),
+    beginCreate: vi.fn(),
+    cancelCreate: vi.fn(),
+    setCreateId: vi.fn(),
+    setCreateName: vi.fn(),
+    setCreatePrompt: vi.fn(),
+    confirmCreate: vi.fn(() => Promise.resolve()),
     openLocation: vi.fn(() => Promise.resolve()),
     confirmDelete: vi.fn(),
     remove: vi.fn(() => Promise.resolve()),
@@ -123,18 +130,17 @@ describe('the preset list', () => {
     expect(screen.getByRole('heading', { name: en.customGroup })).toBeTruthy()
   })
 
-  it('shows no group heading for a set nobody has', () => {
+  it('keeps the custom group available when it has no presets yet', () => {
     renderSection({ rows: [{ id: 'standard', trust: 'system', isDefault: true }] })
 
-    expect(screen.queryByRole('heading', { name: en.customGroup })).toBeNull()
+    expect(screen.getByRole('heading', { name: en.customGroup })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.addPreset })).toBeTruthy()
   })
 
-  it('leads with the two ways a preset is created', () => {
+  it('leads with direct creation, duplication, and Creator mode', () => {
     renderSection()
 
-    // The page has no create button: the intro is what tells a first-time
-    // reader that copying an existing preset — or drafting one in Creator
-    // mode — IS the way to make one.
+    expect(screen.getByRole('button', { name: en.addPreset })).toBeTruthy()
     expect(screen.getByText(new RegExp('Creator mode'))).toBeTruthy()
   })
 
@@ -400,6 +406,41 @@ describe('the copy dialog', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(actions.cancelCopy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the direct-create dialog', () => {
+  const draft: CreateDraft = {
+    id: '', name: '', prompt: '', saving: false, error: null,
+  }
+
+  it('opens from Add preset and collects the identity and system prompt', () => {
+    const actions = renderSection()
+    fireEvent.click(screen.getByRole('button', { name: en.addPreset }))
+    expect(actions.beginCreate).toHaveBeenCalledTimes(1)
+
+    cleanup()
+    const open = renderSection({ create: draft })
+    const dialog = screen.getByRole('dialog', { name: en.addPreset })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.presetIdPlaceholder), { target: { value: 'red-team' } })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.displayNamePlaceholder), { target: { value: 'Red Team' } })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.systemPromptPlaceholder), { target: { value: 'Stay in scope.' } })
+
+    expect(open.setCreateId).toHaveBeenCalledWith('red-team')
+    expect(open.setCreateName).toHaveBeenCalledWith('Red Team')
+    expect(open.setCreatePrompt).toHaveBeenCalledWith('Stay in scope.')
+  })
+
+  it('submits a valid draft and blocks an invalid id', () => {
+    const valid = renderSection({ create: { ...draft, id: 'red-team' } })
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.create))
+    expect(valid.confirmCreate).toHaveBeenCalledTimes(1)
+
+    cleanup()
+    const invalid = renderSection({ create: { ...draft, id: '../escape' } })
+    expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe(en.idInvalid)
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.create))
+    expect(invalid.confirmCreate).not.toHaveBeenCalled()
   })
 })
 

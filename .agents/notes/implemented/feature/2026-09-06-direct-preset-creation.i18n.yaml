@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-06-direct-preset-creation.md
+2026-09-06-direct-preset-creation.md: 61b85cb9e50f7663c588d2d4c44d6153f0838a76
+2026-09-06-direct-preset-creation.zh.md: 2406f7ec32ba194354c274aa826201425973c9e2

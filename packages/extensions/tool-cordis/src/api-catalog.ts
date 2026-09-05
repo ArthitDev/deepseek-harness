@@ -214,11 +214,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['when the source is unknown, the id is unusable or already taken, or the deployment configures no writable root.'],
       },
       {
+        signature: 'async create(from: string, id: string, name: string | undefined, content: string): Promise<void>',
+        description: 'Create a locally authored preset with a complete composition while retaining the source preset\'s other files.',
+        parameters: [{ name: 'from', description: 'source preset whose tools, skills, and assets are retained.' }, { name: 'id', description: 'new preset id and directory name.' }, { name: 'name', description: 'display name; undefined falls back to the id.' }, { name: 'content', description: 'complete composition stored in the new preset.' }],
+        returns: 'once the preset directory and composition are stored.',
+        throws: ['when the source is unknown, the id is unusable or already taken, or the deployment configures no writable root.'],
+      },
+      {
         signature: '@Remote(\'copy\') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>',
         description: 'Copy one preset through the Remote API.',
         parameters: [{ name: 'from', description: 'the source preset id.' }, { name: 'id', description: 'the new preset id.' }, { name: 'name', description: 'the copy\'s optional display name.' }],
         returns: 'once the copy is stored.',
         throws: ['{RemoteError} with the corresponding stable preset code and details when the copy is refused.'],
+      },
+      {
+        signature: '@Remote(\'create\') async remoteExportCreate( from: string, id: string, name: string | undefined, content: string, ): Promise<void>',
+        description: 'Create one preset with caller-supplied composition through the Remote API.',
+        parameters: [{ name: 'from', description: 'source preset whose non-composition files are retained.' }, { name: 'id', description: 'new preset id.' }, { name: 'name', description: 'display name, or undefined to use the id.' }, { name: 'content', description: 'complete composition for the new preset.' }],
+        returns: 'once the complete preset is stored.',
+        throws: ['{RemoteError} with the corresponding stable preset code and details when creation is refused.'],
       },
       {
         signature: 'async remove(id: string): Promise<void>',

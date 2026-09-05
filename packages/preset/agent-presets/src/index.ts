@@ -561,6 +561,26 @@ export class AgentPresets extends TypertRemoteService {
    * or the deployment configures no writable root.
    */
   async copy(from: string, id: string, name?: string): Promise<void> {
+    await this.copyToUserRoot(from, id, name)
+  }
+
+  /**
+   * Create a locally authored preset with a complete composition while
+   * retaining the source preset's other files.
+   * @param from - source preset whose tools, skills, and assets are retained.
+   * @param id - new preset id and directory name.
+   * @param name - display name; undefined falls back to the id.
+   * @param content - complete composition stored in the new preset.
+   * @returns once the preset directory and composition are stored.
+   * @throws when the source is unknown, the id is unusable or already taken,
+   * or the deployment configures no writable root.
+   */
+  async create(from: string, id: string, name: string | undefined, content: string): Promise<void> {
+    await this.copyToUserRoot(from, id, name, content)
+  }
+
+  /** Create or copy one preset into the writable root. */
+  private async copyToUserRoot(from: string, id: string, name?: string, content?: string): Promise<void> {
     const source = await this.resolve(from)
     // The roster check refuses ids any root supplies — shipped ones included,
     // since a user directory named like a shipped preset is shadowed by it.
@@ -568,7 +588,7 @@ export class AgentPresets extends TypertRemoteService {
     if ((await this.list()).some(preset => preset.id === id)) {
       throw presetExists(id)
     }
-    await copyComposition(this.resolvedRoots, source, id, name)
+    await copyComposition(this.resolvedRoots, source, id, name, content)
     // A settled mount under this id can only be stale (its preset was deleted
     // from disk outside `remove`); the new preset must not inherit it. Every
     // session already joined keeps the generation it runs on regardless.
@@ -589,6 +609,25 @@ export class AgentPresets extends TypertRemoteService {
     validatePresetId(from, 'from')
     validatePresetId(id, 'agentPreset')
     await this.copy(from, id, name)
+  }
+
+  /**
+   * Create one preset with caller-supplied composition through the Remote API.
+   * @param from - source preset whose non-composition files are retained.
+   * @param id - new preset id.
+   * @param name - display name, or undefined to use the id.
+   * @param content - complete composition for the new preset.
+   * @returns once the complete preset is stored.
+   * @throws {RemoteError} with the corresponding stable preset code and
+   * details when creation is refused.
+   */
+  @Remote('create')
+  async remoteExportCreate(
+    from: string, id: string, name: string | undefined, content: string,
+  ): Promise<void> {
+    validatePresetId(from, 'from')
+    validatePresetId(id, 'agentPreset')
+    await this.create(from, id, name, content)
   }
 
   /**

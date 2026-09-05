@@ -26,4 +26,4 @@ Settings 对健康的自定义 preset 使用原生文本区域，对随附 prese
 
 浏览器可以在第一个用户 preset 根目录内持久化高权限组装文本。无效文本可能使 preset 显示为损坏，但传输写入失败时草稿不会丢失，preset 目录也仍可用于恢复。元数据、skill 与资产继续使用普通文件编辑器或位置动作。
 
-本文仅取代[仅复制的 preset 创作](../simplification/2026-08-08-copy-only-preset-authoring.zh.md)中“不允许浏览器写入”的决策。其先复制再创作、内置项不可变、请求不带路径以及位置动作的决策仍然有效。
+本文仅取代[仅复制的 preset 创作](../simplification/2026-08-08-copy-only-preset-authoring.zh.md)中“不允许浏览器写入”的决策。内置项不可变、请求不带路径以及位置动作仍然有效；[直接创建 preset](2026-09-06-direct-preset-creation.zh.md)负责从 prompt 创建。

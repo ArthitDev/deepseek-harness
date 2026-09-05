@@ -1,5 +1,5 @@
 /**
- * Copying, reading, writing, and deleting locally authored presets.
+ * Creating, copying, reading, writing, and deleting locally authored presets.
  *
  * Authoring is confined to a `user` root: the shipped `.system` set is part of
  * the deployment, and letting a browser rewrite it would turn "reset to a known
@@ -119,6 +119,8 @@ async function tightenModes(dir: string): Promise<void> {
  * @param source - the resolved preset the copy starts from.
  * @param id - the new preset's id, which becomes its directory name.
  * @param name - display name for the copy; omitted falls back to the id.
+ * @param content - replacement composition stored before the new directory is
+ * published to the caller; omitted keeps the source composition unchanged.
  * @returns the absolute path of the new preset directory.
  * @throws when the id is unusable or already occupied on disk, or the
  * deployment configures no writable root.
@@ -128,6 +130,7 @@ export async function copyComposition(
   source: AgentPreset,
   id: string,
   name?: string,
+  content?: string,
 ): Promise<string> {
   if (!PRESET_ID.test(id)) {
     const reason = `preset id ${JSON.stringify(id)} must match ${String(PRESET_ID)} — `
@@ -144,6 +147,9 @@ export async function copyComposition(
       recursive: true, dereference: true, force: false, errorOnExist: true,
     })
     await tightenModes(dir)
+    if (content !== undefined) {
+      await writeFileAtomic(join(dir, COMPOSITION_FILE), content, { mode: 0o600, dirMode: 0o700 })
+    }
     const rendered = renderPresetMetadata({
       ...name === undefined ? {} : { name },
       ...source.description === undefined ? {} : { description: source.description },

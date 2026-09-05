@@ -14,6 +14,7 @@ export type AgentPresetSettingsKey =
   | 'brokenBadge' | 'brokenNoCopy' | 'switchRefused'
   | 'composition' | 'systemPrompt' | 'systemPromptHelp' | 'cancel' | 'close' | 'retry'
   | 'copyTitle' | 'copyIntro' | 'create' | 'creating' | 'creatorDraft'
+  | 'addPreset' | 'createIntro' | 'createUnavailable' | 'systemPromptPlaceholder'
   | 'openLocation' | 'showLocation' | 'revealedPathLabel'
   | 'idRequired' | 'idInvalid' | 'idTaken'
   | 'deleteTitle' | 'deleteDescription' | 'deleteConfirm' | 'deleting'
@@ -27,7 +28,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   nav: 'Agent presets',
   sectionIntro:
     'A preset is the plugin composition one session\'s agent runs — its tools, prompt, and capabilities. '
-    + 'Duplicate an existing one and make it yours, or let the agent draft one for you in Creator mode.',
+    + 'Create one with a system prompt, duplicate an existing one, or let Creator mode draft one for you.',
   builtIn: 'Built-in',
   setDefault: 'Set as default',
   view: 'View',
@@ -75,6 +76,10 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   create: 'Create',
   creating: 'Creating…',
   creatorDraft: 'Draft a custom preset with Creator mode',
+  addPreset: 'Add preset',
+  createIntro: 'Enter a system prompt. The new preset keeps the current default preset\'s tools, skills, and assets.',
+  createUnavailable: 'The current default preset cannot be used as a template',
+  systemPromptPlaceholder: 'Instructions for this agent',
   openLocation: 'Open folder',
   showLocation: 'Show location',
   revealedPathLabel: 'Preset files:',
@@ -95,7 +100,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   seatHint: '即将开始的这个会话所用的 Agent 预设',
   headerHint: '本会话运行的 Agent 预设，开始时即固定',
   nav: 'Agent 预设',
-  sectionIntro: '预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。复制一份既有预设改成自己的，或用「创造模式」让 Agent 帮你创建。',
+  sectionIntro: '预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。填写系统提示词直接新建、复制既有预设，或用「创造模式」让 Agent 帮你创建。',
   builtIn: '内置',
   setDefault: '设为默认',
   view: '查看',
@@ -137,6 +142,10 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   create: '创建',
   creating: '正在创建…',
   creatorDraft: '用「创造模式」创作自定义预设',
+  addPreset: '新建预设',
+  createIntro: '填写系统提示词。新预设会保留当前默认预设的工具、Skills 和资源。',
+  createUnavailable: '当前默认预设无法作为模板',
+  systemPromptPlaceholder: '该 Agent 的指令',
   openLocation: '打开目录',
   showLocation: '查看路径',
   revealedPathLabel: '预设文件：',

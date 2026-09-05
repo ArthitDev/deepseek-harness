@@ -257,6 +257,22 @@ describe('authoring over Remote', () => {
     await expect(ctx.agentPresets.resolve('mine')).rejects.toThrow(/not found/)
   })
 
+  it('creates a preset with supplied composition through the Remote adapter', async () => {
+    const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    const ctx = await harness({
+      default: 'standard',
+      roots: [{ path: join(FIXTURES, 'system'), trust: 'system' }, { path: userRoot, trust: 'user' }],
+      includeShippedRoot: false,
+      includeUserRoot: false,
+    })
+    const content = `${VALID}# direct prompt\n`
+
+    await ctx.agentPresets.remoteExportCreate('standard', 'direct', 'Direct', content)
+
+    expect(await readFile(join(userRoot, 'direct', COMPOSITION_FILE), 'utf8')).toBe(content)
+    expect((await ctx.agentPresets.resolve('direct')).name).toBe('Direct')
+  })
+
   it('writes a custom composition and refuses a shipped preset', async () => {
     const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
     const ctx = await harness({

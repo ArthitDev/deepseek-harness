@@ -48,7 +48,7 @@ export type { AgentPresetSeatInjected, AgentPresetSeatProps } from './AgentPrese
 export type { AgentPresetSectionInjected, AgentPresetSectionProps } from './AgentPresetSection.tsx'
 export type { AgentPresetSeatState } from './seat-store.ts'
 export {
-  draftBlocker, type AgentPresetSectionState, type CopyDraft, type PresetRow, type PresetView,
+  draftBlocker, type AgentPresetSectionState, type CopyDraft, type CreateDraft, type PresetRow, type PresetView,
 } from './section-store.ts'
 export type { AgentPresetOption, AgentPresetSettingsState } from './settings-store.ts'
 export { AGENT_PRESET_SETTINGS_NS, writeDefaultPreset } from './settings-store.ts'
@@ -186,6 +186,12 @@ export function apply(ctx: ClientContext): void {
     setCopyId: (id: string) => { section.setCopyId(id) },
     setCopyName: (name: string) => { section.setCopyName(name) },
     confirmCopy: () => section.confirmCopy(),
+    beginCreate: () => { section.beginCreate() },
+    cancelCreate: () => { section.cancelCreate() },
+    setCreateId: (id: string) => { section.setCreateId(id) },
+    setCreateName: (name: string) => { section.setCreateName(name) },
+    setCreatePrompt: (prompt: string) => { section.setCreatePrompt(prompt) },
+    confirmCreate: () => section.confirmCreate(),
     openLocation: (id: string) => section.openLocation(id),
     ...creatorDraft === undefined ? {} : { startCreatorDraft: creatorDraft },
     confirmDelete: (id: string | null) => { section.confirmDelete(id) },

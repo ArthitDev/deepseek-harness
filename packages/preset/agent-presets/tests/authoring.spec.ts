@@ -178,6 +178,18 @@ describe('copying a preset', () => {
   })
 })
 
+describe('creating a preset with a composition', () => {
+  it('keeps the source directory and stores the supplied composition', async () => {
+    const content = `${VALID}# direct prompt\n`
+
+    await ctx.agentPresets.create('standard', 'direct', 'Direct', content)
+
+    expect(await readFile(join(userRoot, 'direct', COMPOSITION_FILE), 'utf8')).toBe(content)
+    expect((await ctx.agentPresets.list()).find(preset => preset.id === 'direct'))
+      .toMatchObject({ trust: 'user', name: 'Direct' })
+  })
+})
+
 describe('deleting a preset', () => {
   it('removes a locally authored one', async () => {
     await ctx.agentPresets.copy('standard', 'mine')

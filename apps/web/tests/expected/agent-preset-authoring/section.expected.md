@@ -18,7 +18,7 @@
     - img
     - text: 关闭
   - heading "Agent 预设" [level=2]
-  - paragraph: 预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。复制一份既有预设改成自己的，或用「创造模式」让 Agent 帮你创建。
+  - paragraph: 预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。填写系统提示词直接新建、复制既有预设，或用「创造模式」让 Agent 帮你创建。
   - heading "内置" [level=3]
   - list:
     - listitem:
@@ -62,6 +62,9 @@
         - img
         - text: 复制
   - heading "自定义" [level=3]
+  - button "新建预设":
+    - img
+    - text: 新建预设
   - button "用「创造模式」创作自定义预设":
     - img
     - text: 用「创造模式」创作自定义预设

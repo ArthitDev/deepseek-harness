@@ -18,7 +18,7 @@
     - img
     - text: 关闭
   - heading "Agent 预设" [level=2]
-  - paragraph: 预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。复制一份既有预设改成自己的，或用「创造模式」让 Agent 帮你创建。
+  - paragraph: 预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。填写系统提示词直接新建、复制既有预设，或用「创造模式」让 Agent 帮你创建。
   - heading "内置" [level=3]
   - list:
     - listitem:
@@ -68,6 +68,9 @@
         - text: broken-yaml 加载失败 自定义 暂无描述。
         - alert: "the composition is not valid YAML: unexpected end of the stream within a flow collection (3:1)"
         - code: broken-yaml
+      - 'button "编辑: broken-yaml"':
+        - img
+        - text: 编辑
       - 'button "查看路径: broken-yaml"':
         - img
         - text: 查看路径
@@ -82,6 +85,9 @@
         - text: 幽灵预设 加载失败 自定义 composition 已被手动删除。
         - alert: the composition file agent.cordis.yml is missing — the directory still occupies the id; delete it or restore the file
         - code: ghost
+      - 'button "编辑: 幽灵预设"':
+        - img
+        - text: 编辑
       - 'button "查看路径: 幽灵预设"':
         - img
         - text: 查看路径
@@ -91,6 +97,9 @@
       - 'button "删除: 幽灵预设"':
         - img
         - text: 删除
+  - button "新建预设":
+    - img
+    - text: 新建预设
   - button "用「创造模式」创作自定义预设":
     - img
     - text: 用「创造模式」创作自定义预设

@@ -26,4 +26,4 @@ Composition YAML supports executable `!!js`. Editing a custom composition theref
 
 The browser can persist privileged composition text inside the first user preset root. Invalid text can make the preset appear broken, but the draft survives a failed transport write and the preset directory remains available for recovery. Metadata, skills, and assets continue to use the normal file editor or location action.
 
-This supersedes only the no-browser-write decision in [copy-only preset authoring](../simplification/2026-08-08-copy-only-preset-authoring.md). Its copy-first creation, built-in immutability, path-free requests, and location-action decisions remain current.
+This supersedes only the no-browser-write decision in [copy-only preset authoring](../simplification/2026-08-08-copy-only-preset-authoring.md). Built-in immutability, path-free requests, and location actions remain current; [direct preset creation](2026-09-06-direct-preset-creation.md) owns creation from a prompt.

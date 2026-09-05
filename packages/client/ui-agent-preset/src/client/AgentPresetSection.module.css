@@ -389,6 +389,12 @@
   color: var(--dsw-alias-label-dimmed);
 }
 
+.promptInput {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+}
+
 .dialog {
   width: min(560px, 100%);
 }

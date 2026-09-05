@@ -1,7 +1,6 @@
-// Web e2e scenario: the agent-preset settings section as copy-only authoring.
-// The browser never edits composition text — a shipped preset opens in a
-// read-only viewer, the copy dialog collects an id and an optional display
-// name, and the host copies the whole directory. The section's other job is
+// Web e2e scenario: direct preset creation and whole-preset duplication.
+// A shipped preset opens in a read-only viewer, direct creation collects a
+// system prompt, and duplication copies the whole directory. The section's other job is
 // getting the user TO the files: this lane pins `nativeOpen: false` (see the
 // overlay), so the location affordance answers the preset directory as text —
 // the deterministic branch a golden can hold on every platform.
@@ -32,7 +31,7 @@ const SHIPPED_PRESETS = fileURLToPath(new URL('../../../packages/preset/agent-pr
 const OVERLAY = fileURLToPath(new URL('./agent-preset-authoring.overlay.yml', import.meta.url))
 const MODE = webSnapshotMode()
 
-describe('web e2e: agent-preset authoring is a host-side copy', () => {
+describe('web e2e: direct agent-preset creation and duplication', () => {
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
@@ -46,13 +45,9 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
 
   /** Tokenize the lane-owned preset root after general aria normalization. */
   function withPresetRoot(snapshot: string): string {
-    const rootSuffix = `/${userRoot.split('/').pop()!}`
-    return snapshot.split('\n').map((line) => {
-      const rootStart = line.indexOf(rootSuffix)
-      if (rootStart === -1) return line
-      const pathStart = line.lastIndexOf(' ', rootStart) + 1
-      return `${line.slice(0, pathStart)}{{presetRoot}}${line.slice(rootStart + rootSuffix.length)}`
-    }).join('\n')
+    return snapshot
+      .replaceAll(userRoot, '{{presetRoot}}')
+      .replaceAll(userRoot.replaceAll('\\', '/'), '{{presetRoot}}')
   }
 
   beforeAll(async () => {
@@ -78,7 +73,7 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await scaffold?.close()
   })
 
-  it('offers the roster with copy as the only way to create', async () => {
+  it('offers direct creation beside duplication and Creator mode', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-section'))
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const dialog = settingsDialog()
@@ -90,11 +85,10 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
 
     await compareOrRefreshGolden(SECTION_EXPECTED, snapshot, MODE)
-    // The intro states the copy path directly, and the shipped rows offer
-    // view/copy but never delete or a location — their
+    // The shipped rows offer view/copy but never delete or a location — their
     // install is overwritten by upgrades and is not the user's to manage.
-    expect(snapshot).toContain('或用「创造模式」让 Agent 帮你创建')
-    expect(snapshot).not.toContain('新建预设')
+    expect(snapshot).toContain('填写系统提示词直接新建')
+    expect(snapshot).toContain('新建预设')
     expect(snapshot).toContain('查看: 标准模式')
     expect(snapshot).not.toContain('删除: 标准模式')
     expect(snapshot).not.toContain('打开目录')
@@ -118,6 +112,29 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await viewer.waitFor({ state: 'detached', timeout: 10_000 })
   }, 60_000)
 
+  it('creates a preset directly from a system prompt', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-create'))
+    const dialog = settingsDialog()
+    await dialog.getByRole('button', { name: '新建预设' }).click()
+    const createDialog = page.getByRole('dialog', { name: '新建预设' })
+    await createDialog.waitFor({ timeout: 10_000 })
+    await createDialog.getByPlaceholder('my-agent').fill('direct-agent')
+    await createDialog.getByPlaceholder('选择器中显示的名字，缺省用标识符').fill('直接模式')
+    await createDialog.getByPlaceholder('该 Agent 的指令').fill('只测试已获授权的范围。')
+    await createDialog.getByRole('button', { name: '创建' }).click()
+    await createDialog.waitFor({ state: 'detached', timeout: 10_000 })
+    await dialog.getByText('直接模式').first().waitFor({ timeout: 10_000 })
+
+    const composition = await readFile(join(userRoot, 'direct-agent', 'agent.cordis.yml'), 'utf8')
+    expect(composition).toContain('      只测试已获授权的范围。')
+    expect(composition).toContain("name: '@deepseek-ai/dsh-tool-bash'")
+
+    await dialog.getByRole('button', { name: '删除: 直接模式' }).click()
+    const confirm = page.getByRole('dialog', { name: '删除该预设？' })
+    await confirm.getByRole('button', { name: '删除', exact: true }).click()
+    await confirm.waitFor({ state: 'detached', timeout: 10_000 })
+  }, 60_000)
+
   it('copies 极简模式 whole under a new id and lands in its files', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-copy'))
     const dialog = settingsDialog()
@@ -138,10 +155,16 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await copyDialog.getByRole('button', { name: '创建' }).click()
     await copyDialog.waitFor({ state: 'detached', timeout: 10_000 })
 
-    // The new row lands in the custom group, and — with no desktop opener —
-    // its directory is revealed as text right away: landing in the files is
-    // the completion of a copy, not a follow-up.
+    // Duplication opens the copied persona prompt for immediate editing.
+    const editor = page.getByRole('dialog', { name: '编辑系统提示词 · 我的模式' })
+    await editor.waitFor({ timeout: 10_000 })
+    await editor.getByRole('button', { name: '取消' }).click()
+    await editor.waitFor({ state: 'detached', timeout: 10_000 })
+
+    // The new row lands in the custom group. This lane has no desktop opener,
+    // so its explicit location action reveals the directory as text.
     await dialog.getByText('我的模式').first().waitFor({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: '查看路径: 我的模式' }).click()
     await dialog.getByText('预设文件：').waitFor({ timeout: 10_000 })
     // The copy dialog is detached, so the settings dialog is the only one
     // left (it names itself via aria-labelledby, which a CSS attribute
@@ -149,7 +172,7 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     const snapshot = withPresetRoot(
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd))
     await compareOrRefreshGolden(CREATED_EXPECTED, snapshot, MODE)
-    expect(snapshot).toContain('{{presetRoot}}/my-agent')
+    expect(snapshot).toContain(join('{{presetRoot}}', 'my-agent'))
 
     // The host copied the whole directory and rewrote only the display
     // metadata: the composition is byte-identical to the shipped source, the
@@ -228,6 +251,10 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await copyDialog.getByRole('button', { name: '创建' }).click()
     await copyDialog.waitFor({ state: 'detached', timeout: 10_000 })
     await dialog.getByRole('button', { name: '设为默认: ghost' }).waitFor({ timeout: 10_000 })
+
+    const editor = page.getByRole('dialog', { name: '编辑系统提示词 · ghost' })
+    await editor.getByRole('button', { name: '取消' }).click()
+    await editor.waitFor({ state: 'detached', timeout: 10_000 })
 
     // Leave the roster as the earlier tests shaped it.
     await dialog.getByRole('button', { name: '删除: ghost' }).click()

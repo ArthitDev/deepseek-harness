@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包提供 Web GUI 的 agent preset 表面：新建会话界面的一枚 chip，选择下一个会话的 preset；会话标题旁的一个只读标签；以及一个设置分区，用于管理名单——复制、删除、默认值，以及通往 preset 自身文件的入口。会话的 preset 在创建时即固定，因此选择作用于此后开启的会话，运行中的会话保持它们开始时的组装；默认 preset 在能看到名单的设置分区里编辑，通用设置不再为同一字段保留重复控件。当部署未组装任何 preset 时，三个表面都不渲染任何内容，每个会话共用宿主组装。
+本包提供 Web GUI 的 agent preset 表面：新建会话界面的一枚 chip，选择下一个会话的 preset；会话标题旁的一个只读标签；以及一个设置分区，用于管理直接创建、复制、删除、默认值与 preset 文件。会话的 preset 在创建时即固定，因此选择作用于此后开启的会话，运行中的会话保持它们开始时的组装；默认 preset 在能看到名单的设置分区里编辑，通用设置不再为同一字段保留重复控件。当部署未组装任何 preset 时，三个表面都不渲染任何内容，每个会话共用宿主组装。
 
 ## 目录
 
@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 管理名单
 
-设置分区把名单呈现为卡片：复制对话框创建 preset，随后在原生文本区域编辑该自定义 preset 的 `agent.cordis.yml`；每张自定义卡片仍保留一个位置动作，用于打开元数据、skill 与资产。保存只发送 preset id 与文本，失败时保留草稿，并只影响后续会话，不改变已经组装的会话。默认值可在任一表面设置；删除会移除 preset 目录，而已据其组装的会话继续运行。随附 preset 在只读查看器中打开，不提供编辑、位置或删除。名单行携带 `broken` 时渲染为标记卡片，其主体与复制均被禁用，因为损坏 preset 的副本只是另一个损坏 preset；损坏的自定义行保留位置与删除动作，以便修复文件、清掉幽灵目录。卡片正面仍显示 preset 自己的描述——在选择器里，一个包说明符不足以让人采取行动——宿主给出的原因作为提示条挂在徽标上，另有一个视觉隐藏的 alert 把它送达辅助技术，而被禁用的卡片主体做不到这一点。
+设置分区把名单呈现为卡片。「新建预设」收集 id、可选名称与 system prompt，然后以当前默认 preset 的能力创建自定义 preset。「复制」保持所选来源不变，并在 prompt 编辑器中打开副本。每张自定义卡片仍保留一个位置动作，用于打开元数据、skill 与资产。保存只发送 preset id 与文本，失败时保留草稿，并只影响后续会话，不改变已经组装的会话。默认值可在任一表面设置；删除会移除 preset 目录，而已据其组装的会话继续运行。随附 preset 在只读查看器中打开，不提供编辑、位置或删除。名单行携带 `broken` 时渲染为标记卡片，其主体与复制均被禁用；损坏的自定义行保留位置与删除动作，以便修复文件、清掉幽灵目录。
 
 ### 对话式入口
 
@@ -43,7 +43,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-展示选项来自同一次 `agentPresets/list` 调用——名单本身已报告未显式选择的会话会得到哪个 id，因此任何表面都无需对 settings schema 做内省——默认值的写入即设置分区的设为默认动作，目标是 `agent-presets` settings 命名空间的 `default` 字段，也正是 Host 在创建时解析的字段。设置分区首次加载时查询 `settings.canOpenAgentPresetDirectory()`，并把结果与名单合并；查询失败只会移除原生打开动作。新建会话 chip 与标题标签共用一个控制器，因为暂存选择属于流程而非任何单个会话；暂存值在会话到达时应用（既覆盖工作区连接新建的会话，也覆盖它复用的空白会话），被拒绝时丢弃。被拒绝会以一条瞬时横幅在 composer 列上方自报，因为 chip 的标签此时已经弹回，而被 Host 拒绝挂载的 preset 正是发现过程报告为健康的那一种——它的名单卡片上没有任何原因可供回头查看。只有人刚做出的选择会被自报；会话成为当前会话时触发的应用器不会。[`dsh-client-connection`](../connection/README.zh.md) 使用同一浏览器会话认证 `agentPresets/read`、`agentPresets/copy`、`settings/openAgentPresetDirectory`、`agentPresets/deletePreset`、`agentPresets/list` 及其他所有 Host API 方法。组装仍会指明一个会话所运行的插件，因此读取属于侦察，而 copy、delete 与 settings 所有的目录打开操作负责管理名单并驱动 Host 桌面。分区在自身操作、`settings/document-updated` 与 `connection/reset` 时重读，因为组装文件在浏览器之外编辑，线上没有任何机制宣布文件变动。
+展示选项来自同一次 `agentPresets/list` 调用——名单本身已报告未显式选择的会话会得到哪个 id，因此任何表面都无需对 settings schema 做内省——默认值写入 `agent-presets` settings 命名空间的 `default` 字段。直接创建读取该默认组装，在内存中替换其 persona prompt，并把完整文本送到单次 Host `agentPresets/create` 操作；Host 复制来源目录并写入替换内容后才让操作成功。设置分区首次加载时查询 `settings.canOpenAgentPresetDirectory()`，并把结果与名单合并；查询失败只会移除原生打开动作。新建会话 chip 与标题标签共用一个控制器，因为暂存选择属于流程而非任何会话。[`dsh-client-connection`](../connection/README.zh.md) 使用同一浏览器会话认证 preset Remote 方法及其他所有 Host API 方法。分区在自身操作、`settings/document-updated` 与 `connection/reset` 时重读，因为组装文件也可能在浏览器之外改变。
 
 </details>
 

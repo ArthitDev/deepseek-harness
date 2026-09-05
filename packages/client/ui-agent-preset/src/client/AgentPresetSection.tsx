@@ -1,6 +1,6 @@
 /**
- * Agent-presets settings section: the roster as cards, a copy dialog as the
- * only way a preset is created, a read-only viewer over shipped compositions,
+ * Agent-presets settings section: the roster as cards, direct-create and copy
+ * dialogs, a read-only viewer over shipped compositions,
  * and an editor over custom compositions.
  *
  * A shipped preset stays the known-good source a copy starts from. A custom
@@ -46,6 +46,18 @@ export interface AgentPresetSectionInjected {
   setCopyName: (name: string) => void
   /** Submit the copy. */
   confirmCopy: () => Promise<void>
+  /** Open the direct-create dialog. */
+  beginCreate: () => void
+  /** Close the direct-create dialog. */
+  cancelCreate: () => void
+  /** Replace the direct-create id. */
+  setCreateId: (id: string) => void
+  /** Replace the direct-create display name. */
+  setCreateName: (name: string) => void
+  /** Replace the direct-create system prompt. */
+  setCreatePrompt: (prompt: string) => void
+  /** Submit direct creation. */
+  confirmCreate: () => Promise<void>
   /** Open one preset's directory, or reveal its path where there is no desktop. */
   openLocation: (id: string) => Promise<void>
   /**
@@ -60,6 +72,78 @@ export interface AgentPresetSectionInjected {
   remove: () => Promise<void>
   /** Make one preset the default for sessions created later. */
   makeDefault: (id: string) => Promise<void>
+}
+
+/** Direct-create dialog over an id, display name, and system prompt. */
+function CreateDialog({ state, t, actions }: {
+  state: AgentPresetSectionState
+  t: (key: AgentPresetSettingsKey) => string
+  actions: Pick<AgentPresetSectionInjected,
+    'cancelCreate' | 'confirmCreate' | 'setCreateId' | 'setCreateName' | 'setCreatePrompt'>
+}): ReactNode {
+  const draft = state.create
+  const blocker = draft === null ? undefined : draftBlocker(draft, state.rows)
+  const message = draft === null ? null : draft.error ?? (blocker === undefined ? null : t(blocker))
+  return (
+    <Modal
+      open={draft !== null}
+      onClose={() => { actions.cancelCreate() }}
+      title={t('addPreset')}
+      closeLabel={t('close')}
+      description={t('createIntro')}
+      className={css.dialog as string}
+      footer={(
+        <>
+          <Button variant="outline" disabled={draft?.saving === true} onClick={() => { actions.cancelCreate() }}>
+            {t('cancel')}
+          </Button>
+          <Button
+            disabled={draft === null || draft.saving || blocker !== undefined}
+            onClick={() => { void actions.confirmCreate() }}
+          >
+            {draft?.saving === true ? t('creating') : t('create')}
+          </Button>
+        </>
+      )}
+    >
+      {draft === null ? null : (
+        <div className={css.dialogFields}>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('presetId')}</span>
+            <input
+              className={css.input}
+              value={draft.id}
+              autoFocus
+              spellCheck={false}
+              placeholder={t('presetIdPlaceholder')}
+              onChange={(event) => { actions.setCreateId(event.target.value) }}
+            />
+          </label>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('displayName')}</span>
+            <input
+              className={css.input}
+              value={draft.name}
+              spellCheck={false}
+              placeholder={t('displayNamePlaceholder')}
+              onChange={(event) => { actions.setCreateName(event.target.value) }}
+            />
+          </label>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('systemPrompt')}</span>
+            <textarea
+              className={`${css.input} ${css.promptInput}`}
+              value={draft.prompt}
+              spellCheck={false}
+              placeholder={t('systemPromptPlaceholder')}
+              onChange={(event) => { actions.setCreatePrompt(event.target.value) }}
+            />
+          </label>
+          {message === null ? null : <p className={css.error} role="alert">{message}</p>}
+        </div>
+      )}
+    </Modal>
+  )
 }
 
 /** Full component props. */
@@ -229,6 +313,21 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
       </button>
     )
     : null
+  const createSource = state.rows.find(row => row.isDefault && row.broken === undefined)
+  const addButton = (
+    <button
+      type="button"
+      className={css.creatorButton}
+      disabled={!state.authorable || createSource === undefined}
+      title={!state.authorable
+        ? t('duplicateUnavailable')
+        : createSource === undefined ? t('createUnavailable') : undefined}
+      onClick={() => { props.beginCreate() }}
+    >
+      <IconPlusOutline16 size={14} />
+      {t('addPreset')}
+    </button>
+  )
 
   return (
     <div className={css.section}>
@@ -241,7 +340,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
           .map(row => ({ row, text: presetDisplayText(row, t) }))
         // The custom group is where a preset of one's own will appear, so it
         // stays on screen even while empty: heading plus the creator entry.
-        const tail = trust === 'user' ? creatorButton : null
+        const tail = trust === 'user' ? <>{addButton}{creatorButton}</> : null
         if (group.length === 0 && tail === null) return null
         return (
           <section key={trust} className={css.group}>
@@ -408,6 +507,17 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
           confirmCopy: props.confirmCopy,
           setCopyId: props.setCopyId,
           setCopyName: props.setCopyName,
+        }}
+      />
+      <CreateDialog
+        state={state}
+        t={t}
+        actions={{
+          cancelCreate: props.cancelCreate,
+          confirmCreate: props.confirmCreate,
+          setCreateId: props.setCreateId,
+          setCreateName: props.setCreateName,
+          setCreatePrompt: props.setCreatePrompt,
         }}
       />
       <Modal

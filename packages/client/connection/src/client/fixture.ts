@@ -2474,6 +2474,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       fixturePresets.set(id, { trust: 'user', content: source.content })
       return { ok: true, value: undefined }
     },
+    create(from: string, id: string, _name: string | undefined, content: string): RpcResult<void> {
+      const copied = this.copy(from, id)
+      if (!copied.ok) return copied
+      fixturePresets.set(id, { trust: 'user', content })
+      return { ok: true, value: undefined }
+    },
     deletePreset(id: string): RpcResult<void> {
       if (fixturePresets.get(id)?.trust === 'system') {
         return {
@@ -3421,6 +3427,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           ref?: string | { id: string; revision: number }
           refs?: readonly string[]
           value?: string
+          content?: string
           ns?: string
           settingsNs?: string
           agentPreset?: string
@@ -3461,6 +3468,8 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         case 'agentPresets/select': return Promise.resolve(presetRemotes.select(sessionId, args.agentPreset as string))
         case 'agentPresets/read': return Promise.resolve(presetRemotes.read(args.agentPreset as string))
         case 'agentPresets/copy': return Promise.resolve(presetRemotes.copy(args.from as string, args.id as string))
+        case 'agentPresets/create': return Promise.resolve(presetRemotes.create(
+          args.from as string, args.id as string, args.name, args.content as string))
         case 'agentPresets/deletePreset': return Promise.resolve(presetRemotes.deletePreset(args.id as string))
         case 'subagents/list': return Promise.resolve({
           ok: true,

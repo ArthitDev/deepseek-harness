@@ -29,4 +29,4 @@ agent-preset 设置页带着一个网页 YAML 编辑器：`agentPreset.write` �
 
 保留 write 换个更好的编辑器（CodeMirror 等）：传输层上仍是任意能力，仍是竞态来源，而且仍不如用户自己的编辑器。带 patch 语义的副本（「standard 加这点 diff」）：bundle 面之下没有这样的层，仓库自己的随附 preset 也刻意选了完整副本。浏览器端拿返回路径调 `session/openWorkspacePath`：路径一旦成为请求参数，就打破了 README 的「不可选中任意目标」不变量。
 
-用户 preset 组装写入部分已由[浏览器可编辑的用户 preset 组装](../feature/2026-09-04-browser-editable-user-preset-compositions.zh.md)取代。本文关于先复制再创作、内置项不可变、请求不带路径以及位置动作的决策仍然有效。
+用户 preset 组装写入部分已由[浏览器可编辑的用户 preset 组装](../feature/2026-09-04-browser-editable-user-preset-compositions.zh.md)取代，复制对话框作为唯一创建入口的部分已由[直接创建 preset](../feature/2026-09-06-direct-preset-creation.zh.md)取代。整目录复制、内置项不可变、请求不带路径以及位置动作仍然有效。
