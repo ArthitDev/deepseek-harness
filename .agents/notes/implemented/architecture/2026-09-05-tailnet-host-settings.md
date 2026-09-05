@@ -12,6 +12,10 @@ An authenticated browser opened through Tailscale uses a non-loopback hostname. 
 
 This local build allows Host-backed settings from the exact HTTPS origin `msi-cyborg-15-nb.tailaa5429.ts.net`. The exception lives only in `ui-settings`; it does not classify the browser as loopback and does not enable native file opening or other loopback-only UI. The Host still requires the configured `trustedHosts` match and a valid authority-bound browser cookie before any API dispatch.
 
+## Alternatives considered
+
+Classifying the Tailnet page as loopback would also expose native-only UI. Accepting every HTTPS host would weaken the origin restriction. Keeping remote browsers on memory-only settings leaves provider configuration unavailable.
+
 ## Verification
 
 A focused test accepts loopback and the exact HTTPS hostname, while rejecting plaintext HTTP and another Tailnet hostname. The settings and provider-directory unit suites pass, as do their package bundles.

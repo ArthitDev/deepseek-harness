@@ -118,7 +118,12 @@ function personaTextField(content: string): PersonaTextField {
   return { prompt: promptLines.join('\n'), startLine, endLine, newline }
 }
 
-/** Replace only the persona prompt, encoding arbitrary text as a YAML literal. */
+/**
+ * Replace only the persona prompt, encoding arbitrary text as a YAML literal.
+ * @param content - The complete preset composition.
+ * @param prompt - The replacement persona prompt.
+ * @returns The composition with only the persona prompt replaced.
+ */
 export function replacePersonaPrompt(content: string, prompt: string): string {
   const field = personaTextField(content)
   const lines = content.split(/\r?\n/)
