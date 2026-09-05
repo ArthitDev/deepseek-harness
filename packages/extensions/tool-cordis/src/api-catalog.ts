@@ -172,10 +172,63 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Inherited preset id, or undefined in a preset-free composition.',
       },
       {
-        signature: 'composedPreset(ctx: Context): string | undefined',
-        description: 'Read the preset a live Agent uses.',
-        parameters: [{ name: 'ctx', description: 'Agent context.' }],
-        returns: 'Its preset id, if bound.',
+        signature: 'composedPreset(agentCtx: Context): string | undefined',
+        description: 'The preset one live agent runs on.\n\nRead from the live scope chain rather than from the session, so it answers for an agent whose session has not recorded a preset yet — a child agent whose durable header is being built from its parent\'s composition.',
+        parameters: [{ name: 'agentCtx', description: 'the agent\'s scope context.' }],
+        returns: 'the preset id, or undefined when the agent joined none.',
+      },
+      {
+        signature: 'async read(id: string): Promise<string>',
+        description: 'Read one preset\'s composition text.',
+        parameters: [{ name: 'id', description: 'the preset id.' }],
+        returns: 'the composition exactly as stored.',
+        throws: ['when no configured root supplies that id.'],
+      },
+      {
+        signature: '@Remote(\'read\') async readDocument(agentPreset: string): Promise<AgentPresetDocument>',
+        description: 'One preset\'s composition text with the roster row it belongs to.',
+        parameters: [{ name: 'agentPreset', description: 'the preset id.' }],
+        returns: 'the composition beside its trust and published metadata.',
+        throws: ['{RemoteError} `gateway/bad-request` for an empty id, or `agent-preset/not-found` when no configured root supplies it.'],
+      },
+      {
+        signature: 'async write(id: string, content: string): Promise<void>',
+        description: 'Replace one locally authored preset\'s composition.',
+        parameters: [{ name: 'id', description: 'preset id resolved against the Host\'s configured roots.' }, { name: 'content', description: 'complete `agent.cordis.yml` text to store.' }],
+        returns: 'once the atomic write commits.',
+        throws: ['when the preset is unknown, ships with the deployment, or lies outside the writable user root.'],
+      },
+      {
+        signature: '@Remote(\'write\') async remoteExportWrite(agentPreset: string, content: string): Promise<void>',
+        description: 'Replace one locally authored preset\'s composition through the Remote API.',
+        parameters: [{ name: 'agentPreset', description: 'preset id resolved by the Host.' }, { name: 'content', description: 'complete `agent.cordis.yml` text to store.' }],
+        returns: 'once the atomic write commits.',
+      },
+      {
+        signature: 'async copy(from: string, id: string, name?: string): Promise<void>',
+        description: 'Create a locally authored preset by copying an existing one whole.\n\nThe source is named by id and its directory is copied as it stands. The copy is NOT mounted to validate: a source that mounts today yields a copy that mounts today.',
+        parameters: [{ name: 'from', description: 'the preset the copy starts from; shipped presets are the primary source, so any trust is accepted.' }, { name: 'id', description: 'the new preset\'s id, which becomes its directory name.' }, { name: 'name', description: 'display name for the copy; absent falls back to the id.' }],
+        throws: ['when the source is unknown, the id is unusable or already taken, or the deployment configures no writable root.'],
+      },
+      {
+        signature: '@Remote(\'copy\') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>',
+        description: 'Copy one preset through the Remote API.',
+        parameters: [{ name: 'from', description: 'the source preset id.' }, { name: 'id', description: 'the new preset id.' }, { name: 'name', description: 'the copy\'s optional display name.' }],
+        returns: 'once the copy is stored.',
+        throws: ['{RemoteError} with the corresponding stable preset code and details when the copy is refused.'],
+      },
+      {
+        signature: 'async remove(id: string): Promise<void>',
+        description: 'Delete a locally authored preset.',
+        parameters: [{ name: 'id', description: 'the preset id.' }],
+        throws: ['when the preset is unknown or ships with the deployment.'],
+      },
+      {
+        signature: '@Remote(\'deletePreset\') async remoteExportDelete(id: string): Promise<void>',
+        description: 'Delete one preset through the Remote API.',
+        parameters: [{ name: 'id', description: 'the preset id.' }],
+        returns: 'once the preset is deleted.',
+        throws: ['{RemoteError} with the corresponding stable preset code and details when deletion is refused.'],
       },
       {
         signature: 'serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): Context[K] | undefined',
@@ -1814,6 +1867,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the Session identity and resolved preset when configured.',
       },
       {
+        signature: '@Remote(\'delete\') async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>',
+        description: 'Stop an owned Web Agent and permanently delete its stored Session log. The Session cwd and project files remain untouched.',
+        parameters: [{ name: 'request', description: 'Session identity to delete.' }, { name: 'signal', description: 'cancellation observed before storage commit.' }],
+        returns: 'confirmation after durable deletion and list removal.',
+      },
+      {
         signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
         description: 'Select one Session-local model after explicitly resuming the Session.',
         parameters: [{ name: 'request', description: 'Session identity and requested model selection.' }],
@@ -1962,6 +2021,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'id', description: 'the stored session to open.' }, { name: 'access', description: '`read` or `write`.' }, { name: 'options', description: 'optional cancellation.' }],
         returns: 'the open handle.',
         throws: ['{SessionPersistenceNotFoundError} when the session does not exist.', '{SessionAlreadyOwnedError} for `write` when ownership is taken.'],
+      },
+      {
+        signature: 'abstract delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<boolean>',
+        description: 'Permanently delete one stored Session and its session-owned artifacts. Active write ownership rejects; read handles may fail their next read. The Session working directory is never part of this operation.',
+        parameters: [{ name: 'id', description: 'the stored Session to delete.' }, { name: 'options', description: 'optional cancellation observed before commit.' }],
+        returns: '`true` when a Session was deleted, or `false` when absent.',
+        throws: ['{SessionAlreadyOwnedError} while a write handle owns the Session.'],
       },
       {
         signature: 'abstract flush(): Promise<void>',
@@ -3588,6 +3654,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Unpin one session durably by dropping it from the registry-global pin set. Unpinning runs no session-existence check because removing an id cannot introduce an unknown one, so an entry whose session is gone still resolves. An id that is not pinned resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to unpin.' }],
         returns: 'resolution after durability.',
+      },
+      {
+        signature: 'forgetSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one deleted Session from workspace accounting and the global archive set. Unknown ids are an idempotent no-op.',
+        parameters: [{ name: 'sessionId', description: 'permanently deleted Session identity.' }],
       },
       {
         signature: 'async resolveByPath(path: string): Promise<Workspace | undefined>',
@@ -6122,6 +6193,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteRequest',
+    declaration: 'export interface SessionDeleteRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionDeleteValue',
+    declaration: 'export interface SessionDeleteValue {\n    readonly deleted: true;\n}',
+  },
+  {
     name: 'SessionEvent',
     declaration: 'export type SessionEvent<T extends SessionEventType = SessionEventType> = {\n    [K in SessionEventType]: {\n        type: K;\n        seq: SessionSeq;\n        time: number;\n        data: SessionEventMap[K];\n        ignorable?: true;\n    } & (K extends SurfaceEventType ? SurfaceIntent<K> : {\n        surfaceOp?: never;\n        sourceEventSeqs?: never;\n    });\n}[T];',
   },
@@ -6320,6 +6399,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionPersistenceCreateOptions',
     declaration: 'export interface SessionPersistenceCreateOptions {\n    readonly signal?: AbortSignal;\n    readonly inheritedEventCount?: SessionLogOffset;\n}',
+  },
+  {
+    name: 'SessionPersistenceDeleteOptions',
+    declaration: 'export interface SessionPersistenceDeleteOptions {\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'SessionPersistenceListOptions',

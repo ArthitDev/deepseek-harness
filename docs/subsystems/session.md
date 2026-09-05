@@ -814,6 +814,15 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
 
 /**
+ * Stop an owned Web Agent and permanently delete its stored Session log.
+ * The Session cwd and project files remain untouched.
+ * @param request - Session identity to delete.
+ * @param signal - cancellation observed before storage commit.
+ * @returns confirmation after durable deletion and list removal.
+ */
+@Remote('delete') async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>
+
+/**
  * Select one Session-local model after explicitly resuming the Session.
  * @param request - Session identity and requested model selection.
  * @returns the normalized selection installed for the Session.

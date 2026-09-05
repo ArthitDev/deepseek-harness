@@ -1,14 +1,9 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
- * time->ellipsis, action buttons) are CSS-only, and a session row's clipped
- * title marquees programmatically while the row is hovered. Workspace row
- * menus are visual-only except Rename/Delete. A Session row's "..." menu and
- * its hover buttons are the `sidebar.workspaces.session.menu.item` and
- * `sidebar.workspaces.session.row.action` lists, rendered through the
- * browser's `renderSlot` with the menu's open state as the occurrence's hook
- * context; this package's own actions are entries like any plugin's. The
- * session and workspace hover cards are suppressed while a menu is open.
+ * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
+ * except workspace Rename/Delete and session Rename/Fork/Archive/Delete; the session
+ * and workspace hover cards are suppressed while a menu is open.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
@@ -518,26 +513,29 @@ export function SearchResultItem({ result, currentId, onOpen, onUnarchive, t }: 
  * @param props.currentId - selected session id (row highlight).
  * @param props.now - epoch ms for relative-time formatting.
  * @param props.onOpen - open a session by id.
- * @param props.onRenameRequest - open the rename dialog from a title double-click (id + current title).
- * @param props.renderSlot - render the row's `sidebar.workspaces.session.menu.item` and `sidebar.workspaces.session.row.action` lists.
- * @param props.onReveal - scroll this row into view after search navigation, then acknowledge it.
- * @param props.drag - optional row-drag target wiring; blank rows cannot start a drag.
+ * @param props.onRename - open the session rename dialog (id + current title).
+ * @param props.onFork - fork a session at its last completed turn.
+ * @param props.onArchive - archive a session by id.
+ * @param props.onDelete - open the permanent-delete confirmation.
+ * @param props.drag - optional draggable-row wiring.
  * @param props.flat - omit the empty status slot in the hierarchy-free flat list.
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({
-  node, currentId, now, onOpen, onRenameRequest, renderSlot, onReveal, drag, flat = false, t,
-}: {
+export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, onDelete, drag, flat = false, t }: {
   node: SessionNode
   currentId: string | undefined
   now: number
   onOpen: (id: SessionNode['id']) => void
-  /** Open the rename dialog from a title double-click (id + current title). */
-  onRenameRequest: (id: SessionNode['id'], currentTitle: string) => void
-  /** Scroll this row into view after search navigation, then acknowledge it. */
-  onReveal?: (() => void) | undefined
-  /** Present on reorderable-list rows so every row can remain a drop target. */
+  /** Open the browser-owned session rename dialog (row menu action). */
+  onRename: (id: SessionNode['id'], currentTitle: string) => void
+  /** Fork a session at its last completed turn (row menu action). */
+  onFork: (id: SessionNode['id']) => void
+  /** Archive this session (row menu action; commits without a dialog). */
+  onArchive: (id: SessionNode['id']) => void
+  /** Open permanent-delete confirmation for this session. */
+  onDelete?: ((id: SessionNode['id'], currentTitle: string) => void) | undefined
+  /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
   /** The row is rendered without a parent Workspace header. */
   flat?: boolean | undefined
@@ -554,16 +552,16 @@ export function SessionNodeItem({
   // their drop targets to fellow pinned rows.
   const draggable = drag !== undefined && !row.blank && !row.archived
   const [menuOpen, setMenuOpen] = useState(false)
-  // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
-  const menuOpenState = useMemo((): MenuOpenState => [menuOpen, setMenuOpen], [menuOpen])
-  const rowRef = useRef<HTMLDivElement>(null)
-  const titleRef = useRef<HTMLSpanElement>(null)
-  const marquee = useTitleMarquee(titleRef)
-  useEffect(() => {
-    if (onReveal === undefined) return
-    rowRef.current?.scrollIntoView({ block: 'nearest' })
-    onReveal()
-  }, [onReveal])
+  // Archive hides the row through the registry-global archive set and never
+  // touches the session log, so it is not styled as destructive and needs no
+  // confirmation dialog.
+  const sessionMenuItems = [
+    { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
+    { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
+    // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
+    { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
+    { id: 'delete', label: t('menu.deleteSession'), icon: <IconTrashOutline16 /> },
+  ]
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
     <div
@@ -649,6 +647,14 @@ export function SessionNodeItem({
           <Menu
             open={menuOpen}
             onClose={() => { setMenuOpen(false) }}
+            items={sessionMenuItems}
+            onSelect={(id) => {
+              setMenuOpen(false)
+              if (id === 'rename') onRename(node.id, row.title)
+              if (id === 'fork') onFork(node.id)
+              if (id === 'archive') onArchive(node.id)
+              if (id === 'delete') onDelete?.(node.id, title)
+            }}
             portal
             closeOnPointerLeave
             anchor={(

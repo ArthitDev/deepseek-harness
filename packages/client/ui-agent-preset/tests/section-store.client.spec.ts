@@ -1,17 +1,227 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AgentPresetSectionController } from '../src/client/section-store.ts'
 
-function fixture() {
-  const remote = { agentPresets: {
-    list: vi.fn(async () => ({ ok: true as const, value: { presets: [{ id: 'standard', isDefault: true }], modeSelectionEnabled: true } })),
-  }, settings: { update: vi.fn(async () => ({ ok: true as const, value: {} })) } }
-  const controller = new AgentPresetSectionController({ remote } as never)
-  return { remote, controller, state: () => controller.store.getSnapshot() }
+import { describe, expect, it } from 'vitest'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
+import { AgentPresetSectionController, draftBlocker } from '../src/client/section-store.ts'
+import type { CopyDraft, PresetRow } from '../src/client/section-store.ts'
+
+interface FakePreset { trust: 'system' | 'user'; content: string; name?: string }
+interface Recorded { method: string; payload: unknown }
+
+interface FakeOptions {
+  /** Every call the controller made, in order. */
+  calls?: Recorded[]
+  /** Reject `list` with this message. */
+  failList?: string
+  /** Reject `read` with this message. */
+  failRead?: string
+  /** Reject `copy` with this message. */
+  failCopy?: string
+  /** Reject `write` with this message. */
+  failWrite?: string
+  /** Reject `openDocument` with this message. */
+  failOpen?: string
+  /** Reject `remove` with this message. */
+  failRemove?: string
+  /** Reject `settings.update` with this message. */
+  failSettings?: string
+  /** Whether the deployment configures a writable root. */
+  authorable?: boolean
+  /** Whether the host can open a preset directory on a desktop. */
+  hasDocument?: boolean
+  /** Refuse the opener capability read. */
+  failCapability?: string
+  /** Hold `remove` until this resolves, to observe the in-flight state. */
+  holdRemove?: Promise<void>
 }
 
-describe('the preset roster', () => {
-  it('reads the roster once for simultaneous loads and surfaces failed reads', async () => {
-    const { controller, remote, state } = fixture()
+const remoteOk = (value: unknown) => Promise.resolve({ ok: true as const, value })
+const remoteFail = (message: string) =>
+  Promise.resolve({ ok: false as const, error: new RemoteError('gateway/internal', message, {}) })
+
+/**
+ * The Remote namespace over an in-memory preset store: copies land, so the
+ * roster the controller re-reads after a copy is the one the copy produced.
+ * @param presets - the starting compositions by id.
+ * @param defaultId - the preset a session with no choice gets.
+ * @param options - failure injection and call recording.
+ * @returns the fake plugin context carrying the Remote namespaces.
+ */
+function fakeCtx(
+  presets: Map<string, FakePreset>,
+  defaultId: { id: string },
+  options: FakeOptions = {},
+): ClientContext {
+  const record = (method: string, payload: unknown): void => { options.calls?.push({ method, payload }) }
+  return {
+    remote: {
+      agentPresets: {
+        list: () => {
+          record('list', {})
+          if (options.failList !== undefined) return remoteFail(options.failList)
+          return remoteOk({
+            presets: [...presets].map(([id, preset]) => ({
+              id, trust: preset.trust, isDefault: id === defaultId.id,
+              ...preset.name === undefined ? {} : { name: preset.name },
+            })),
+            authorable: options.authorable ?? true,
+          })
+        },
+        read: (agentPreset: string) => {
+          record('read', { agentPreset })
+          if (options.failRead !== undefined) return remoteFail(options.failRead)
+          const preset = presets.get(agentPreset)
+          /* v8 ignore next -- every test reads an id the fake store holds */
+          if (preset === undefined) return remoteFail(`unknown preset ${agentPreset}`)
+          return remoteOk({
+            agentPreset,
+            trust: preset.trust,
+            content: preset.content,
+            ...preset.name === undefined ? {} : { name: preset.name },
+          })
+        },
+        write: (agentPreset: string, content: string) => {
+          record('write', { agentPreset, content })
+          if (options.failWrite !== undefined) return remoteFail(options.failWrite)
+          const preset = presets.get(agentPreset)
+          /* v8 ignore next -- every test writes an id the fake store holds */
+          if (preset === undefined) return remoteFail(`unknown preset ${agentPreset}`)
+          preset.content = content
+          return remoteOk(undefined)
+        },
+        // Arity is checked against the declaration, not against which arguments
+        // carry a value, so a short call rejects instead of answering. Reject
+        // one here too: the real face would, and a lenient double hid it once.
+        copy: (...args: [from: string, id: string, name?: string]) => {
+          if (args.length !== 3) {
+            return Promise.reject(new Error(`client api: agentPresets/copy expected 3 argument(s), got ${String(args.length)}`))
+          }
+          const [from, id, name] = args
+          record('copy', { from, id, ...name === undefined ? {} : { name } })
+          if (options.failCopy !== undefined) return remoteFail(options.failCopy)
+          const source = presets.get(from)
+          /* v8 ignore next -- every test copies a source the fake store holds */
+          if (source === undefined) return remoteFail(`unknown preset ${from}`)
+          presets.set(id, {
+            trust: 'user',
+            content: source.content,
+            ...name === undefined ? {} : { name },
+          })
+          return remoteOk(undefined)
+        },
+        deletePreset: async (id: string) => {
+          record('deletePreset', { id })
+          await options.holdRemove
+          if (options.failRemove !== undefined) return await remoteFail(options.failRemove)
+          presets.delete(id)
+          return await remoteOk(undefined)
+        },
+      },
+      settings: {
+        canOpenAgentPresetDirectory: () => {
+          record('canOpenAgentPresetDirectory', {})
+          return options.failCapability === undefined
+            ? remoteOk(options.hasDocument ?? true)
+            : remoteFail(options.failCapability)
+        },
+        update: (ns: string, patch: { default?: string }) => {
+          record('settings.update', { ns, patch })
+          if (options.failSettings !== undefined) return remoteFail(options.failSettings)
+          /* v8 ignore next -- the controller only ever sets `default` */
+          defaultId.id = patch.default ?? defaultId.id
+          return remoteOk({})
+        },
+        openAgentPresetDirectory: (agentPreset: string) => {
+          record('openAgentPresetDirectory', { agentPreset })
+          if (options.failOpen !== undefined) return remoteFail(options.failOpen)
+          return (options.hasDocument ?? true)
+            ? remoteOk({ opened: true })
+            : remoteOk({ opened: false, path: `/presets/${agentPreset}` })
+        },
+      },
+    },
+  } as unknown as ClientContext
+}
+
+function seed(): Map<string, FakePreset> {
+  const standard = [
+    '- id: persona',
+    "  name: '@deepseek-ai/dsh-persona'",
+    '  config:',
+    '    text: >-',
+    '      Standard prompt.',
+    '',
+    '- id: tool-bash',
+    "  name: '@deepseek-ai/dsh-tool-bash'",
+    '',
+  ].join('\n')
+  const mine = standard.replace('Standard prompt.', 'Original prompt.').replace(/tool-bash/g, 'tool-read')
+  return new Map<string, FakePreset>([
+    ['standard', { trust: 'system', content: standard, name: '标准模式' }],
+    ['mine', { trust: 'user', content: mine }],
+  ])
+}
+
+function harness(options: FakeOptions = {}) {
+  const presets = seed()
+  const defaultId = { id: 'standard' }
+  const calls: Recorded[] = []
+  let rosterChanges = 0
+  const wired = { ...options, calls: options.calls ?? calls }
+  const controller = new AgentPresetSectionController(
+    fakeCtx(presets, defaultId, wired),
+    () => { rosterChanges += 1 },
+  )
+  return { controller, presets, defaultId, calls, rosterChanges: () => rosterChanges }
+}
+
+function copyOf(controller: AgentPresetSectionController): CopyDraft {
+  const { copy } = controller.store.getSnapshot()
+  if (copy === null) throw new Error('expected an open copy dialog')
+  return copy
+}
+
+describe('loading the roster', () => {
+  it('still lists the roster when the opener capability is refused', async () => {
+    const { controller } = harness({ failCapability: 'no opener here' })
+
+    await controller.load()
+
+    // The two reads are independent: a refused capability query costs the
+    // open-directory affordance, not the page.
+    const state = controller.store.getSnapshot()
+    expect(state.status).toBe('ready')
+    expect(state.hasDocument).toBe(false)
+    expect(state.rows.map((row: PresetRow) => row.id)).toEqual(['standard', 'mine'])
+  })
+
+  it('maps the roster onto rows with the capability flags', async () => {
+    const { controller } = harness({ authorable: true, hasDocument: false })
+
+    await controller.load()
+
+    const state = controller.store.getSnapshot()
+    expect(state.status).toBe('ready')
+    expect(state.authorable).toBe(true)
+    expect(state.hasDocument).toBe(false)
+    expect(state.rows.map((row: PresetRow) => row.id)).toEqual(['standard', 'mine'])
+    expect(state.rows[0]).toMatchObject({ trust: 'system', isDefault: true, name: '标准模式' })
+  })
+
+  it('reports an empty roster as unavailable, not as an error', async () => {
+    const { controller, presets } = harness()
+    presets.clear()
+
+    await controller.load()
+
+    expect(controller.store.getSnapshot().status).toBe('unavailable')
+  })
+
+  it('keeps one load in flight rather than stacking reads', async () => {
+    const { controller, calls } = harness()
+
     await Promise.all([controller.load(), controller.load()])
     expect(remote.agentPresets.list).toHaveBeenCalledOnce()
     expect(state()).toMatchObject({ status: 'ready', rows: [{ id: 'standard', isDefault: true }], showPicker: true })
@@ -39,14 +249,302 @@ describe('the preset roster', () => {
     expect(state()).toMatchObject({ policySaving: false, error: 'read only' })
   })
 
-  it('prevents a second policy write and reports blank-session synchronization failures', async () => {
-    const { controller, remote, state } = fixture()
-    let release!: () => void
-    const wait = new Promise<void>((resolve) => { release = resolve })
-    remote.settings.update.mockImplementationOnce(async () => { await wait; return { ok: true, value: {} } })
-    const pending = controller.makeDefault('standard', async () => 'Session already started')
-    await controller.setPickerVisible(false)
-    expect(remote.settings.update).toHaveBeenCalledOnce()
+})
+
+describe('the read-only viewer', () => {
+  it('opens a shipped composition under its display name', async () => {
+    const { controller } = harness()
+    await controller.load()
+
+    await controller.view('standard')
+
+    const content = seed().get('standard')?.content
+    expect(controller.store.getSnapshot().view).toEqual({
+      id: 'standard', title: '标准模式', content, draft: content, savedDraft: content,
+      editable: false, saving: false, error: null,
+    })
+  })
+
+  it('falls back to the id when the preset published no name', async () => {
+    const { controller } = harness()
+    await controller.load()
+
+    await controller.view('mine')
+
+    expect(controller.store.getSnapshot().view?.title).toBe('mine')
+  })
+
+  it('closes without touching the list', async () => {
+    const { controller } = harness()
+    await controller.load()
+    await controller.view('standard')
+
+    controller.closeView()
+
+    expect(controller.store.getSnapshot().view).toBeNull()
+    expect(controller.store.getSnapshot().rows).toHaveLength(2)
+  })
+
+  it('puts a read refusal on the page rather than opening empty', async () => {
+    const { controller } = harness({ failRead: 'no peeking' })
+    await controller.load()
+
+    await controller.view('standard')
+
+    expect(controller.store.getSnapshot().view).toBeNull()
+    expect(controller.store.getSnapshot().error).toBe('no peeking')
+  })
+
+  it('writes only the system prompt and keeps a refused draft open', async () => {
+    const success = harness()
+    await success.controller.load()
+    await success.controller.view('mine')
+    success.controller.setViewContent('Changed: # stays text\nSecond line')
+    await success.controller.saveView()
+
+    const written = success.calls.find(call => call.method === 'write')?.payload as { content: string }
+    expect(written.content).toContain('    text: |-\n      Changed: # stays text\n      Second line\n')
+    expect(written.content).toContain("- id: tool-read\n  name: '@deepseek-ai/dsh-tool-read'")
+    expect(success.controller.store.getSnapshot().view).toMatchObject({
+      draft: 'Changed: # stays text\nSecond line',
+      savedDraft: 'Changed: # stays text\nSecond line',
+    })
+    expect(success.rosterChanges()).toBe(1)
+
+    const refused = harness({ failWrite: 'disk full' })
+    await refused.controller.load()
+    await refused.controller.view('mine')
+    refused.controller.setViewContent('Unsaved prompt')
+    await refused.controller.saveView()
+
+    expect(refused.controller.store.getSnapshot().view).toMatchObject({
+      draft: 'Unsaved prompt', savedDraft: 'Original prompt.', saving: false, error: 'disk full',
+    })
+  })
+
+})
+
+describe('the copy dialog', () => {
+  it('opens over the source with its display name in the title', async () => {
+    const { controller } = harness()
+    await controller.load()
+
+    controller.beginCopy('standard')
+
+    expect(copyOf(controller)).toMatchObject({
+      from: 'standard', fromTitle: '标准模式', id: '', name: '', saving: false,
+    })
+  })
+
+  it('falls back to the source id when it published no name', async () => {
+    const { controller } = harness()
+    await controller.load()
+
+    controller.beginCopy('mine')
+
+    expect(copyOf(controller).fromTitle).toBe('mine')
+  })
+
+  it('cancel discards whatever was typed', async () => {
+    const { controller } = harness()
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('half-typed')
+
+    controller.cancelCopy()
+
+    expect(controller.store.getSnapshot().copy).toBeNull()
+  })
+
+  it('ignores field edits and submits with no dialog open', async () => {
+    const { controller, calls } = harness()
+    await controller.load()
+
+    controller.setCopyId('typed-into-nothing')
+    controller.setCopyName('nameless')
+    await controller.confirmCopy()
+
+    expect(controller.store.getSnapshot().copy).toBeNull()
+    expect(calls.some(call => call.method === 'copy')).toBe(false)
+  })
+
+  it('typing clears the previous failure', async () => {
+    const { controller } = harness({ failCopy: 'disk full' })
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('my-copy')
+    await controller.confirmCopy()
+    expect(copyOf(controller).error).toBe('disk full')
+
+    controller.setCopyName('renamed')
+
+    expect(copyOf(controller).error).toBeNull()
+  })
+})
+
+describe('the copy blocker', () => {
+  const rows: PresetRow[] = [
+    { id: 'standard', trust: 'system', isDefault: true },
+    { id: 'mine', trust: 'user', isDefault: false },
+  ]
+  const draft = (id: string): CopyDraft =>
+    ({ from: 'standard', fromTitle: '标准模式', id, name: '', saving: false, error: null })
+
+  it('requires an id, a containable shape, and a free name', () => {
+    expect(draftBlocker(draft(''), rows)).toBe('idRequired')
+    expect(draftBlocker(draft('../escape'), rows)).toBe('idInvalid')
+    expect(draftBlocker(draft('Upper'), rows)).toBe('idInvalid')
+    expect(draftBlocker(draft('mine'), rows)).toBe('idTaken')
+    expect(draftBlocker(draft('my-copy'), rows)).toBeUndefined()
+  })
+})
+
+describe('submitting a copy', () => {
+  it('copies, re-reads the roster, announces the change, and opens the editor', async () => {
+    const { controller, calls, rosterChanges } = harness()
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('my-copy')
+    controller.setCopyName('我的模式')
+
+    await controller.confirmCopy()
+
+    const state = controller.store.getSnapshot()
+    expect(state.copy).toBeNull()
+    expect(state.rows.map(row => row.id)).toContain('my-copy')
+    expect(rosterChanges()).toBe(1)
+    expect(calls.find(call => call.method === 'copy')?.payload)
+      .toEqual({ from: 'standard', id: 'my-copy', name: '我的模式' })
+    expect(state.view).toMatchObject({ id: 'my-copy', editable: true })
+  })
+
+  it('omits an empty name so the copy falls back to its id', async () => {
+    const { controller, calls } = harness()
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('my-copy')
+    controller.setCopyName('   ')
+
+    await controller.confirmCopy()
+
+    expect(calls.find(call => call.method === 'copy')?.payload)
+      .toEqual({ from: 'standard', id: 'my-copy' })
+  })
+
+  it('opens the new editor where the host has no desktop', async () => {
+    const { controller } = harness({ hasDocument: false })
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('my-copy')
+
+    await controller.confirmCopy()
+
+    expect(controller.store.getSnapshot().view).toMatchObject({ id: 'my-copy', editable: true })
+  })
+
+  it('keeps the dialog open with the refusal on it', async () => {
+    const { controller, rosterChanges } = harness({ failCopy: 'id already exists' })
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('my-copy')
+
+    await controller.confirmCopy()
+
+    expect(copyOf(controller)).toMatchObject({ saving: false, error: 'id already exists' })
+    expect(rosterChanges()).toBe(0)
+  })
+
+  it('refuses to submit while blocked or already saving', async () => {
+    const { controller, calls } = harness()
+    await controller.load()
+    controller.beginCopy('standard')
+    controller.setCopyId('mine')
+
+    await controller.confirmCopy()
+
+    expect(calls.some(call => call.method === 'copy')).toBe(false)
+  })
+})
+
+describe('the location action', () => {
+  it('opens the directory and leaves the page alone on a desktop host', async () => {
+    const { controller, calls } = harness()
+    await controller.load()
+
+    await controller.openLocation('mine')
+
+    expect(calls.find(call => call.method === 'openAgentPresetDirectory')?.payload).toEqual({ agentPreset: 'mine' })
+    expect(controller.store.getSnapshot().revealedPaths).toEqual({})
+  })
+
+  it('reveals the path on the row where the host has none', async () => {
+    const { controller } = harness({ hasDocument: false })
+    await controller.load()
+
+    await controller.openLocation('mine')
+
+    expect(controller.store.getSnapshot().revealedPaths).toEqual({ mine: '/presets/mine' })
+  })
+
+  it('drops a revealed path once its preset leaves the roster', async () => {
+    const { controller, presets } = harness({ hasDocument: false })
+    await controller.load()
+    await controller.openLocation('mine')
+    presets.delete('mine')
+
+    await controller.load()
+
+    expect(controller.store.getSnapshot().revealedPaths).toEqual({})
+  })
+
+  it('surfaces a refusal as the page error', async () => {
+    const { controller } = harness({ failOpen: 'not yours' })
+    await controller.load()
+
+    await controller.openLocation('mine')
+
+    expect(controller.store.getSnapshot().error).toBe('not yours')
+  })
+
+})
+
+describe('deleting', () => {
+  it('asks first, then deletes, re-reads, and announces the change', async () => {
+    const { controller, rosterChanges } = harness()
+    await controller.load()
+
+    controller.confirmDelete('mine')
+    expect(controller.store.getSnapshot().pendingDelete).toBe('mine')
+    await controller.remove()
+
+    const state = controller.store.getSnapshot()
+    expect(state.pendingDelete).toBeNull()
+    expect(state.rows.map(row => row.id)).not.toContain('mine')
+    expect(rosterChanges()).toBe(1)
+  })
+
+  it('dismisses the confirmation without deleting', async () => {
+    const { controller, calls } = harness()
+    await controller.load()
+    controller.confirmDelete('mine')
+
+    controller.confirmDelete(null)
+    await controller.remove()
+
+    expect(controller.store.getSnapshot().rows.map(row => row.id)).toContain('mine')
+    expect(calls.some(call => call.method === 'deletePreset')).toBe(false)
+  })
+
+  it('ignores a second confirmation while one delete is in flight', async () => {
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const { controller, calls } = harness({ holdRemove: gate })
+    await controller.load()
+    controller.confirmDelete('mine')
+    const removal = controller.remove()
+
+    controller.confirmDelete('standard')
+    await controller.remove()
     release()
     await pending
     expect(state().error).toBe('Session already started')

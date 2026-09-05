@@ -899,6 +899,26 @@ describe('create', () => {
   })
 })
 
+describe('delete', () => {
+  it('removes the local projection only after the Host confirms deletion', async () => {
+    const b = bench()
+    await feedList(b, [{ id: 'doomed', cwd: '/work' }])
+    b.api.onDelete = () => Promise.resolve(err(new RemoteError('gateway/internal', 'delete failed', {})))
+
+    await expect(b.svc.delete(sid('doomed')))
+      .rejects.toThrow('session delete failed: gateway/internal: delete failed')
+    expect(b.svc.list.getSnapshot().byId[sid('doomed')]).toBeDefined()
+
+    b.api.onDelete = () => Promise.resolve(ok({ deleted: true }))
+    await b.svc.delete(sid('doomed'))
+    expect(b.api.callsOf('session.delete')).toEqual([
+      { sessionId: 'doomed' },
+      { sessionId: 'doomed' },
+    ])
+    expect(b.svc.list.getSnapshot().byId[sid('doomed')]).toBeUndefined()
+  })
+})
+
 describe('fork', () => {
   it('propagates a failed fork without creating or retaining a child', async ({ bench }) => {
     const b = bench()

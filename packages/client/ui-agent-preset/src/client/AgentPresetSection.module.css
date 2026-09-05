@@ -317,6 +317,72 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.input:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.input::placeholder {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+.dialog {
+  width: min(560px, 100%);
+}
+
+.dialogFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* A shipped composition can be long; the dialog scrolls it rather than grow. */
+.viewerCode {
+  margin: 0;
+  padding: 12px;
+  max-height: min(52vh, 480px);
+  overflow: auto;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.editorFields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: min(52vh, 480px);
+  resize: vertical;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
+.editor:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
 .error {
   margin: 0;
   font-size: 12px;

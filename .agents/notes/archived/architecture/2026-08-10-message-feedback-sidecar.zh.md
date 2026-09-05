@@ -9,7 +9,7 @@ Archived: 2026-09-04
 
 现有 `/feedback` 命令记录不可变的 Session 级 `feedback/record` 事件。在 `FEEDBACK_ONLY` 下，该事件可以释放待处理的遥测前缀，因此它不适合作为挂在单条 assistant 消息上的可编辑好评／差评与可选备注的权威来源。消息反馈需要独立的更新与删除语义，且不得进入权威 Session 日志、改变投影、到达模型上下文，或隐式表示遥测同意。
 
-只按 `SessionId` 建索引的伴随记录可能在该 id 以不同 header 身份重建后，继续存活于其所描述的日志生命周期之外。Session 级 revision 还会让无关消息的编辑彼此冲突，而普通 storage-domain 读／写不提供跨进程 compare-and-swap。Session disposal 只是从 live store 脱离，并非持久删除；当前 Session 持久化 seam 也没有可拥有真实级联的删除操作。
+只按 `SessionId` 建索引的伴随记录可能在该 id 以不同 header 身份重建后，继续存活于其所描述的日志生命周期之外。Session 级 revision 还会让无关消息的编辑彼此冲突，而普通 storage-domain 读／写不提供跨进程 compare-and-swap。Session disposal 只是从 live store 脱离，并非持久删除。后来的[永久 Session 删除](../feature/2026-09-04-web-session-permanent-deletion.zh.md)拥有规范日志与 Workspace 引用，但消息反馈仍是独立的保留域，不作为隐式级联 participant。
 
 ## 决策
 
@@ -27,7 +27,7 @@ Archived: 2026-09-04
 
 `maxNoteBytes` 是必填的部署选择，用于限制可选备注的 UTF-8 字节长度；Web Host bundle 将其显式设为 `8192`。该包通过 `TypertRemoteService` 与 `@Remote` 直接发布 Host `messageFeedback.list`、`messageFeedback.put` 与 `messageFeedback.delete` 约定。客户端 Remote 聚合挂载与 UI 由各自边界负责并保持延后；后续适配层只是该 Host 约定的薄消费者。
 
-服务不伪造删除级联。`session/disposed` 与 `host/session-removed` 表示脱离 live ownership，而非持久删除，Session persistence 当前也没有删除接口。因此在带外移除日志后，伴随记录可能继续存在；不同的 `{createdAt, cwd}` 可阻止此类遗留记录变成后来复用该 id 的 Session 反馈。
+服务不伪造删除级联。`session/disposed` 与 `host/session-removed` 表示脱离 live ownership，而非持久删除。显式 `session.delete` endpoint 不会征用消息反馈存储，因此日志移除后伴随记录仍可能存在；不同的 `{createdAt, cwd}` 可阻止此类遗留记录变成后来复用该 id 的 Session 反馈。
 
 ## 考虑过的替代方案
 
@@ -37,7 +37,7 @@ Archived: 2026-09-04
 
 **在本次变更中为 `KvTable` 扩展跨进程 compare-and-swap。** 不予采纳，因为现有 storage-domain 后端没有共同的条件写原语。进程内队列符合受支持的单 Host 拓扑；真实的多进程保证需要后端级原子约定，属于独立工作。
 
-**在 Session disposal 时删除反馈。** 不予采纳，因为 disposal 包含普通 detach 与 rollback 路径。把它当成持久删除会在 Session 日志仍存在时丢失反馈；清理必须等待真正的 Session 删除权威。
+**在 Session disposal 时删除反馈。** 不予采纳，因为 disposal 包含普通 detach 与 rollback 路径。把它当成持久删除会在 Session 日志仍存在时丢失反馈；任何未来的协调清理都必须挂到显式 `session.delete`，而非通用 disposal。
 
 ## 后果
 

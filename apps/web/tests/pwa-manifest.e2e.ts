@@ -20,22 +20,15 @@ it('ships install metadata with the built web application', async () => {
     scope: './',
     display: 'fullscreen',
     icons: [{
-      src: 'favicon.svg',
-      sizes: 'any',
-      type: 'image/svg+xml',
+      src: '/new-logo.png',
+      sizes: '1280x1280',
+      type: 'image/png',
       purpose: 'any',
     }],
   })
 })
 
-it('ships fixed-color favicons selected by document media queries', async () => {
-  const index = await readFile(join(DIST_ROOT, 'index.html'), 'utf8')
-  expect(index).toContain('<link rel="icon" type="image/svg+xml" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" />')
-  expect(index).toContain('<link rel="icon" type="image/svg+xml" href="./favicon.svg" media="(prefers-color-scheme: light)" />')
-  const light = await readFile(join(DIST_ROOT, 'favicon.svg'), 'utf8')
-  const dark = await readFile(join(DIST_ROOT, 'favicon-dark.svg'), 'utf8')
-  expect(light).not.toContain('<style>')
-  expect(light).toContain('fill="#000"')
-  expect(dark).toContain('fill="#fff"')
-  expect(dark.replace('fill="#fff"', 'fill="#000"')).toBe(light)
+it('ships the PNG favicon', async () => {
+  const favicon = await readFile(join(DIST_ROOT, 'new-logo.png'))
+  expect(favicon.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
 })

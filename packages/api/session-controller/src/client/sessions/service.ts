@@ -436,7 +436,18 @@ export class ClientSessions implements ISessions {
   }
 
   /**
-   * Fork a session from an exact inclusive prefix of the source (same
+   * Permanently delete one Host Session and remove its local projection.
+   * @param id - Session identity to delete.
+   */
+  async delete(id: SessionId): Promise<void> {
+    const result = await this.manager.delete(id)
+    if (!result.ok) throw new Error(`session delete failed: ${result.error.code}: ${result.error.message}`)
+    this.manager.handleSessionRemoved(id)
+    this.projectList()
+  }
+
+  /**
+   * Fork a session from a completed-turn prefix of the source (same
    * synchronous-addressability guarantee as {@link ClientSessions.create}:
    * on resolution the child is catalogued and may be explicitly retained).
    * @param opts - source session id, the optional exact inclusive boundary

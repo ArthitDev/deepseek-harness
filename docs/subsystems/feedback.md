@@ -304,8 +304,8 @@ Either unrecorded rating opens the Session's feedback dialog, the `feedback-dial
 
 ## Boundaries and limitations
 
-- The operation queue is process-local; cold writer exclusion relies on the selected persistence provider.
-- Deletion removes the current item, not earlier note text from the append-only log or an already delivered suffix.
+- The mutation queue is process-local. Storage-domain has no cross-process conditional write, so multiple Host writers to one storage root have no compare-and-swap or lost-update guarantee.
+- Explicit `session.delete` owns the canonical log and Workspace references but does not enlist message-feedback storage. The service does not treat `session/disposed` or `api-session/removed` as deletion and therefore performs no fake cascade; orphan sidecar rows may remain after log removal.
 - A request in the narrow interval after live detach but before the persistence catalog materializes the header can receive `session-not-found`; callers retry after retirement materialization.
 - Cold requests read the complete log; the service has no item-count or aggregate-byte cap. `maxNoteBytes` bounds only each note.
 - The Host contract records no authenticated actor or audit identity and therefore assumes a trusted caller boundary.

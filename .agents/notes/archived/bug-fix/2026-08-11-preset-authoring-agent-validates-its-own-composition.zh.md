@@ -71,4 +71,4 @@ skill 自带的 `cordis_mount` 代码片段经工具注册表逐字执行：它�
 
 ## Related
 
-取代[破损 preset 是 roster 行](2026-08-09-broken-preset-roster-rows.zh.md)中关于创作模式指导的那一条，其健康检查决策依然有效——本篇只推翻它「agent 起不了会话；设置页的红色标记是用户的检查手段」这一结论。创作的 copy-only 形态由[copy-only preset 创作](../simplification/2026-08-08-copy-only-preset-authoring.zh.md)负责。
+取代[破损 preset 是 roster 行](2026-08-09-broken-preset-roster-rows.zh.md)中关于创作模式指导的那一条，其健康检查决策依然有效——本篇只推翻它「agent 起不了会话；设置页的红色标记是用户的检查手段」这一结论。当前先复制再创作与浏览器写入由[浏览器可编辑的用户 preset 组装](../feature/2026-09-04-browser-editable-user-preset-compositions.zh.md)负责。

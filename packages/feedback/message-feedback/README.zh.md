@@ -89,13 +89,14 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **仅日志具有权威性：**不读取或迁移现有 `message_feedback` 伴随数据。这些文件保持不变，但其反馈无法通过本服务访问。
-- **删除保留历史：**delete 移除当前反馈，不会从仅追加日志中清除更早的评分或备注；它不是隐私擦除操作。
-- **写入所有权：**另一个进程持有 Session 写句柄时，冷会话修改会 reject。服务不会唤醒该所有者，也不协调跨进程 Remote 调用。
-- **受信任调用方：**请求不包含经过认证的 actor 或审计身份。部署方必须保护 Host 网关。
-- **遥测导出：**对于所有用户和提供方，包括 `deepseek-official`，随附 OTel 后端在 `FEEDBACK_ONLY` 模式下仅在新的显式文本反馈、评分、备注或分类编辑、撤回后释放完整权威日志前缀。前缀包含上下文和原样备注；后续记录等待下一次反馈，`DISABLED` 阻止捕获。部署方负责脱敏；见 [OTel 导出策略](../../session/session-telemetry-otel/README.zh.md)。
-- **扫描成本：**每次访问已有 Session 的 `list`、`put` 或 `delete` 都会扫描完整事件日志来推导当前反馈；冷会话操作还会从持久化存储读取完整日志。工作量随 Session 历史总量增长，而不只是反馈条目数。
-- **保留量：**`maxNoteBytes` 只限制单条备注，不限制日志总大小或变更次数。
+
+这些限制说明服务何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是任务积压。
+
+- **Compare-and-set 仅限单进程**——按 Session 划分的队列只串行化一个服务实例；storage-domain 不提供跨进程条件写，因此多个 Host 进程写入同一存储根目录时仍可能丢失更新。
+- **没有协调式 Session 删除级联**——显式 `session.delete` 拥有规范日志与 Workspace 引用，但不会征用消息反馈存储；`session/disposed`/`api-session/removed` 仍表示 detach 而非持久删除。因此服务会保留空行，并可能在日志移除后留下遗留行，而不会在 detach 时删除仍有效的反馈。
+- **Header 身份不是内容指纹**——只有 `{createdAt, cwd}` 不同时才能识别复用；本契约无法区分保留相同 header 身份的克隆日志。
+- **调用方边界受信任**——`list`/`put`/`delete` 不携带已认证的 actor 或审计身份。在加入授权与归属信息前，部署方必须只通过受信任或另行认证的边界暴露 Host gateway。
+- **行边界**——`maxNoteBytes` 只限制单条备注，单个 Session 行的条目数和聚合保留字节尚无上限；由部署决定的行边界，延后到具体消费方明确策略时处理。
 
 <a id="dev-note"></a>
 ### 开发备注

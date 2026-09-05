@@ -520,6 +520,15 @@ export class SessionManager {
   }
 
   /**
+   * Permanently delete one Host Session.
+   * @param sessionId - Session identity to delete.
+   * @returns the Host deletion result.
+   */
+  delete(sessionId: SessionId): Promise<RemoteResult<{ deleted: true }>> {
+    return this.remote.session.delete({ sessionId })
+  }
+
+  /**
    * Contract session.fork; on success merge the child into summaries
    * immediately (same synchronous-addressability guarantee as create).
    * Blankness starts provisionally true so the authoritative Host summary can

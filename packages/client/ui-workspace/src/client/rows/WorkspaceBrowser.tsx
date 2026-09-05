@@ -245,25 +245,23 @@ type SessionTreeProps = Pick<
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
-  /** Open the rename dialog from a row title double-click. */
-  onSessionRenameRequest: (sessionId: SessionNode['id'], currentTitle: string) => void
-  /** One Session chosen from search that must be exposed and scrolled into view. */
-  revealSessionId?: SessionId | undefined
-  /** Acknowledge that the chosen Session row has been revealed. */
-  onSessionRevealed: (sessionId: SessionId) => void
+  /** Open the browser-owned session rename dialog. */
+  onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
+  /** Archive a session (row menu action; the row disappears on the state echo). */
+  onSessionArchive: (sessionId: SessionNode['id']) => void
+  /** Open the browser-owned permanent Session deletion dialog. */
+  onSessionDelete: (sessionId: SessionNode['id'], currentTitle: string) => void
+  /** Session order behavior: fixed after edits, or additionally promoted by user activity. */
+  orderBy: SessionOrderBy
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and local row limits. */
 function SessionTree({
-  list, useSessionStatus, startSession, open, workspaces, ungroupedSessionIds,
-  rowState,
-  workspaceReady, animationResetKey, usePanelInfo,
-  onRenameRequest, onDeleteRequest, onSessionRenameRequest,
-  renderSlot,
-  insertWorkspaceBefore,
-  nestWorkspaces, groupExpansion, setGroupExpanded,
-  setSessionOrder, home, t,
-  revealSessionId, onSessionRevealed,
+  useSessions, useSessionPendingInteraction, startSession, open, forkSession, workspaces, archivedSessionIds,
+  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive, onSessionDelete,
+  insertWorkspaceBefore, insertSessionBefore, orderBy,
+  groupExpansion, setGroupExpanded,
+  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
@@ -589,8 +587,156 @@ function SessionTree({
         {groups.length === 0 && (
           <div className={css.empty} data-row-key="empty">{t('empty.none')}</div>
         )}
-        {groupRows}
-      </AnimatedRows>
+        {groups.map((group) => {
+          const workspaceId = group.workspaceId
+          const collapsed = collapsedSessionRows(group.sessions)
+          const sessionsExpanded = expandedSessionGroups.includes(group.key)
+          const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
+            ? workspaceDrag.over.half
+            : null
+          const workspaceDragProps = workspaceId === undefined ? undefined : {
+            start: () => {
+              workspaceDropCommitted.current = false
+              setWorkspaceDrag({ workspaceId, over: null })
+            },
+            end: () => {
+              if (workspaceDrag?.over !== null && workspaceDrag?.over !== undefined) {
+                commitWorkspaceDrag(workspaceDrag, workspaceDrag.over)
+              } else {
+                setWorkspaceDrag(null)
+              }
+              workspaceDropCommitted.current = false
+            },
+          }
+          const hoverWorkspace = workspaceId === undefined
+            ? undefined
+            : (half: 'before' | 'after') => {
+              setWorkspaceDrag(active => active === null
+                ? active
+                : { ...active, over: { id: workspaceId, half } })
+            }
+          const dropWorkspace = workspaceId === undefined
+            ? undefined
+            : (half: 'before' | 'after') => {
+              if (workspaceDrag === null) return
+              commitWorkspaceDrag(workspaceDrag, { id: workspaceId, half })
+            }
+          return (
+          // Group section: header row + expanded top-level session rows. The
+          // inter-group breathing room is the section's own margin
+          // (WorkspaceBrowser.module.css).
+            <div
+              key={group.key}
+              className={clsx(
+                css.groupSection,
+                workspaceMarker === 'before' && css.workspaceDropBefore,
+                workspaceMarker === 'after' && css.workspaceDropAfter,
+              )}
+              onDragOver={workspaceDrag === null || hoverWorkspace === undefined
+                ? undefined
+                : (e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  hoverWorkspace(workspaceGroupHalf(e))
+                }}
+              onDrop={workspaceDrag === null || dropWorkspace === undefined
+                ? undefined
+                : (e) => {
+                  e.preventDefault()
+                  dropWorkspace(workspaceGroupHalf(e))
+                }}
+            >
+              <ProjectRowItem
+                group={group}
+                home={home}
+                t={t}
+                onToggle={() => {
+                  if (group.expanded) {
+                    setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
+                  }
+                  setGroupExpanded(group.key, !group.expanded)
+                }}
+                onCreate={() => {
+                  if (group.workspaceId !== undefined) {
+                    setGroupExpanded(group.key, true)
+                    startSession(group.workspaceId)
+                  }
+                }}
+                drag={workspaceDragProps}
+                actions={group.workspaceId === undefined
+                  ? undefined
+                  : {
+                    rename: () => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
+                    },
+                    delete: () => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
+                    },
+                  }}
+              />
+              {(sessionsExpanded
+                ? group.sessions
+                : collapsed.rows
+              ).map((node) => {
+              // Session drag never leaves its group. Ungrouped writes only the
+              // browser-local account; real Workspaces may also write Host order.
+                const sameGroupDrag = drag !== null && drag.accountKey === group.key
+                const dragProps = {
+                  start: () => {
+                    sessionDropCommitted.current = false
+                    setDrag({ accountKey: group.key, sessionId: node.id, over: null })
+                  },
+                  active: sameGroupDrag,
+                  marker: sameGroupDrag && drag.over?.id === node.id ? drag.over.half : null,
+                  hover: (half: 'before' | 'after') => {
+                  /* v8 ignore next -- narrowing guard: Rows gates hover on `active`, which is false while the drag state is null. */
+                    setDrag(d => (d === null ? d : { ...d, over: { id: node.id, half } }))
+                  },
+                  drop: (half: 'before' | 'after') => {
+                  /* v8 ignore next -- narrowing guard: Rows gates drop on `active`, which is false while the drag state is null. */
+                    if (drag === null) return
+                    commitSessionDrag(drag, { id: node.id, half })
+                  },
+                  end: () => {
+                    if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
+                    else setDrag(null)
+                    sessionDropCommitted.current = false
+                  },
+                }
+                return (
+                  <SessionNodeItem
+                    key={node.id}
+                    node={node}
+                    currentId={current}
+                    now={now}
+                    onOpen={open}
+                    onRename={onSessionRename}
+                    onFork={forkSession}
+                    onArchive={onSessionArchive}
+                    onDelete={onSessionDelete}
+                    drag={dragProps}
+                    t={t}
+                  />
+                )
+              })}
+              {collapsed.hiddenCount > 0 && (
+                <button
+                  type="button"
+                  className={css.sessionOverflowButton}
+                  aria-expanded={sessionsExpanded}
+                  onClick={() => { setExpandedSessionGroups(keys => toggled(keys, group.key)) }}
+                >
+                  {sessionsExpanded
+                    ? t('sessions.collapse')
+                    : t('sessions.expand', { n: collapsed.hiddenCount })}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
       <span className={css.fade} />
     </div>
   )
@@ -598,17 +744,22 @@ function SessionTree({
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
-  list, sessionIds, rowState, useSessionStatus, open, onSessionRenameRequest,
-  renderSlot,
-  usePanelInfo, setSessionOrder, workspaceReady, animationResetKey,
-  revealSessionId, onSessionRevealed, t,
+  useSessions, useSessionPendingInteraction, open, forkSession, onSessionRename, onSessionArchive, onSessionDelete,
+  archivedSessionIds,
+  orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
 }: Pick<
   SessionTreeProps,
   | 'useSessionStatus'
   | 'open'
-  | 'onSessionRenameRequest'
-  | 'renderSlot'
-  | 'usePanelInfo'
+  | 'forkSession'
+  | 'onSessionRename'
+  | 'onSessionArchive'
+  | 'onSessionDelete'
+  | 'archivedSessionIds'
+  | 'orderBy'
+  | 'sessionOrderByAccount'
+  | 'sessionUpdatedAtByAccount'
+  | 'syncSessionOrderAccount'
   | 'setSessionOrder'
   | 'workspaceReady'
   | 'animationResetKey'
@@ -663,11 +814,10 @@ function FlatList({
               currentId={currentId}
               now={now}
               onOpen={open}
-              onRenameRequest={onSessionRenameRequest}
-              renderSlot={renderSlot}
-              onReveal={node.id === revealSessionId
-                ? () => { onSessionRevealed(node.id) }
-                : undefined}
+              onRename={onSessionRename}
+              onFork={forkSession}
+              onArchive={onSessionArchive}
+              onDelete={onSessionDelete}
               flat
               drag={{
                 start: () => {
@@ -816,8 +966,9 @@ export function WorkspaceBrowser({
   actions,
   startSession,
   open,
-  requestSessionRename,
-  notifyArchivedNotOpenable,
+  renameSession,
+  forkSession,
+  deleteSession,
   renameWorkspace,
   deleteWorkspace,
   insertWorkspaceBefore,
@@ -1104,6 +1255,31 @@ export function WorkspaceBrowser({
     })
   }
 
+  const [sessionDeleteTarget, setSessionDeleteTarget] = useState<{ sessionId: SessionId; title: string } | null>(null)
+  const [sessionDeleting, setSessionDeleting] = useState(false)
+  const [sessionDeleteError, setSessionDeleteError] = useState<string | null>(null)
+  const closeSessionDelete = () => {
+    if (sessionDeleting) return
+    setSessionDeleteTarget(null)
+    setSessionDeleteError(null)
+  }
+  const confirmSessionDelete = () => {
+    if (sessionDeleting || sessionDeleteTarget === null) return
+    setSessionDeleting(true)
+    setSessionDeleteError(null)
+    deleteSession(sessionDeleteTarget.sessionId).then(() => {
+      setSessionDeleting(false)
+      setSessionDeleteTarget(null)
+    }).catch((reason: unknown) => {
+      setSessionDeleting(false)
+      setSessionDeleteError(reason instanceof Error ? reason.message : String(reason))
+    })
+  }
+  const onSessionDelete = (sessionId: SessionId, title: string) => {
+    setSessionDeleteTarget({ sessionId, title })
+    setSessionDeleteError(null)
+  }
+
   // Delete dialog is separate from the row so a successful removal can
   // unmount that row without tearing down the in-flight confirmation state.
   const [deleteTarget, setDeleteTarget] = useState<{ workspaceId: WorkspaceId; title: string } | null>(null)
@@ -1295,34 +1471,28 @@ export function WorkspaceBrowser({
           : groupBy === 'flat'
             ? (
               <FlatList
-                usePanelInfo={usePanelInfo}
-                list={list}
-                sessionIds={orderedFlatSessionIds}
-                rowState={rowState}
-                workspaceReady={workspaceReady}
-                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
-                useSessionStatus={useSessionStatus}
-                open={guardedOpen}
-                onSessionRenameRequest={requestSessionRename}
-                renderSlot={renderSlot}
-                setSessionOrder={saveSessionOrder}
-                revealSessionId={revealSessionId}
-                onSessionRevealed={acknowledgeSessionReveal}
+                useSessions={useSessions} useSessionPendingInteraction={useSessionPendingInteraction}
+                open={open} forkSession={forkSession}
+                onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
+                onSessionDelete={onSessionDelete}
+                archivedSessionIds={archivedSessionIds}
+                orderBy={orderBy}
+                sessionOrderByAccount={sessionOrderByAccount}
+                sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
+                syncSessionOrderAccount={actions.syncSessionOrderAccount}
+                setSessionOrder={actions.setSessionOrder}
                 t={t}
               />
             )
             : (
               <SessionTree
-                usePanelInfo={usePanelInfo}
-                list={list}
-                useSessionStatus={useSessionStatus}
-                onSessionRenameRequest={requestSessionRename}
-                renderSlot={renderSlot}
-                workspaces={orderedWorkspaces}
-                ungroupedSessionIds={orderedUngroupedSessionIds}
-                workspaceReady={workspaceReady}
-                nestWorkspaces={groupBy === 'workspace-tree'}
-                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
+                useSessions={useSessions}
+                useSessionPendingInteraction={useSessionPendingInteraction}
+                onSessionRename={onSessionRename}
+                onSessionArchive={onSessionArchive}
+                onSessionDelete={onSessionDelete}
+                forkSession={forkSession}
+                workspaces={workspaces}
                 groupExpansion={groupExpansion}
                 setGroupExpanded={actions.setGroupExpanded}
                 setSessionOrder={saveSessionOrder}
@@ -1382,6 +1552,62 @@ export function WorkspaceBrowser({
         {renameError !== null && <div className={css.renameError} role="alert">{renameError}</div>}
       </Modal>
 
+      <Modal
+        open={sessionRenameTarget !== null}
+        onClose={closeSessionRename}
+        closeLabel={t('close')}
+        title={t('rename.session.title')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={sessionRenaming} onClick={closeSessionRename}>{t('cancel')}</Button>
+            <Button variant="primary" disabled={sessionRenameBlocked} onClick={confirmSessionRename}>{t('rename')}</Button>
+          </>
+        )}
+      >
+        <input
+          className={css.renameInput}
+          value={sessionRenameDraft}
+          aria-label={t('field.sessionName')}
+          autoFocus
+          disabled={sessionRenaming}
+          onFocus={(e) => { e.target.select() }}
+          onChange={(e) => { setSessionRenameDraft(e.target.value); setSessionRenameError(null) }}
+          onCompositionStart={() => { composingRef.current = true }}
+          onCompositionEnd={() => { composingRef.current = false }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !composingRef.current) {
+              e.preventDefault()
+              confirmSessionRename()
+            }
+          }}
+        />
+        {sessionRenameError !== null && <div className={css.renameError} role="alert">{sessionRenameError}</div>}
+      </Modal>
+      <Modal
+        open={sessionDeleteTarget !== null}
+        onClose={closeSessionDelete}
+        closeLabel={t('close')}
+        title={t('delete.session')}
+        {...sessionDeleteTarget === null
+          ? {}
+          : { description: t('delete.sessionDesc', { name: sessionDeleteTarget.title }) }}
+        footer={(
+          <>
+            <Button variant="outline" disabled={sessionDeleting} onClick={closeSessionDelete}>{t('cancel')}</Button>
+            <Button
+              variant="outline"
+              className={css.deleteAction}
+              disabled={sessionDeleting}
+              onClick={confirmSessionDelete}
+            >
+              {t('delete.session')}
+            </Button>
+          </>
+        )}
+      >
+        {sessionDeleting && <div className={css.deleteStatus} role="status">{t('delete.sessionPending')}</div>}
+        {sessionDeleteError !== null && <div className={css.renameError} role="alert">{sessionDeleteError}</div>}
+      </Modal>
       <Modal
         open={deleteTarget !== null}
         onClose={closeDelete}

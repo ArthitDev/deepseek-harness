@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-05-tailnet-host-settings.md
+2026-09-05-tailnet-host-settings.md: faf5d548de2c9ab6aa553cd47eb218975cdd7bd0
+2026-09-05-tailnet-host-settings.zh.md: 1cd5f452c1fd1d37e58074e320d3868cb922f448

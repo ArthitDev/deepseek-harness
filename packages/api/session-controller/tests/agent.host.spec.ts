@@ -485,3 +485,39 @@ describe('ApiSession create or adoption', () => {
       .rejects.toThrow('failed to ensure project directory')
   })
 })
+
+describe('ApiSession deletion ownership', () => {
+  it('disposes an owned Web Agent before deletion and refuses another owner', async () => {
+    const owned = await harness()
+    const ownedAgent = agent(owned.ctx, header('owned-delete'))
+    owned.ctx.agents.register(ownedAgent)
+    const order: string[] = []
+    const dispose = vi.fn(async () => { order.push('dispose') })
+    owned.agents.adoptHandle({ agent: ownedAgent, dispose })
+
+    await expect(owned.agents.deleteSession(ownedAgent.id, async () => {
+      order.push('delete')
+      return true
+    })).resolves.toBe(true)
+    expect(order).toEqual(['dispose', 'delete'])
+
+    const external = await harness()
+    const externalAgent = agent(external.ctx, header('external-delete'))
+    external.ctx.agents.register(externalAgent)
+    const operation = vi.fn(async () => true)
+    await expect(external.agents.deleteSession(externalAgent.id, operation)).rejects.toMatchObject({
+      code: 'session/agent-busy',
+    })
+    expect(operation).not.toHaveBeenCalled()
+
+    const child = await harness()
+    const childId = SessionId('attached-child-delete')
+    child.ctx.sessions.create(childId, {
+      meta: { ...header(String(childId)), parentSession: SessionId('parent'), origin: 'subagent' },
+    })
+    await expect(child.agents.deleteSession(childId, operation)).rejects.toMatchObject({
+      code: 'session/agent-busy',
+    })
+    expect(operation).not.toHaveBeenCalled()
+  })
+})

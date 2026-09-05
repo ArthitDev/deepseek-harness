@@ -20,7 +20,7 @@ group-by 菜单提供 WorkSpace / In one list 两种模式。WorkSpace 模式按
 ### 行交互
 
 - session 行悬停 500ms 出详情卡（完整标题、相对时间、状态行；在 wire 增加 status 字段前，状态行只有 running/idle 两态）。卡片与行菜单互斥：菜单开启或拖拽进行中不出卡。
-- session 行 … 菜单：Rename / Fork session / Delete session，其中 Rename 与 Fork 已接线，Delete 仍为纯视觉；workspace 组头 … 菜单的 Rename / Delete workspace 均已接线。菜单鼠标移出即关。
+- session 行 … 菜单：Rename / Fork session / Archive session / Delete session；四项操作均已接线，永久删除由 [Web 会话永久删除](2026-09-04-web-session-permanent-deletion.zh.md)负责。workspace 组头 … 菜单的 Rename / Delete workspace 均已接线。菜单鼠标移出即关。
 - 支撑件：`Menu` 新增 label 条目、danger 行、`closeOnPointerLeave`；新增 `HoverCard`（portal 定位、开启延时、disabled 守卫）。
 
 ### workspace.rename
@@ -54,7 +54,7 @@ ui-sidebar 缩为列几何壳：品牌行、折叠状态机、New Session、Sett
 - 手动序是 Host workspace 账本的唯一顺序权威：活动绝不改动 `WorkspaceView.sessionIds`。后续加入的浏览器本地最近更新视图可以把活跃行提到最前，但不会改变该账本；其独立语义见 [Workspace 侧边栏顺序与折叠](2026-08-11-workspace-sidebar-order-and-folding.zh.md)。
 - 壳/区域两事实约定把 workspace 域的后续功能（Delete 确认、跨组移动、Ungrouped 收编）全部收进 ui-workspace 单包；ui-sidebar 不再随 session 列表功能演进。
 - 平铺模式不支持重排，也没有在指定 workspace 中创建 session 的入口（需切回分组视图），是拍板接受的范围收窄。
-- session Delete 的功能接线与扩展 wire 状态枚举，留待后续迭代。
+- 扩展 wire 状态枚举仍留待后续迭代；Session Delete 已由 [Web 会话永久删除](2026-09-04-web-session-permanent-deletion.zh.md)完成接线。
 
 ## 测试
 

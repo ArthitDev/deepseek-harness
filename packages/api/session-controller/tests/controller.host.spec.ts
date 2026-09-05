@@ -16,8 +16,45 @@ const defaults = {
 }
 
 describe('SessionController facade', () => {
-  it('does not require the Tools service', () => {
+  it('declares Session persistence without requiring the Tools service', () => {
+    expect(SessionController.inject).toContain('sessionPersistence')
     expect(SessionController.inject).not.toContain('tools')
+  })
+
+  it('deletes an owned live blank Session before its log is materialized', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    const sessionId = SessionId('blank-delete')
+    const header: SessionHeader = {
+      version: 0, id: sessionId, createdAt: 1, cwd: '/workspace', isSeeded: false,
+    }
+    const order: string[] = []
+    ctx.provide('sessionPersistence', testSessionPersistence(ctx, {
+      list: () => Promise.resolve([]),
+      delete: async () => { order.push('persistence'); return false },
+    }) as never)
+    ctx.provide('workspaceRegistry', {
+      forgetSession: async () => { order.push('workspace') },
+    } as never)
+    const controller = createSessionTestController(ctx, defaults)
+    const agents = (controller as unknown as { agents: ApiSessionAgentController }).agents
+    const session = ctx.sessions.create(sessionId, { meta: header })
+    const live = { id: sessionId, session, status: 'idle', ctx } as Agent
+    ctx.agents.register(live)
+    agents.adoptHandle({
+      agent: live,
+      dispose: async () => { order.push('dispose') },
+    })
+    const removed = vi.fn()
+    ctx.on('api-session/removed', removed)
+
+    await expect(controller.delete({ sessionId }, new AbortController().signal))
+      .resolves.toEqual({ deleted: true })
+    expect(order).toEqual(['dispose', 'workspace', 'persistence'])
+    expect(removed).toHaveBeenCalledOnce()
+    expect(removed).toHaveBeenCalledWith(sessionId)
+    await ctx.fiber.dispose()
   })
 
   it('owns Host service methods and publishes Agent lifecycle projections', async () => {

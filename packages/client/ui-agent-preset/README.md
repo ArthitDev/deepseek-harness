@@ -29,7 +29,13 @@ Settings shows the built-in and custom card groups with default highlighting and
 
 The “Choose a mode for new tasks” switch controls whether the saved user default is active. Hiding selection uses the deployment default; showing it restores the user preference. Choosing a healthy default also synchronizes the blank session on the current new-task surface. Creator starts a new task using the `cordis` preset. The new-session picker additionally requires Developer tools in General Settings.
 
-Known shipped presets offer mode details and usage examples in a read-only dialog. Its tabs preserve each page's scroll position; closing returns focus to the opening action. Help does not change the new-task default. The default badge replaces the card's group badge, and the preset id appears beside the title. Guide copy and examples belong to this package.
+The settings section shows the roster as cards: a copy dialog creates a preset, then opens that custom preset in a native textarea editor for `agent.cordis.yml`; every custom card also keeps a location action for its metadata, skills, and assets. Save sends only the preset id and text, preserves the draft on failure, and affects later sessions rather than sessions already composed. The default is set from any surface; deleting removes the preset directory while sessions already composed from it keep running. A shipped preset opens in a read-only viewer and offers no edit, location, or delete. A roster row carrying `broken` renders as a marked card whose body and duplication are disabled, because a copy of a broken preset is another broken preset; broken custom rows keep their location and delete actions so the files can be fixed and ghost directories cleared. The card face still shows the preset's own description — a chooser cannot act on a package specifier there — and the host's reason rides the badge as a tooltip, plus a visually hidden alert that carries it to assistive technology, which a disabled card body cannot.
+
+### The conversational entry
+
+When the roster carries the self-referential `cordis` preset, a dashed add-card stages it and starts a new session — the section closes the settings panel and the new-session chip's own applier composes the blank session the workspace flow produces.
+
+-----
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

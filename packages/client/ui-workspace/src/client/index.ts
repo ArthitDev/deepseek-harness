@@ -227,8 +227,22 @@ export function apply(ctx: Context): void {
     open: openSession,
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
-    requestSessionRename,
-    notifyArchivedNotOpenable: () => { notify({ kind: 'archivedNotOpenable' }) },
+    renameSession: async (sessionId, title) => {
+      // Row → session-face hop: rename is a per-session verb (ISession), not
+      // a list-service verb; the binding resolves any listed session.
+      const session = sessions.binding(sessionId)?.session
+      if (session === undefined) throw new Error(`unknown session "${sessionId}"`)
+      const result = await session.rename(title)
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    forkSession: (sessionId) => {
+      sessions.fork({ sessionId, increaseTitle: true })
+        .then((childId) => { sessions.open(childId) })
+        .catch(() => {
+          // Fork or child-rename failure keeps the current selection.
+        })
+    },
+    deleteSession: async (sessionId) => { await sessions.delete(sessionId) },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {

@@ -293,6 +293,16 @@ export interface SessionCreateValue {
   readonly agentPreset?: string
 }
 
+/** Permanent Session deletion request. */
+export interface SessionDeleteRequest {
+  readonly sessionId: SessionId
+}
+
+/** Confirmation that the stored Session was deleted. */
+export interface SessionDeleteValue {
+  readonly deleted: true
+}
+
 /** Session model-selection request. */
 export interface SessionSelectModelRequest extends ModelSelection {
   readonly sessionId: SessionId

@@ -1,8 +1,20 @@
-/** Preset selection settings: the roster, its default, mode help and the Creator-mode entry. */
-import type { ReactNode } from 'react'
+/**
+ * Agent-presets settings section: the roster as cards, a copy dialog as the
+ * only way a preset is created, a read-only viewer over shipped compositions,
+ * and an editor over custom compositions.
+ *
+ * A shipped preset stays the known-good source a copy starts from. A custom
+ * preset can be edited in the browser or in its own files. Deleting or editing
+ * a preset leaves running sessions on their mounted generation.
+ */
+
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Button, IconPlusOutlineRegular, Switch, Tag, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ReactNode } from 'react'
+import {
+  Button, IconBrowseOutline16, IconCopyOutline16, IconEditOutline16, IconFolderOpenOutline16,
+  IconPlusOutline16, IconTrashOutline16, Modal, Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentPresetSectionState } from './section-store.ts'
 import { isBuiltInPreset, presetDisplayText } from './locales.ts'
@@ -16,7 +28,33 @@ export interface AgentPresetSectionInjected {
     /** Shared preference controlling the picker-policy row. */
     developerTools: ObservableSnapshot<boolean>
   }
-  /** Stage the `cordis` preset and start a Creator-mode task; absent without a conversation flow. */
+  /** Read the roster; called once when the section first renders. */
+  load: () => Promise<void>
+  /** Open one preset's composition in the viewer or editor. */
+  view: (id: string) => Promise<void>
+  /** Close the viewer or editor. */
+  closeView: () => void
+  /** Replace the open custom preset's editor draft. */
+  setViewContent: (content: string) => void
+  /** Persist the open custom preset's editor draft. */
+  saveView: () => Promise<void>
+  /** Open the copy dialog over one preset. */
+  beginCopy: (from: string) => void
+  /** Close the copy dialog, discarding the draft. */
+  cancelCopy: () => void
+  /** Name the preset the copy creates. */
+  setCopyId: (id: string) => void
+  /** Name the copy's display name. */
+  setCopyName: (name: string) => void
+  /** Submit the copy. */
+  confirmCopy: () => Promise<void>
+  /** Open one preset's directory, or reveal its path where there is no desktop. */
+  openLocation: (id: string) => Promise<void>
+  /**
+   * Stage the self-referential preset and start a new session on it — the
+   * guided way to author a preset, beside copying. Absent when the surface
+   * is composed without the conversation flow to land the session in.
+   */
   startCreatorDraft?: () => void
   load: () => Promise<void>
   makeDefault: (id: string) => Promise<void>
@@ -84,74 +122,261 @@ export function AgentPresetSection({
         {t('creatorDraft')}
       </button>
     )
-  return <section className={css.section}>
-    <h2 className={css.title}>{t('nav')}</h2>
-    <p className={css.intro}>{t('sectionIntro')}</p>
-    {developerTools && (
-      <div className={css.pickerPreference}>
-        <div className={css.pickerPreferenceCopy}>
-          <span className={css.pickerPreferenceTitleRow}>
-            <span className={css.pickerPreferenceTitle}>{t('showPicker')}</span>
-            <Tag>{t('showPickerBeta')}</Tag>
-          </span>
-          <p className={css.pickerPreferenceDescription}>{t('showPickerDescription')}</p>
-        </div>
-        <Switch checked={state.showPicker} disabled={state.status !== 'ready' || state.policySaving}
-          onChange={(value) => { void setPickerVisible(value) }} label={t('showPicker')} />
-      </div>
-    )}
-    {state.error === null ? null : <p className={css.error} role="alert">{state.error}</p>}
-    {([true, false] as const).map((builtIn) => {
-      const rows = state.rows.filter(row => isBuiltInPreset(row) === builtIn)
-      const entry = builtIn ? null : creatorButton
-      if (rows.length === 0 && entry === null) return null
-      return <section key={String(builtIn)} className={css.group}>
-        <h3 className={css.groupHead}>{t(builtIn ? 'builtInGroup' : 'customGroup')}</h3>
-        {rows.length === 0 ? null : <ul className={css.cards}>
-          {rows.map((row) => {
-            const display = presetDisplayText(row, t)
-            const help = presetGuide(row.id, builtIn ? 'system' : 'user')
-            const selectionAction = row.broken !== undefined ? t('brokenBadge')
-              : row.isDefault ? t(state.showPicker ? 'inUse' : 'selectionOffDefault')
-                : t(state.showPicker ? 'setDefault' : 'enablePickerToSetDefault')
-            return <li key={row.id} data-agent-preset-id={row.id} className={[
-              css.card, row.broken === undefined ? undefined : css.cardBroken,
-              row.isDefault ? css.cardActive : undefined,
-              !state.showPicker && row.broken === undefined && !row.isDefault ? css.cardSelectionDisabled : undefined,
-            ].filter(Boolean).join(' ')}>
-              <button type="button" className={css.cardMain} aria-pressed={row.isDefault}
-                disabled={row.isDefault || (row.broken === undefined && (!state.showPicker || state.policySaving))}
-                aria-disabled={row.broken !== undefined} aria-label={`${selectionAction}: ${display.name}`} title={selectionAction}
-                onClick={() => { if (row.broken === undefined) void makeDefault(row.id) }}>
-                <span className={css.cardHead}>
-                  <span className={css.cardIdentity}>
-                    <span className={css.cardName} title={display.name}>{display.name}</span>
-                    {row.broken === undefined ? null : <span className={css.brokenBadge}>
-                      {t('brokenBadge')}<span className={css.brokenTip} aria-hidden="true">{row.broken}</span>
-                    </span>}
-                    <Tag tone={row.isDefault ? 'solid' : 'outline'}>
-                      {row.isDefault ? t(state.showPicker ? 'inUse' : 'selectionOffDefault') : t(builtIn ? 'builtInGroup' : 'customGroup')}
-                    </Tag>
-                  </span>
-                  <code className={css.cardId} title={row.id}>{row.id}</code>
-                </span>
-                <CardDescription text={display.description ?? t('noDescription')} />
-                {row.broken === undefined ? null : <span className={css.cardBrokenReason} role="alert">{row.broken}</span>}
-              </button>
-              {help === undefined ? null : <div className={css.cardFoot}>
-                <div className={css.cardHelp}>
-                  <Button variant="ghost" className={css.helpButton} aria-label={`${t('modeExplanation')}: ${display.name}`}
-                    onClick={() => { setGuide({ content: help, page: 'explanation' }) }}>{t('modeExplanation')}</Button>
-                  <Button variant="ghost" className={css.helpButton} aria-label={`${t('howToUse')}: ${display.name}`}
-                    onClick={() => { setGuide({ content: help, page: 'usage' }) }}>{t('howToUse')}</Button>
-                </div>
-              </div>}
-            </li>
-          })}
-        </ul>}
-        {entry}
-      </section>
-    })}
-    {guide === null ? null : <PresetGuideDialog guide={guide.content} initialPage={guide.page} t={t} onClose={() => { setGuide(null) }} />}
-  </section>
+    : null
+
+  return (
+    <div className={css.section}>
+      <h2 className={css.title}>{t('nav')}</h2>
+      <p className={css.intro}>{t('sectionIntro')}</p>
+      {state.error === null ? null : <p className={css.error} role="alert">{state.error}</p>}
+      {([['system', t('builtInGroup')], ['user', t('customGroup')]] as const).map(([trust, heading]) => {
+        const group = state.rows
+          .filter(row => row.trust === trust)
+          .map(row => ({ row, text: presetDisplayText(row, t) }))
+        // The custom group is where a preset of one's own will appear, so it
+        // stays on screen even while empty: heading plus the creator entry.
+        const tail = trust === 'user' ? creatorButton : null
+        if (group.length === 0 && tail === null) return null
+        return (
+          <section key={trust} className={css.group}>
+            <h3 className={css.groupHead}>{heading}</h3>
+            {group.length === 0 ? null : (
+              <ul className={css.cards}>
+                {group.map(({ row, text }) => (
+                  <li
+                    key={row.id}
+                    className={row.broken !== undefined
+                      ? `${css.card} ${css.cardBroken}`
+                      : row.isDefault ? `${css.card} ${css.cardActive}` : css.card}
+                  >
+                    {/* The card body IS the control: picking a preset is the
+                      common act, so it should not hide behind a small button.
+                      The action row sits outside it — nesting buttons is
+                      invalid, and these act on the card rather than select it.
+                      A broken preset cannot compose a session, so its body
+                      refuses the pick; the reason rides the badge rather than
+                      the card face, which stays the preset's own
+                      description. */}
+                    <button
+                      type="button"
+                      className={css.cardMain}
+                      aria-pressed={row.isDefault}
+                      // Broken says so through `aria-disabled` rather than
+                      // `disabled`, which would take the card out of the tab
+                      // order. With the reason moved onto the badge, that is
+                      // the only way anyone without a pointer reaches it.
+                      disabled={row.isDefault}
+                      aria-disabled={row.broken !== undefined}
+                      // Without this the name is the whole card read aloud —
+                      // title, badge, description, id.
+                      aria-label={`${row.broken !== undefined ? t('brokenBadge') : row.isDefault ? t('inUse') : t('setDefault')}: ${text.name}`}
+                      // The reason rides the badge, not the whole card: two
+                      // tooltips over one target would race, and the card's
+                      // own label answers what clicking it would do.
+                      title={row.broken !== undefined ? t('brokenBadge') : row.isDefault ? t('inUse') : t('setDefault')}
+                      onClick={() => {
+                        if (row.broken !== undefined) return
+                        void props.makeDefault(row.id)
+                      }}
+                    >
+                      <span className={css.cardHead}>
+                        <span className={css.cardName}>{text.name}</span>
+                        {row.broken !== undefined
+                          ? (
+                            <span className={css.brokenBadge}>
+                              {t('brokenBadge')}
+                              {/* Pointer-only, hence `aria-hidden`: the same
+                                reason reaches assistive technology through the
+                                alert below, and a second copy inside the card's
+                                own text would be read out twice. */}
+                              <span className={css.brokenTip} aria-hidden="true">{row.broken}</span>
+                            </span>
+                          )
+                          : null}
+                        <span className={css.badge}>
+                          {row.trust === 'user' ? t('userTrust') : t('builtIn')}
+                        </span>
+                        {row.isDefault ? <span className={css.inUse}>{t('inUse')}</span> : null}
+                      </span>
+                      <CardDescription text={text.description ?? t('noDescription')} />
+                      {/* Visually hidden, deliberately: the pointer path is the
+                        badge's tooltip, and a disabled card body is out of the
+                        tab order, so this is the only reading a screen reader
+                        or a keyboard-only user gets. */}
+                      {row.broken === undefined
+                        ? null
+                        : <span className={css.cardBrokenReason} role="alert">{row.broken}</span>}
+                      <code className={css.cardId}>{row.id}</code>
+                    </button>
+                    <div className={css.cardFoot}>
+                      {/* Shipped presets are the read-only compositions a copy
+                        starts from; a custom preset gets an editor and keeps a
+                        location action for its other files. A broken shipped
+                        preset has no readable
+                        composition to offer, so its viewer is withheld; a
+                        broken custom one keeps the location action — the
+                        files are where it gets fixed. */}
+                      {row.trust === 'system'
+                        ? row.broken === undefined
+                          ? (
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={t('view')}
+                              aria-label={`${t('view')}: ${text.name}`}
+                              onClick={() => { void props.view(row.id) }}
+                            >
+                              <IconBrowseOutline16 />
+                            </button>
+                          )
+                          : null
+                        : (
+                          <>
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={t('edit')}
+                              aria-label={`${t('edit')}: ${text.name}`}
+                              onClick={() => { void props.view(row.id) }}
+                            >
+                              <IconEditOutline16 />
+                            </button>
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={state.hasDocument ? t('openLocation') : t('showLocation')}
+                              aria-label={`${state.hasDocument ? t('openLocation') : t('showLocation')}: ${text.name}`}
+                              onClick={() => { void props.openLocation(row.id) }}
+                            >
+                              <IconFolderOpenOutline16 />
+                            </button>
+                          </>
+                        )}
+                      <button
+                        type="button"
+                        className={css.iconButton}
+                        disabled={!state.authorable || row.broken !== undefined}
+                        data-tip={row.broken !== undefined
+                          ? t('brokenNoCopy')
+                          : state.authorable ? t('duplicate') : t('duplicateUnavailable')}
+                        aria-label={`${t('duplicate')}: ${text.name}`}
+                        onClick={() => { props.beginCopy(row.id) }}
+                      >
+                        <IconCopyOutline16 />
+                      </button>
+                      {row.trust === 'user'
+                        ? (
+                          <button
+                            type="button"
+                            className={`${css.iconButton} ${css.iconDanger}`}
+                            data-tip={t('delete')}
+                            aria-label={`${t('delete')}: ${text.name}`}
+                            onClick={() => { props.confirmDelete(row.id) }}
+                          >
+                            <IconTrashOutline16 />
+                          </button>
+                        )
+                        : null}
+                    </div>
+                    {state.revealedPaths[row.id] === undefined
+                      ? null
+                      : (
+                        <p className={css.revealedPath}>
+                          <span className={css.revealedPathLabel}>{t('revealedPathLabel')}</span>
+                          <code>{state.revealedPaths[row.id]}</code>
+                        </p>
+                      )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {tail}
+          </section>
+        )
+      })}
+      <CopyDialog
+        state={state}
+        t={t}
+        actions={{
+          cancelCopy: props.cancelCopy,
+          confirmCopy: props.confirmCopy,
+          setCopyId: props.setCopyId,
+          setCopyName: props.setCopyName,
+        }}
+      />
+      <Modal
+        open={state.view !== null}
+        onClose={() => { props.closeView() }}
+        title={state.view === null ? '' : `${t(state.view.editable ? 'editSystemPrompt' : 'view')} · ${viewedTitle}`}
+        closeLabel={t('close')}
+        description={t(state.view?.editable === true ? 'systemPromptHelp' : 'composition')}
+        className={css.dialog as string}
+        footer={state.view?.editable === true
+          ? (
+            <>
+              <Button variant="outline" disabled={state.view.saving} onClick={() => { props.closeView() }}>
+                {t('cancel')}
+              </Button>
+              <Button
+                disabled={state.view.saving || state.view.draft === state.view.savedDraft}
+                onClick={() => { void props.saveView() }}
+              >
+                {state.view.saving ? t('saving') : t('save')}
+              </Button>
+            </>
+          )
+          : (
+            <Button variant="outline" autoFocus onClick={() => { props.closeView() }}>
+              {t('close')}
+            </Button>
+          )}
+      >
+        {state.view === null
+          ? null
+          : state.view.editable
+            ? (
+              <div className={css.editorFields}>
+                <textarea
+                  className={css.editor}
+                  aria-label={t('systemPrompt')}
+                  value={state.view.draft}
+                  spellCheck={false}
+                  autoFocus
+                  onChange={(event) => { props.setViewContent(event.target.value) }}
+                />
+                {state.view.error === null ? null : <p className={css.error} role="alert">{state.view.error}</p>}
+              </div>
+            )
+            : <pre className={css.viewerCode}>{state.view.content}</pre>}
+      </Modal>
+      <Modal
+        open={state.pendingDelete !== null}
+        onClose={() => { props.confirmDelete(null) }}
+        title={t('deleteTitle')}
+        closeLabel={t('close')}
+        description={t('deleteDescription')}
+        className={css.deleteDialog as string}
+        footer={(
+          <>
+            <Button
+              variant="outline"
+              autoFocus
+              disabled={state.deleting}
+              onClick={() => { props.confirmDelete(null) }}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              variant="outline"
+              className={css.deleteConfirm}
+              disabled={state.deleting}
+              onClick={() => { void props.remove() }}
+            >
+              {state.deleting ? t('deleting') : t('deleteConfirm')}
+            </Button>
+          </>
+        )}
+      />
+    </div>
+  )
 }

@@ -6,9 +6,9 @@
   "display": "fullscreen",
   "icons": [
     {
-      "src": "favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/new-logo.png",
+      "sizes": "1280x1280",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

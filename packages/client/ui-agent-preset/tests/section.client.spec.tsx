@@ -11,15 +11,43 @@ const translations: ReadonlyMap<string, string> = new Map(Object.entries(en))
 function unusedHook(): never {
   throw new Error('This section does not read global slot sources')
 }
-function view(partial: Partial<AgentPresetSectionState> = {}, startCreatorDraft?: () => void, developerTools = true) {
-  const store = createSnapshotStore<AgentPresetSectionState>({ status: 'ready', error: null,
-    showPicker: true, policySaving: false, rows: [{ id: 'standard', isDefault: true }, { id: 'mine', name: 'Mine', isDefault: false }], ...partial })
-  const actions = { load: vi.fn(async () => {}), makeDefault: vi.fn(async () => {}),
-    setPickerVisible: vi.fn(async () => {}), close: vi.fn() }
-  const props: AgentPresetSectionProps = { ...actions,
-    ...(startCreatorDraft === undefined ? {} : { startCreatorDraft }),
-    usePanelInfo: unusedHook, useSessions: unusedHook, useSessionStatus: unusedHook, useSessionRetainInfo: unusedHook,
-    useWorkspaces: unusedHook, useResource: unusedHook,
+
+const SYSTEM_VIEW = {
+  id: 'standard', title: '标准模式', content: '- id: tool-bash\n', draft: '- id: tool-bash\n',
+  savedDraft: '- id: tool-bash\n', editable: false, saving: false, error: null,
+}
+
+/**
+ * Render the section over a fixed snapshot, with every action a spy.
+ * @param state - the snapshot to render.
+ * @returns the spies, so a test can assert what a click reached.
+ */
+function renderSection(
+  state: Partial<AgentPresetSectionState> = {},
+  options: { creator?: boolean } = {},
+) {
+  const store = createSnapshotStore<AgentPresetSectionState>({ ...READY, ...state })
+  const actions = {
+    load: vi.fn(() => Promise.resolve()),
+    // The shell-owned section affordance (SettingsSectionOwnerProps.close).
+    close: vi.fn(),
+    ...options.creator === false ? {} : { startCreatorDraft: vi.fn() },
+    view: vi.fn(() => Promise.resolve()),
+    closeView: vi.fn(),
+    setViewContent: vi.fn(),
+    saveView: vi.fn(() => Promise.resolve()),
+    beginCopy: vi.fn(),
+    cancelCopy: vi.fn(),
+    setCopyId: vi.fn(),
+    setCopyName: vi.fn(),
+    confirmCopy: vi.fn(() => Promise.resolve()),
+    openLocation: vi.fn(() => Promise.resolve()),
+    confirmDelete: vi.fn(),
+    remove: vi.fn(() => Promise.resolve()),
+    makeDefault: vi.fn(() => Promise.resolve()),
+  }
+  const props = {
+    ...actions,
     useAgentPresetSection: bindSnapshotSelector(store),
     useDeveloperTools: bindSnapshotSelector(createSnapshotStore(developerTools)),
     t: key => translations.get(key) ?? key }
@@ -31,11 +59,256 @@ function rowFor(id: string): HTMLElement {
   if (row === null) throw new Error(`no card for ${id}`)
   return row
 }
-it('hides the complete picker-policy row while developer tools are off', () => {
-  view({}, undefined, false)
-  expect(screen.queryByRole('switch', { name: en.showPicker })).toBeNull()
-  expect(screen.queryByText(en.showPickerDescription)).toBeNull()
-  expect(screen.queryByText(en.showPickerBeta)).toBeNull()
+
+describe('the preset list', () => {
+  it('reads the roster once when it first renders', async () => {
+    const actions = renderSection()
+
+    await waitFor(() => { expect(actions.load).toHaveBeenCalledTimes(1) })
+  })
+
+  it('shows resolved copy for built-ins and falls back to custom ids', () => {
+    renderSection()
+
+    // Display copy is what a picker reads; the id stays visible as the key the
+    // composition and the session header actually carry.
+    expect(screen.getByText(en.presetStandardName)).toBeTruthy()
+    expect(screen.getByText(en.presetStandardDescription)).toBeTruthy()
+    const mine = rowFor('mine')
+    expect(within(mine).getAllByText('mine').length).toBeGreaterThan(0)
+    expect(within(mine).getByText(en.noDescription)).toBeTruthy()
+  })
+
+  it('marks trust and the one in use, and offers no "set default" on it', () => {
+    renderSection()
+
+    const standard = rowFor('standard')
+    expect(within(standard).getByText(en.builtIn)).toBeTruthy()
+    expect(within(standard).getByText(en.inUse)).toBeTruthy()
+    expect(within(standard).queryByText(en.setDefault)).toBeNull()
+    expect(within(rowFor('mine')).getByText(en.userTrust)).toBeTruthy()
+  })
+
+  it('separates built-in presets from custom ones', () => {
+    renderSection()
+
+    // Two different things: one set ships with the deployment and is
+    // read-only, the other is the user's own.
+    expect(screen.getByRole('heading', { name: en.builtInGroup })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: en.customGroup })).toBeTruthy()
+  })
+
+  it('shows no group heading for a set nobody has', () => {
+    renderSection({ rows: [{ id: 'standard', trust: 'system', isDefault: true }] })
+
+    expect(screen.queryByRole('heading', { name: en.customGroup })).toBeNull()
+  })
+
+  it('leads with the two ways a preset is created', () => {
+    renderSection()
+
+    // The page has no create button: the intro is what tells a first-time
+    // reader that copying an existing preset — or drafting one in Creator
+    // mode — IS the way to make one.
+    expect(screen.getByText(new RegExp('Creator mode'))).toBeTruthy()
+  })
+
+  it('picks a preset by clicking its card, and the one in use is inert', () => {
+    const actions = renderSection()
+
+    const inUse = within(rowFor('standard')).getByRole('button', { name: `${en.inUse}: ${en.presetStandardName}` })
+    expect(inUse).toHaveProperty('disabled', true)
+    fireEvent.click(inUse)
+
+    // Clicking the card IS the choice; the preset already in use cannot be
+    // re-picked, so the click reaches nothing.
+    expect(actions.makeDefault).not.toHaveBeenCalled()
+  })
+
+  it('offers View on a shipped row and Edit plus location on a custom one', () => {
+    renderSection()
+
+    // A shipped preset is the read-only composition a copy starts from. A
+    // custom preset has both the composition editor and its directory action.
+    const standard = rowFor('standard')
+    expect(within(standard).getByRole('button', { name: `${en.view}: ${en.presetStandardName}` })).toBeTruthy()
+    expect(within(standard).queryByRole('button', { name: `${en.openLocation}: ${en.presetStandardName}` })).toBeNull()
+    const mine = rowFor('mine')
+    expect(within(mine).getByRole('button', { name: `${en.openLocation}: mine` })).toBeTruthy()
+    expect(within(mine).getByRole('button', { name: `${en.edit}: mine` })).toBeTruthy()
+  })
+
+  it('offers Delete only for a locally authored preset', () => {
+    renderSection()
+
+    expect(within(rowFor('mine')).getByRole('button', { name: `${en.delete}: mine` })).toBeTruthy()
+    expect(within(rowFor('standard')).queryByRole('button', { name: `${en.delete}: ${en.presetStandardName}` })).toBeNull()
+  })
+
+  it('disables duplication when nothing is writable, and says why', () => {
+    renderSection({ authorable: false })
+
+    const duplicate = within(rowFor('standard')).getByRole('button', { name: `${en.duplicate}: ${en.presetStandardName}` })
+    expect(duplicate).toHaveProperty('disabled', true)
+    expect(duplicate.getAttribute('data-tip')).toBe(en.duplicateUnavailable)
+  })
+
+  it('marks a broken custom preset: unselectable, uncopyable, still deletable', () => {
+    const actions = renderSection({
+      rows: [
+        { id: 'standard', trust: 'system', isDefault: true },
+        {
+          id: 'ghost', trust: 'user', isDefault: false, name: '幽灵预设', description: '我自己写的',
+          broken: 'the composition file agent.cordis.yml is missing',
+        },
+      ],
+    })
+
+    const ghost = rowFor('ghost')
+    // The badge carries the reason for a pointer, and the body cannot pick
+    // what cannot mount.
+    expect(within(ghost).getByText(en.brokenBadge).textContent)
+      .toBe(`${en.brokenBadge}the composition file agent.cordis.yml is missing`)
+    // A picker card keeps showing what the preset is; a package specifier in
+    // its place would tell a chooser nothing they can act on there.
+    expect(within(ghost).getByText('我自己写的')).toBeTruthy()
+    // Reachable without a pointer: the disabled body leaves the tab order, so
+    // this node is the only reading assistive technology gets.
+    expect(within(ghost).getByRole('alert').textContent).toContain('is missing')
+    // `aria-disabled`, not `disabled`: the card stays in the tab order so a
+    // keyboard reaches the reason the face no longer shows, and refuses the
+    // pick itself rather than by being unreachable.
+    const body = within(ghost).getByRole('button', { name: `${en.brokenBadge}: 幽灵预设` })
+    expect(body).toHaveProperty('disabled', false)
+    expect(body.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(body)
+    expect(actions.makeDefault).not.toHaveBeenCalled()
+    // Copying a broken preset would only mint another broken one; deleting
+    // and the location remain — the files are where it gets fixed.
+    const duplicate = within(ghost).getByRole('button', { name: `${en.duplicate}: 幽灵预设` })
+    expect(duplicate).toHaveProperty('disabled', true)
+    expect(duplicate.getAttribute('data-tip')).toBe(en.brokenNoCopy)
+    expect(within(ghost).getByRole('button', { name: `${en.delete}: 幽灵预设` })).toBeTruthy()
+    expect(within(ghost).getByRole('button', { name: `${en.openLocation}: 幽灵预设` })).toBeTruthy()
+  })
+
+  it('withholds the viewer on a broken shipped preset', () => {
+    renderSection({
+      rows: [{ id: 'standard', trust: 'system', isDefault: false, name: '标准模式', broken: 'the composition is not valid YAML' }],
+    })
+
+    // There is no readable composition to offer; the reason on the card is
+    // the whole story a shipped row can tell.
+    const standard = rowFor('standard')
+    expect(within(standard).queryByRole('button', { name: `${en.view}: ${en.presetStandardName}` })).toBeNull()
+    expect(within(standard).getByRole('alert').textContent).toContain('not valid YAML')
+  })
+
+  it('labels the location by what it will do without a desktop', () => {
+    renderSection({ hasDocument: false })
+
+    expect(within(rowFor('mine')).getByRole('button', { name: `${en.showLocation}: mine` })).toBeTruthy()
+  })
+
+  it('shows a revealed directory on its row', () => {
+    renderSection({ revealedPaths: { mine: '/home/user/.dsh/.agent-presets/mine' } })
+
+    const mine = rowFor('mine')
+    expect(within(mine).getByText('/home/user/.dsh/.agent-presets/mine')).toBeTruthy()
+    expect(within(mine).getByText(en.revealedPathLabel)).toBeTruthy()
+    // The reveal belongs to its row alone.
+    expect(within(rowFor('standard')).queryByText(en.revealedPathLabel)).toBeNull()
+  })
+
+  it('routes the row actions to the controller', () => {
+    const actions = renderSection()
+
+    // The card body is the control that picks a preset.
+    fireEvent.click(within(rowFor('mine')).getByRole('button', { name: `${en.setDefault}: mine` }))
+    fireEvent.click(within(rowFor('mine')).getByRole('button', { name: `${en.openLocation}: mine` }))
+    fireEvent.click(within(rowFor('mine')).getByRole('button', { name: `${en.duplicate}: mine` }))
+    fireEvent.click(within(rowFor('standard')).getByRole('button', { name: `${en.view}: ${en.presetStandardName}` }))
+
+    expect(actions.makeDefault).toHaveBeenCalledWith('mine')
+    expect(actions.openLocation).toHaveBeenCalledWith('mine')
+    expect(actions.beginCopy).toHaveBeenCalledWith('mine')
+    expect(actions.view).toHaveBeenCalledWith('standard')
+  })
+
+  it('starts a creator-mode draft session and leaves settings', () => {
+    const actions = renderSection({
+      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' }],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: en.creatorDraft }))
+
+    expect(actions.startCreatorDraft).toHaveBeenCalledTimes(1)
+    // Leaving settings is part of the gesture: the flow lands in the new
+    // session, not behind the modal.
+    expect(actions.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the empty custom group on screen: heading plus the creator entry', () => {
+    renderSection({
+      rows: [
+        { id: 'standard', trust: 'system', isDefault: true, name: '标准模式' },
+        { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' },
+      ],
+    })
+
+    // No member yet, but the place where one's own preset will appear stays.
+    expect(screen.getByRole('heading', { name: en.customGroup })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.creatorDraft })).toBeTruthy()
+    expect(screen.queryByText(`· ${en.userTrust}`)).toBeNull()
+  })
+
+  it('hides the creator entry without the flow or the preset, disables it without a root', () => {
+    renderSection()
+    expect(screen.queryByRole('button', { name: en.creatorDraft })).toBeNull()
+    cleanup()
+
+    renderSection({
+      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' }],
+    }, { creator: false })
+    expect(screen.queryByRole('button', { name: en.creatorDraft })).toBeNull()
+    cleanup()
+
+    const actions = renderSection({
+      authorable: false,
+      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' }],
+    })
+    const disabled = screen.getByRole('button', { name: en.creatorDraft })
+    expect(disabled).toHaveProperty('disabled', true)
+    fireEvent.click(disabled)
+    expect(actions.startCreatorDraft).not.toHaveBeenCalled()
+  })
+
+  it('shows a page-level failure without hiding the list', () => {
+    renderSection({ error: 'settings are read-only' })
+
+    expect(screen.getByRole('alert').textContent).toBe('settings are read-only')
+    expect(rowFor('mine')).toBeTruthy()
+  })
+
+  it('renders nothing when the deployment composes no presets', () => {
+    const { container } = render(<AgentPresetSection {...({
+      useAgentPresetSection: bindSnapshotSelector(
+        createSnapshotStore<AgentPresetSectionState>({ ...READY, status: 'unavailable', rows: [] })),
+      t: (key: keyof typeof en) => en[key],
+      load: vi.fn(() => Promise.resolve()),
+    } as unknown as AgentPresetSectionProps)} />)
+
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('offers a retry when the roster could not be read', () => {
+    const actions = renderSection({ status: 'error', error: 'roster unavailable' })
+
+    expect(screen.getByRole('alert').textContent).toContain('roster unavailable')
+    fireEvent.click(screen.getByText(en.retry))
+
+    expect(actions.load).toHaveBeenCalledTimes(2)
+  })
 })
 it('reads the roster once and sets a default from the card body', async () => {
   const actions = view()
@@ -190,22 +463,161 @@ it('closes help even when the browser reports no previously focused element', ()
     activeElement.mockRestore()
   }
 })
-it.each([false, true])('only offers a description tooltip when the card clips it: %s', (overflow) => {
-  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(overflow ? 400 : 80)
-  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(80)
-  const disconnect = vi.spyOn(ResizeObserver.prototype, 'disconnect')
-  vi.useFakeTimers()
-  view({ rows: [{ id: 'mine', isDefault: false, description: 'Preset description' }] })
-  fireEvent.mouseEnter(screen.getByText('Preset description'))
-  act(() => { vi.advanceTimersByTime(400) })
-  expect(screen.queryByRole('tooltip')?.textContent ?? null).toBe(overflow ? 'Preset description' : null)
-  cleanup()
-  expect(disconnect).toHaveBeenCalledTimes(overflow ? 2 : 1)
+
+describe('the read-only viewer', () => {
+  it('shows the composition text under the preset\'s name', () => {
+    renderSection({ view: SYSTEM_VIEW })
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe(`${en.view} · ${en.presetStandardName}`)
+    expect(within(dialog).getByText(en.composition)).toBeTruthy()
+    expect(within(dialog).getByText(/tool-bash/).textContent).toBe('- id: tool-bash\n')
+  })
+
+  it('keeps the loaded title when the viewed row leaves the roster', () => {
+    renderSection({ view: { ...SYSTEM_VIEW, id: 'retired', title: 'Retired mode' } })
+
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(`${en.view} · Retired mode`)
+  })
+
+  it('closes through the controller', () => {
+    const actions = renderSection({ view: SYSTEM_VIEW })
+
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.close))
+
+    expect(actions.closeView).toHaveBeenCalledTimes(1)
+  })
+
+  it('dismisses on Escape', () => {
+    const actions = renderSection({ view: SYSTEM_VIEW })
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(actions.closeView).toHaveBeenCalledTimes(1)
+  })
 })
-it('renders descriptions and allows selection without resize observation', () => {
-  vi.stubGlobal('ResizeObserver', undefined)
-  const actions = view({ rows: [{ id: 'mine', name: 'Mine', isDefault: false, description: 'Preset description' }] })
-  expect(screen.getByText('Preset description')).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: `${en.setDefault}: Mine` }))
-  expect(actions.makeDefault).toHaveBeenCalledWith('mine')
+
+describe('the custom preset editor', () => {
+  it('edits and saves the system prompt while preserving a write error', () => {
+    const actions = renderSection({
+      view: {
+        id: 'mine', title: 'mine', content: '- id: persona\n', draft: 'New prompt', savedDraft: 'Old prompt',
+        editable: true, saving: false, error: 'disk full',
+      },
+    })
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe(`${en.editSystemPrompt} · mine`)
+    expect(within(dialog).getByText(en.systemPromptHelp)).toBeTruthy()
+    const editor = within(dialog).getByRole('textbox', { name: en.systemPrompt })
+    expect(editor).toHaveProperty('value', 'New prompt')
+    expect(within(dialog).getByRole('alert').textContent).toBe('disk full')
+    fireEvent.change(editor, { target: { value: 'Changed: # plain text' } })
+    fireEvent.click(within(dialog).getByText(en.save))
+
+    expect(actions.setViewContent).toHaveBeenCalledWith('Changed: # plain text')
+    expect(actions.saveView).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('deleting a preset', () => {
+  it('asks before deleting', () => {
+    const actions = renderSection()
+
+    fireEvent.click(within(rowFor('mine')).getByRole('button', { name: `${en.delete}: mine` }))
+
+    expect(actions.confirmDelete).toHaveBeenCalledWith('mine')
+  })
+
+  it('confirms and dismisses through the controller', () => {
+    const actions = renderSection({ pendingDelete: 'mine' })
+
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByText(en.deleteConfirm))
+    fireEvent.click(within(dialog).getByText(en.cancel))
+
+    expect(actions.remove).toHaveBeenCalledTimes(1)
+    expect(actions.confirmDelete).toHaveBeenLastCalledWith(null)
+  })
+
+  it('dismisses the confirmation on Escape', () => {
+    const actions = renderSection({ pendingDelete: 'mine' })
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(actions.confirmDelete).toHaveBeenCalledWith(null)
+  })
+
+  it('reports a delete in flight', () => {
+    const actions = renderSection({ pendingDelete: 'mine', deleting: true })
+
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.deleting))
+
+    expect(actions.remove).not.toHaveBeenCalled()
+  })
+})
+
+describe('a long card description', () => {
+  /** jsdom has no ResizeObserver; the description watches its own box through one. */
+  class ResizeObserverStub {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+
+  const LONG = '始终用简体中文交流的友好通用助手，提供持久 bash 与文件编辑能力。'.repeat(8)
+
+  /** Force the clamp to report an overflow: jsdom lays nothing out, so both heights are 0. */
+  function clamp(overflowing: boolean): void {
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(overflowing ? 400 : 80)
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(80)
+  }
+
+  beforeEach(() => { vi.stubGlobal('ResizeObserver', ResizeObserverStub) })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('offers the whole description on hover once the card cuts it off', () => {
+    clamp(true)
+    vi.useFakeTimers()
+    try {
+      renderSection({ rows: [{ id: 'zh', trust: 'user', isDefault: false, name: '中文助手', description: LONG }] })
+
+      fireEvent.mouseEnter(within(rowFor('zh')).getByText(LONG))
+      act(() => { vi.advanceTimersByTime(400) })
+
+      expect(screen.getByRole('tooltip').textContent).toBe(LONG)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stays quiet when the description already fits', () => {
+    clamp(false)
+    vi.useFakeTimers()
+    try {
+      renderSection({ rows: [{ id: 'zh', trust: 'user', isDefault: false, name: '中文助手', description: '短描述。' }] })
+
+      fireEvent.mouseEnter(within(rowFor('zh')).getByText('短描述。'))
+      act(() => { vi.advanceTimersByTime(400) })
+
+      // A bubble repeating what is already fully on the card is noise.
+      expect(screen.queryByRole('tooltip')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('renders where the runtime has no ResizeObserver', () => {
+    vi.unstubAllGlobals()
+    clamp(true)
+
+    expect(() => {
+      renderSection({ rows: [{ id: 'zh', trust: 'user', isDefault: false, description: LONG }] })
+    }).not.toThrow()
+    // The first measurement does not depend on the observer.
+    expect(within(rowFor('zh')).getByText(LONG).getAttribute('title')).toBe('')
+  })
 })

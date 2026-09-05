@@ -117,8 +117,9 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
-    requestSessionRename: vi.fn(),
-    notifyArchivedNotOpenable: vi.fn(),
+    renameSession: vi.fn(async () => {}),
+    forkSession: vi.fn(),
+    deleteSession: vi.fn(async () => {}),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     unarchiveSession: vi.fn(async () => {}),
@@ -1011,24 +1012,42 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByText('gone-s')).toBeNull()
   })
 
-  it.each(['workspace', 'flat', 'ungrouped'] as const)(
-    'keeps complete %s order through archived filters and both drag partitions',
-    async (mode) => {
-      const account = mode === 'flat' ? FLAT_SESSION_ORDER_KEY : mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha'
-      const saved = ['a', 'p', 'kept-archive', 'b', 'q', 'c']
-      const preferences = createWorkspaceViewStore().create()
-      preferences.actions.setGroupBy(mode === 'flat' ? 'flat' : 'workspace')
-      preferences.actions.setGroupExpanded(account, true)
-      preferences.actions.setSessionOrder(account, saved, {})
-      const items = ['a', 'p', 'kept-archive', 'b', 'q', 'c', 'missing-archive']
-        .map((id, index) => summary(id, 100 - index))
-      const b = mount({
-        useSessions: hook(sessionState(items)),
-        useWorkspaces: hook(workspaceState(
-          mode === 'ungrouped' ? [] : [workspace('alpha', items.map(item => item.id))],
-          [sid('kept-archive'), sid('missing-archive')],
-          [sid('p'), sid('q')],
-        )),
+  it('confirms permanent session deletion before calling the host action', async () => {
+    let finishDelete!: () => void
+    const deleteSession = vi.fn(() => new Promise<void>((resolve) => { finishDelete = resolve }))
+    mount({
+      useSessions: hook(sessionState([summary('delete-s', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['delete-s'])])),
+      deleteSession,
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: t('actions.session.aria', { name: 'delete-s' }) }))
+    fireEvent.click(screen.getByRole('menuitem', { name: t('menu.deleteSession') }))
+
+    const dialog = screen.getByRole('dialog', { name: t('delete.session') })
+    expect(dialog.textContent).toContain(t('delete.sessionDesc', { name: 'delete-s' }))
+    expect(deleteSession).not.toHaveBeenCalled()
+
+    const confirm = screen.getByRole('button', { name: t('delete.session') })
+    fireEvent.click(confirm)
+    expect(deleteSession).toHaveBeenCalledOnce()
+    expect(deleteSession).toHaveBeenCalledWith(sid('delete-s'))
+    expect(confirm.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(t('delete.sessionPending'))
+
+    await act(async () => { finishDelete() })
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: t('delete.session') })).toBeNull() })
+  })
+
+  it('logs and keeps the tree when the archive call rejects', async () => {
+    const rejection = new Error('archive exploded')
+    const archiveSession = vi.fn(async () => { throw rejection })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      mount({
+        useSessions: hook(sessionState([summary('alpha-s', 1)])),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s'])])),
+        archiveSession,
       })
       const names = () => screen.getAllByRole('treeitem')
         .filter(row => row.getAttribute('aria-expanded') === null)

@@ -304,8 +304,8 @@ fork 种子可以包含父 Session 的反馈事件，但 payload 保留父级 `s
 
 ## 边界与限制
 
-- 操作队列仅在进程内生效；cold 写入排他性依赖所选持久化提供方。
-- 删除只移除当前条目，不会抹除 append-only 日志或已投递后缀中的早先备注。
+- 变更队列仅在进程内生效。storage-domain 没有跨进程条件写，因此多个 Host 写入同一存储根目录时，不提供 compare-and-swap 或防止丢失更新的保证。
+- 显式 `session.delete` 拥有规范日志与 Workspace 引用，但不会征用消息反馈存储。服务不把 `session/disposed` 或 `api-session/removed` 当作删除，因此不伪造级联；日志移除后，孤儿伴随记录可能继续存在。
 - 请求若恰好落在 live detach 之后、persistence catalog 物化 header 之前的极短窗口，可能收到 `session-not-found`；调用方应在 retirement materialization 后重试。
 - cold 请求读取完整日志；服务没有条目数或聚合字节上限。`maxNoteBytes` 只限制每条备注。
 - Host 约定不记录已认证的 actor 或审计身份，因此假设调用方边界可信。

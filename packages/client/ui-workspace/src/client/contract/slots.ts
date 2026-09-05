@@ -204,10 +204,12 @@ export type WorkspaceBrowserInjected = {
   ) => Promise<{ items: readonly SessionSearchResultItem[]; hasMore: boolean }>
   /** Maximum number of merged rows rendered for one search. */
   searchResultLimit: number
-  /** Open the Session rename dialog (a row title double-click); the rename action entry raises the same request. */
-  requestSessionRename: (sessionId: SessionId, currentTitle: string) => void
-  /** Tell the user an archived row cannot be opened (a click on it). */
-  notifyArchivedNotOpenable: () => void
+  /** Rename a Session (explicit user title; resolves on host acceptance). */
+  renameSession: (sessionId: SessionId, title: string) => Promise<void>
+  /** Fork a Session at its last completed turn and open the child. */
+  forkSession: (sessionId: SessionId) => void
+  /** Permanently delete a Session while retaining its project files. */
+  deleteSession: (sessionId: SessionId) => Promise<void>
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */

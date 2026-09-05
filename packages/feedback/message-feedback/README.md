@@ -89,13 +89,14 @@ Independent. Feedback does not change the model request prefix.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Log-only authority:** existing `message_feedback` sidecar data is neither read nor migrated. Those files remain untouched, but their feedback is unavailable through this service.
-- **Deletion retains history:** delete removes current feedback, not earlier ratings or notes from the append-only log; it is not a privacy-erasure operation.
-- **Writer ownership:** another process holding a Session write handle causes cold mutations to reject. The service does not wake that owner or coordinate Remote calls across processes.
-- **Trusted callers:** requests contain no authenticated actor or audit identity. Deployments must protect the Host gateway.
-- **Telemetry export:** for all users and providers, including `deepseek-official`, the shipped OTel backend in `FEEDBACK_ONLY` releases the complete canonical prefix only after new explicit text feedback, rating, note, or category edits, or withdrawal. The prefix includes context and verbatim notes; later records wait for the next feedback, and `DISABLED` prevents capture. Deployments own redaction; see the [OTel export policy](../../session/session-telemetry-otel/README.md).
-- **Scan cost:** each `list`, `put`, or `delete` that reaches an existing Session scans its full event log to derive current feedback; cold operations also read the full log from persistence. Work grows with total Session history, not just the number of feedback items.
-- **Retention:** `maxNoteBytes` limits one note, not aggregate log size or mutation count.
+
+These limits define when the service is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
+
+- **Compare-and-set is single-process** — the per-Session queue serializes one service instance only; storage-domain has no cross-process conditional write, so multiple Host processes writing one storage root can still lose updates.
+- **No coordinated Session deletion cascade** — explicit `session.delete` owns the canonical log and Workspace references but does not enlist message-feedback storage; `session/disposed`/`api-session/removed` still mean detach rather than durable deletion. The service therefore retains empty rows and may leave orphan rows after log removal instead of deleting valid feedback on detach.
+- **Header identity is not a content fingerprint** — `{createdAt, cwd}` detects reuse only when those fields differ; a cloned log retaining the same header identity is indistinguishable.
+- **Trusted caller boundary** — `list`/`put`/`delete` carry no authenticated actor or audit identity. A deployment must expose the Host gateway only through its trusted or separately authenticated boundary until authorization and attribution are added.
+- **Row bounds** — `maxNoteBytes` bounds one note, but the item count and aggregate retained bytes of one Session row are not capped; a deployment-owned row bound remains deferred until a concrete consumer defines its policy.
 
 <a id="dev-note"></a>
 ### Dev Note

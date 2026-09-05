@@ -241,12 +241,10 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
             data-slot="sidebar.brand.mark"
             style="display: contents;"
           >
-            <svg
-              aria-hidden="true"
-              data-content="965fe321"
-              fill="none"
-              height="17.6580310880829"
-              viewBox="0 0 23.16 17.04"
+            <img
+              alt=""
+              height="24"
+              src="/new-logo.png"
               width="24"
             />
           </div>
@@ -344,12 +342,10 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
               data-slot="sidebar.brand.mark"
               style="display: contents;"
             >
-              <svg
-                aria-hidden="true"
-                data-content="965fe321"
-                fill="none"
-                height="17.6580310880829"
-                viewBox="0 0 23.16 17.04"
+              <img
+                alt=""
+                height="24"
+                src="/new-logo.png"
                 width="24"
               />
             </div>
@@ -367,7 +363,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 <span
                   class="localBuildTitle"
                 >
-                  DSH Local Build
+                  Shield Break Agent
                 </span>
                 <span
                   class="buildVersion"
@@ -478,12 +474,10 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
               data-slot="sidebar.brand.mark"
               style="display: contents;"
             >
-              <svg
-                aria-hidden="true"
-                data-content="965fe321"
-                fill="none"
-                height="17.6580310880829"
-                viewBox="0 0 23.16 17.04"
+              <img
+                alt=""
+                height="24"
+                src="/new-logo.png"
                 width="24"
               />
             </div>
@@ -501,7 +495,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 <span
                   class="localBuildTitle"
                 >
-                  DSH 本地构建
+                  Shield Break Agent
                 </span>
                 <span
                   class="buildVersion"
