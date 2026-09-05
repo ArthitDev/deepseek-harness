@@ -12,6 +12,10 @@ Status: implemented
 
 此本地构建允许精确 HTTPS 来源 `msi-cyborg-15-nb.tailaa5429.ts.net` 使用 Host 设置。该例外仅存在于 `ui-settings`。它不会把浏览器归类为 loopback，也不会启用原生文件打开或其他仅限 loopback 的 UI。Host 在分派任何 API 前仍要求匹配已配置的 `trustedHosts`，并验证绑定到 authority 的浏览器 cookie。
 
+## 考虑过的替代方案
+
+将 Tailnet 页面归类为 loopback 也会暴露仅限原生环境的 UI。接受所有 HTTPS 主机会削弱来源限制。让远程浏览器继续使用仅内存设置会导致提供商配置不可用。
+
 ## 验证
 
 聚焦测试允许 loopback 与精确 HTTPS 主机名，同时拒绝明文 HTTP 和其他 Tailnet 主机名。设置与提供商目录单元测试均通过，相关 package bundle 也构建成功。
