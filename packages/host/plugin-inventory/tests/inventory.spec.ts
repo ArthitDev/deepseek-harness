@@ -32,13 +32,15 @@ async function harness(): Promise<{
 }
 
 describe('PluginInventoryGateway', () => {
-  it('publishes one direct list method under the pluginInventory namespace', async () => {
+  it('publishes inventory and confirmed editing methods under the pluginInventory namespace', async () => {
     const { inventory } = await harness()
     expect(inventory.typertRemote).toMatchObject({
       serviceKey: 'pluginInventory',
       namespace: 'pluginInventory',
     })
     expect(remoteMethods(inventory)).toEqual([
+      { method: 'edit', invocation: { kind: 'direct' } },
+      { method: 'setEnabled', invocation: { kind: 'direct' } },
       { method: 'list', invocation: { kind: 'direct' } },
     ])
   })

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-客户端与设置页可以展示宿主当前组合了什么：调用 `pluginInventory/list` 即按 Loader 顺序返回当前的非组条目——条目 id、模块标识、有效启用状态与根 Fiber 阶段（`pending`、`loading`、`active`、`failed` 或 `unloading`；条目没有存活根 Fiber 时为 `null`）。当部署组合了 Agent 预设 roster 时，快照还携带每个预设一组——id、trust、显示名、默认标记、健康状态与压平后的组合行——因为挂载 roster 的部署把模型侧插件运行在预设组合里，而不是 Loader 自己的条目上。该快照只表示调用当下：Loader 是唯一的生命周期权威，本包不拥有缓存、历史、来源模型、事件流或修改路径。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
+客户端与设置页可以展示宿主当前组合了什么：调用 `pluginInventory/list` 即按 Loader 顺序返回当前的非组条目——条目 id、模块标识、有效启用状态与根 Fiber 阶段（`pending`、`loading`、`active`、`failed` 或 `unloading`；条目没有存活根 Fiber 时为 `null`）。当部署组合了 Agent 预设 roster 时，快照还携带每个预设一组——id、trust、显示名、默认标记、健康状态与压平后的组合行——因为挂载 roster 的部署把模型侧插件运行在预设组合里，而不是 Loader 自己的条目上。该快照只表示调用当下：Loader 是唯一的生命周期权威，本包不拥有缓存、历史、来源模型或事件流。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
 
 ## 目录
 
@@ -37,7 +37,9 @@ kind: "package-reference"
 
 ### 你能用它做什么、不能做什么
 
-该清单是供展示与诊断的快照：客户端可以渲染名单、标出失败条目，并通过比较快照检测变化。它不能启用、停用、添加或移除插件，也不携带历史——已经失败并被移除的 fiber 缺席。由于服务每次调用都读取 Loader，答案总是反映当前组合，而不是缓存视图。
+清单快照用于展示与诊断。独立的 `edit` 和 `setEnabled` Remote 可以修改用户预设、允许列表中的全局工具及部署的 global-skills 插件的字面量启停状态，但不能安装或移除插件。Host 解析路径、检查修订版本，并在保存前写入同目录的 `.bak`。内置预设、表达式、已禁用的祖先组、嵌套 include 和全局基础设施受到保护。
+
+预设保存保留 YAML 值与 `!!js` 表达式，但会重新格式化文档并丢弃注释；改动适用于新会话。全局保存追加一个窄范围 profile patch，并遵循部署的重载策略；保存成功不代表运行时已激活。重新打开清单检查状态，必要时重启 Host。更高优先级的覆盖仍可能生效。
 
 -----
 
@@ -83,7 +85,7 @@ Typert 生成由 `./typert` 与 `./remote` 导出的 Host 和 Client Remote 产�
 <a id="model-experience"></a>
 ## 模型体验
 
-无。这个仅限 Host 的只读 Loader 投影不注册任何面向模型的内容。
+该服务不注册任何面向模型的内容。修改启停状态可能改变后续会话获得的工具。
 
 #### KV Cache 影响
 
@@ -97,7 +99,7 @@ Typert 生成由 `./typert` 与 `./remote` 导出的 Host 和 Client Remote 产�
 这些限制说明一个点时刻清单无法告诉客户端什么。它们是当前包约束，不是任务积压。
 
 - **仅表示调用当下**——结果不包含持久的失败历史或订阅；只要不存在存活的根 Fiber，就会报告 `null`，而不区分其原因。
-- **无来源与修改能力**——服务不识别条目由哪个 bundle、profile 或 override 引入，也不能在任一平面启用、停用、添加或移除插件。
+- **有限编辑**——仅能编辑字面量启停状态；安装、移除、任意配置和完整的覆盖来源不在本服务范围内。
 - **预设仅随 roster 出现**——未装 `dsh-agent-presets` 的部署只提供 Loader 条目；`agentPresets` 字段缺席而非为空。
 
 <a id="dev-note"></a>

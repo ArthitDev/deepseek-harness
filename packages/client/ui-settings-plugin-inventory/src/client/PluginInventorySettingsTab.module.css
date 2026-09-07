@@ -456,3 +456,36 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.togglePanel {
+  padding-block: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.togglePanel button {
+  margin-inline-end: 8px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.toggleLabel input {
+  accent-color: var(--dsw-alias-state-business-primary);
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.togglePanel :disabled {
+  opacity: 0.5;
+  cursor: default;
+}

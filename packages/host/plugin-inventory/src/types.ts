@@ -3,6 +3,14 @@ import type { Branded } from '@deepseek-ai/dsh-brand'
 /** Stable Loader-tree identity of one configured plugin entry. */
 export type PluginEntryId = Branded<'PluginEntryId'>
 
+/** File revision and configuration state for one plugin switch. */
+export interface PluginEnablementDocument {
+  readonly revision: string
+  readonly enabled: boolean
+  /** A blocked edit carries its reason and cannot be submitted. */
+  readonly reason?: string
+}
+
 /** Lifecycle state of an entry's root Fiber, or null when it has no live root Fiber. */
 export type PluginFiberPhase =
   | 'pending'

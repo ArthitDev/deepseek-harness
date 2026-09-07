@@ -1,5 +1,5 @@
 ---
-description: "Scope-grouped read-only plugin inventory tab in Web Plugins settings for the dsh web client: agent-preset compositions first, the global plane behind a disclosure, search across both."
+description: "Scope-grouped plugin inventory and enablement tab in Web Plugins settings for the dsh web client: agent-preset compositions first, the global plane behind a disclosure, search across both."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-settings-plugin-inventory` contributes the read-only **Plugin list** tab to the Web Settings Plugins section. The tab lazily calls `ctx.remote.pluginInventory.list()` the first time it is selected and renders the inventory in two collapsible groups. The agent-preset group comes first, open by default: a display-only switcher pill over the roster opens on the default preset, and each composition row is a compact disclosure card carrying its enablement — including `conditional` for a disabled gate the Host could not evaluate — with provenance facts behind the disclosure. The global group follows collapsed, its header carrying the entry count and a failure count; expanded, failures float first, and an entry disabled globally but enabled by at least one preset is marked as preset-provided in place — its details name the enabling presets — instead of reading as plainly disabled. Search filters both groups, forces the collapsed groups open, and points at matches sitting in unselected presets. Loading, empty, no-match, and generic failure states stay local to the mounted component, and a failed read can be retried without exposing transport details; without a roster the tab renders the global plane alone, expanded.
+`dsh-client-ui-settings-plugin-inventory` contributes the **Plugin list** tab to the Web Settings Plugins section. The tab lazily calls `ctx.remote.pluginInventory.list()` the first time it is selected and renders the inventory in two collapsible groups. The agent-preset group comes first, open by default: a display-only switcher pill over the roster opens on the default preset, and each composition row is a compact disclosure card carrying its enablement — including `conditional` for a disabled gate the Host could not evaluate — with provenance facts behind the disclosure. The global group follows collapsed, its header carrying the entry count and a failure count; expanded, failures float first, and an entry disabled globally but enabled by at least one preset is marked as preset-provided in place — its details name the enabling presets — instead of reading as plainly disabled. Search filters both groups, forces the collapsed groups open, and points at matches sitting in unselected presets. Loading, empty, no-match, and generic failure states stay local to the mounted component, and a failed read can be retried without exposing transport details; without a roster the tab renders the global plane alone, expanded.
 
 ## Table of Contents
 
@@ -26,6 +26,10 @@ English | [中文](README.zh.md)
 ## Use this package
 
 Open the Plugins section in Settings and select the **Plugin list** tab to inspect the Host's plugin inventory. The tab reads no Remote during plugin activation — selecting it for the first time mounts the component and lazily calls `ctx.remote.pluginInventory.list()` through `api-remotes`.
+
+### Changing enablement
+
+Expand a plugin card, change **Enable plugin**, then choose **Save change** or **Cancel**. The Host supplies the saved state and revision; protected rows show a reason instead of a switch. User preset changes apply to new sessions. Global changes follow the Host reload policy and may need a restart. Each save keeps a sibling `.bak`; reopen Settings to check runtime status. A stale revision requires reloading before another save.
 
 ### Reading a card
 
@@ -47,7 +51,7 @@ A failed read renders a generic failure state inside the tab; retrying re-runs t
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The tab is a read-only projection of a Host-owned snapshot; it performs no Remote read during plugin activation and takes the snapshot on first selection.
+The tab projects a Host-owned snapshot and delegates enablement edits to the Host; it performs no Remote read during plugin activation and takes the snapshot on first selection.
 
 ### Registration
 
@@ -69,7 +73,7 @@ These pages cover the settings section, the remote call, and the Host-side proje
 - [ui-settings-plugins](../ui-settings-plugins/README.md) — the Plugins section this tab registers into.
 - [ui-settings](../ui-settings/README.md) — the domain base declaring `settings.plugins.tab`.
 - [api-remotes](../../api/remotes/README.md) — the Remote BFF surface behind `pluginInventory.list()`.
-- [plugin-inventory](../../host/plugin-inventory/README.md) — the Host-side read-only Loader projection this tab renders.
+- [plugin-inventory](../../host/plugin-inventory/README.md) — the Host-side Loader inventory and enablement service this tab renders.
 
 -----
 
@@ -89,8 +93,8 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define the freshness and reach of the inventory view; they are current package constraints.
 
-- **One snapshot per Settings mount or retry** — the tab does not subscribe to Loader changes or automatically refetch after reconnect; switching tabs preserves the current snapshot, while reopening Settings obtains a new one.
-- **Read-only in both planes** — the tab shows global and preset enablement but mutates neither; enable/disable controls that write a custom preset's own composition file are deliberate follow-up work.
+- **Polled runtime status** — the mounted tab refreshes immediately after saving and polls again one second after each completed read. Cleanup cancels the timer and ignores late responses. This reports Host state; it does not force plugin activation.
+- **Limited editing** — built-in presets and global infrastructure remain protected. The tab changes literal enablement, not arbitrary configuration or installation.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -102,4 +106,4 @@ None.
 
 </details>
 
-**Runtime invariant:** No companion is published. This package owns a read-only Settings contribution.
+**Runtime invariant:** No companion is published. The Host owns validation and persistence; the browser confirms changes using revision tokens.

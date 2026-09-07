@@ -588,6 +588,10 @@ describe('web e2e: settings modal and General preferences', () => {
       const presetSwitcher = dialog.getByRole('button', { name: 'Choose the agent preset to inspect' })
       await presetSwitcher.waitFor({ timeout: 10_000 })
       expect(await presetSwitcher.textContent()).toBe('Standard mode (default)')
+      const presetCard = dialog.locator('[data-plugin-scope="preset"] [data-plugin-entry]').first()
+      await presetCard.getByRole('button').first().click()
+      await presetCard.getByText('Copy this built-in preset before changing its plugins', { exact: true }).waitFor()
+      expect(await presetCard.getByRole('switch').count()).toBe(0)
       // This page has no closing inventory spec to sweep its console, so the
       // scenario clears both tripwire channels itself.
       expect(enTripwire.pageErrors).toEqual([])

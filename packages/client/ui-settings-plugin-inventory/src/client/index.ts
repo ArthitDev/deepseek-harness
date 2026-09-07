@@ -45,7 +45,17 @@ export function apply(ctx: ClientContext): void {
   const agentPresetCopy = ctx.locale.bind('settings.agentPreset')
   const presetName: PluginInventorySettingsTabInjected['presetName'] = preset =>
     presetDisplayText(preset, agentPresetCopy).name
-  const injected = (): PluginInventorySettingsTabInjected => ({ list, presetName })
+  const edit: NonNullable<PluginInventorySettingsTabInjected['edit']> = async (entryId, moduleName, preset) => {
+    const result = await ctx.remote.pluginInventory.edit(entryId, moduleName, preset)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+  const setEnabled: NonNullable<PluginInventorySettingsTabInjected['setEnabled']> = async (entryId, moduleName, enabled, revision, preset) => {
+    const result = await ctx.remote.pluginInventory.setEnabled(entryId, moduleName, enabled, revision, preset)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+  const injected = (): PluginInventorySettingsTabInjected => ({ list, presetName, edit, setEnabled })
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',

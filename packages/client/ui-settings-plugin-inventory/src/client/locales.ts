@@ -2,6 +2,15 @@
 
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
+  toggleLabel: '启用 {name}',
+  enablePlugin: '启用插件',
+  confirmGlobal: '保存此配置？全局变更可能影响当前会话，重新加载失败时可恢复备份。',
+  confirmPreset: '保存到此预设？新会话生效，现有会话保持不变。',
+  save: '保存变更',
+  saving: '正在保存…',
+  cancel: '取消',
+  savedGlobal: '配置已保存，并已创建 .bak 备份。运行状态会自动刷新；若更改未生效，请重启 Harness。',
+  savedPreset: '配置已保存，并已创建 .bak 备份。请使用此预设创建新会话。',
   tab: '插件列表',
   loading: '正在读取插件…',
   error: '暂时无法读取插件。',
@@ -45,6 +54,15 @@ export type PluginInventoryLocaleKey = keyof typeof zh
 
 /** English dictionary checked against the Chinese key set. */
 export const en = {
+  toggleLabel: 'Enable {name}',
+  enablePlugin: 'Enable plugin',
+  confirmGlobal: 'Save this configuration? Global changes can affect active sessions. Restore the backup if reloading fails.',
+  confirmPreset: 'Save to this preset? New sessions use the change; existing sessions keep their plugins.',
+  save: 'Save change',
+  saving: 'Saving…',
+  cancel: 'Cancel',
+  savedGlobal: 'Configuration saved with a .bak backup. Runtime status refreshes automatically; restart Harness if the change does not take effect.',
+  savedPreset: 'Configuration saved with a .bak backup. Start a new session with this preset.',
   tab: 'Plugin list',
   loading: 'Reading plugins…',
   error: 'Plugins are temporarily unavailable.',

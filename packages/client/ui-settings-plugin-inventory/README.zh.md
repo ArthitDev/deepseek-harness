@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端设置中按作用域分组的只读插件清单标签页：Agent 预设组合在前，全局平面收在折叠分组里，搜索跨两组。"
+description: "dsh Web 客户端设置中按作用域分组的插件清单与启停标签页：Agent 预设组合在前，全局平面收在折叠分组里，搜索跨两组。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-settings-plugin-inventory` 向 Web 设置的「插件」分区贡献只读的**插件列表**标签页。该标签页在首次被选择时懒调用 `ctx.remote.pluginInventory.list()`，并把清单分成两个可折叠分组渲染。Agent 预设组在前、默认展开：一个只改显示的切换器胶囊覆盖 roster、初始停在默认预设，每个组合行是一张紧凑折叠卡片，携带其启停状态——含宿主无法求值的 disabled 门对应的 `conditional`——出处事实收在折叠里。全局组随后且默认收起，组头带条目计数与失败计数；展开后失败行浮在最前，全局停用但被至少一个预设启用的条目就地标记为预设提供——详情列出启用它的预设——而不是读作单纯的已停用。搜索同时过滤两组、强制撑开收起的分组，并指出未选中预设里的匹配。加载、空结果、无匹配与通用失败状态只属于已挂载组件，读取失败后可以重试，且不会暴露传输细节；没有 roster 时标签页只渲染全局平面并保持展开。
+`dsh-client-ui-settings-plugin-inventory` 向 Web 设置的「插件」分区贡献**插件列表**标签页。该标签页在首次被选择时懒调用 `ctx.remote.pluginInventory.list()`，并把清单分成两个可折叠分组渲染。Agent 预设组在前、默认展开：一个只改显示的切换器胶囊覆盖 roster、初始停在默认预设，每个组合行是一张紧凑折叠卡片，携带其启停状态——含宿主无法求值的 disabled 门对应的 `conditional`——出处事实收在折叠里。全局组随后且默认收起，组头带条目计数与失败计数；展开后失败行浮在最前，全局停用但被至少一个预设启用的条目就地标记为预设提供——详情列出启用它的预设——而不是读作单纯的已停用。搜索同时过滤两组、强制撑开收起的分组，并指出未选中预设里的匹配。加载、空结果、无匹配与通用失败状态只属于已挂载组件，读取失败后可以重试，且不会暴露传输细节；没有 roster 时标签页只渲染全局平面并保持展开。
 
 ## 目录
 
@@ -26,6 +26,10 @@ kind: "package-reference"
 ## 使用本包
 
 打开设置中的「插件」分区并选择**插件列表**标签页，即可查看宿主的插件清单。插件激活期间不会读取 Remote——首次选择该标签页时才挂载组件，并通过 `api-remotes` 懒调用 `ctx.remote.pluginInventory.list()`。
+
+### 修改启停状态
+
+展开插件卡片，修改**启用插件**，然后选择**保存更改**或**取消**。Host 提供已保存状态和修订版本；受保护的行显示原因而非开关。用户预设的更改适用于新会话，全局更改遵循 Host 重载策略，可能需要重启。每次保存保留同目录的 `.bak`；重新打开设置可检查运行状态。修订版本过期时必须重新加载后再保存。
 
 ### 阅读卡片
 
@@ -47,7 +51,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-该标签页是宿主拥有快照的只读投影；插件激活期间不执行任何 Remote 读取，首次选择时才取快照。
+该标签页投影宿主持有的快照，并将启停编辑交给 Host；插件激活期间不执行任何 Remote 读取，首次选择时才取快照。
 
 ### 注册
 
@@ -69,7 +73,7 @@ kind: "package-reference"
 - [ui-settings-plugins](../ui-settings-plugins/README.zh.md)——本标签页注册进的「插件」分区。
 - [ui-settings](../ui-settings/README.zh.md)——声明 `settings.plugins.tab` 的领域底座。
 - [api-remotes](../../api/remotes/README.zh.md)——`pluginInventory.list()` 背后的 Remote BFF 表面。
-- [plugin-inventory](../../host/plugin-inventory/README.zh.md)——本标签页所渲染的宿主侧只读 Loader 投影。
+- [plugin-inventory](../../host/plugin-inventory/README.zh.md)——本标签页所渲染的宿主侧 Loader 清单与启停服务。
 
 -----
 
@@ -89,8 +93,8 @@ kind: "package-reference"
 
 这些限制定义清单视图的新鲜度与触达范围；它们是当前包约束。
 
-- **每次 Settings 挂载或重试只读取一份快照**：标签页不订阅 Loader 变化，也不会在重连后自动重新读取；切换标签页会保留当前快照，重新打开 Settings 则会取得新快照。
-- **两个平面都只读**：标签页展示全局与预设的启停状态但都不修改；写回自定义预设组合文件的启停控件是刻意留作后续的工作。
+- **轮询运行状态**：已挂载的标签页在保存后立即刷新，每次读取完成一秒后再次轮询。卸载时取消计时器并忽略迟到的响应。它报告 Host 状态，不强制激活插件。
+- **有限编辑**：内置预设和全局基础设施受到保护。标签页修改字面量启停状态，不修改任意配置或安装插件。
 
 <a id="dev-note"></a>
 ### 开发备注
@@ -102,4 +106,4 @@ kind: "package-reference"
 
 </details>
 
-**运行时不变式：** 不发布伴生入口。本包只持有一个只读 Settings contribution。
+**运行时不变式：** 不发布伴生入口。Host 负责验证与持久化；浏览器使用修订令牌确认更改。

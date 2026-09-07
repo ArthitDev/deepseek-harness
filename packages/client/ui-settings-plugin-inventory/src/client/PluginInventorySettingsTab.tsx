@@ -8,6 +8,7 @@ import {
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './PluginInventorySettingsTab.module.css'
+import { PluginToggle } from './PluginToggle.tsx'
 
 type PluginInventoryEntry = PluginInventorySnapshot['entries'][number]
 type AgentPresetGroup = NonNullable<PluginInventorySnapshot['agentPresets']>[number]
@@ -15,6 +16,12 @@ type AgentPresetRow = AgentPresetGroup['rows'][number]
 
 /** Registration-side Remote face used by the section. */
 export interface PluginInventorySettingsTabInjected {
+  /** Optional editing face; read-only hosts can omit both callbacks. */
+  edit?: (entryId: string, moduleName: string, preset?: string) => Promise<{ revision: string; enabled: boolean; reason?: string }>
+  /** Persist a confirmed change against its exact read revision. */
+  setEnabled?: (
+    entryId: string, moduleName: string, enabled: boolean, revision: string, preset?: string,
+  ) => Promise<{ revision: string; enabled: boolean; reason?: string }>
   /** Read a current Host inventory snapshot. */
   list: () => Promise<PluginInventorySnapshot>
   /**
@@ -166,8 +173,8 @@ function StateTag({ kind, label }: { readonly kind: string; readonly label: stri
   return <span className={css.configTag} data-kind={kind}>{label}</span>
 }
 
-/** Render the read-only plugin inventory: agent presets first, then the global plane. */
-export function PluginInventorySettingsTab({ list, presetName, t }: PluginInventorySettingsTabProps): ReactNode {
+/** Render the plugin inventory with confirmed edits: agent presets first, then the global plane. */
+export function PluginInventorySettingsTab({ list, presetName, edit, setEnabled, t }: PluginInventorySettingsTabProps): ReactNode {
   const sectionId = useId()
   const [request, setRequest] = useState(0)
   const [query, setQuery] = useState('')
@@ -180,12 +187,23 @@ export function PluginInventorySettingsTab({ list, presetName, t }: PluginInvent
 
   useEffect(() => {
     let current = true
-    void Promise.resolve().then(() => list()).then(
-      (snapshot) => { if (current) setState({ status: 'ready', snapshot }) },
-      () => { if (current) setState({ status: 'error' }) },
-    )
-    return () => { current = false }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // ponytail: poll while mounted; use Host events if inventory traffic becomes material.
+    const refresh = async (): Promise<void> => {
+      try {
+        const snapshot = await list()
+        if (current) setState({ status: 'ready', snapshot })
+      } catch {
+        if (current) setState({ status: 'error' })
+      } finally {
+        if (current) timer = setTimeout(() => { void refresh() }, 1000)
+      }
+    }
+    void refresh()
+    return () => { current = false; clearTimeout(timer) }
   }, [list, request])
+
+  const refreshAfterSave = (): void => { setRequest(value => value + 1) }
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const searching = normalizedQuery.length > 0
@@ -268,6 +286,10 @@ export function PluginInventorySettingsTab({ list, presetName, t }: PluginInvent
           </>
         )}
       >
+        {edit && setEnabled && row.entryId !== null ? (
+          <PluginToggle key={`${preset.id}:${row.entryId}`} entryId={row.entryId} moduleName={row.moduleName}
+            preset={preset.id} edit={edit} setEnabled={setEnabled} onSaved={refreshAfterSave} t={t} />
+        ) : null}
         <CardFacts
           moduleName={row.moduleName}
           moduleLabel={t('moduleLabel')}
@@ -314,6 +336,10 @@ export function PluginInventorySettingsTab({ list, presetName, t }: PluginInvent
           </>
         )}
       >
+        {edit && setEnabled ? (
+          <PluginToggle key={entry.entryId} entryId={entry.entryId} moduleName={entry.moduleName}
+            edit={edit} setEnabled={setEnabled} onSaved={refreshAfterSave} t={t} />
+        ) : null}
         <CardFacts
           moduleName={entry.moduleName}
           moduleLabel={t('moduleLabel')}
