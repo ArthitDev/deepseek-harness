@@ -255,11 +255,13 @@ describe('ui-model-selection dual entry', () => {
     b.ctx.emit('connection/reset')
     expect(face.directory.getSnapshot()).toMatchObject({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+      default: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
       status: 'ready',
     })
     face.load()
     expect(face.directory.getSnapshot()).toMatchObject({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+      default: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
       status: 'ready',
     })
   })

@@ -17,6 +17,8 @@ import type { ModelCatalogDirectory } from './catalog.ts'
 export interface ModelDirectoryState {
   /** Effective selection: durable next-request projection, then Host default. */
   current: ModelSelection | null
+  /** Host default used when the Session has no durable selection. */
+  default: ModelSelection | null
   /**
    * Whether an adapter serves the current selection's provider, as the host reports
    * it — null before the first load, which is NOT the same as blocked. Read
@@ -39,7 +41,7 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, default: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
   })
 
   /** Latest selection operation wins; an older response never overwrites a newer one. */
@@ -151,6 +153,7 @@ export class ModelDirectory {
       }
       this.store.set({
         current: null,
+        default: null,
         routable: null,
         groups: [],
         failures: [],
@@ -163,6 +166,7 @@ export class ModelDirectory {
     this.resolved = true
     this.store.set({
       current,
+      default: catalog.value.default,
       routable: catalog.value.routableProviders.includes(current.provider),
       groups: catalog.value.groups,
       failures: catalog.value.failures,
