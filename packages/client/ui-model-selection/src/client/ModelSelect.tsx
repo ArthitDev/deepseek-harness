@@ -316,10 +316,13 @@ export function ModelSelect(
   }
 
   const waiting = state.current === null && state.status === 'loading'
+  const showProvider = state.current !== null && state.default !== null
+    && (state.current.provider !== state.default.provider || state.current.model !== state.default.model)
   const modelLabel = waiting
     ? t('trigger.loading')
-    : currentChoice?.model.name
-      ?? (state.current === null ? t('trigger.fallback') : `${state.current.provider}/${state.current.model}`)
+    : currentChoice === undefined
+      ? state.current === null ? t('trigger.fallback') : `${state.current.provider}/${state.current.model}`
+      : `${showProvider ? `${currentChoice.group.name} · ` : ''}${currentChoice.model.name}`
   const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
   const triggerAria = waiting
     ? t('trigger.loading')

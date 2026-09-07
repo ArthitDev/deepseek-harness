@@ -34,6 +34,7 @@ const reasoning = {
 function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryState {
   return {
     current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    default: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     routable: true,
     groups: [{
       id: 'deepseek-official',
@@ -113,7 +114,7 @@ describe('ModelSelect reasoning effort', () => {
     />)
 
     fireEvent.click(screen.getByRole('button', {
-      name: '选择模型，当前 Model，推理等级 Default',
+      name: '选择模型，当前 Provider · Model，推理等级 Default',
     }))
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
@@ -142,6 +143,23 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('menuitemradio', { name: 'removed-model' })).toBeNull()
     expect(screen.getByRole('menuitemradio', { name: 'DeepSeek-V4-Flash' })).toBeTruthy()
     expect(screen.queryByText('Fast catalog description')).toBeNull()
+  })
+
+  it('shows the provider when the Session route differs from the Host default', () => {
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={createSnapshotStore(state({
+        default: { provider: 'epit-local', model: 'gemma4-26b-a4b-uncensored' },
+      }))}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    expect(screen.getByRole('button', {
+      name: '选择模型，当前 DeepSeek · DeepSeek-V4-Flash，推理等级 High',
+    }).textContent).toContain('DeepSeek · DeepSeek-V4-Flash')
   })
 
   it('shows loading until the catalog and Session projection are both ready', async () => {
