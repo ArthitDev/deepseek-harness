@@ -103,7 +103,7 @@ kind: "package-reference"
 
 这些限制说明设置传输层够不到的地方；它们是当前包约束。
 
-- **非 loopback 页面没有持久化设置**：本 Client 在那里禁用 Host 持久化，因此 表单以 `unavailable` 起步且从不跨线路；尽管 Connection 认证覆盖 API，表单写入仍在那里无效。共享的开发者工具偏好单独提供浏览器本地变更。
+- **未列出的非 loopback 页面没有持久化设置**：本 Client 仅为 loopback 和此构建明确列出的、已认证 Tailnet origin 启用 Host 持久化。尽管 Connection 认证覆盖 API，其他 origin 仍保持进程本地模式。
 
 <a id="dev-note"></a>
 ### 开发备注
