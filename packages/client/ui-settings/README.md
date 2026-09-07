@@ -94,7 +94,7 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define where the settings transport cannot reach; they are current package constraints.
 
-- **Non-loopback pages get no durable settings** — this Client keeps Host persistence disabled there, so a scope starts `unavailable` and never crosses the wire; every row it backs is inert even though Connection authentication covers the API.
+- **Unlisted non-loopback pages get no durable settings** — this Client enables Host persistence only for loopback and this build's exact authenticated Tailnet origins. Every other origin stays process-local even though Connection authentication covers the API.
 
 <a id="dev-note"></a>
 ### Dev Note
