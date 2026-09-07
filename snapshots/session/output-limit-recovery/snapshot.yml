@@ -1,0 +1,8 @@
+version: 1
+scenario: output-limit-recovery
+profile: headless
+composition: output-limit-recovery
+recording: authored
+header:
+  class: output-limit-recovery
+  pin: true

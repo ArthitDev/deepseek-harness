@@ -303,6 +303,7 @@ describe('compact configuration and defaults', () => {
       maxOverflowRetries: 1,
       modelPolicies: [],
       auto: true,
+      maxOutputContinuations: 2,
     })
     expect(Object.isFrozen(resolved)).toBe(true)
   })

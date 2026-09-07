@@ -10,7 +10,7 @@ import { CompactionEngine, ManualCompactionError } from '@deepseek-ai/dsh-compac
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
-import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -115,6 +115,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     maxOverflowRetries: maxOverflowRetriesSchema,
     modelPolicies: z.array(modelPolicy),
     auto: z.boolean(),
+    maxOutputContinuations: z.number().step(1).min(0),
   })
 
   /** Resolved and validated compaction configuration. */
@@ -137,6 +138,39 @@ export class BasicCompactionEngine extends CompactionEngine {
    */
   private _registerAutomaticCompaction(): void {
     const { ctx } = this
+    ctx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
+      const limit = this.config.maxOutputContinuations
+      if (limit === 0 || signal.aborted || agent.inbox.hasPending) return
+      const events = agent.session.snapshotEvents()
+      const finish = events.findLast(event => event.type === 'assistant/chunk'
+        && event.data.turn === turn && event.data.chunk.type === 'finish')
+      if (finish?.type !== 'assistant/chunk' || finish.data.chunk.type !== 'finish'
+        || finish.data.chunk.reason.kind !== 'max-tokens') return
+
+      // Read the durable log, including shadowed input, so compaction and resume
+      // cannot replenish the continuation budget without a new user message.
+      let continuations = 0
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index]
+        if (event?.type !== 'user/message') continue
+        if (event.data.source.kind === 'user') break
+        if (event.data.source.kind === 'plugin'
+          && event.data.source.plugin === 'output-limit-continuation') continuations += 1
+      }
+      if (continuations >= limit) return
+      agent.followup(createUserMessage({
+        content: [{
+          type: 'text',
+          text: 'Your previous response reached its output-token limit. Continue only the unfinished work from where it stopped. '
+            + 'Do not repeat completed work. Tool calls from the truncated response were not executed; issue any needed call again in full. '
+            + 'If the task is already complete, give a brief final answer and stop.',
+        }],
+        source: {
+          kind: 'plugin', plugin: 'output-limit-continuation', form: 'notice',
+          summary: `Output limit reached; auto-continue ${continuations + 1}/${limit}`,
+        },
+      }))
+    })
     const logResult = (result: CompactionResult, trigger: string): void => {
       ctx.logger.info(
         `compaction (${trigger}): shadowed ${result.shadowedSeqs.length} surface nodes `

@@ -12,6 +12,13 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
+import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
 
 let root: string | undefined
 let context: Context | undefined
@@ -56,6 +63,37 @@ async function loadYaml(lines: readonly string[]): Promise<Context> {
 }
 
 describe('real Loader composition', () => {
+  it('loads bounded output recovery from YAML and records its follow-up', async () => {
+    const loaded = await loadYaml([
+      "- name: '@deepseek-ai/dsh-llm'",
+      "- name: '@deepseek-ai/dsh-session'",
+      "- name: '@deepseek-ai/dsh-session-projection'",
+      "- name: '@deepseek-ai/dsh-token-meter'",
+      "- name: '@deepseek-ai/dsh-compaction-basic'",
+      '  config:',
+      '    maxOutputContinuations: 1',
+    ])
+    await loaded.plugin(SystemPrompt)
+    await loaded.plugin(ToolRuntime)
+    await loaded.plugin(AgentRegistry)
+    await loaded.plugin(AgentLoop, { agents: [] })
+    let calls = 0
+    class CappedAdapter extends LlmAdapter {
+      override async * stream(): AsyncIterable<StreamChunk> {
+        calls += 1
+        yield { type: 'finish', reason: { kind: 'max-tokens' } }
+      }
+    }
+    loaded.llm.registerAdapter(['mock'], new CappedAdapter())
+    const agent = await loaded.agentLoop.create(SessionId('loader-output-cap'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Go' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    expect(calls).toBe(2)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')).toHaveLength(2)
+    expect(agent.session.deriveMessages().some(message => message.source.kind === 'plugin'
+      && message.source.plugin === 'output-limit-continuation')).toBe(true)
+  })
+
   it('loads the shipped token-meter, pruning, and compaction-basic YAML order', async () => {
     const loaded = await loadYaml([
       "- name: '@deepseek-ai/dsh-llm'",
