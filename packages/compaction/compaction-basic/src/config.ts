@@ -40,6 +40,7 @@ const BASIC_COMPACT_CONFIG_KEYS: ReadonlySet<string> = new Set([
   ...POLICY_CONFIG_KEYS,
   'modelPolicies',
   'auto',
+  'maxOutputContinuations',
 ])
 
 /** Complete exact-target override key set. */
@@ -68,6 +69,9 @@ export class TargetPressureConfigError extends Error {
 export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfig {
   validateKeys(config, BASIC_COMPACT_CONFIG_KEYS, 'BasicCompactionConfig')
   validatePolicy(config, 'BasicCompactionConfig')
+  if (config.maxOutputContinuations !== undefined) {
+    assertNonNegativeInteger('BasicCompactionConfig.maxOutputContinuations', config.maxOutputContinuations)
+  }
   if (config.auto !== undefined && typeof config.auto !== 'boolean') {
     throw new Error('BasicCompactionConfig: auto must be a boolean')
   }
@@ -106,6 +110,7 @@ export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfi
     maxOverflowRetries: config.maxOverflowRetries ?? 1,
     modelPolicies,
     auto: config.auto ?? true,
+    maxOutputContinuations: config.maxOutputContinuations ?? 2,
   })
 }
 

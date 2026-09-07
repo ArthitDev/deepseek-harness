@@ -72,6 +72,7 @@ All settings are optional. With context window `W`, effective request output cap
 | `maxTokens` | `headroomTokens` (`65536`) | Positive summary output cap, including any provider-counted reasoning tokens. Explicit per-model caps override explicit global caps; otherwise the cap follows the resolved headroom. |
 | `compactionRetries` | `1` | Extra condensation attempts after the first when pressure remains above threshold. |
 | `maxOverflowRetries` | `1` | Maximum retries after a confirmed context-window overflow; `0` disables recovery only. |
+| `maxOutputContinuations` | `2` | Follow-up turns after output truncation per user input; `0` disables output recovery. Requires `auto: true`. |
 | `modelPolicies` | `[]` | Exact `{ provider, model, ...partialPolicy }` overrides for individual model routes. |
 | `auto` | `true` | Enable automatic condensation and overflow recovery; set `false` for manual-only operation. |
 
@@ -80,6 +81,10 @@ Misconfiguration fails fast: unknown settings, duplicate per-model overrides, in
 ### What happens when condensation runs
 
 The oldest balanced span is replaced by one summary message and the recent tail stays verbatim; the conversation continues from the summary. The operation reports how many history items were condensed and the estimated tokens freed. If nothing can be condensed safely — for example the whole conversation is one indivisible unit — nothing changes and nothing is written to the session log. If no model is available to write the summary (no configured target and no routed request yet), condensation fails with a clear error telling you to configure the summarization provider and model or route one request.
+
+### Output-limit recovery
+
+Output truncation is separate from context overflow. When the latest request finishes with `max-tokens`, the plugin queues a follow-up with a visible `Output limit reached; auto-continue N/LIMIT` notice. It counts continuations in the durable log since the latest user message, including history replaced by compaction. Normal completion, cancellation, pending inbox input, and an exhausted budget prevent automatic continuation. Each follow-up has its own turn outcome, so recovery can end as completed while the truncated turn remains recorded. The notice asks the model to continue unfinished work, avoid repeating completed work, and reissue any needed truncated tool call in full. No truncated tool call is executed. A cap is evidence of truncation, not proof that a task remains unfinished; the model may simply return a brief final answer.
 
 ### On-demand condensation with /compact
 

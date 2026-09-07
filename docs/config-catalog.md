@@ -591,6 +591,8 @@ Requires: `llm` · `tokenMeter` · `sessions`
 ```ts config-catalog
 /** Basic compaction configuration with an optional exact-target policy table. */
 export interface BasicCompactionConfig extends CompactionPolicyConfig {
+  /** Follow-up turns after output truncation per user input; `0` disables them. Defaults to `2`. */
+  maxOutputContinuations?: number
   /** Exact provider/model overrides; duplicate targets fail plugin load. */
   modelPolicies?: ModelCompactPolicyConfig[]
   /** Enable automatic step-boundary pressure and overflow-recovery listeners. Defaults to `true`. */

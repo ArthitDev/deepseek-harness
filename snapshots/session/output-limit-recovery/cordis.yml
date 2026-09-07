@@ -1,0 +1,7 @@
+# Output recovery does not depend on platform-specific shell tools.
+- id: compaction-basic
+  config: {}
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
