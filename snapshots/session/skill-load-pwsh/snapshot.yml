@@ -1,0 +1,11 @@
+version: 1
+scenario: skill-load-pwsh
+profile: headless
+composition: skill-load-pwsh
+recording: authored
+platform: pwsh
+header:
+  class: skill-pwsh
+  pin: true
+workspace:
+  setup: editing-cordis-skill

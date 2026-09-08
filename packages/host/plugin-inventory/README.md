@@ -85,11 +85,11 @@ Read these when the inventory contract is not enough: how the Remote reaches cli
 <a id="model-experience"></a>
 ## Model Experience
 
-This service registers nothing model-facing. Changing enablement can change which tools a subsequent session receives.
+None, as this service registers no model-facing contributions.
 
 #### KV Cache effect
 
-None; this package neither assembles nor sends a provider request.
+This package neither assembles nor sends a provider request. Changing enablement can change the tools and request prefix of subsequent sessions.
 
 ## Known Limitations and Deferred Work
 

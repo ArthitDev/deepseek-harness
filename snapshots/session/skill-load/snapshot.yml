@@ -3,6 +3,7 @@ scenario: skill-load
 profile: headless
 composition: default
 recording: authored
+platform: posix
 header:
   class: skill
   pin: true

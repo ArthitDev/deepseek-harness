@@ -22,6 +22,6 @@ Retain the fork's user-facing features while adapting them to upstream APIs. Ses
 
 ## Consequences
 
-Windows verification covers the build, preset authoring in a real browser, settings and workspace browser flows, persistence exclusion, and output-limit replay. The skill-load body matches after refresh; its shared Bash header still differs from the Windows PowerShell tool catalog and requires POSIX replay before claiming cross-platform snapshot coverage.
+Windows verification covers the build, preset authoring in a real browser, settings and workspace browser flows, persistence exclusion, output-limit replay, and PowerShell skill loading. Skill loading uses separate scenarios: `skill-load` runs on POSIX with the shared Bash header; `skill-load-pwsh` requires PowerShell, explicitly selects its shell, and owns its prompt and tool-schema sidecars. Both retain full request and persisted-log comparisons. POSIX execution still requires a POSIX runner; Windows skips that scenario rather than comparing it against PowerShell output.
 
 Source merges do not migrate the user's Harness home. Tests use temporary storage; live deployment requires a separate backup of configuration and histories before first write with the new runtime. The pre-merge source remains on `backup/shield-break-agent-before-master-20260908`. Archived upstream notes retain their sealed contents; current feature notes own the fork's additions.

@@ -1,0 +1,9 @@
+# Keep the ordinary skill composition, with a platform-independent PowerShell catalog.
+- id: tool-bash
+  disabled: true
+- id: bash-sandbox
+  disabled: true
+- id: tool-pwsh
+  disabled: false
+- id: pwsh-sandbox
+  disabled: false

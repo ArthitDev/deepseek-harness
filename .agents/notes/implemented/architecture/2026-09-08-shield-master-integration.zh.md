@@ -22,6 +22,6 @@ Persona 配置仅在缺少 `prefix` 时接受旧字段 `text`。编辑器写入 
 
 ## 后果
 
-Windows 验证覆盖构建、真实浏览器中的预设编写、设置和工作区流程、持久化互斥及输出上限重放。skill-load 正文刷新后匹配；共享 Bash 请求头仍与 Windows PowerShell 工具目录不同，声明跨平台快照覆盖前仍需 POSIX 重放。
+Windows 验证覆盖构建、真实浏览器中的预设编写、设置和工作区流程、持久化互斥、输出上限重放及 PowerShell 技能加载。技能加载采用独立场景：`skill-load` 在 POSIX 上使用共享 Bash 请求头；`skill-load-pwsh` 要求 PowerShell，显式选择其 shell，并拥有自己的提示词及工具 schema 附属文件。两者均保留完整请求与持久化日志比较。POSIX 执行仍需要 POSIX runner；Windows 跳过该场景，不将其与 PowerShell 输出比较。
 
 合并源码不会迁移用户的 Harness home。测试使用临时存储；部署时，在新运行时首次写入前需要单独备份配置与历史。合并前源码保留在 `backup/shield-break-agent-before-master-20260908`。上游归档记录保留封存内容，fork 新增能力由当前功能记录说明。
