@@ -17,6 +17,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
@@ -50,6 +52,8 @@
 - text: {{clock}}
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
 - button "Select model, current github-webhook-review-test/reply":

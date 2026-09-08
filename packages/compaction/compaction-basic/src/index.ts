@@ -10,7 +10,7 @@ import { CompactionEngine, ManualCompactionError } from '@deepseek-ai/dsh-compac
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -140,12 +140,12 @@ export class BasicCompactionEngine extends CompactionEngine {
     const { ctx } = this
     ctx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
       const limit = this.config.maxOutputContinuations
-      if (limit === 0 || signal.aborted || agent.inbox.hasPending) return
+      if (limit === 0 || signal.aborted || agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) return
       const events = agent.session.snapshotEvents()
-      const finish = events.findLast(event => event.type === 'assistant/chunk'
-        && event.data.turn === turn && event.data.chunk.type === 'finish')
-      if (finish?.type !== 'assistant/chunk' || finish.data.chunk.type !== 'finish'
-        || finish.data.chunk.reason.kind !== 'max-tokens') return
+      const settlement = events.findLast(event => (event.type === 'assistant/message' || event.type === 'assistant/attempt')
+        && event.data.turn === turn)
+      if (settlement?.type !== 'assistant/message' && settlement?.type !== 'assistant/attempt') return
+      if (lastAssistantStreamChunk(settlement.data.stream, 'finish')?.reason.kind !== 'max-tokens') return
 
       // Read the durable log, including shadowed input, so compaction and resume
       // cannot replenish the continuation budget without a new user message.

@@ -3,6 +3,8 @@ scenario: output-limit-recovery
 profile: headless
 composition: output-limit-recovery
 recording: authored
+workspace:
+  setup: isolated
 header:
   class: output-limit-recovery
   pin: true

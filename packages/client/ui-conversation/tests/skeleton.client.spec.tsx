@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps, ReactNode } from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
@@ -32,15 +33,19 @@ import type {
 } from '../src/client/contract/slots.ts'
 import type { ViewTab } from '../src/client/contract/views.ts'
 
+// Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+
 // jsdom implements no Range geometry (Lexical's scroll-into-view measures the
 // caret with one once the surface is genuinely contenteditable).
 Range.prototype.getBoundingClientRect = () => ({
   top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}),
 })
 
+
 function fakeWiring() {
   const sink = vi.fn(() => Promise.resolve({ kind: 'success' as const }))
-  const shell = new SessionInputShell({ actx: {} as Context, defaultSink: sink, commandImages: { serialize: () => Promise.resolve([]), release: () => {}, unsupportedNotice: (token: string) => `${token.trim()} images-unsupported` } })
+  const shell = new SessionInputShell({ actx: {} as Context, defaultSink: sink, commandAttachments: { serialize: () => Promise.resolve([]), release: () => {}, unsupportedNotice: (token: string) => `${token.trim()} attachments-unsupported` } })
   return { wiring: shell, sink, shell }
 }
 
@@ -194,6 +199,7 @@ function mount(
           useChat={useChat}
           useTrajectory={useTrajectory}
           useSessions={props.useSessions}
+          useResource={useResource}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
           useProjection={(() => undefined)}
@@ -219,6 +225,7 @@ function mount(
           useChat={useChat}
           useTrajectory={useTrajectory}
           useSessions={props.useSessions}
+          useResource={useResource}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
           useProjection={(() => undefined)}
@@ -240,6 +247,7 @@ function mount(
         <InputBar
           sessionId={SID}
           SessionProvider={({ children }) => children}
+          useResource={useResource}
           useSession={useSession}
           useConversation={useConversation}
           useSessions={props.useSessions}
@@ -249,9 +257,11 @@ function mount(
           useInput={useInput}
           inputActions={inputActions}
           keyboard={wiring}
-          addImages={() => null}
-          removeImage={() => {}}
-          draftImages={() => []}
+          addFiles={() => null}
+          useFileUploads={bindSnapshotSelector(createSnapshotStore({}))}
+          retryFileUpload={undefined}
+          removeAttachment={() => {}}
+          resolveDraftAttachments={() => []}
           resolveSubmitMode={() => 'queue'}
           toggleCommandMenu={vi.fn()}
           useNotices={bindSnapshotSelector(wiring.notices)}
@@ -291,6 +301,7 @@ function mount(
     useConversation,
     useSessions: bindSnapshotSelector(sessions),
     useSessionPendingInteraction,
+    useResource,
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
@@ -436,6 +447,7 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
+    expect(b.slotCalls).toContain('conversation.session.header.corner')
   })
 
   it('sticky composer seat wraps the whole overlay chain, not only the fallback stack', () => {

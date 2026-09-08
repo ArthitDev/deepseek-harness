@@ -308,7 +308,7 @@ describe('the read-only viewer', () => {
     await success.controller.saveView()
 
     const written = success.calls.find(call => call.method === 'write')?.payload as { content: string }
-    expect(written.content).toContain('    text: |-\n      Changed: # stays text\n      Second line\n')
+    expect(written.content).toContain('    prefix: |-\n      Changed: # stays text\n      Second line\n')
     expect(written.content).toContain("- id: tool-read\n  name: '@deepseek-ai/dsh-tool-read'")
     expect(success.controller.store.getSnapshot().view).toMatchObject({
       draft: 'Changed: # stays text\nSecond line',
@@ -388,8 +388,10 @@ describe('the copy dialog', () => {
 })
 
 describe('direct creation', () => {
-  it('creates from the default capabilities with the drafted system prompt', async () => {
+  it.each(['text', 'prefix'])('creates from a %s persona while preserving its suffix and tools', async (field) => {
     const { controller, calls, presets, rosterChanges } = harness()
+    const source = presets.get('standard')!
+    source.content = source.content.replace('    text: >-', `    suffix: Keep the workspace context.\n    ${field}: >-`)
     await controller.load()
     controller.beginCreate()
     controller.setCreateId('red-team')
@@ -400,7 +402,9 @@ describe('direct creation', () => {
 
     const created = presets.get('red-team')
     expect(created?.content).toContain(
-      '    text: |-\n      Work only within the authorized scope.\n      Keep evidence.\n')
+      '    prefix: |-\n      Work only within the authorized scope.\n      Keep evidence.\n')
+    expect(created?.content).toContain('    suffix: Keep the workspace context.')
+    expect(created?.content).not.toContain('    text:')
     expect(created?.content).toContain("- id: tool-bash\n  name: '@deepseek-ai/dsh-tool-bash'")
     expect(calls.find(call => call.method === 'create')?.payload).toMatchObject({
       from: 'standard', id: 'red-team', name: 'Red Team',

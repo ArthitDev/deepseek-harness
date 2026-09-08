@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-11-preset-authoring-agent-validates-its-own-composition.md
-2026-08-11-preset-authoring-agent-validates-its-own-composition.md: 7ea082797d9da72a102697a42d4b1bf534115262
-2026-08-11-preset-authoring-agent-validates-its-own-composition.zh.md: 9224028ad9d73409196f806f0dee9866ce9047b1

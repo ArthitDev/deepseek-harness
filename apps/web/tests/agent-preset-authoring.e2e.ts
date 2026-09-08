@@ -43,13 +43,6 @@ describe('web e2e: direct agent-preset creation and duplication', () => {
     return page.getByRole('dialog', { name: '设置' })
   }
 
-  /** Tokenize the lane-owned preset root after general aria normalization. */
-  function withPresetRoot(snapshot: string): string {
-    return snapshot
-      .replaceAll(userRoot, '{{presetRoot}}')
-      .replaceAll(userRoot.replaceAll('\\', '/'), '{{presetRoot}}')
-  }
-
   beforeAll(async () => {
     userRoot = await realpath(await mkdtemp(join(tmpdir(), 'dsh-web-e2e-presets-')))
     scaffold = await launchWebScaffold({
@@ -71,6 +64,7 @@ describe('web e2e: direct agent-preset creation and duplication', () => {
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
+    await rm(userRoot, { recursive: true, force: true })
   })
 
   it('offers direct creation beside duplication and Creator mode', async () => {
@@ -169,8 +163,9 @@ describe('web e2e: direct agent-preset creation and duplication', () => {
     // The copy dialog is detached, so the settings dialog is the only one
     // left (it names itself via aria-labelledby, which a CSS attribute
     // selector cannot address).
-    const snapshot = withPresetRoot(
-      await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd))
+    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd, {
+      replacements: [[userRoot, '{{presetRoot}}']],
+    })
     await compareOrRefreshGolden(CREATED_EXPECTED, snapshot, MODE)
     expect(snapshot).toContain(join('{{presetRoot}}', 'my-agent'))
 
@@ -219,8 +214,9 @@ describe('web e2e: direct agent-preset creation and duplication', () => {
     await dialog.getByRole('button', { name: 'Agent 预设' }).click()
     await dialog.getByText('加载失败').first().waitFor({ timeout: 10_000 })
 
-    const snapshot = withPresetRoot(
-      await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd))
+    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd, {
+      replacements: [[userRoot, '{{presetRoot}}']],
+    })
     await compareOrRefreshGolden(DAMAGED_EXPECTED, snapshot, MODE)
     // Both damage shapes surface as marked, unselectable, uncopyable cards
     // that still carry their metadata and the discovery-reported reason.

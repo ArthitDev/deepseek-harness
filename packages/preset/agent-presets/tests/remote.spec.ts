@@ -3,7 +3,7 @@
  * composition viewer/editor, and the per-session switch.
  */
 
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -33,7 +33,13 @@ const ROOTS = [
 // temp preset directory these tests seed would report the composition broken.
 const VALID = '- id: prompt\n  name: \'@deepseek-ai/dsh-system-prompt\'\n'
 
-afterEach(() => vi.restoreAllMocks())
+/** Every temp preset root created by this file, removed after each test. */
+const roots: string[] = []
+
+afterEach(async () => {
+  vi.restoreAllMocks()
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
+})
 
 async function remoteFailure(operation: Promise<unknown>): Promise<RemoteFailure> {
   try {
@@ -72,10 +78,10 @@ async function harness(
   ctx.loader.builtins.include = Include
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
-  await ctx.plugin(SystemPrompt, { persona: '' })
+  await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(SystemPrompt, { personaPrefix: '' })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(AgentPresets, roster)
   return ctx
@@ -96,6 +102,7 @@ const recordedPreset = (agent: Agent): unknown =>
 describe('the roster a client reads', () => {
   it('projects path-free rows, marking the default and carrying published metadata', async () => {
     const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    roots.push(userRoot)
     await mkdir(join(userRoot, 'documented'), { recursive: true })
     await writeFile(join(userRoot, 'documented', COMPOSITION_FILE), VALID)
     await writeFile(join(userRoot, 'documented', METADATA_FILE), 'name: 我的模式\ndescription: 只做检索。\n')
@@ -121,6 +128,7 @@ describe('the roster a client reads', () => {
 
   it('keeps a broken preset on the roster with its reason', async () => {
     const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    roots.push(userRoot)
     await mkdir(join(userRoot, 'damaged'), { recursive: true })
     const ctx = await harness({
       default: 'standard',
@@ -173,6 +181,7 @@ describe('reading one composition', () => {
 
   it('carries the display metadata a preset published', async () => {
     const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    roots.push(userRoot)
     await mkdir(join(userRoot, 'documented'), { recursive: true })
     await writeFile(join(userRoot, 'documented', COMPOSITION_FILE), VALID)
     await writeFile(join(userRoot, 'documented', METADATA_FILE), 'name: 我的模式\ndescription: 只做检索。\n')
@@ -243,6 +252,7 @@ describe('authoring over Remote', () => {
 
   it('copies and deletes through the Remote adapters', async () => {
     const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    roots.push(userRoot)
     const ctx = await harness({
       default: 'standard',
       roots: [{ path: join(FIXTURES, 'system'), trust: 'system' }, { path: userRoot, trust: 'user' }],
@@ -471,6 +481,7 @@ describe('switching one session\'s composition', () => {
 
   it('reports an unusable composition with its discovery reason', async () => {
     const userRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-remote-'))
+    roots.push(userRoot)
     await mkdir(join(userRoot, 'damaged'), { recursive: true })
     const ctx = await harness({
       default: 'standard',

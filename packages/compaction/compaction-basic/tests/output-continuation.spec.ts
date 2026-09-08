@@ -2,7 +2,6 @@ import { expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { LlmAdapter, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -36,7 +35,6 @@ it.each([
   const ctx = new Context()
   try {
     await mountAgentLoopTestDependencies(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)
     await ctx.plugin(BasicCompactionEngine, { maxOutputContinuations: limit })
@@ -78,7 +76,6 @@ it.each(['cancel', 'queued', 'manual', 'dispose'] as const)('respects %s at the 
   const ctx = new Context()
   try {
     await mountAgentLoopTestDependencies(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)
     const intercept = ctx.on('agent/turn-stopping', ({ agent }) => {

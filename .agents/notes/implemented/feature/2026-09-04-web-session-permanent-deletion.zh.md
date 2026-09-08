@@ -14,13 +14,13 @@ Web Session 菜单可以重命名、fork 或归档对话，却无法永久移除
 
 可见 Session 行菜单除 Archive 外还提供 **Delete session**。它会打开确认框，明确说明历史不可恢复、运行中任务将停止、项目文件保留。请求进行中时控件保持禁用；失败会保留对话框并显示错误。
 
-`SessionPersistence.delete(id, options?)` 是规范存储原语。JSONL 后端取得与写句柄相同的单写者认领，活动写入方存在时拒绝，只移除配置 root 下编码后 Session 自有目录，id 不存在时返回 `false`，每条退出路径都会释放认领，并允许日后复用该 id。它绝不移除 header 的 `cwd`。
+`SessionPersistence.delete(id, options?)` 是规范存储原语。JSONL 后端取得与写句柄相同的进程内认领和跨进程 writer lease，活动写入方存在时拒绝，只移除配置 root 下编码后 Session 自有目录及其全部格式世代，id 不存在时返回 `false`，每条退出路径都会释放所有权，并允许日后复用该 id。它绝不移除 header 的 `cwd`。
 
 `session.delete` 按 id 串行请求。持久日志或 live Agent 任一存在即可使该身份可删除。`ApiSessionAgentController` 仅在自己保留了完全相同的 `AgentHandle` 时销毁 live Agent；外部所有者与 subagent 身份返回 `session/agent-busy`。因此，由 Web 持有的空白 Session 即使延迟实体化日志尚未落盘，也可以删除。
 
 Agent 销毁后，Host 先调用 `WorkspaceRegistry.forgetSession(id)`，从所有 Workspace 记账与全局归档集合中摘除该 id，再删除持久日志。先清理可以避免 cleanup 失败后，耐久 Workspace 元数据仍指向已删除 id；如果日志删除失败，历史仍可用于重试。成功会发出 `api-session/removed`，发起请求的 Client 也会立即应用同一删除，无需等待自己的 stream 回声。
 
-删除权威只拥有规范 Session 日志与 Workspace 引用。项目文件保留。消息反馈 sidecar 与工具输出 spill 的保留策略由各自后端拥有，因此本操作不宣称对每条派生或辅助记录进行安全擦除；复用 id 时，header 身份匹配会阻止陈旧消息反馈被继承。
+删除权威只拥有规范 Session 日志及其中记录的反馈，以及 Workspace 引用。项目文件保留。历史消息反馈 sidecar、遥测导出与工具输出 spill 的保留策略由各自后端拥有，因此本操作不宣称对每条派生或辅助记录进行安全擦除。反馈服务不读取历史 sidecar。
 
 ## 考虑过的替代方案
 

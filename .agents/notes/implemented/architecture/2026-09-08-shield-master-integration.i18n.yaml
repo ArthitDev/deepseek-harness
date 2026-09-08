@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-08-shield-master-integration.md
+2026-09-08-shield-master-integration.md: 50c7c11856c765c80862deb08186ef136058931f
+2026-09-08-shield-master-integration.zh.md: 129a5bd8494600b88959088f69da4b3be8105f77

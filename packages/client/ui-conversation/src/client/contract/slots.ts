@@ -1,7 +1,8 @@
 /** Target-neutral Conversation slot declarations and composed component props. */
 import type { ReactNode, RefObject } from 'react'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload/client'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {
   MaybeSnapshotSelectorHook, ObservableSnapshot, SnapshotSelectorHook,
@@ -22,8 +23,11 @@ import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submissi
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
 
-/** Browser-owned image that has not crossed the durable Host boundary. */
-export interface ComposerAttachment {
+/** Browser-owned draft attachment that has not crossed the durable Host boundary. */
+export type ComposerAttachment = ComposerImageAttachment | ComposerFileAttachment
+
+/** Browser-owned image, base64-encoded into the prompt at send time. */
+export interface ComposerImageAttachment {
   kind: 'image'
   id: DraftAttachmentId
   file: File
@@ -34,16 +38,36 @@ export interface ComposerAttachment {
   height?: number
 }
 
+/** Browser-owned generic file whose bytes upload to the Host as soon as it is picked. */
+export interface ComposerFileAttachment {
+  kind: 'file'
+  id: DraftAttachmentId
+  file: File
+}
+
+/** Upload lifecycle of one picked file draft (files upload on pick, not on send). */
+export type DraftFileUpload =
+  | { readonly status: 'uploading'; readonly loaded: number; readonly total?: number }
+  | { readonly status: 'ready'; readonly receiptId: FileUploadReceiptId; readonly file: FileAttachmentRef }
+  | { readonly status: 'error'; readonly message: string }
+
+/** Per-draft upload states keyed by draft attachment id. */
+export type DraftFileUploads = Readonly<Record<string, DraftFileUpload>>
+
 /** Input state handed to the optional attachment presentation plugin. */
 export interface ComposerAttachmentsOwnerProps {
-  /** Browser-owned draft images in input order. */
+  /** Browser-owned draft attachments in input order. */
   attachments: readonly ComposerAttachment[]
-  /** Whether a document-level file drop may add images now. */
+  /** Whether a document-level file drop may add attachments now. */
   canAcceptDrop: boolean
   /** Add one dropped batch through the composer's validation path. */
-  onAddImages: (files: readonly File[]) => void
-  /** Remove one draft image through the Conversation service. */
-  onRemoveImage: (id: DraftAttachmentId) => void
+  onAddFiles: (files: readonly File[]) => void
+  /** Remove one draft attachment through the Conversation service. */
+  onRemoveAttachment: (id: DraftAttachmentId) => void
+  /** Current per-draft upload states for file-kind attachments. */
+  uploads: DraftFileUploads
+  /** Restart one failed file upload. */
+  onRetryFile: (id: DraftAttachmentId) => void
   /** Display-ready limits for the drop invitation. */
   dropLimits?: { readonly count: number; readonly size: string } | undefined
 }
@@ -79,6 +103,8 @@ export interface MessageImagesOwnerProps {
   loadImage: MessageImageLoader
   /** Horizontal placement inside the owning record. */
   align: 'start' | 'end'
+  /** Force every image into the compact message-attachment tile size. */
+  compact?: boolean
 }
 
 /** Slot-backed renderer used by Conversation targets without importing an attachment implementation. */
@@ -113,6 +139,18 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ConversationHeaderActionOwnerProps
     }
+    /**
+     * The header's far-right corner, past the utilities' edge and into the
+     * header's own padding, for one control that must keep its place whether or
+     * not it currently shows anything. The corner reserves its width while an
+     * occupant is registered, so the utilities beside it never move; an
+     * occupant with nothing to show renders a same-size placeholder.
+     */
+    'conversation.session.header.corner': {
+      kind: 'single'
+      scope: 'session'
+      owner: ConversationHeaderCornerOwnerProps
+    }
     /** Registered Conversation target Views, rendered one at a time. */
     'conversation.view': { kind: 'list'; scope: 'session'; owner: ConvViewOwnerProps }
     /** Selector-routed replacements for the current Session's resident composer. */
@@ -135,7 +173,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.input.right': { kind: 'list'; scope: 'session' }
     /** Resident composer body, including the no-Session inert state. */
     'conversation.composer.bar': { kind: 'single'; scope: 'session-maybe'; owner: ComposerBarOwnerProps }
-    /** Optional draft-image rail and drop target. */
+    /** Optional draft-attachment rail and drop target. */
     'conversation.input.attachments': {
       kind: 'single'
       scope: 'session-maybe'
@@ -180,6 +218,12 @@ export interface HeroAgentPresetOwnerProps {
 /** Header actions derive their state from standard Session props. */
 export interface ConversationHeaderActionOwnerProps {
   /** Marker field: entries receive no owner-specific values. */
+  children?: never
+}
+
+/** The header corner's occupant derives its state from standard Session props. */
+export interface ConversationHeaderCornerOwnerProps {
+  /** Marker field: the occupant receives no owner-specific values. */
   children?: never
 }
 
@@ -260,9 +304,11 @@ export interface ComposerBarOwnerProps {
 /** Package-private operations injected into the resident composer bar. */
 export interface ComposerBarInjected {
   keyboard: ComposerKeyboard | undefined
-  addImages: ((files: readonly File[]) => string | null) | undefined
-  removeImage: ((id: DraftAttachmentId) => void) | undefined
-  draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
+  addFiles: ((files: readonly File[]) => string | null) | undefined
+  removeAttachment: ((id: DraftAttachmentId) => void) | undefined
+  resolveDraftAttachments: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
+  /** Restart one failed file upload; absent without a session. */
+  retryFileUpload: ((id: DraftAttachmentId) => void) | undefined
   resolveSubmitMode: (
     running: boolean,
     gesture: ComposerSubmitGesture,
@@ -272,6 +318,8 @@ export interface ComposerBarInjected {
   stop: (() => void) | undefined
   command: ((line: string) => Promise<boolean>) | undefined
   hooks: {
+    /** Live per-draft upload states for file-kind drafts. */
+    fileUploads: ObservableSnapshot<DraftFileUploads>
     notices: ObservableSnapshot<InputNotice | null>
     lexicon: ObservableSnapshot<ReadonlyMap<'/' | '@', readonly string[]>>
     menuLauncher: ObservableSnapshot<string | null>
@@ -345,12 +393,13 @@ export type ConversationSessionHeaderSlotProps =
     'conversation.session.header.lineage'
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
+    | 'conversation.session.header.corner'
   >
   & PropsStore<ConversationStore>
   & InjectFace<ConversationSessionHeaderInjected>
   & PropsLocale<'conversation'>
 
-/** Full props of the draft-image attachment renderer. */
+/** Full props of the draft-attachment renderer. */
 export type ComposerAttachmentsProps =
   PropsRuntime<'conversation.input.attachments'> & PropsLocale<'conversation'>
 

@@ -50,7 +50,7 @@ kind: "package-reference"
 
 ### 你能做什么
 
-完整或流式读取任意普通 UTF-8 文本文件，按你选择的上限读取原始字节，并按稳定名称顺序列出一层目录。原子地创建或替换文件，并原子地应用字面量文本编辑；两个变更操作都按文件串行化，并发写入方绝不会交错。版本防护是可选的：省略它即无条件创建或覆盖，提供它则在文件自上次观察以来发生变化时失败。
+完整或流式读取任意普通 UTF-8 文本文件，按你选择的上限或按字节窗口读取原始字节，并按稳定名称顺序列出一层目录。原子地创建或替换文件，并原子地应用字面量文本编辑；两个变更操作都按文件串行化，并发写入方绝不会交错。版本防护是可选的：省略它即无条件创建或覆盖，提供它则在文件自上次观察以来发生变化时失败。
 
 失败是携带稳定错误码的类型化 `FsError`——`FS_NOT_FOUND`、`FS_NOT_TEXT`（二进制内容）、`FS_STALE_VERSION`（自观察以来已变化）、`FS_EDIT_NOT_FOUND` 或 `FS_AMBIGUOUS_EDIT`（无唯一字面量匹配）等——因此调用方依据错误码分支，绝不解析消息文本。带防护的编辑遇到缺失目标时，无论哪种情况都报告 `FS_STALE_VERSION`。
 
@@ -106,7 +106,7 @@ kind: "package-reference"
 - [fs-sandbox](../fs-sandbox/README.zh.md)——扩展本后端的沙箱强制后端。
 - [tool-fs](../tool-fs/README.zh.md)——消费 `ctx.fs` 的面向模型工具。
 - [fs-observation-policy](../fs-observation-policy/README.zh.md)——通过 `fs/*` 事件防护变更的策略插件。
-- [Windows DACL 保留笔记](../../../.agents/notes/implemented/bug-fix/2026-07-19-windows-atomic-write-dacl-preservation.zh.md)——原子替换为何复制目标的访问策略。
+- [Windows DACL 保留笔记](../../../.agents/notes/archived/bug-fix/2026-07-19-windows-atomic-write-dacl-preservation.md)——原子替换为何复制目标的访问策略。
 
 -----
 
@@ -126,7 +126,7 @@ kind: "package-reference"
 
 这些限制说明本地后端何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是通用文件系统对比或任务积压。
 
-- **`config.cwd` 不是沙箱**：它是解析默认值，而非约束；绝对路径和 `..` 可以逃逸。请使用更严格的 `ctx.fs` 后端或 `tools/execute` waterfall（瀑布式事件）上的权限插件实施约束（见[能力 seam 笔记](../../../.agents/notes/implemented/architecture/2026-06-17-filesystem-capability-seam.zh.md)）。
+- **`config.cwd` 不是沙箱**：它是解析默认值，而非约束；绝对路径和 `..` 可以逃逸。请使用更严格的 `ctx.fs` 后端或 `tools/execute` waterfall（瀑布式事件）上的权限插件实施约束。
 - **版本 token 依赖文件系统元数据**：它们组合设备、inode、大小、纳秒级 mtime 与纳秒级 ctime；如果存储层在重写时无法更新其中任何一项事实，仍可能绕过陈旧防护。
 - **`editText` 会把整个文件及编辑后的副本保存在内存中**：只有读取路径支持流式处理。
 - **低于上限的覆写仍会缓冲上下文基础**：`writeText` 除调用方持有的替换内容外，最多还会保留略低于 `config.diffBasisMaxBytes` 的旧文本；该上限不限制返回的 `after` 值，也不限制整文件展示回退。

@@ -14,6 +14,7 @@ import type {
   SessionAccess,
   SessionHandle,
   SessionHandleReadOptions,
+  SessionHandleReadResult,
   SessionPersistenceSnapshot,
 } from '@deepseek-ai/dsh-session-persistence'
 import SessionQueryEngine, {
@@ -51,7 +52,7 @@ class TestHandle implements SessionHandle {
     readonly access: SessionAccess,
   ) {}
 
-  read(offset = 0, length?: number, options?: SessionHandleReadOptions): Promise<readonly SessionEvent[]> {
+  read(offset = 0, length?: number, options?: SessionHandleReadOptions): Promise<SessionHandleReadResult> {
     TestPersistence.readCalls.push(this.id)
     TestPersistence.readSignals.push(options?.signal)
     const slice = (events: SessionEvent[]): SessionEvent[] => {
@@ -59,7 +60,9 @@ class TestHandle implements SessionHandle {
       return length === undefined ? from : from.slice(0, length)
     }
     if (TestPersistence.readOverride !== undefined) {
-      return TestPersistence.readOverride(this.id, options?.signal).then(loaded => slice(loaded.events))
+      return TestPersistence.readOverride(this.id, options?.signal).then(loaded => ({
+        eventState: 'detached', events: structuredClone(slice(loaded.events)),
+      } as const))
     }
     if (TestPersistence.readFailure !== undefined) return rejectUnknown(TestPersistence.readFailure)
     const entry = TestPersistence.entries.get(this.id)
@@ -67,7 +70,7 @@ class TestHandle implements SessionHandle {
     const result = structuredClone(entry.events)
     TestPersistence.readEffect?.()
     TestPersistence.readEffect = undefined
-    return Promise.resolve(slice(result))
+    return Promise.resolve({ eventState: 'detached', events: slice(result) })
   }
 
   append(events: readonly SessionEvent[]): Promise<void> {
@@ -948,24 +951,17 @@ describe('session-query exact reads', () => {
       }),
       { surfaceOp: 'append' },
     )
-    session.append('assistant/chunk', {
+    session.append('assistant/attempt', {
       turn: 1,
       step: 1,
-      chunk: { type: 'text-delta', index: 0, text: 'draft' },
+      stream: [{ type: 'text-chunks', time0: 0, index: 0, dt: [], texts: ['draft'] }],
     })
     session.append(
-      'assistant/message',
-      {
-        turn: 1, step: 1,
-        message: createMessage({
-          role: 'assistant',
-          content: [{ type: 'text', text: 'replacement' }],
-          source: {
-            kind: 'model',
-            ...{ provider: 'mock', model: 'mock' },
-          },
-        }),
-      },
+      'user/message',
+      createUserMessage({
+        content: [{ type: 'text', text: 'replacement' }],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
       { surfaceOp: { op: 'replace', start: first.seq, end: first.seq }, sourceEventSeqs: [first.seq] },
     )
 
@@ -983,10 +979,10 @@ describe('session-query exact reads', () => {
       }),
       { surfaceOp: 'append' },
     )
-    session.append('assistant/chunk', {
+    session.append('assistant/attempt', {
       turn: 1,
       step: 1,
-      chunk: { type: 'text-delta', index: 0, text: 'draft' },
+      stream: [{ type: 'text-chunks', time0: 0, index: 0, dt: [], texts: ['draft'] }],
     })
     session.append(
       'user/message',
@@ -1012,6 +1008,7 @@ describe('session-query exact reads', () => {
     session.append(
       'assistant/message',
       {
+        stream: [],
         turn: 2, step: 1,
         message: createMessage({
           role: 'assistant',

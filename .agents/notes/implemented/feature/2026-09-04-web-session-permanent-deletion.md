@@ -14,13 +14,13 @@ A destructive path must also respect live Agent ownership. Closing an Agent owne
 
 The visible Session-row menu offers **Delete session** in addition to Archive. It opens a confirmation that states the irreversible history removal, running-task stop, and project-file retention. Controls remain disabled while the request is pending; failure keeps the dialog open with the error.
 
-`SessionPersistence.delete(id, options?)` is the canonical storage primitive. The JSONL backend takes the same single-writer claim used by write handles, rejects an active writer, removes only the encoded Session-owned directory below its configured root, returns `false` for an absent id, releases its claim on every exit, and permits later id reuse. It never removes the header's `cwd`.
+`SessionPersistence.delete(id, options?)` is the canonical storage primitive. The JSONL backend takes the in-process claim and cross-process writer lease used by write handles, rejects an active writer, removes only the encoded Session-owned directory and all its format generations below its configured root, returns `false` for an absent id, releases ownership on every exit, and permits later id reuse. It never removes the header's `cwd`.
 
 `session.delete` serializes requests per id. A persisted log or a live Agent makes the identity eligible. `ApiSessionAgentController` disposes a live Agent only when it retained that exact `AgentHandle`; foreign owners and subagent identities return `session/agent-busy`. This also lets a Web-owned blank Session be deleted before its lazy log has materialized.
 
 After Agent disposal, the Host first calls `WorkspaceRegistry.forgetSession(id)` to detach the id from every Workspace account and the global archive set, then deletes the persistent log. Cleanup-first means a failure cannot leave a deleted id attached to durable Workspace metadata; if log deletion fails, the history remains available for retry. Success emits `api-session/removed`, and the requesting Client applies the same removal immediately rather than waiting for its stream echo.
 
-The deletion authority owns the canonical Session log and Workspace references only. Project files remain. Message-feedback sidecars and tool-output spill retention are separate backend policies, so this action is not advertised as secure erasure of every derived or auxiliary record; a reused id is protected from stale message feedback by header-identity matching.
+The deletion authority owns the canonical Session log, including its logged feedback, and Workspace references only. Project files remain. Historical message-feedback sidecars, telemetry exports, and tool-output spill retention are separate backend policies, so this action is not advertised as secure erasure of every derived or auxiliary record. The feedback service does not read historical sidecars.
 
 ## Alternatives considered
 

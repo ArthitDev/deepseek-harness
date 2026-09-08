@@ -107,10 +107,10 @@ function personaTextField(content: string): PersonaTextField {
   const rowEnd = lines.findIndex((line, index) => index > persona && /^-\s/.test(line))
   const limit = rowEnd < 0 ? lines.length : rowEnd
   const startLine = lines.findIndex((line, index) =>
-    index > persona && index < limit && /^ {4}text:/.test(line))
-  if (startLine < 0) throw new Error('The "persona" row has no config.text system prompt.')
+    index > persona && index < limit && /^ {4}(?:prefix|text):/.test(line))
+  if (startLine < 0) throw new Error('The "persona" row has no config.prefix system prompt.')
 
-  const value = lines[startLine]?.replace(/^ {4}text:\s*/, '') ?? ''
+  const value = lines[startLine]?.replace(/^ {4}(?:prefix|text):\s*/, '') ?? ''
   if (!/^[>|][+-]?(?:\s+#.*)?$/.test(value)) {
     const trimmed = value.trim()
     const prompt = trimmed.startsWith("'") && trimmed.endsWith("'")
@@ -142,7 +142,7 @@ function personaTextField(content: string): PersonaTextField {
 export function replacePersonaPrompt(content: string, prompt: string): string {
   const field = personaTextField(content)
   const lines = content.split(/\r?\n/)
-  const replacement = ['    text: |-', ...prompt.replace(/\r\n?/g, '\n').split('\n').map(line => `      ${line}`)]
+  const replacement = ['    prefix: |-', ...prompt.replace(/\r\n?/g, '\n').split('\n').map(line => `      ${line}`)]
   lines.splice(field.startLine, field.endLine - field.startLine, ...replacement)
   return lines.join(field.newline)
 }

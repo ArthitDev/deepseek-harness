@@ -17,6 +17,7 @@ import type {
   SessionAccess,
   SessionHandle,
   SessionHandleReadOptions,
+  SessionHandleReadResult,
   SessionPersistenceListOptions,
   SessionPersistenceSnapshot,
 } from '@deepseek-ai/dsh-session-persistence'
@@ -86,7 +87,7 @@ class TestHandle implements SessionHandle {
     readonly access: SessionAccess,
   ) {}
 
-  async read(_offset = 0, _length?: number, options?: SessionHandleReadOptions): Promise<readonly SessionEvent[]> {
+  async read(_offset = 0, _length?: number, options?: SessionHandleReadOptions): Promise<SessionHandleReadResult> {
     TestPersistence.reads.set(this.id, (TestPersistence.reads.get(this.id) ?? 0) + 1)
     TestPersistence.readSignals.push(options?.signal)
     if (TestPersistence.failure !== undefined) throw TestPersistence.failure
@@ -94,7 +95,7 @@ class TestHandle implements SessionHandle {
     if (entry === undefined) throw new SessionPersistenceNotFoundError(this.id)
     await TestPersistence.readEffect?.(entry, options?.signal)
     TestPersistence.readEffect = undefined
-    return structuredClone(entry.events)
+    return { eventState: 'detached', events: structuredClone(entry.events) }
   }
 
   append(events: readonly SessionEvent[]): Promise<void> {
@@ -364,6 +365,7 @@ describe('SQLite session search', () => {
     session.append(
       'assistant/message',
       {
+        stream: [],
         turn: 1,
         step: 1,
         message: createAssistantMessage({
@@ -395,7 +397,16 @@ describe('SQLite session search', () => {
       { type: 'user/message', seq: SessionSeq(0), time: 10, data: createUserMessage({
         content: [{ type: 'text', text: 'needle original' }], source: { kind: 'user' },
       }), surfaceOp: 'append' },
-      { type: 'assistant/chunk', seq: SessionSeq(1), time: 11, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'needle raw' } } },
+      {
+        type: 'assistant/attempt',
+        seq: SessionSeq(1),
+        time: 11,
+        data: {
+          turn: 1,
+          step: 1,
+          stream: [{ type: 'text-chunks', time0: 11, index: 0, dt: [], texts: ['needle raw'] }],
+        },
+      },
       { type: 'user/message', seq: SessionSeq(2), time: 12, data: createUserMessage({
         content: [{ type: 'text', text: 'needle summary' }], source: { kind: 'plugin', plugin: 'test' },
       }), surfaceOp: { op: 'replace', start: SessionSeq(0), end: SessionSeq(0) }, sourceEventSeqs: [SessionSeq(0)] },
@@ -1805,7 +1816,7 @@ describe('SQLite schema, cancellation, and real persistence integration', () => 
     await search.dispose()
     const reader = await ctx.sessionPersistence.open(meta.id, 'read')
     expect(reader.header).toMatchObject(meta)
-    await expect(reader.read()).resolves.toMatchObject([{ seq: SessionSeq(0) }])
+    await expect(reader.read()).resolves.toMatchObject({ events: [{ seq: SessionSeq(0) }] })
     await reader.close()
     await persistence.dispose()
   })

@@ -29,6 +29,7 @@ kind: "package-group"
 | [`web/`](web/README.zh.md) | 启动浏览器外壳 | — |
 | [`modules/`](modules/README.zh.md) | 加载浏览器侧客户端模块 | `ctx.clientModules` / `ctx.modules` |
 | [`connection/`](connection/README.zh.md) | 维护浏览器与宿主之间的 RPC 通信与事件投递 | `ctx.connection` |
+| [`file-upload/`](file-upload/README.zh.md) | 在页面线程之外发送原始 Blob 与字节流请求体 | `ctx.fileUpload` |
 | [`store/`](store/README.zh.md) | 提供不依赖 React 的 observable 与 snapshot-store 原语 | — |
 | [`hmr/`](hmr/README.zh.md) | 在开发期间刷新客户端插件 | — |
 | [`locale/`](locale/README.zh.md) | 提供本地化偏好与消息词典 | `ctx.locale` |
@@ -41,6 +42,8 @@ kind: "package-group"
 | [`ui-attachment/`](ui-attachment/README.zh.md) | 注册输入框与消息图片的附件呈现 | — |
 | [`ui-layout/`](ui-layout/README.zh.md) | 排列应用的主要区域 | — |
 | [`ui-sidebar/`](ui-sidebar/README.zh.md) | 展示工作区与会话导航 | — |
+| [`resources/`](resources/README.zh.md) | 统一资源模型：`useResource` 会话标准 hook 背后的协议提供者 | `ctx.resources` |
+| [`ui-sidebar-files/`](ui-sidebar-files/README.zh.md) | 右侧 Sidebar 的工作区文件树 tab 类型 | — |
 | [`ui-brand-official/`](ui-brand-official/README.zh.md) | 用官方名称与标记填充通用浏览器品牌 slot | — |
 | [`ui-workspace/`](ui-workspace/README.zh.md) | 提供工作区选择与创建界面 | — |
 | [`ui-conversation/`](ui-conversation/README.zh.md) | 展示当前对话及其输入界面 | — |
@@ -71,6 +74,7 @@ kind: "package-group"
 | [`ui-message-feedback/`](ui-message-feedback/README.zh.md) | 向助手消息操作条贡献逐消息反馈控件 | — |
 | [`ui-directory-picker-browse/`](ui-directory-picker-browse/README.zh.md) | 面向工作区目录流程的应用内目录浏览界面 | — |
 | [`ui-directory-picker-native/`](ui-directory-picker-native/README.zh.md) | 驱动宿主 OS 选择器的原生目录选择界面 | — |
+| [`ui-open-in-app/`](ui-open-in-app/README.zh.md) | 在已安装应用中打开 workspace 目录的会话头部分体按钮 | — |
 
 -----
 

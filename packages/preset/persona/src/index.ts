@@ -16,9 +16,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { PERSONA_SECTION } from '@deepseek-ai/dsh-system-prompt'
+import { PERSONA_PREFIX_SECTION, PERSONA_SUFFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 
-export { PERSONA_SECTION }
+export { PERSONA_PREFIX_SECTION, PERSONA_SUFFIX_SECTION }
 
 /** Cordis plugin name. */
 export const name = 'persona'
@@ -29,36 +29,52 @@ export const inject = ['systemPrompt']
 /** Plugin config: the persona text this composition contributes. */
 export interface Config {
   /**
-   * Persona prose rendered as the `deployment:persona` section. A template:
+   * Persona prose rendered as the `deployment:persona-prefix` section. A template:
    * complete `{{…}}` groups interpolate strictly against registered prompt
    * variables. Empty text drops the section at render, matching the registry.
    */
-  text: string
-  /** Make this persona the complete system prompt, suppressing every other section. */
+  prefix?: string
+  /** Legacy prefix alias for existing presets; used only when `prefix` is absent. */
+  text?: string
+  /**
+   * Persona suffix template rendered after first-party guidance. Omitted or empty
+   * text shadows the deployment suffix away; interpolation is strict.
+   */
+  suffix?: string
+  /** Make the prefix the complete system prompt, suppressing the suffix and every other section. */
   complete?: boolean
   /** Suppress dynamic runtime-context snapshots for this persona's agent scope. */
   includeRuntimeContext?: boolean
 }
 
-/** Runtime schema for the persona row. */
+/** Runtime schema; at least one of `prefix` and legacy `text` must be supplied. */
 export const Config: z<Config> = z.object({
-  text: z.string().required(),
+  prefix: z.string(),
+  text: z.string(),
+  suffix: z.string().default(''),
   complete: z.boolean().default(false),
   includeRuntimeContext: z.boolean().default(true),
 })
 
 /**
- * Register the persona section for the mounting context's scope.
+ * Register the persona prefix and suffix sections for the mounting context's scope.
  * @param ctx - an agent scope context; an unscoped context collides with the
  * prompt registry's own persona registration and rejects.
- * @param config - the persona text and complete-prompt policy.
+ * @param config - the prefix, suffix, and complete-prompt policy.
  */
 export function apply(ctx: Context, config: Config): void {
+  const prefix = config.prefix ?? config.text
+  if (prefix === undefined) throw new Error('persona: config.prefix is required (legacy config.text is also accepted)')
   ctx.effect(() => ctx.systemPrompt.section({
-    name: PERSONA_SECTION,
-    order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA'),
-    text: config.text,
+    name: PERSONA_PREFIX_SECTION,
+    order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+    text: prefix,
     ...(config.complete ? { complete: true } : {}),
   }), 'persona.section()')
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: PERSONA_SUFFIX_SECTION,
+    order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX'),
+    text: config.suffix ?? '',
+  }), 'persona.suffix()')
   if (!(config.includeRuntimeContext ?? true)) ctx.systemPrompt.suppressRuntimeContext()
 }
