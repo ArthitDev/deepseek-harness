@@ -80,6 +80,8 @@ Client 的首次 `follow`、重连首屏与 `loadOlder()` 至少请求 50 条以
 
 `workspacePathApplications({ path })` 使用与 `openWorkspacePath` 相同的文件系统映射校验，返回服务端桌面上该文件的关联应用。打开请求中的可选 `application` 指定当前关联的应用，不修改系统默认应用。应用名称、默认项、图标和平台支持范围由 [native-command](../../util/native-command/README.zh.md) 提供。这些操作不激活 Agent，也不追加会话事件。原生操作失败时返回简短消息，原始命令异常作为 Host 端原因保留。
 
+根地址的 `skills/installed`、`skills/setEnabled`、`skills/remove`、`skills/search` 和 `skills/add` Remote 无需打开 Session 即可管理用户全局 skill。`setEnabled` 会在 `$DSH_HOME/skills` 与 `$DSH_HOME/disabled-skills` 之间原子移动 skill；`remove` 会把任一状态的 skill 移入 `$DSH_HOME/skill-backups` 以便恢复。搜索委托给 `npx skills find`；安装过程不会启动 shell，也不会向 CLI 传递 Harness 凭据，而是在操作系统临时目录运行 CLI，校验请求的目录标识恰好生成一个 `SKILL.md`，再原子发布到 `$DSH_HOME/skills`。被替换的目录会保存在 `$DSH_HOME/skill-backups`，最终移动失败时会自动恢复。
+
 -----
 
 <a id="configuration"></a>
@@ -110,8 +112,7 @@ Client 的首次 `follow`、重连首屏与 `loadOlder()` 至少请求 50 条以
 - follow 恢复失败会对调用方可见，而不会无限重试。
 - 浏览器原始字节上传使用一次不带断点续传偏移的流式 HTTP 请求；重试会从第零字节重新传输整个文件。
 - 文件引用补全使用共享 Agent lookup，因此可能恢复冷 Session；`skills/list` 目录是不激活 Agent 的 skill 元数据读取路径。
-- 受理/运行的展示记忆只存在于客户端内存，页面重载后即丢失。
-- 该记忆不在 tab 之间共享：同一会话可能在一个 tab 中已转正，在另一个 tab 中仍显示为 `New Session`。
+- 目录搜索与安装需要网络访问和可用的 `npx`；管理 Remote 只接受目录返回的一个 `owner/repository@skill` 标识。
 
 
 <a id="dev-note"></a>

@@ -1,4 +1,10 @@
 - tree "Sessions":
-  - treeitem "workspace" [expanded]
-  - treeitem "New Session" [selected]
-  - treeitem "1 subagent running Delegate a background job. now"
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
+    - img
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "workspace" [expanded]:
+      - img
+      - text: workspace
+    - treeitem "1 subagent running Delegate a background job. now"
+    - treeitem "New Session" [selected]

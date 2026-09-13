@@ -1,10 +1,24 @@
 - dialog "设置":
   - navigation:
     - text: 设置
-    - button "通用设置"
-    - button "模型"
-    - button "内置插件"
-    - button "Agent 预设"
+    - button "通用设置":
+      - img
+      - text: 通用设置
+    - button "模型":
+      - img
+      - text: 模型
+    - button "插件":
+      - img
+      - text: 插件
+    - button "Agent 预设":
+      - img
+      - text: Agent 预设
+    - button "远程计算机":
+      - img
+      - text: 远程计算机
+    - button "Skills":
+      - img
+      - text: Skills
   - button "打开配置文件"
   - button "关闭"
   - text: 权限 选择新会话的默认权限模式

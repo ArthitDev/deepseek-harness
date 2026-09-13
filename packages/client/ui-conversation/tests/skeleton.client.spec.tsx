@@ -382,7 +382,7 @@ describe('Hero chrome', () => {
   it('renders the branded English hero', () => {
     const renderSlot = vi.fn<HeroShellProps['renderSlot']>((_key, _owner, options) => options?.fallback ?? null)
     const view = render(<HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot} />)
-    expect(view.getByText('Shield Break Agent')).toBeTruthy()
+    expect(view.getByText('Shield Break Agent').getAttribute('data-text')).toBe('Shield Break Agent')
     expect(view.queryByText('Preview')).toBeNull()
     expect(renderSlot).toHaveBeenCalledOnce()
     expect(renderSlot.mock.calls[0]?.[0]).toBe('conversation.hero.brand.mark')
@@ -394,6 +394,19 @@ describe('Hero chrome', () => {
     expect(brandMarkOwner.className).toBeTypeOf('string')
     expect(renderSlot.mock.calls[0]?.[2]?.fallback).toBeTruthy()
     expect(view.container.querySelector('img[src="/new-logo.png"]')).not.toBeNull()
+  })
+
+  it('cycles the hero headline', () => {
+    vi.useFakeTimers()
+    const renderSlot = vi.fn<HeroShellProps['renderSlot']>((_key, _owner, options) => options?.fallback ?? null)
+    const view = render(<HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot} />)
+    try {
+      act(() => { vi.advanceTimersByTime(6_300) })
+      expect(view.getByText('Break All Shield').getAttribute('data-text')).toBe('Break All Shield')
+    } finally {
+      view.unmount()
+      vi.useRealTimers()
+    }
   })
 })
 

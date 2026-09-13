@@ -30,6 +30,12 @@
       "path": "../../session/session-persistence"
     },
     {
+      "path": "../../remote/remote-machines"
+    },
+    {
+      "path": "../../fs/fs"
+    },
+    {
       "path": "../../typert/protocol"
     },
     {

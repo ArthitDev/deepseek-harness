@@ -122,7 +122,15 @@ Read these pages when the package-level contract is not enough. They move from t
 
 #### What the model sees
 
-A separate DeepSeek model receives exactly `Perform a web search for the query: <query>` as its user text and one native `web_search` server-tool definition. This request is not part of the conversation model's context.
+A separate DeepSeek model receives the following user text and one native `web_search` server-tool definition. The language instruction prevents the provider from defaulting non-Chinese queries to Chinese sources. This request is not part of the conversation model's context.
+
+##### Search instruction
+
+```markdown
+Search the web for the query exactly as written. Prefer sources in the query's language. Do not default to Chinese-language sources unless the query is Chinese or no relevant sources exist.
+
+Query: <query>
+```
 
 #### Token effect
 

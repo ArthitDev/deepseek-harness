@@ -224,105 +224,56 @@ Host service backing the generated `ctx.remote.directoryPicker` namespace. The s
 
 Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
 
-<a id="ctxterminalcontroller--terminalcontroller"></a>
+<a id="ctxremotemachines--remotemachines"></a>
 
-### `ctx.terminalController` — `TerminalController`
+### `ctx.remoteMachines` — `RemoteMachines`
 
-Typed Remote control of transient Session-owned terminal processes.
+Owns saved SSH profiles, fingerprint trust, and shared remote transports.
 
 ```ts cordis-catalog
 /**
- * Read the Session working directory and terminal limits without resolving a shell.
- * @param agent - Session owner supplied by the Gateway.
- * @param signal - request cancellation.
- * @returns the Session workspace directory and terminal limits.
+ * Read a Host-only profile with any lifetime-only password applied.
+ * @param id - Saved machine identifier.
+ * @returns the complete profile, or undefined when it is absent.
  */
-@Remote environment(agent: Agent, signal: AbortSignal): TerminalEnvironment
+profile(id: string): RemoteMachineProfile | undefined
 
 /**
- * Discover installed shells in the Session's execution environment.
- * @param agent - Session owner supplied by the Gateway.
- * @param signal - request cancellation.
- * @returns verified profiles, with the configured or system default first.
+ * List every saved machine without credential fields.
+ * @returns redacted views for every saved machine.
  */
-@Remote shells(agent: Agent, signal: AbortSignal): Promise<TerminalShell[]>
+@Remote('list') list(): RemoteMachinesValue
 
 /**
- * List retained terminals without resolving or activating an Agent.
- * @param sessionId - displayed Session identity, including offline history.
- * @returns terminals retained for this Host lifetime.
+ * Create or update one saved profile.
+ * @param request - Validated profile fields and optional secrets.
+ * @returns the redacted saved profile.
  */
-@Remote list(sessionId: SessionId): WebTerminalInfo[]
+@Remote('save') async save(request: RemoteMachineSaveRequest): Promise<RemoteMachineValue>
 
 /**
- * Allocate a user shell once for a caller-generated identity, without Agent sandbox or approval restrictions.
- * @param agent - Session owner supplied by the Gateway.
- * @param request - initial dimensions and idempotency identity.
- * @param signal - allocation cancellation; committed terminals survive disconnection.
- * @returns the existing or newly committed terminal.
+ * Delete a saved profile that has no registered workspace.
+ * @param request - Saved machine identifier.
+ * @returns confirmation after settings and cached credentials are cleared.
  */
-@Remote async create(agent: Agent, request: TerminalCreateRequest, signal: AbortSignal): Promise<WebTerminalInfo>
+@Remote('remove') async remove(request: RemoteMachineIdRequest): Promise<RemoteMachineRemoveValue>
 
 /**
- * Retain an existing terminal for a window without activating its Agent or taking input control.
- * @param sessionId - owning Session identity, including an inactive saved layout.
- * @param id - retained Host terminal identity.
- * @param signal - physical Remote stream cancellation.
- * @returns a hold acknowledgement followed by an open lifetime stream.
+ * Observe an SSH host key and platform without trusting a new key.
+ * @param request - Saved machine identifier and optional lifetime-only password.
+ * @returns the observed fingerprint and remote platform details.
  */
-@Remote({ mode: 'stream' }) retain(sessionId: SessionId, id: WebTerminalId, signal: AbortSignal): AsyncIterable<TerminalRetentionFrame>
+@Remote('probe') async probe(request: RemoteMachineProbeRequest): Promise<RemoteMachineProbeValue>
 
 /**
- * Attach to a terminal without binding its process lifetime to the transport.
- * @param agent - Session owner supplied by the Gateway.
- * @param id - terminal identity.
- * @param attachmentId - new exclusive input attachment.
- * @param signal - physical stream cancellation.
- * @returns screen recovery followed by output and metadata changes.
+ * Re-probe and save one exact SSH host fingerprint.
+ * @param request - Saved machine identifier and observed fingerprint.
+ * @returns the updated redacted profile.
  */
-@Remote({ mode: 'stream' }) follow(agent: Agent, id: WebTerminalId, attachmentId: TerminalAttachmentId, signal: AbortSignal): AsyncIterable<TerminalFrame>
-
-/**
- * Deliver raw input, including Tab completion and control characters.
- * @param agent - Session owner supplied by the Gateway.
- * @param id - terminal identity.
- * @param attachmentId - current writable attachment.
- * @param data - input bytes represented as UTF-8 text.
- * @returns after provider input acceptance.
- */
-@Remote async write(agent: Agent, id: WebTerminalId, attachmentId: TerminalAttachmentId, data: string): Promise<void>
-
-/**
- * Update the dimensions of the PTY and recovery screen.
- * @param agent - Session owner supplied by the Gateway.
- * @param id - terminal identity.
- * @param attachmentId - current writable attachment.
- * @param cols - column count.
- * @param rows - row count.
- * @returns after the resize completes.
- */
-@Remote async resize(agent: Agent, id: WebTerminalId, attachmentId: TerminalAttachmentId, cols: number, rows: number): Promise<void>
-
-/**
- * Rename a terminal without changing its shell.
- * @param agent - Session owner supplied by the Gateway.
- * @param id - terminal identity.
- * @param title - nonempty display title, at most 120 characters.
- */
-@Remote rename(agent: Agent, id: WebTerminalId, title: string): void
-
-/**
- * Close an identity to future creation and kill its process range; repeated closes succeed.
- * @param agent - Session owner supplied by the Gateway.
- * @param id - terminal identity.
- * @returns after provider cleanup succeeds. A failure retains the terminal for retry.
- */
-@Remote async close(agent: Agent, id: WebTerminalId): Promise<void>
+@Remote('trust') async trust(request: RemoteMachineTrustRequest): Promise<RemoteMachineValue>
 ```
 
-Types: [Agent](core.md) · [SessionId](core.md)
-
-Source: [`packages/api/terminal-controller/src/index.ts`](../../packages/api/terminal-controller/src/index.ts)
+Source: [`packages/remote/remote-machines/src/index.ts`](../../packages/remote/remote-machines/src/index.ts)
 
 <a id="ctxworkspacecontroller--workspacecontroller"></a>
 

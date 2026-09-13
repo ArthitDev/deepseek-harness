@@ -252,6 +252,71 @@ Host service backing `ctx.remote.skills` without activating a cold Agent.
 
 ```ts cordis-catalog
 /**
+ * Start one unrestricted command in the host platform's native interactive shell.
+ * @param request - Command and initial terminal dimensions.
+ * @param signal - Caller cancellation for terminal startup.
+ * @returns the caller-owned terminal identifier.
+ */
+@Remote async terminalOpen(request: SkillTerminalOpenRequest, signal: AbortSignal): Promise<SkillTerminalOpenValue>
+
+/**
+ * Read terminal output from the caller-owned character offset.
+ * @param request - Terminal identifier and character offset.
+ * @returns retained output and the next readable offset.
+ */
+@Remote terminalRead(request: SkillTerminalReadRequest): SkillTerminalReadValue
+
+/**
+ * Write terminal input verbatim, including control characters.
+ * @param request - Terminal identifier and input text.
+ * @returns whether the terminal accepted the input.
+ */
+@Remote async terminalWrite(request: SkillTerminalWriteRequest): Promise<SkillTerminalWriteValue>
+
+/**
+ * Terminate and forget one Skills settings terminal.
+ * @param request - Terminal identifier to close.
+ * @returns whether an open terminal was closed.
+ */
+@Remote async terminalClose(request: SkillTerminalCloseRequest): Promise<SkillTerminalCloseValue>
+
+/**
+ * List skills installed directly in the user-global DSH skill root.
+ * @returns the installed skill names in stable order.
+ */
+@Remote async installed(): Promise<InstalledSkillsValue>
+
+/**
+ * Enable or disable one global skill by moving it into or out of discovery.
+ * @param request - Installed skill name and desired state.
+ * @returns the persisted state.
+ */
+@Remote async setEnabled(request: SkillSetEnabledRequest): Promise<SkillSetEnabledValue>
+
+/**
+ * Remove one global skill from discovery while retaining a recoverable backup.
+ * @param request - Installed skill name to remove.
+ * @returns whether an installed directory was moved to backup.
+ */
+@Remote async remove(request: SkillRemoveRequest): Promise<SkillRemoveValue>
+
+/**
+ * Search skills.sh through the maintained `skills` CLI.
+ * @param request - validated search text.
+ * @param signal - caller cancellation.
+ * @returns matching installable skills.
+ */
+@Remote async search(request: SkillSearchRequest, signal: AbortSignal): Promise<SkillSearchValue>
+
+/**
+ * Install one skills.sh source into the user-global DSH skill root.
+ * @param request - canonical owner/repository and skill selection.
+ * @param signal - caller cancellation.
+ * @returns the installed skill identity.
+ */
+@Remote('add') async install(request: SkillInstallRequest, signal: AbortSignal): Promise<SkillInstallValue>
+
+/**
  * List the user-invocable skills visible to one Session composition.
  * @param request - Session identity whose cwd and preset select the catalog view.
  * @param signal - caller lifetime carried by the Remote transport; admitted catalog reads retain their existing completion semantics.

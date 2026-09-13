@@ -165,6 +165,17 @@ export class SessionCommandController {
             ? {}
             : { reasoningEffort: resolved.reasoningEffort }),
         }
+        const presets = this.ctx.get('agentPresets')
+        if (presets !== undefined) {
+          const agentPreset = presets.presetIdForModel(selected.provider, selected.model)
+          if (this.agents.presetForSession(agent.session) !== agentPreset) {
+            try {
+              await presets.select(agent, agentPreset)
+            } catch (error) {
+              if (remoteErrorOf(error)?.code !== 'agent-preset/locked') throw error
+            }
+          }
+        }
         this.agents.selectForNextRequest(agent, selected)
         try {
           await this.ctx.agentDefaultModel.saveSelection(selected)

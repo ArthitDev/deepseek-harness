@@ -155,7 +155,8 @@ const processBoundTests = [
   'packages/context/time-context/tests/time-context.spec.ts',
   'packages/llm/llm-pi-ai/tests/adapter.spec.ts',
   'packages/boot/app-boot/tests/app-boot.spec.ts',
-  'packages/workflow/workflow-ptc/tests/workflow-ptc.spec.ts',
+  'packages/host/directory-picker-native/tests/win32-dialog.spec.ts',
+  'packages/workflow/workflow-worker-thread/tests/session.spec.ts',
 ]
 
 export default defineConfig({
@@ -192,7 +193,8 @@ export default defineConfig({
           name: 'process-bound',
           execArgv: vitestExecArgv,
           pool: 'forks',
-          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts', './scripts/test-dom-environment.ts'],
+          fileParallelism: false,
+          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
           include: processBoundTests,
           exclude: [
             ...platformUnsupportedTests,

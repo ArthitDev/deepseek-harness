@@ -14,7 +14,8 @@ describe('BootPage', () => {
   it('draws the loading skeleton before any plugin state arrives', () => {
     const { el } = mount()
     expect(el.firstElementChild?.getAttribute('data-dsh-boot')).toBe('')
-    expect(el.textContent).toContain('HARNESS')
+    expect(el.querySelector('img')?.getAttribute('src')).toBe('/new-logo.png')
+    expect(el.textContent).toContain('Shield Break Agent')
     expect(el.textContent).toContain('Loading plugins…')
   })
 

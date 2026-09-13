@@ -1210,13 +1210,13 @@ describe('TypertGatewayService', () => {
         if (signal.aborted) resolve()
         else signal.addEventListener('abort', () => { resolve() }, { once: true })
       })
-    })(), { home: '/home/fixture' })
+    })(), { home: '/home/fixture', hostname: 'fixture-host' })
     const carrier = new AbortController()
     const events = rawGatewayEventHarness(ctx).openRemoteEvents({ args: {} }, carrier.signal)
     const opening = await events.next()
     expect(opening).toMatchObject({
       done: false,
-      value: { type: 'ready', host: { home: '/home/fixture' } },
+      value: { type: 'ready', host: { home: '/home/fixture', hostname: 'fixture-host' } },
     })
     if (opening.done) throw new Error('Remote event stream ended before ready')
     const clientId: unknown = Reflect.get(opening.value as object, 'clientId')

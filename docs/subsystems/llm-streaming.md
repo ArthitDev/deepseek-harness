@@ -615,6 +615,8 @@ interface GenerateOptions {
   system?: string
   /** Tool schemas (adapters map to the provider's `tools` field). */
   tools?: ToolSchema[]
+  /** Tool-call policy for this request. `required` is valid only when at least one tool is present. */
+  toolChoice?: ToolChoice
   temperature?: number
   maxTokens?: number
   /**
@@ -656,7 +658,7 @@ interface FinishReasonMap {
 
 `FinishReason = FinishReasonMap[keyof FinishReasonMap]`. `TokenUsage` (per-call accounting with disjoint cache fields) is detailed [below](#tokenusage).
 
-`GenerateOptions.tools` carries `ToolSchema` — the JSON-schema description of a tool, as sent to the model. It is declared in dsh-llm (not dsh-tools) precisely because it is part of the request the loop assembles every step:
+`GenerateOptions.tools` carries `ToolSchema` — the JSON-schema description of a tool, as sent to the model. `GenerateOptions.toolChoice` independently selects automatic, required, or disabled tool use for that request; the runtime rejects `required` when no tools are present. It is declared in dsh-llm (not dsh-tools) precisely because it is part of the request the loop assembles every step:
 
 ```ts type-equiv
 /**
@@ -715,7 +717,7 @@ interface LlmModelDiscoveryRequest {
 /**
  * One model an endpoint reports about itself. Every field but the id is
  * optional because most provider listings disclose an id and nothing else;
- * a surface adopting one of these still owes the capacities its adapter needs.
+ * a surface adopting one may retain the capabilities its adapter understands.
  */
 interface LlmDiscoveredModel {
   /** Model id the endpoint accepts. */
@@ -726,8 +728,8 @@ interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
-  /** Accepted input types when disclosed by the catalog or endpoint; absent means unknown. */
-  inputModalities?: readonly ModelModality[]
+  /** Selectable reasoning levels and their endpoint-facing spellings, when disclosed. */
+  reasoningEfforts?: Readonly<Record<string, string | null>>
 }
 ```
 

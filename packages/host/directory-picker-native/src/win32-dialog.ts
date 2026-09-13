@@ -7,6 +7,7 @@
  */
 
 import { closeThreadWindows as hostCloseThreadWindows, spawnDialogWorker } from './win32-dialog-host.ts'
+import { fileURLToPath } from 'node:url'
 import type { Win32DialogWorkerData, Win32DialogWorkerMessage } from './win32-dialog-worker.ts'
 
 /** The child-process surface the driver drives (satisfied by `node:child_process`). */
@@ -44,6 +45,7 @@ export interface Win32DialogInternals {
 
 /** The dialog title every host shows. */
 export const DIALOG_TITLE = 'Select Workspace Directory'
+const DIALOG_ICON_PATH = fileURLToPath(new URL('../assets/app.ico', import.meta.url))
 
 /** `WM_CLOSE` re-post cadence while an abort waits for the worker to unwind. */
 const CLOSE_RETRY_MS = 150
@@ -72,7 +74,7 @@ export async function pickWin32Directory(
   const closeWindows = internals.closeThreadWindows ?? hostCloseThreadWindows
   const closeRetryMs = internals.closeRetryMs ?? CLOSE_RETRY_MS
 
-  const worker: Win32DialogWorkerLike = spawnWorker({ title: DIALOG_TITLE })
+  const worker: Win32DialogWorkerLike = spawnWorker({ title: DIALOG_TITLE, iconPath: DIALOG_ICON_PATH })
   let dialogThreadId: number | undefined
   let closeTimer: NodeJS.Timeout | undefined
   let settled = false

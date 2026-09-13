@@ -13,8 +13,7 @@ import pluginManagerRemote from '@deepseek-ai/dsh-plugin-manager/remote'
 import pluginRegistryProbeRemote from '@deepseek-ai/dsh-client-ui-plugin-manager/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import messageFeedbackRemote from '@deepseek-ai/dsh-message-feedback/remote'
-import permissionPresetsRemote from '@deepseek-ai/dsh-permission-presets/remote'
-import sessionFeedbackRemote from '@deepseek-ai/dsh-command-feedback/remote'
+import remoteMachinesRemote from '@deepseek-ai/dsh-remote-machines/remote'
 import fileUploadsRemote from '@deepseek-ai/dsh-client-file-upload/remote'
 import sessionReferencesRemote from '@deepseek-ai/dsh-session-reference/remote'
 import subagentsRemote from '@deepseek-ai/dsh-subagent/remote'
@@ -43,8 +42,7 @@ export type {} from '@deepseek-ai/dsh-office-to-pdf/remote'
 export type {} from '@deepseek-ai/dsh-llm/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@deepseek-ai/dsh-message-feedback/remote'
-export type {} from '@deepseek-ai/dsh-permission-presets/remote'
-export type {} from '@deepseek-ai/dsh-command-feedback/remote'
+export type {} from '@deepseek-ai/dsh-remote-machines/remote'
 export type {} from '@deepseek-ai/dsh-client-file-upload/remote'
 export type {} from '@deepseek-ai/dsh-session-reference/remote'
 export type {} from '@deepseek-ai/dsh-subagent/remote'
@@ -152,6 +150,10 @@ export type {
   RemoteErrorCode, RemoteErrorDetailsMap, RemoteFailure, RemoteResult,
 } from '@deepseek-ai/dsh-typert-protocol'
 export type { RemoteHostFacts } from '@deepseek-ai/dsh-api-gateway/client'
+export type {
+  RemoteMachineAuth, RemoteMachineProbeValue, RemoteMachineSaveRequest,
+  RemoteMachinesValue, RemoteMachineView,
+} from '@deepseek-ai/dsh-remote-machines/types'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -172,11 +174,9 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      agentPresetsRemote, commandsRemote, settingsControllerRemote, accountRemote, goalsRemote, llmRemote, dynamicRemote,
-      pluginInventoryRemote, pluginManagerRemote, pluginRegistryProbeRemote, messageFeedbackRemote, sessionFeedbackRemote,
-      fileUploadsRemote, sessionReferencesRemote,
-      permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
-      officeToPdfRemote,
+      agentPresetsRemote, commandsRemote, settingsControllerRemote, goalsRemote, llmRemote, dynamicRemote,
+      pluginInventoryRemote, messageFeedbackRemote, fileUploadsRemote, sessionReferencesRemote,
+      remoteMachinesRemote, subagentsRemote, sessionRemote, workspaceRemote, workspaceFilesRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

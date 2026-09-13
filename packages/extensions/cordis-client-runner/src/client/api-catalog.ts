@@ -549,7 +549,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConnectionHostInfo',
-    declaration: 'export interface ConnectionHostInfo {\n    readonly home: string;\n}',
+    declaration: 'export interface ConnectionHostInfo {\n    readonly home: string;\n    readonly hostname?: string;\n}',
   },
   {
     name: 'ConnectionLoop',
@@ -801,7 +801,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RemoteHostFacts',
-    declaration: 'export interface RemoteHostFacts {\n    readonly home: string | undefined;\n    readonly isLoopback: boolean;\n}',
+    declaration: 'export interface RemoteHostFacts {\n    readonly home: string | undefined;\n    readonly hostname: string | undefined;\n    readonly isLoopback: boolean;\n}',
   },
   {
     name: 'RemoteStream',

@@ -1,11 +1,16 @@
 import { Context } from '@deepseek-ai/cordis'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-skill'
+import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { describe, expect, it, vi } from 'vitest'
-import { SessionSkillCatalog } from '../src/skill-catalog.ts'
+import { parseSearchOutput, SessionSkillCatalog } from '../src/skill-catalog.ts'
 
 function observation(
   sessionId: SessionId,
@@ -44,6 +49,174 @@ async function context(): Promise<Context> {
 }
 
 describe('SessionSkillCatalog', () => {
+  it('parses deduplicated skills.sh results from CLI output', () => {
+    expect(parseSearchOutput([
+      '\u001B[32mowner/repo@pentest\u001B[0m',
+      '└ https://skills.sh/owner/repo/pentest',
+      'owner/repo@pentest',
+      'other/tools@web-audit',
+    ].join('\n'))).toEqual([
+      { source: 'owner/repo@pentest', name: 'pentest', url: 'https://skills.sh/owner/repo/pentest' },
+      { source: 'other/tools@web-audit', name: 'web-audit', url: 'https://skills.sh/other/tools/web-audit' },
+    ])
+  })
+
+  it('installs through exact npx arguments, replaces atomically, and keeps a backup', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-skill-manager-test-'))
+    try {
+      await mkdir(join(home, 'skills', 'pentest'), { recursive: true })
+      await writeFile(join(home, 'skills', 'pentest', 'SKILL.md'), 'old')
+      const runCli = vi.fn(async (_args: readonly string[], cwd: string) => {
+        await mkdir(join(cwd, '.agents', 'skills', 'pentest'), { recursive: true })
+        await writeFile(join(cwd, '.agents', 'skills', 'pentest', 'SKILL.md'), 'new')
+        return ''
+      })
+      const catalog = new SessionSkillCatalog(await context(), { dshHome: home, runCli })
+
+      await expect(catalog.install(
+        { source: 'owner/repo@pentest' },
+        new AbortController().signal,
+      )).resolves.toEqual({ installed: ['pentest'], backedUp: ['pentest'] })
+      expect(runCli).toHaveBeenCalledWith([
+        '--yes', 'skills', 'add', 'owner/repo@pentest',
+        '--agent', 'universal', '-y', '--copy',
+      ], expect.any(String), expect.any(AbortSignal))
+      await expect(readFile(join(home, 'skills', 'pentest', 'SKILL.md'), 'utf8')).resolves.toBe('new')
+      const [backupGeneration] = await readdir(join(home, 'skill-backups'))
+      await expect(readFile(join(home, 'skill-backups', backupGeneration!, 'pentest', 'SKILL.md'), 'utf8'))
+        .resolves.toBe('old')
+      await expect(catalog.installed()).resolves.toEqual({ skills: [{ name: 'pentest', enabled: true }] })
+
+      await expect(catalog.install(
+        { source: '../repo@local' },
+        new AbortController().signal,
+      )).rejects.toMatchObject({ code: 'gateway/bad-request' })
+      await expect(catalog.install(
+        { source: 'https://skills.sh/owner/repo/pentest' },
+        new AbortController().signal,
+      )).rejects.toMatchObject({ code: 'gateway/bad-request' })
+      expect(runCli).toHaveBeenCalledOnce()
+
+      runCli.mockImplementationOnce(async (_args: readonly string[], cwd: string) => {
+        await mkdir(join(cwd, '.agents', 'skills', 'pentest'), { recursive: true })
+        await mkdir(join(cwd, '.agents', 'skills', 'unexpected'), { recursive: true })
+        await writeFile(join(cwd, '.agents', 'skills', 'pentest', 'SKILL.md'), 'newer')
+        await writeFile(join(cwd, '.agents', 'skills', 'unexpected', 'SKILL.md'), 'unrequested')
+        return ''
+      })
+      await expect(catalog.install(
+        { source: 'owner/repo@pentest' },
+        new AbortController().signal,
+      )).rejects.toThrow('did not produce exactly the requested skill')
+      await expect(readFile(join(home, 'skills', 'pentest', 'SKILL.md'), 'utf8')).resolves.toBe('new')
+      expect(runCli).toHaveBeenCalledTimes(2)
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('enables and disables an installed skill by moving it out of discovery', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-skill-toggle-test-'))
+    try {
+      await mkdir(join(home, 'skills', 'pentest'), { recursive: true })
+      await writeFile(join(home, 'skills', 'pentest', 'SKILL.md'), 'body')
+      const catalog = new SessionSkillCatalog(await context(), { dshHome: home })
+
+      await expect(catalog.setEnabled({ name: 'pentest', enabled: false }))
+        .resolves.toEqual({ name: 'pentest', enabled: false })
+      await expect(catalog.installed()).resolves.toEqual({ skills: [{ name: 'pentest', enabled: false }] })
+      await expect(readFile(join(home, 'disabled-skills', 'pentest', 'SKILL.md'), 'utf8')).resolves.toBe('body')
+      await expect(catalog.setEnabled({ name: 'pentest', enabled: false }))
+        .resolves.toEqual({ name: 'pentest', enabled: false })
+
+      await expect(catalog.setEnabled({ name: 'pentest', enabled: true }))
+        .resolves.toEqual({ name: 'pentest', enabled: true })
+      await expect(catalog.installed()).resolves.toEqual({ skills: [{ name: 'pentest', enabled: true }] })
+      await expect(readFile(join(home, 'skills', 'pentest', 'SKILL.md'), 'utf8')).resolves.toBe('body')
+      await expect(catalog.setEnabled({ name: '../pentest', enabled: false }))
+        .rejects.toMatchObject({ code: 'gateway/bad-request' })
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('removes enabled and disabled skills into recoverable backups', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-skill-remove-test-'))
+    try {
+      for (const [root, name] of [['skills', 'enabled'], ['disabled-skills', 'disabled']] as const) {
+        await mkdir(join(home, root, name), { recursive: true })
+        await writeFile(join(home, root, name, 'SKILL.md'), name)
+      }
+      const catalog = new SessionSkillCatalog(await context(), { dshHome: home })
+
+      await expect(catalog.remove({ name: 'enabled' })).resolves.toEqual({ name: 'enabled', removed: true })
+      await expect(catalog.remove({ name: 'disabled' })).resolves.toEqual({ name: 'disabled', removed: true })
+      await expect(catalog.remove({ name: 'disabled' })).resolves.toEqual({ name: 'disabled', removed: false })
+      await expect(catalog.remove({ name: '../enabled' })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+      await expect(catalog.installed()).resolves.toEqual({ skills: [] })
+
+      const generations = await readdir(join(home, 'skill-backups'))
+      const names = (await Promise.all(generations.map(generation => (
+        readdir(join(home, 'skill-backups', generation))
+      )))).flat().sort()
+      expect(names).toEqual(['disabled', 'enabled'])
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('bridges an interactive native terminal with incremental output and cleanup', async () => {
+    const ctx = await context()
+    const output = new PassThrough()
+    const settled = Promise.withResolvers<{ exitCode: number | null; signal: NodeJS.Signals | null }>()
+    const write = vi.fn(() => Promise.resolve())
+    const terminate = vi.fn(() => Promise.resolve())
+    const handle = {
+      pid: 42,
+      output,
+      done: settled.promise,
+      write,
+      inspectForeground: vi.fn(() => Promise.resolve(undefined)),
+      signalForeground: vi.fn(() => Promise.resolve(42)),
+      terminate,
+    } satisfies SubprocessTerminalHandle
+    const resolveExecutable = vi.fn((shell: string) => Promise.resolve(shell))
+    const spawnTerminal = vi.fn((_spec: SubprocessTerminalSpawnSpec) => Promise.resolve(handle))
+    ctx.provide('subprocess', { resolveExecutable, spawnTerminal } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    const opened = await catalog.terminalOpen(
+      { command: 'npx skills add owner/repo', rows: 30, cols: 120 },
+      new AbortController().signal,
+    )
+    expect(resolveExecutable).toHaveBeenCalledWith(
+      process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : process.env.SHELL ?? '/bin/sh',
+      undefined,
+      expect.any(AbortSignal),
+    )
+    expect(spawnTerminal).toHaveBeenCalledOnce()
+    const [terminalSpec] = spawnTerminal.mock.calls[0]!
+    expect(terminalSpec).toMatchObject({ rows: 30, cols: 120 })
+    expect(terminalSpec.argv).toHaveLength(1)
+    expect(typeof terminalSpec.argv[0]).toBe('string')
+    expect(typeof terminalSpec.cwd).toBe('string')
+    expect(write).toHaveBeenCalledWith('npx skills add owner/repo\r')
+
+    output.write('Select a skill: ')
+    expect(catalog.terminalRead({ id: opened.id, offset: 0 })).toMatchObject({
+      text: 'Select a skill: ', nextOffset: 16, lossy: false, exited: false,
+    })
+    await expect(catalog.terminalWrite({ id: opened.id, text: 'y\r' })).resolves.toEqual({ accepted: true })
+    expect(write).toHaveBeenLastCalledWith('y\r')
+
+    settled.resolve({ exitCode: 0, signal: null })
+    output.end()
+    await new Promise(resolve => setImmediate(resolve))
+    expect(catalog.terminalRead({ id: opened.id, offset: 16 })).toMatchObject({ exited: true, exitCode: 0 })
+    await expect(catalog.terminalClose({ id: opened.id })).resolves.toEqual({ closed: true })
+    expect(terminate).toHaveBeenCalledOnce()
+  })
+
   it('reads a cold Session catalog without resuming an Agent', async () => {
     const ctx = await context()
     const sessionId = SessionId('cold-skills')

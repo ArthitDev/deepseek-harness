@@ -454,6 +454,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections.',
   },
   {
+    key: 'remoteMachines',
+    pkg: 'remote-machines',
+    title: 'Saved SSH machine registry',
+    mode: 'core',
+    note: 'Owns saved profiles, lifetime-only passwords, host-key trust, and the connection pool used by its filesystem and subprocess providers.',
+  },
+  {
     key: 'sessionQuery',
     pkg: 'session-query',
     title: 'Session reads, traces, filters, and search',

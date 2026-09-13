@@ -198,8 +198,8 @@ loop 保留的响应块会追加到下一个请求，并保留其更早的可复
 
 这些限制说明适配器在哪里停止、由未来工作接续。它们是当前包约束，不是通用 DeepSeek 对比或任务积压。
 
-- **替换 `models` 会替换完整目录列表**——修改单个模型条目时使用路径编辑。
-- **不映射 `tool_choice`**——不属于核心词汇（与 pi-ai 孪生共享）。
+- **设置中的 `models` 列表会整体替换组合列表**——设置层按字段合并，数组只算一个字段；按条目合并目录需要带键的形状。
+- **`tool_choice` 支持 `auto`、`required` 与 `none`**——适配器把提供方无关的 `GenerateOptions.toolChoice` 直接映射到 OpenAI 兼容的 wire 字段。
 - **请求使用原始 `fetch`，而非 `@cordisjs/plugin-http`**——没有共享代理或拦截配置。
 - **Messages 历史内 system 更新需要保留用户或工具结果轮次**——若更新后的全部用户输入都被省略，且前一个协议轮次是 assistant，序列化会在下一个 assistant 之前或请求结束处以 `UNSUPPORTED_CONTENT` 失败。文本或空工具结果可以保留该轮次。不支持将更新移到更早的轮次；[输入历史决策](../../../.agents/notes/implemented/bug-fix/2026-09-18-messages-input-history-compatibility.zh.md)记录了排序约束。
 - **图片是仅用于输入的持久附件**——不支持直接外部 URL 与 assistant 图片输出；DeepSeek 输入通常使用 Files API，仅在单次请求恢复时使用内联 base64。

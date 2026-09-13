@@ -58,7 +58,8 @@ export interface AgentPresetSectionInjected {
   startCreatorDraft?: () => void
   load: () => Promise<void>
   makeDefault: (id: string) => Promise<void>
-  setPickerVisible: (visible: boolean) => Promise<void>
+  /** Set one model's preset, or return it to the default preset. */
+  bindModel: (provider: string, model: string, preset: string | undefined) => Promise<void>
 }
 /** Props assembled by the settings renderer. */
 export type AgentPresetSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.agentPreset'> & InjectFace<AgentPresetSectionInjected>
@@ -93,24 +94,41 @@ function CardDescription({ text }: { text: string }): ReactNode {
  * @param props Settings actions, snapshot hooks and localized text.
  * @returns The preset settings section.
  */
-export function AgentPresetSection({
-  useAgentPresetSection, load, makeDefault, setPickerVisible, startCreatorDraft, close: closeSettings, useDeveloperTools, t,
-}: AgentPresetSectionProps) {
-  const state = useAgentPresetSection(value => value)
-  const developerTools = useDeveloperTools(enabled => enabled)
-  const [guide, setGuide] = useState<{
-    content: NonNullable<ReturnType<typeof presetGuide>>
-    page: PresetGuidePage
-  } | null>(null)
-  useEffect(() => { void load() }, [load])
-  // Creator mode authors presets in conversation; it needs the flow to land a
-  // session in and the self-referential preset on the roster.
-  const creator = startCreatorDraft !== undefined && state.rows.some(row => row.id === 'cordis') ? startCreatorDraft : undefined
-  /* The custom group is where a preset of one's own appears, so its entry
-     stays on screen even while the group is empty. */
-  const creatorButton = creator === undefined
-    ? null
-    : (
+export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
+  const { useAgentPresetSection, t, load } = props
+  const state = useAgentPresetSection(snapshot => snapshot)
+  const viewedId = state.view?.id
+  const viewedRow = viewedId === undefined ? undefined : state.rows.find(row => row.id === viewedId)
+  const viewedTitle = state.view === null
+    ? ''
+    : viewedRow === undefined ? state.view.title : presetDisplayText(viewedRow, t).name
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // A deployment that composes no presets has nothing to manage: every
+  // session shares the host composition and the page would be an empty list.
+  if (state.status === 'unavailable') return null
+  if (state.status === 'error') {
+    /* v8 ignore next -- an error status always carries text; the fallback satisfies the nullable type */
+    const detail = state.error ?? ''
+    return (
+      <div className={css.section}>
+        <p className={css.error} role="alert">{`${t('error')} ${detail}`}</p>
+        <button type="button" className={css.secondaryButton} onClick={() => { void load() }}>
+          {t('retry')}
+        </button>
+      </div>
+    )
+  }
+
+  /* The guided alternative to copying: the self-referential preset can
+     read this very composition and author a new one in conversation.
+     Offered only where that preset is actually on the roster and a
+     session can be landed; without a writable root the draft could
+     never be discovered, so the reason rides the disabled button. */
+  const creatorButton = props.startCreatorDraft !== undefined && state.rows.some(row => row.id === 'cordis')
+    ? (
       <button
         type="button"
         className={css.creatorButton}
@@ -208,6 +226,43 @@ export function AgentPresetSection({
                         : <span className={css.cardBrokenReason} role="alert">{row.broken}</span>}
                       <code className={css.cardId}>{row.id}</code>
                     </button>
+                    {state.models.length === 0 || row.broken !== undefined ? null : (
+                      <details className={css.cardModels}>
+                        <summary className={css.cardModelsTitle}>
+                          {`${t('modelBindings')} (${String(state.models.length)})`}
+                        </summary>
+                        <div
+                          className={css.cardModelList}
+                          role="group"
+                          aria-label={`${t('modelBindings')}: ${text.name}`}
+                        >
+                          {state.models.map((model) => {
+                            const checked = state.modelPresets[model.provider]?.[model.id] === row.id
+                            return (
+                              <label key={`${model.provider}\u0000${model.id}`} className={css.cardModelOption}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={state.binding}
+                                  aria-label={`${text.name}: ${model.providerName} / ${model.name}`}
+                                  onChange={(event) => {
+                                    void props.bindModel(
+                                      model.provider,
+                                      model.id,
+                                      event.target.checked ? row.id : undefined,
+                                    )
+                                  }}
+                                />
+                                <span className={css.cardModelIdentity}>
+                                  <span>{`${model.providerName} / ${model.name}`}</span>
+                                  <code>{`${model.provider}/${model.id}`}</code>
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </details>
+                    )}
                     <div className={css.cardFoot}>
                       {/* Shipped presets are the read-only compositions a copy
                         starts from; a custom preset gets an editor and keeps a

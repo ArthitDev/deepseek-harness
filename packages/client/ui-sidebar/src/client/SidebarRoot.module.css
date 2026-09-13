@@ -278,6 +278,13 @@
   justify-content: center;
 }
 
+.brandMark,
+.railMark {
+  filter: drop-shadow(
+    0 0 5px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 55%, transparent)
+  );
+}
+
 .brandName {
   display: inline-flex;
   align-items: center;

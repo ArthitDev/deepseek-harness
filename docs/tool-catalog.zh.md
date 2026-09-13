@@ -604,7 +604,7 @@ ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类�
     },
     "description": {
       "type": "string",
-      "description": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
+      "description": "Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
     },
     "timeoutMs": {
       "type": "number",
@@ -620,8 +620,7 @@ ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类�
     }
   },
   "required": [
-    "command",
-    "description"
+    "command"
   ]
 }
 ```
@@ -691,7 +690,7 @@ bash 工具是 bash 执行器 seam 面向模型的消费方。组合中有 job �
     },
     "description": {
       "type": "string",
-      "description": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"Get-Process\" → \"List running processes\"."
+      "description": "Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"Get-Process\" → \"List running processes\"."
     },
     "timeoutMs": {
       "type": "number",
@@ -707,8 +706,7 @@ bash 工具是 bash 执行器 seam 面向模型的消费方。组合中有 job �
     }
   },
   "required": [
-    "command",
-    "description"
+    "command"
   ]
 }
 ```

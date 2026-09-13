@@ -14,8 +14,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { AgentPresetRow } from '@deepseek-ai/dsh-agent-preset-registry/types'
-import { writeDefaultPreset, writeModeSelectionEnabled } from './settings-store.ts'
+import { beginRosterRead, writeDefaultPreset, writeModelPreset } from './settings-store.ts'
 
 /** Ids a preset directory may be named, mirroring the host's own rule. */
 const PRESET_ID = /^[a-z0-9][a-z0-9-]*$/
@@ -39,6 +38,18 @@ export interface PresetRow {
    * is where both of those live.
    */
   broken?: string
+}
+
+/** One model offered for a preset binding. */
+export interface PresetModelRow {
+  /** Provider route and settings-map key. */
+  provider: string
+  /** Provider display name. */
+  providerName: string
+  /** Provider-owned model id and settings-map key. */
+  id: string
+  /** Model display name. */
+  name: string
 }
 
 /** The copy dialog: a new id and optional display name over a fixed source. */
@@ -143,6 +154,12 @@ export interface AgentPresetSectionState {
   hasDocument: boolean
   /** Every preset the deployment currently supplies. */
   rows: readonly PresetRow[]
+  /** Every model the Host currently offers. */
+  models: readonly PresetModelRow[]
+  /** User-selected preset ids by provider and model. */
+  modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>
+  /** Whether one model binding write is in flight. */
+  binding: boolean
   /** The open copy dialog, or null. */
   copy: CopyDraft | null
   /** The open composition viewer or editor, or null. */
@@ -160,7 +177,44 @@ export interface AgentPresetSectionState {
 const INITIAL: AgentPresetSectionState = { status: 'idle', error: null, showPicker: true, policySaving: false, rows: [] }
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
-/** Loads the roster and writes the default and chooser policy. */
+const INITIAL: AgentPresetSectionState = {
+  status: 'idle',
+  error: null,
+  authorable: false,
+  hasDocument: false,
+  rows: [],
+  models: [],
+  modelPresets: {},
+  binding: false,
+  copy: null,
+  create: null,
+  view: null,
+  pendingDelete: null,
+  deleting: false,
+  revealedPaths: {},
+}
+
+/**
+ * Why this copy cannot be submitted yet, as a locale key, or undefined when
+ * it can. Client-side only: the host re-checks the id and its answer is what
+ * the dialog reports on failure.
+ * @param draft - the open copy dialog.
+ * @param rows - the roster, for the collision check.
+ * @returns the blocking reason's locale key, or undefined when submittable.
+ */
+export function draftBlocker(
+  draft: Pick<CopyDraft, 'id'>,
+  rows: readonly PresetRow[],
+): 'idRequired' | 'idInvalid' | 'idTaken' | undefined {
+  if (draft.id === '') return 'idRequired'
+  if (!PRESET_ID.test(draft.id)) return 'idInvalid'
+  // A copy never overwrites: landing on a name already in use would replace
+  // something the user did not open.
+  if (rows.some(row => row.id === draft.id)) return 'idTaken'
+  return undefined
+}
+
+/** Reads the roster and drives the copy dialog, viewer, and location reveals. */
 export class AgentPresetSectionController {
   /** Observable roster and selection state. */
   readonly store: SnapshotStore<AgentPresetSectionState> = createSnapshotStore(INITIAL)
@@ -191,15 +245,56 @@ export class AgentPresetSectionController {
    * reports `unavailable` and renders nothing.
    * @returns once the snapshot reflects the host.
    */
-  load(): Promise<void> {
-    return this.loading ??= this.readRoster().finally(() => { this.loading = undefined })
+  async load(): Promise<void> {
+    const roster = await beginRosterRead(this.ctx, this.store)
+    if (roster === undefined) return
+    const { presets, authorable, models, modelPresets } = roster
+    const { hasDocument } = this.store.getSnapshot()
+    if (presets.length === 0) {
+      // Nothing to manage leaves nothing to keep a dialog open over.
+      this.set({
+        status: 'unavailable', rows: [], models, modelPresets,
+        authorable, hasDocument, copy: null, create: null, view: null,
+      })
+      return
+    }
+    // A reveal outlives a reload but not its preset: a path for a row the
+    // roster no longer lists would be a claim about a directory that is gone.
+    const revealed = this.store.getSnapshot().revealedPaths
+    const kept = Object.fromEntries(
+      Object.entries(revealed).filter(([id]) => presets.some(preset => preset.id === id)))
+    this.set({
+      status: 'ready',
+      error: null,
+      authorable,
+      hasDocument,
+      rows: presets.map(preset => ({ ...preset })),
+      models,
+      modelPresets,
+      revealedPaths: kept,
+    })
+    void this.ctx.remote.settings.canOpenAgentPresetDirectory().then((described) => {
+      this.set({ hasDocument: described.ok && described.value })
+    }).catch(() => {})
   }
-  private async readRoster(): Promise<void> {
-    try {
-      const result = await this.ctx.remote.agentPresets.list()
-      if (!result.ok) throw new Error(result.error.message)
-      this.set({ status: 'ready', error: null, rows: result.value.presets, showPicker: result.value.modeSelectionEnabled })
-    } catch (error) { this.set({ status: 'error', error: message(error) }) }
+
+  /**
+   * Set one model's preset, or return it to the default preset.
+   * @param provider - model provider route.
+   * @param model - provider-owned model id.
+   * @param preset - preset override, or undefined to inherit the default.
+   * @returns once the settings write and roster refresh settle.
+   */
+  async bindModel(provider: string, model: string, preset: string | undefined): Promise<void> {
+    if (this.store.getSnapshot().binding) return
+    this.set({ binding: true, error: null })
+    const failure = await writeModelPreset(this.ctx, provider, model, preset)
+    if (failure !== undefined) {
+      this.set({ binding: false, error: failure })
+      return
+    }
+    await this.load()
+    this.set({ binding: false })
   }
 
   /**

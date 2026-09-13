@@ -434,10 +434,10 @@ export class ApiSessionAgentController {
     readonly setup: AgentSetup
   }> {
     const presets = this.ctx.get('agentPresets')
-    if (presets === undefined) {
-      return { setup: (_agentCtx, agent) => { this.installSelection(agent) } }
-    }
-    const resolvedId = (await presets.resolve(presetId)).id
+    if (presets === undefined) return { setup: (agentCtx) => { this.installSelection(agentCtx) } }
+    const selection = this.ctx.agentDefaultModel.currentSelection()
+    const requestedId = presetId ?? presets.presetIdForModel(selection.provider, selection.model)
+    const resolvedId = (await presets.resolve(requestedId)).id
     return {
       agentPreset: resolvedId,
       setup: async (agentCtx, agent) => {

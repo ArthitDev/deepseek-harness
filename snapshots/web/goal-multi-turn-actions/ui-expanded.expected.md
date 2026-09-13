@@ -1,8 +1,13 @@
 - banner:
   - navigation "Session hierarchy": workspace
   - text: Standard mode
-  - button "More actions"
-  - button "Open right sidebar"
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
@@ -10,25 +15,73 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
 - group "Command input": /goal 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的
-- 'button "goal Goal created Status: active Objective: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的 Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"'
-- button "Continuing goal {{clock}}":
-  - text: Continuing goal
-  - time: {{clock}}
-- status: Worked
-- button "Took {{duration}}" [expanded]
-- button "Ran commands and updated the plan" [expanded]
-- button "Think"
-- button "Bash List package directories deterministically"
-- button "View goal 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的"
-- button "Think"
-- button "Bash List packages directory contents"
-- button "Think"
-- button "Failed Bash Randomly pick one package directory"
-- button "Think"
-- button "Bash Randomly select one package with Python"
-- button "Think"
-- button "Bash List all files in session-reference package"
-- button "Think"
+- 'button "goal Goal created Status: active Objective: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的 Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"':
+  - img
+  - img
+  - text: "goal Goal created Status: active Objective: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的 Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- button "6 tool calls" [expanded]:
+  - text: 6 tool calls
+  - img
+- button "Context injection goal":
+  - img
+  - img
+  - text: Context injection goal
+- button "Context injection @deepseek-ai/dsh-system-prompt":
+  - img
+  - img
+  - text: Context injection @deepseek-ai/dsh-system-prompt
+- 'button "Think The user''s goal is: \"做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的\" — which translates to: \"Do two turns, each turn output the file structure of a random package. Note that after you finish one turn, directly output the content and stop; our system will help you open another turn, and you just do something similar.\""':
+  - img
+  - img
+  - text: "Think The user's goal is: \"做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的\" — which translates to: \"Do two turns, each turn output the file structure of a random package. Note that after you finish one turn, directly output the content and stop; our system will help you open another turn, and you just do something similar.\""
+- button "Bash List package directories deterministically":
+  - img
+  - img
+  - text: Bash List package directories deterministically
+- 'button "Tool call get_goal · {}"':
+  - img
+  - img
+  - text: "Tool call get_goal · {}"
+- 'button "Think There''s a `packages` directory. Let me look inside to see what packages are available."':
+  - img
+  - img
+  - text: "Think There's a `packages` directory. Let me look inside to see what packages are available."
+- button "Bash List packages directory contents":
+  - img
+  - img
+  - text: Bash List packages directory contents
+- button "Think There are 4 packages:":
+  - img
+  - img
+  - text: "Think There are 4 packages:"
+- text: Failed
+- button "Bash Randomly pick one package directory":
+  - img
+  - text: Bash Randomly pick one package directory
+- 'button "Think shuf is not available on macOS. I''ll use a different approach for random selection. Let me use $RANDOM in bash or use `sort -R` or Python."':
+  - img
+  - img
+  - text: "Think shuf is not available on macOS. I'll use a different approach for random selection. Let me use $RANDOM in bash or use `sort -R` or Python."
+- button "Bash Randomly select one package with Python":
+  - img
+  - img
+  - text: Bash Randomly select one package with Python
+- 'button "Think The random pick for turn 1 is `packages/context/session-reference`. Now I''ll output its file structure. Let me get the file tree."':
+  - img
+  - img
+  - text: "Think The random pick for turn 1 is `packages/context/session-reference`. Now I'll output its file structure. Let me get the file tree."
+- button "Bash List all files in session-reference package":
+  - img
+  - img
+  - text: Bash List all files in session-reference package
+- 'button "Think Turn 1 is done. Per the objective: \"你做完一个turn之后，直接输出内容，停止\" — after finishing a turn, directly output the content and stop. The system will open another turn."':
+  - img
+  - img
+  - text: "Think Turn 1 is done. Per the objective: \"你做完一个turn之后，直接输出内容，停止\" — after finishing a turn, directly output the content and stop. The system will open another turn."
 - paragraph:
   - strong: Turn 1 / 2
   - text: — 随机选中的包：
@@ -143,7 +196,14 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash":
+  - text: DeepSeek · DeepSeek-V4-Flash
+  - img
+- button "9% of context used"
 - button "Send message" [disabled]
 - button "2 turns 12 steps · {{throughput}} tok/s": 2 turns 12 steps{{throughput}} tok/s
 - button "115K tok · Cache hit 91%": 115K tokCache hit 91%

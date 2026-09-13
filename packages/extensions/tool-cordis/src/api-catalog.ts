@@ -136,10 +136,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Registry of YAML-declared presets and the revisions live Agents retain.',
     methods: [
       {
-        signature: 'async register(definition: PresetDefinition): Promise<() => Promise<void>>',
-        description: 'Register and eagerly load a definition; activation failure remains visible in the roster.',
-        parameters: [{ name: 'definition', description: 'Parsed configuration supplied by the declaring plugin.' }],
-        returns: 'Definition disposer after activation or its diagnostic settles; the declaring plugin owns it.',
+        signature: 'presetIdForModel(provider: string, model: string): string',
+        description: 'Resolve the preset configured for one model route.',
+        parameters: [{ name: 'provider', description: 'model provider route.' }, { name: 'model', description: 'provider-owned model id.' }],
+        returns: 'the route override, or the current default preset when unbound.',
       },
       {
         signature: 'async list(): Promise<AgentPreset[]>',
@@ -1640,152 +1640,50 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
-    key: 'pluginManager',
-    summary: 'Manage profile files and apply their declared reload lifecycle.',
-    description: 'Manage profile files and apply their declared reload lifecycle.',
+    key: 'remoteMachines',
+    summary: 'Owns saved SSH profiles, fingerprint trust, and shared remote transports.',
+    description: 'Owns saved SSH profiles, fingerprint trust, and shared remote transports.',
     methods: [
       {
-        signature: '@Remote async listPlugins(): Promise<PluginInfo[]>',
-        description: 'Read current plugins, including why a row cannot be changed through the profile patch.',
-        parameters: [],
-        returns: 'Current runtime entries with persistent patch targets.',
-      },
-      {
-        signature: '@Remote listBundles(): Promise<BundleInfo[]>',
-        description: 'Read the profile\'s installed bundles, the bundles this dsh installation supplies, and the selected names that are not bundles. A dependency without a bundle patch is listed, as a `not-bundle` problem, only while it is selected.',
-        parameters: [],
-        returns: 'Package versions, manifest descriptions, rows, optional display metadata, activation selections, whether the installation offers the bundle, and removal availability.',
-      },
-      {
-        signature: '@Remote async registries(): Promise<PluginRegistries>',
-        description: 'Read the registries this manager asks: the configured first one, its fallbacks in order, and what pnpm\'s own configuration names.',
-        parameters: [],
-        returns: 'The registries in pnpm\'s comparison form; null is the one pnpm\'s own configuration names, `resolved` as pnpm reads it now.',
-      },
-      {
-        signature: '@Remote async inspect(spec: string, options?: InspectOptions, signal?: AbortSignal): Promise<PluginSpecInspection>',
-        description: 'Read what a spec names before installing it.',
-        parameters: [{ name: 'spec', description: 'One package spec: a registry name, an absolute path, a git address, or a tarball.' }, { name: 'options', description: 'The registry asked first.' }, { name: 'signal', description: 'Ends a registry lookup early.' }],
-        returns: 'The package the spec names, or why it is refused.',
-      },
-      {
-        signature: '@Remote setPluginEnabled(id: PluginEntryId, enabled: boolean): Promise<ChangeResult>',
-        description: 'Persist a plugin entry\'s desired enablement and apply it on live profiles.',
-        parameters: [{ name: 'id', description: 'Loader entry identity returned by listPlugins.' }, { name: 'enabled', description: 'Whether the plugin should run.' }],
-        returns: 'Saved and runtime outcomes, including higher-priority overrides.',
-      },
-      {
-        signature: '@Remote setBundleEnabled(name: string, enabled: boolean): Promise<ChangeResult>',
-        description: 'Select or remove a bundle layer while retaining installed dependencies.',
-        parameters: [{ name: 'name', description: 'Bundle package name.' }, { name: 'enabled', description: 'Whether the bundle contributes its patch layer.' }],
-        returns: 'Persisted and runtime outcomes.',
-      },
-      {
-        signature: '@Remote installBundle(spec: string, options?: InstallBundleOptions): Promise<ChangeResult>',
-        description: 'Install a package using the same pnpm implementation as dsh plugin. A run that fails, is cancelled, or adds a package without a bundle patch restores `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.',
-        parameters: [{ name: 'spec', description: 'One package spec, including local paths relative to the invocation directory.' }, { name: 'options', description: 'Whether to activate the installed bundle (defaults to true), the request id a cancellation names, the pending build scripts to allow for this profile before pnpm runs, and the registry asked first.' }],
-        returns: 'Package-manager diagnostics, the registries asked, and the observed activation outcome.',
-      },
-      {
-        signature: '@Remote async waitForInstall(requestId: PluginInstallRequestId): Promise<ChangeResult | null>',
-        description: 'Recover the result of an active installation without cancelling it.',
-        parameters: [{ name: 'requestId', description: 'The id supplied when installation started.' }],
-        returns: 'The installation\'s outcome after it settles, or null if no active request has that id. Completed results are not retained; null establishes neither success nor cancellation.',
-      },
-      {
-        signature: '@Remote async cancelInstall(requestId: PluginInstallRequestId): Promise<PluginInstallCancellation>',
-        description: 'Stop an installation this manager owns and wait until its files are back.',
-        parameters: [{ name: 'requestId', description: 'The id the installation was started with.' }],
-        returns: '`cancelled` once pnpm exited and the files are restored, `too-late` once the bundle is being applied, `not-running` for any other id.',
-      },
-      {
-        signature: '@Remote removeBundle(name: string): Promise<ChangeResult>',
-        description: 'Unload and remove a profile-owned bundle dependency through dsh plugin\'s pnpm path.',
-        parameters: [{ name: 'name', description: 'Installed dependency name.' }],
-        returns: 'Removal diagnostics and the remaining profile state.',
-      },
-    ],
-  },
-  {
-    key: 'pluginRegistryProbe',
-    summary: 'Compares public registry responses on the Host; the Client owns the initial selection.',
-    description: 'Compares public registry responses on the Host; the Client owns the initial selection.',
-    methods: [
-      {
-        signature: '@Remote async fastest(): Promise<string | null>',
-        description: 'Race npm and npmmirror HTTPS ping responses through the Host\'s fetch proxy. Concurrent readers share a probe; a winner cancels and awaits the other request.',
-        parameters: [],
-        returns: 'the first registry with a successful response, or null when disabled or neither responds successfully; results are cached.',
-        throws: ['rejects when the service has been unloaded.'],
-      },
-    ],
-  },
-  {
-    key: 'productTelemetry',
-    summary: 'Host analytics sender.',
-    description: 'Host analytics sender. Mounting alone sends nothing; the owning fiber drains it on unload.',
-    methods: [
-      {
-        signature: 'emit(record: ProductTelemetryRecord): void',
-        description: 'Enqueue one selected product event without waiting for network delivery. Queue admission and shutdown completion are not collector or warehouse acknowledgements.',
-        parameters: [{ name: 'record', description: 'caller-owned event containing only approved analytics fields.' }],
-      },
-    ],
-  },
-  {
-    key: 'profileContext',
-    summary: 'Current profile facts; scheduling and mutation belong to their callers.',
-    description: 'Current profile facts; scheduling and mutation belong to their callers.',
-    methods: [
-      {
-        signature: 'readonly packageManager?: ProfilePnpmInvocation',
-        description: 'Packaged applications supply their bundled runtime instead of a PATH executable.',
+        signature: 'readonly connections: SshConnectionPool',
+        description: 'Fingerprint-verified connection pool shared by filesystem and subprocess providers.',
         parameters: [],
       },
       {
-        signature: 'readonly startedBundles: readonly string[]',
-        description: 'Bundle packages used to start this process, before any persisted edits.',
+        signature: 'profile(id: string): RemoteMachineProfile | undefined',
+        description: 'Read a Host-only profile with any lifetime-only password applied.',
+        parameters: [{ name: 'id', description: 'Saved machine identifier.' }],
+        returns: 'the complete profile, or undefined when it is absent.',
+      },
+      {
+        signature: '@Remote(\'list\') list(): RemoteMachinesValue',
+        description: 'List every saved machine without credential fields.',
         parameters: [],
+        returns: 'redacted views for every saved machine.',
       },
       {
-        signature: 'readonly overlays: readonly PatchOptions[]',
-        description: 'Parsed command-line overlays, applied above profile and home patches.',
-        parameters: [],
+        signature: '@Remote(\'save\') async save(request: RemoteMachineSaveRequest): Promise<RemoteMachineValue>',
+        description: 'Create or update one saved profile.',
+        parameters: [{ name: 'request', description: 'Validated profile fields and optional secrets.' }],
+        returns: 'the redacted saved profile.',
       },
       {
-        signature: 'readonly telemetryDisabledEnv: string | undefined',
-        description: 'Launch-time DSH_TELEMETRY_DISABLED value; any non-empty value opts out.',
-        parameters: [],
-      },
-    ],
-  },
-  {
-    key: 'ptcRuntime',
-    summary: 'Registers one `ctx.ptcRuntime` implementation.',
-    description: 'Registers one `ctx.ptcRuntime` implementation. Program, budget, abort, and substrate failures resolve in PtcRunResult; only Service Definition contract misuse rejects. Implementations bridge structured-cloneable bindings, materialize each declared namespace rejection class, treat programs as hostile peers, isolate runs from one another, and terminate and await in-flight runs during disposal.',
-    methods: [
-      {
-        signature: 'abstract readonly language: string',
-        description: 'The source language run expects `program` to be written in, as a lowercase identifier. Informational, not gating — a consumer that generates language-specific presentation (typed SDK stubs, usage instructions) switches on it and fails loud on a language it cannot present. Well-known values: `\'typescript\'` and `\'python\'`, those `dsh-tools` presents; the TypeScript backend is released, the Python backend is experimental and private (not published).',
-        parameters: [],
+        signature: '@Remote(\'remove\') async remove(request: RemoteMachineIdRequest): Promise<RemoteMachineRemoveValue>',
+        description: 'Delete a saved profile that has no registered workspace.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier.' }],
+        returns: 'confirmation after settings and cached credentials are cleared.',
       },
       {
-        signature: 'abstract readonly isolation: string',
-        description: 'The execution substrate, as a lowercase identifier. Informational, not gating — a descriptor so deployments and diagnostics can tell backends apart, not a security claim. Well-known values: `\'worker-thread\'`, `\'process\'`, `\'container\'`.',
-        parameters: [],
+        signature: '@Remote(\'probe\') async probe(request: RemoteMachineProbeRequest): Promise<RemoteMachineProbeValue>',
+        description: 'Observe an SSH host key and platform without trusting a new key.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier and optional lifetime-only password.' }],
+        returns: 'the observed fingerprint and remote platform details.',
       },
       {
-        signature: 'abstract resolve(request: PtcRunRequest): PtcRunSpec',
-        description: 'Resolve supported options and provider defaults before execution.',
-        parameters: [{ name: 'request', description: 'Program, bindings, cancellation and optional execution choices.' }],
-        returns: 'Complete directory, deadline and supported authority for run.',
-        throws: ['When an explicit choice is invalid or unsupported by this provider.'],
-      },
-      {
-        signature: 'abstract run(spec: PtcRunSpec): Promise<PtcRunResult>',
-        description: 'Execute resolved inputs; program outcomes resolve as result fields.',
-        parameters: [{ name: 'spec', description: 'directory, deadline, program, bindings, cancellation and supported policy.' }],
-        returns: 'Captured output and the execution outcome.',
+        signature: '@Remote(\'trust\') async trust(request: RemoteMachineTrustRequest): Promise<RemoteMachineValue>',
+        description: 'Re-probe and save one exact SSH host fingerprint.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier and observed fingerprint.' }],
+        returns: 'the updated redacted profile.',
       },
     ],
   },
@@ -2357,6 +2255,60 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     description: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     methods: [
+      {
+        signature: '@Remote async terminalOpen(request: SkillTerminalOpenRequest, signal: AbortSignal): Promise<SkillTerminalOpenValue>',
+        description: 'Start one unrestricted command in the host platform\'s native interactive shell.',
+        parameters: [{ name: 'request', description: 'Command and initial terminal dimensions.' }, { name: 'signal', description: 'Caller cancellation for terminal startup.' }],
+        returns: 'the caller-owned terminal identifier.',
+      },
+      {
+        signature: '@Remote terminalRead(request: SkillTerminalReadRequest): SkillTerminalReadValue',
+        description: 'Read terminal output from the caller-owned character offset.',
+        parameters: [{ name: 'request', description: 'Terminal identifier and character offset.' }],
+        returns: 'retained output and the next readable offset.',
+      },
+      {
+        signature: '@Remote async terminalWrite(request: SkillTerminalWriteRequest): Promise<SkillTerminalWriteValue>',
+        description: 'Write terminal input verbatim, including control characters.',
+        parameters: [{ name: 'request', description: 'Terminal identifier and input text.' }],
+        returns: 'whether the terminal accepted the input.',
+      },
+      {
+        signature: '@Remote async terminalClose(request: SkillTerminalCloseRequest): Promise<SkillTerminalCloseValue>',
+        description: 'Terminate and forget one Skills settings terminal.',
+        parameters: [{ name: 'request', description: 'Terminal identifier to close.' }],
+        returns: 'whether an open terminal was closed.',
+      },
+      {
+        signature: '@Remote async installed(): Promise<InstalledSkillsValue>',
+        description: 'List skills installed directly in the user-global DSH skill root.',
+        parameters: [],
+        returns: 'the installed skill names in stable order.',
+      },
+      {
+        signature: '@Remote async setEnabled(request: SkillSetEnabledRequest): Promise<SkillSetEnabledValue>',
+        description: 'Enable or disable one global skill by moving it into or out of discovery.',
+        parameters: [{ name: 'request', description: 'Installed skill name and desired state.' }],
+        returns: 'the persisted state.',
+      },
+      {
+        signature: '@Remote async remove(request: SkillRemoveRequest): Promise<SkillRemoveValue>',
+        description: 'Remove one global skill from discovery while retaining a recoverable backup.',
+        parameters: [{ name: 'request', description: 'Installed skill name to remove.' }],
+        returns: 'whether an installed directory was moved to backup.',
+      },
+      {
+        signature: '@Remote async search(request: SkillSearchRequest, signal: AbortSignal): Promise<SkillSearchValue>',
+        description: 'Search skills.sh through the maintained `skills` CLI.',
+        parameters: [{ name: 'request', description: 'validated search text.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'matching installable skills.',
+      },
+      {
+        signature: '@Remote(\'add\') async install(request: SkillInstallRequest, signal: AbortSignal): Promise<SkillInstallValue>',
+        description: 'Install one skills.sh source into the user-global DSH skill root.',
+        parameters: [{ name: 'request', description: 'canonical owner/repository and skill selection.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the installed skill identity.',
+      },
       {
         signature: '@Remote async list(request: SkillListRequest, signal: AbortSignal): Promise<SkillListValue>',
         description: 'List the user-invocable skills visible to one Session composition.',
@@ -3777,6 +3729,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.status - the status just entered (the transition\'s destination). Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
+    name: 'agent/tool-choice',
+    mode: 'waterfall',
+    signature: '\'agent/tool-choice\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<ToolChoice | undefined>): Promise<ToolChoice | undefined>',
+    summary: 'Select the provider-neutral tool-call policy for one exact model request.',
+    description: 'Select the provider-neutral tool-call policy for one exact model request. A mode that requires a tool returns `required`; otherwise call `next()`.',
+    parameters: [{ name: 'payload', description: '.signal - the current turn\'s cancellation signal. Scope-filtered dispatch: agent-scoped listeners receive only that agent.' }],
+  },
+  {
     name: 'agent/turn-stopping',
     mode: 'serial',
     signature: '\'agent/turn-stopping\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; signal: AbortSignal }): Promise<void> | void',
@@ -4353,8 +4313,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AgentPresetCompositionRow {\n    readonly entryId: string | null;\n    readonly moduleName: string;\n    readonly enabled: CompositionRowEnablement;\n    readonly condition?: string;\n    readonly fiberState?: FiberState;\n}',
   },
   {
+    name: 'AgentPresetDirectoryOpenValue',
+    declaration: 'export type AgentPresetDirectoryOpenValue = {\n    readonly opened: true;\n} | {\n    readonly opened: false;\n    readonly path: string;\n};',
+  },
+  {
+    name: 'AgentPresetDocument',
+    declaration: 'export interface AgentPresetDocument {\n    readonly agentPreset: string;\n    readonly trust: PresetTrust;\n    readonly content: string;\n    readonly name?: string;\n    readonly description?: string;\n}',
+  },
+  {
+    name: 'AgentPresetModelRow',
+    declaration: 'export interface AgentPresetModelRow {\n    readonly provider: string;\n    readonly providerName: string;\n    readonly id: string;\n    readonly name: string;\n}',
+  },
+  {
     name: 'AgentPresetRoster',
-    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly modeSelectionEnabled: boolean;\n}',
+    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly authorable: boolean;\n    readonly models: readonly AgentPresetModelRow[];\n    readonly modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>;\n    readonly defaultModel?: {\n        readonly provider: string;\n        readonly model: string;\n    };\n}',
   },
   {
     name: 'AgentPresetRow',
@@ -5078,7 +5050,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolChoice?: ToolChoice;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -5193,12 +5165,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type InspectorJsonValue = InspectorJsonPrimitive | readonly InspectorJsonValue[] | InspectorJsonObject;',
   },
   {
-    name: 'InstallBundleOptions',
-    declaration: 'export interface InstallBundleOptions {\n    enabled?: boolean;\n    requestId?: PluginInstallRequestId;\n    approvedBuilds?: string[];\n    registry?: Registry;\n}',
+    name: 'InstalledSkillEntry',
+    declaration: 'export interface InstalledSkillEntry {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
   },
   {
-    name: 'InstallSpecKind',
-    declaration: 'export type InstallSpecKind = \'registry\' | \'path\' | \'git\' | \'tarball\';',
+    name: 'InstalledSkillsValue',
+    declaration: 'export interface InstalledSkillsValue {\n    readonly skills: readonly InstalledSkillEntry[];\n}',
   },
   {
     name: 'InvariantFailure',
@@ -5386,7 +5358,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    inputModalities?: readonly ModelModality[];\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    reasoningEfforts?: Readonly<Record<string, string | null>>;\n}',
   },
   {
     name: 'LlmFailure',
@@ -5950,7 +5922,51 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RemoteEventHostInfo',
-    declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
+    declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n    readonly hostname?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineAuth',
+    declaration: 'export type RemoteMachineAuth = \'agent\' | \'password\' | \'password-prompt\' | \'private-key\';',
+  },
+  {
+    name: 'RemoteMachineIdRequest',
+    declaration: 'export interface RemoteMachineIdRequest {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'RemoteMachineProbeRequest',
+    declaration: 'export interface RemoteMachineProbeRequest extends RemoteMachineIdRequest {\n    readonly password?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineProbeValue',
+    declaration: 'export interface RemoteMachineProbeValue {\n    readonly fingerprint: string;\n    readonly trusted: boolean;\n    readonly home?: string;\n    readonly platform?: \'linux\' | \'darwin\' | \'windows\' | \'unknown\';\n}',
+  },
+  {
+    name: 'RemoteMachineProfile',
+    declaration: 'export interface RemoteMachineProfile {\n    readonly id: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly password?: string;\n    readonly privateKey?: string;\n    readonly passphrase?: string;\n    readonly fingerprint?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineRemoveValue',
+    declaration: 'export interface RemoteMachineRemoveValue {\n    readonly removed: true;\n}',
+  },
+  {
+    name: 'RemoteMachineSaveRequest',
+    declaration: 'export interface RemoteMachineSaveRequest {\n    readonly id?: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port?: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly password?: string;\n    readonly privateKey?: string;\n    readonly passphrase?: string;\n}',
+  },
+  {
+    name: 'RemoteMachinesValue',
+    declaration: 'export interface RemoteMachinesValue {\n    readonly machines: readonly RemoteMachineView[];\n}',
+  },
+  {
+    name: 'RemoteMachineTrustRequest',
+    declaration: 'export interface RemoteMachineTrustRequest {\n    readonly id: string;\n    readonly fingerprint: string;\n}',
+  },
+  {
+    name: 'RemoteMachineValue',
+    declaration: 'export interface RemoteMachineValue {\n    readonly machine: RemoteMachineView;\n}',
+  },
+  {
+    name: 'RemoteMachineView',
+    declaration: 'export interface RemoteMachineView {\n    readonly id: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly fingerprint?: string;\n    readonly hasPassword: boolean;\n    readonly hasPrivateKey: boolean;\n    readonly hasPassphrase: boolean;\n}',
   },
   {
     name: 'RenderedDocumentBytes',
@@ -6749,6 +6765,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
   },
   {
+    name: 'SkillInstallRequest',
+    declaration: 'export interface SkillInstallRequest {\n    readonly source: string;\n}',
+  },
+  {
+    name: 'SkillInstallValue',
+    declaration: 'export interface SkillInstallValue {\n    readonly installed: readonly string[];\n    readonly backedUp: readonly string[];\n}',
+  },
+  {
     name: 'SkillInvocationPolicy',
     declaration: 'export interface SkillInvocationPolicy {\n    readonly modelInvocable: boolean;\n    readonly userInvocable: boolean;\n}',
   },
@@ -6781,8 +6805,36 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SkillRegistration = Omit<SkillDefinition, \'invocation\' | \'provider\'> & {\n    readonly invocation?: SkillInvocationPolicy;\n    readonly provider?: string;\n};',
   },
   {
+    name: 'SkillRemoveRequest',
+    declaration: 'export interface SkillRemoveRequest {\n    readonly name: string;\n}',
+  },
+  {
+    name: 'SkillRemoveValue',
+    declaration: 'export interface SkillRemoveValue {\n    readonly name: string;\n    readonly removed: boolean;\n}',
+  },
+  {
     name: 'SkillResourceBase',
     declaration: 'export type SkillResourceBase = {\n    readonly kind: \'directory\';\n    readonly path: string;\n} | {\n    readonly kind: \'url\';\n    readonly url: string;\n} | {\n    readonly kind: \'opaque\';\n    readonly description: string;\n};',
+  },
+  {
+    name: 'SkillSearchEntry',
+    declaration: 'export interface SkillSearchEntry {\n    readonly source: string;\n    readonly name: string;\n    readonly url: string;\n}',
+  },
+  {
+    name: 'SkillSearchRequest',
+    declaration: 'export interface SkillSearchRequest {\n    readonly query: string;\n}',
+  },
+  {
+    name: 'SkillSearchValue',
+    declaration: 'export interface SkillSearchValue {\n    readonly skills: readonly SkillSearchEntry[];\n}',
+  },
+  {
+    name: 'SkillSetEnabledRequest',
+    declaration: 'export interface SkillSetEnabledRequest {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
+  },
+  {
+    name: 'SkillSetEnabledValue',
+    declaration: 'export interface SkillSetEnabledValue {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
   },
   {
     name: 'SkillSource',
@@ -6791,6 +6843,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillSummary',
     declaration: 'export interface SkillSummary {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
+  },
+  {
+    name: 'SkillTerminalCloseRequest',
+    declaration: 'export interface SkillTerminalCloseRequest {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'SkillTerminalCloseValue',
+    declaration: 'export interface SkillTerminalCloseValue {\n    readonly closed: boolean;\n}',
+  },
+  {
+    name: 'SkillTerminalOpenRequest',
+    declaration: 'export interface SkillTerminalOpenRequest {\n    readonly command: string;\n    readonly rows?: number;\n    readonly cols?: number;\n}',
+  },
+  {
+    name: 'SkillTerminalOpenValue',
+    declaration: 'export interface SkillTerminalOpenValue {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'SkillTerminalReadRequest',
+    declaration: 'export interface SkillTerminalReadRequest {\n    readonly id: string;\n    readonly offset: number;\n}',
+  },
+  {
+    name: 'SkillTerminalReadValue',
+    declaration: 'export interface SkillTerminalReadValue {\n    readonly text: string;\n    readonly nextOffset: number;\n    readonly lossy: boolean;\n    readonly exited: boolean;\n    readonly exitCode?: number | null;\n    readonly error?: string;\n}',
+  },
+  {
+    name: 'SkillTerminalWriteRequest',
+    declaration: 'export interface SkillTerminalWriteRequest {\n    readonly id: string;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SkillTerminalWriteValue',
+    declaration: 'export interface SkillTerminalWriteValue {\n    readonly accepted: true;\n}',
   },
   {
     name: 'SkillViewOptions',
@@ -6889,8 +6973,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SpillSource = {\n    kind: \'tool\';\n    toolName: string;\n    callId: ToolCallId;\n    label: string;\n} | {\n    kind: \'session-reference\';\n    sessionId: SessionId;\n    label: string;\n};',
   },
   {
-    name: 'SshStreamEndpoint',
-    declaration: 'export type SshStreamEndpoint = z.infer<typeof streamEndpointSchema>;',
+    name: 'SshConnectionPool',
+    declaration: 'export class SshConnectionPool {\n    constructor(private readonly profileOf: (id: string) => RemoteMachineProfile | undefined);\n    async probe(id: string): Promise<RemoteMachineProbeValue>;\n    async client(id: string): Promise<Client>;\n    async sftp(id: string): Promise<SFTPWrapper>;\n    async exec(id: string, command: string, options: object = {}): Promise<ClientChannel>;\n    invalidate(id?: string): void;\n}',
   },
   {
     name: 'StorageBackend',
@@ -7279,6 +7363,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ToolCallView',
     declaration: 'export type ToolCallView = GenericCallView | TerminalCallView | DiffCallView;',
+  },
+  {
+    name: 'ToolChoice',
+    declaration: 'export type ToolChoice = \'auto\' | \'required\' | \'none\';',
   },
   {
     name: 'ToolDefinition',

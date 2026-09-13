@@ -110,10 +110,10 @@ describe('web e2e: CJK-adjacent Markdown strong emphasis', () => {
 
   it.skipIf(MODE === 'record')('renders punctuation-terminated strong spans before adjacent CJK text', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-markdown-cjk-strong'))
-    const groupRow = page.locator('[role="treeitem"]').first()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
-    await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
     await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)

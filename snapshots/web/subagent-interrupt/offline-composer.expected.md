@@ -4,8 +4,13 @@
     - text: /
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
   - text: Standard mode
-  - button "More actions"
-  - button "Open right sidebar"
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
@@ -23,5 +28,9 @@
 - textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
 - button "Add files or run commands" [disabled]
 - 'button "Access mode, current: Custom" [disabled]': Custom
+- button "Web search automatic, press to search on every request" [disabled]:
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB" [disabled]': MSI-Cyborg-15-NB
 - button "Stop generating"
 - button "Send message" [disabled]

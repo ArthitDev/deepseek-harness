@@ -27,6 +27,12 @@ kind: "package-reference"
 
 在编辑器中输入 `/` 并从建议中选择 skill，或直接键入 `/name`；发出的消息携带字面文本，宿主对菜单 pick 与手动键入的 token 以同样方式加载 skill。与宿主命令同名的名称仍解析为命令——裁决在客户端把该行认领走，它根本不会成为提示词。
 
+### 管理全局 skill
+
+打开 **设置 > Skills** 可以在 Host 的原生交互式 shell 中运行命令，或搜索公开的 skills.sh 目录。已安装列表可启用、停用或移除每个全局 skill；停用的目录存放在 `$DSH_HOME/disabled-skills`，移除的 skill 则移入 `$DSH_HOME/skill-backups` 以便恢复。终端命令会在应用内确认后，以 Host 用户权限运行；输出会实时回传到页面，提示也可继续接收输入。目录结果安装仍走独立流程：Host 在隔离的暂存目录中以无 shell 方式运行 `npx skills`，只接受一个请求的、包含有效 `SKILL.md` 的 skill，然后发布到 `$DSH_HOME/skills`；替换已有 skill 前，会先将旧副本移动到 `$DSH_HOME/skill-backups/<timestamp-and-id>/`。变更成功后会清除浏览器缓存，后续 skill 发现即可看到文件系统更新。
+
+请把每个 skill 当作可执行指导：其说明可以指示 Agent 运行命令、访问服务和修改文件。只安装你信任的来源。
+
 ### source 提供什么
 
 普通会话的候选来自 `skills/list` Remote；宿主提供每一个用户可调用的 skill，`modelInvocable: false` 的条目（即 `disable-model-invocation` skill，此路径是其唯一入口）会以当前语言把仅限用户标记作为描述前缀带上。结果经 `/` 菜单共享的名字排序器（ui-primitives 的 `rankByName`）排名：查询作为不区分大小写的有序子序列匹配 skill 名，前缀命中排最前，同分保持宿主顺序（[排名决策](../../../.agents/notes/archived/feature/2026-08-04-web-slash-command-fuzzy-discovery.md)）。`skills/list` 调用失败时会被记录并静默丢弃该菜单组——菜单只显示 pending／ready 状态。
@@ -100,6 +106,8 @@ source 不实现任何裁决钩子，也没有引用 codec：pick 落下字面�
 - **仅含工具结果的 history 页使用通用行**：键控分派要求配对的工具调用位于运行时窗口内；分页将工具调用留在窗口外时，工具结果没有工具身份。这项客户端呈现功能不会为了恢复该身份而扩展 history 协议约定。
 - **文本是唯一依据**：引用是普通的草稿文本；手动键入的相同 token 就是同一个引用，宿主手势边界评判的是发出的文本，而不是菜单交互。chip 视觉由 lexicon 扫描派生；提示词协议上没有 occurrence 身份、位置跟踪或结构化引用载荷。
 - **预热落定之前打开的菜单**：在那次击键下不显示 skill 候选；下一次击键会重新轮询已落定的缓存。
+
+- **终端渲染有意保持精简**：最多保留最近 512 KiB 输出，并支持逐行输入、Ctrl+C 和停止，但不模拟完整 ANSI 终端渲染，也不调整运行中 shell 的尺寸。目录界面仍一次只安装一个 skill，且尚不支持原地更新。
 
 <a id="dev-note"></a>
 ### 开发备注

@@ -488,14 +488,17 @@ Source: [`packages/core/agent-loop/src/index.ts`](../../packages/core/agent-loop
 Registry of YAML-declared presets and the revisions live Agents retain.
 
 ```ts cordis-catalog
-/** Register and eagerly load a definition; activation failure remains visible in the roster.
- * @param definition Parsed configuration supplied by the declaring plugin.
- * @returns Definition disposer after activation or its diagnostic settles; the declaring plugin owns it.
+/**
+ * Resolve the preset configured for one model route.
+ * @param provider - model provider route.
+ * @param model - provider-owned model id.
+ * @returns the route override, or the current default preset when unbound.
  */
-async register(definition: PresetDefinition): Promise<() => Promise<void>>
+presetIdForModel(provider: string, model: string): string
 
-/** Read every declared preset, including activation failures.
- * @returns Display metadata and loading diagnostics.
+/**
+ * Every preset the configured roots currently supply.
+ * @returns the presets, first-root-wins per id.
  */
 async list(): Promise<AgentPreset[]>
 
@@ -1102,6 +1105,31 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 ```
 
 Types: [Scoped](scope.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
+<a id="agenttool-choice--waterfall"></a>
+
+#### `agent/tool-choice` — waterfall
+
+Select the provider-neutral tool-call policy for one exact model request. A mode that requires a tool returns `required`; otherwise call `next()`.
+
+```ts cordis-catalog
+/**
+ * Select the provider-neutral tool-call policy for one exact model request.
+ * A mode that requires a tool returns `required`; otherwise call `next()`.
+ * @param payload - identity and boundary of the request being selected.
+ * @param payload.agent - the agent making the model call.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the step whose request this is.
+ * @param payload.signal - the current turn's cancellation signal.
+ * Scope-filtered dispatch: agent-scoped listeners receive only that agent.
+ * @mode waterfall
+ */
+'agent/tool-choice'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<ToolChoice | undefined>): Promise<ToolChoice | undefined>
+```
+
+Types: [Scoped](scope.md) · [ToolChoice](llm-streaming.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

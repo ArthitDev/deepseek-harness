@@ -312,7 +312,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 /**
  * One model an endpoint reports about itself. Every field but the id is
  * optional because most provider listings disclose an id and nothing else;
- * a surface adopting one of these still owes the capacities its adapter needs.
+ * a surface adopting one may retain the capabilities its adapter understands.
  */
 export interface LlmDiscoveredModel {
   /** Model id the endpoint accepts. */
@@ -323,8 +323,8 @@ export interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
-  /** Accepted input types when disclosed by the catalog or endpoint; absent means unknown. */
-  inputModalities?: readonly ModelModality[]
+  /** Selectable reasoning levels and their endpoint-facing spellings, when disclosed. */
+  reasoningEfforts?: Readonly<Record<string, string | null>>
 }
 
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */
@@ -482,6 +482,9 @@ export interface RequestUserInput {
 /** A durable conversation message or a user input used only for one request. */
 export type RequestMessage = Message | RequestUserInput
 
+/** Provider-neutral control over whether the next response may, must, or cannot call a tool. */
+export type ToolChoice = 'auto' | 'required' | 'none'
+
 /** A single model request, fully assembled. */
 export interface GenerateOptions {
   /** Registered provider route selecting the adapter instance. */
@@ -503,6 +506,8 @@ export interface GenerateOptions {
   system?: string
   /** Tool schemas (adapters map to the provider's `tools` field). */
   tools?: ToolSchema[]
+  /** Tool-call policy for this request. `required` is valid only when at least one tool is present. */
+  toolChoice?: ToolChoice
   temperature?: number
   maxTokens?: number
   /**

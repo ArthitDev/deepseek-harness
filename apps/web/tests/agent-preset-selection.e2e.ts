@@ -62,7 +62,9 @@ async function seedRefusingPreset(root: string): Promise<void> {
  * @param workspaceCwd - the scaffold's temp project parent.
  */
 async function seedWorkspaceSkill(workspaceCwd: string): Promise<void> {
-  const directory = join(workspaceCwd, 'workspace', '.agents', 'skills', SKILL_NAME)
+  const project = join(workspaceCwd, 'workspace')
+  const directory = join(project, '.agents', 'skills', SKILL_NAME)
+  await mkdir(join(project, '.git'), { recursive: true })
   await mkdir(directory, { recursive: true })
   await writeFile(join(directory, 'SKILL.md'), [
     '---',

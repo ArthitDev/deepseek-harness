@@ -45,6 +45,7 @@ import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionActivity, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { createWorkspaceViewStore } from '../stores.ts'
+import type { RemoteMachineSnapshot } from '../remote-machine-store.ts'
 
 /**
  * Owner share of the directory-flow holes: the complete conversation between
@@ -185,6 +186,8 @@ export type WorkspaceBrowserInjected = {
      * saw. Select the field the surface needs (`info => info.home`).
      */
     hostInfo: HostObservable<RemoteHostFacts>
+    /** Redacted saved-machine names used to label remote Workspace groups. */
+    remoteMachines: HostObservable<RemoteMachineSnapshot>
   }
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
@@ -407,7 +410,8 @@ export type WorkspaceBrowserProps =
   >
   & PropsStore<WorkspaceViewStoreHandle>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
-  & PropsHooks<WorkspaceBrowserInjected['hooks']>
+  & PropsHooks<Pick<WorkspaceBrowserInjected['hooks'], 'directoryFlow' | 'hostInfo'>>
+  & Partial<PropsHooks<Pick<WorkspaceBrowserInjected['hooks'], 'remoteMachines'>>>
   & PropsLocale<'workspace'>
 
 /**
@@ -418,6 +422,10 @@ export type WorkspaceBrowserProps =
 export type WorkspacePickerInjected = DirectoryPickingInjected & {
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  hooks: DirectoryPickingInjected['hooks'] & {
+    /** Redacted saved-machine names used to group the picker. */
+    remoteMachines: HostObservable<RemoteMachineSnapshot>
+  }
 }
 
 /**
@@ -429,5 +437,6 @@ export type WorkspacePickerProps =
   PropsRuntime<'conversation.hero.workspace'>
   & PropsRenderSlots<'conversation.hero.workspace.directoryFlow'>
   & Omit<WorkspacePickerInjected, 'hooks'>
-  & PropsHooks<WorkspacePickerInjected['hooks']>
+  & DirectoryPickingHooks
+  & Partial<PropsHooks<Pick<WorkspacePickerInjected['hooks'], 'remoteMachines'>>>
   & PropsLocale<'workspace'>

@@ -10,7 +10,7 @@ import { errorChain } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-client-file-upload'
 import { canOpenNativePath, nativeFileManager, nativeFileApplications, openNativeFileApplication, openNativeAssociatedPath, revealNativePath } from '@deepseek-ai/dsh-native-command'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import { SessionAlreadyOwnedError, type SessionInspection } from '@deepseek-ai/dsh-session-persistence'
+import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
@@ -314,7 +314,7 @@ export class SessionController extends TypertRemoteService {
       return { deleted: true }
     } catch (error: unknown) {
       if (error instanceof RemoteError) throw error
-      if (error instanceof SessionAlreadyOwnedError) {
+      if (error instanceof Error && error.name === 'SessionAlreadyOwnedError') {
         throw new RemoteError('session/agent-busy', error.message, { reason: 'Session storage is in use' })
       }
       if (signal.aborted) throw new RemoteError('gateway/cancelled', 'session deletion was aborted', {})

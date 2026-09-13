@@ -1,7 +1,8 @@
 // Keyless replay of a real two-round Goal run. Each autonomous round ends as
 // its own turn, so the first answer must keep its IconActions when Goal opens
 // round two and the final answer must own a second, distinct action row.
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
@@ -22,6 +23,32 @@ const OVERRIDE = join(SNAPSHOT_DIR, 'replay.override.json')
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
 const UI_EXPANDED_EXPECTED = join(SNAPSHOT_DIR, 'ui-expanded.expected.md')
 const MODE = webSnapshotMode()
+
+function rewriteWindowsShellCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(rewriteWindowsShellCalls)
+  if (value === null || typeof value !== 'object') return value
+  const rewritten = Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    rewriteWindowsShellCalls(item),
+  ]))
+  if (rewritten.name !== 'bash') return rewritten
+  rewritten.name = 'pwsh'
+  for (const key of ['arguments', 'argumentsDelta']) {
+    const raw = rewritten[key]
+    if (typeof raw !== 'string') continue
+    const args = JSON.parse(raw) as Record<string, unknown>
+    if (typeof args.command !== 'string') continue
+    args.command = args.command.includes('exit 127') ? 'exit 127' : 'exit 0'
+    rewritten[key] = JSON.stringify(args)
+  }
+  return rewritten
+}
+
+function normalizeShellTitle(snapshot: string): string {
+  return process.platform === 'win32'
+    ? snapshot.replaceAll('Pwsh', 'Bash').replaceAll('pwsh', 'bash')
+    : snapshot
+}
 
 const PROMPT = '做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的'
 const COMMAND = `/goal ${PROMPT}`
@@ -95,6 +122,7 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
   let sessionEvents: SessionEvent[]
+  let sidecarDir: string | undefined
 
   afterEach(async () => {
     const failures: unknown[] = []
@@ -103,6 +131,8 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     const closing = scaffold
     scaffold = undefined
     await closing?.close().catch((error: unknown) => failures.push(error))
+    if (sidecarDir !== undefined) await rm(sidecarDir, { recursive: true, force: true }).catch((error: unknown) => failures.push(error))
+    sidecarDir = undefined
     if (failures.length === 1) throw failures[0]
     if (failures.length > 1) throw new AggregateError(failures, 'goal-multi-turn-actions teardown failed')
   })
@@ -110,8 +140,23 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
   /** Boot the real Web composition and connect a fresh package fixture workspace. */
   async function launch(): Promise<void> {
     sessionEvents = []
+    let replayFixture = FIXTURE
+    let replayOverride = OVERRIDE
+    if (process.platform === 'win32' && MODE !== 'record') {
+      sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
+      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      replayOverride = join(sidecarDir, 'replay.override.json')
+      await Promise.all([
+        writeFile(replayFixture, (await readFile(FIXTURE, 'utf8')).replaceAll('"name":"bash"', '"name":"pwsh"')),
+        writeFile(replayOverride, JSON.stringify(rewriteWindowsShellCalls(JSON.parse(await readFile(OVERRIDE, 'utf8'))))),
+      ])
+    }
     scaffold = await launchWebScaffold(
-      MODE === 'record' ? {} : { replayFixture: FIXTURE, replayOverride: OVERRIDE },
+      MODE === 'record' ? {} : {
+        replayFixture,
+        replayOverride,
+        compareReplaySession: process.platform !== 'win32',
+      },
     )
     await seedPackageInventory(scaffold.workspaceCwd)
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
@@ -154,6 +199,14 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     expect(goalRounds(sessionEvents)).toEqual([1, 2])
     expect(sessionEvents.flatMap(event =>
       event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial', 'series'])
+    if (process.platform === 'win32') {
+      const shellCallIds = new Set(sessionEvents.flatMap(event =>
+        event.type === 'tool/call' && event.data.name === 'pwsh' ? [event.data.callId] : []))
+      expect(sessionEvents.flatMap(event => event.type === 'tool/result'
+        && shellCallIds.has(event.data.message.source.callId)
+        ? [event.data.message.content[0].isError]
+        : [])).toEqual(Array(8).fill(false))
+    }
     await expect.poll(() => page.locator('[data-turn-process]').count(), { timeout: 15_000 }).toBe(2)
     expect(await page.getByRole('button', { name: 'System prompt' }).count()).toBe(0)
     expect(await page.locator(
@@ -164,13 +217,13 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     expect(await branchButtons.evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-disabled'))))
       .toEqual([null, null])
     await branchButtons.last().focus()
-    const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
+    const snapshot = normalizeShellTitle(await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd))
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
-    const expanded = await captureExpandedTurnProcessAria(
+    const expanded = normalizeShellTitle(await captureExpandedTurnProcessAria(
       page,
       '[class*="centerCol"]',
       scaffold!.workspaceCwd,
-    )
+    ))
     await compareOrRefreshGolden(UI_EXPANDED_EXPECTED, expanded, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])

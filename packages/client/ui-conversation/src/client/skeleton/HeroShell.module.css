@@ -39,19 +39,39 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* Title text + badge as one wrap unit so the title never breaks mid-text with
-   the badge stranded beside a fragment. When the badge no longer fits beside
-   the title it wraps to its own centered line below; while both fit, the group
-   is content-sized and centering is a no-op, keeping the superscript snug. */
-.titleGroup {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  /* Superscript sits 7 from the title. */
-  column-gap: 7px;
-  row-gap: 4px;
-  min-width: 0;
+.headlineText {
+  grid-row: 1;
+  grid-column: 2;
+  position: relative;
+  color: transparent;
+  white-space: nowrap;
+}
+
+.headlineText::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0 auto auto 0;
+  box-sizing: content-box;
+  width: 0;
+  overflow: hidden;
+  border-right: 4px solid var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+  filter: drop-shadow(
+    0 0 5px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 55%, transparent)
+  );
+  animation:
+    hero-title-type 6s steps(24, end) 300ms forwards,
+    hero-title-caret 650ms step-end 300ms infinite;
+}
+
+@keyframes hero-title-type {
+  0%, 5%, 100% { width: 0; }
+  20%, 88% { width: 100%; }
+}
+
+@keyframes hero-title-caret {
+  50% { border-color: transparent; }
 }
 
 /* Keep the brand mark centered in its fixed grid column. */
@@ -60,6 +80,21 @@
   flex: none;
   align-items: center;
   justify-content: center;
+  animation: hero-logo-pulse 4s ease-in-out infinite;
+}
+
+@keyframes hero-logo-pulse {
+  0%, 100% {
+    filter: drop-shadow(
+      0 0 7px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 35%, transparent)
+    );
+  }
+
+  50% {
+    filter: drop-shadow(
+      0 0 14px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 72%, transparent)
+    );
+  }
 }
 
 /* The class also passes through the brand-mark slot for custom occupants. */
@@ -177,4 +212,21 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-state-error-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fishHitbox {
+    animation: none;
+    filter: drop-shadow(
+      0 0 10px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 55%, transparent)
+    );
+  }
+
+  .headlineText {
+    color: inherit;
+  }
+
+  .headlineText::before {
+    content: none;
+  }
 }

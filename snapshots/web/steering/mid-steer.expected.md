@@ -1,8 +1,13 @@
 - banner:
   - navigation "Session hierarchy": Use the ask_user_question tool to
   - text: Standard mode
-  - button "More actions"
-  - button "Open right sidebar"
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"

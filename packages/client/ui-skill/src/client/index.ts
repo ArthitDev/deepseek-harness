@@ -44,7 +44,9 @@ import { rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { SkillRow } from './SkillRow.tsx'
+import { SkillManagerSection, type SkillManagerSectionInjected } from './SkillManagerSection.tsx'
 import { en, NS, zh, type SkillKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
@@ -151,6 +153,63 @@ export function apply(ctx: ClientContext): void {
   const clearAll = (): void => {
     for (const key of [...fetches.keys()]) invalidate(key)
   }
+
+  const managerInjected = (): SkillManagerSectionInjected => ({
+    installed: async () => {
+      const result = await skills.installed()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    search: async (query) => {
+      const result = await skills.search({ query })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    install: async (source) => {
+      const result = await skills.add({ source })
+      if (!result.ok) throw new Error(result.error.message)
+      clearAll()
+      return result.value
+    },
+    setEnabled: async (name, enabled) => {
+      const result = await skills.setEnabled({ name, enabled })
+      if (!result.ok) throw new Error(result.error.message)
+      clearAll()
+      return result.value
+    },
+    remove: async (name) => {
+      const result = await skills.remove({ name })
+      if (!result.ok) throw new Error(result.error.message)
+      clearAll()
+      return result.value
+    },
+    terminalOpen: async (command) => {
+      const result = await skills.terminalOpen({ command, rows: 24, cols: 100 })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    terminalRead: async (id, offset) => {
+      const result = await skills.terminalRead({ id, offset })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    terminalWrite: async (id, text) => {
+      const result = await skills.terminalWrite({ id, text })
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    terminalClose: async (id) => {
+      const result = await skills.terminalClose({ id })
+      if (!result.ok) throw new Error(result.error.message)
+    },
+  })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'skills',
+    order: 30,
+    label: () => t('manager.nav'),
+    locale: NS,
+    inject: managerInjected,
+  }, SkillManagerSection))
 
   // The bound translate resolves against the registered dictionaries with the
   // locale service's own fallback ladder; candidate-time reads stay plain text.

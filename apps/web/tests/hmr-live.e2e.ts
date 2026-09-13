@@ -86,18 +86,23 @@ async function stopTree(child: SubprocessHandle): Promise<void> {
 
 it('hot-reloads a real client-plugin source edit without refreshing the page', async () => {
   const world = await mkdtemp(join(tmpdir(), 'dsh-web-hmr-world-'))
-  const sourcePath = join(REPO_ROOT, 'packages/client/ui-conversation/src/client/locales.ts')
+  const sourcePath = join(REPO_ROOT, 'packages/client/ui-conversation/src/client/skeleton/EmptyHero.tsx')
   const binPath = join(REPO_ROOT, 'apps/cli/lib/bin.js')
   if (!existsSync(binPath)) throw new Error('HMR browser test needs the built dsh bin; run pnpm run build first')
+  const watcherArgv = process.platform === 'win32'
+    ? [process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe', '/d', '/s', '/c', 'pnpm run dev:web']
+    : ['pnpm', 'run', 'dev:web']
   const clientBuildEnvironment = readClientBuildRecord(REPO_ROOT).environment
   const originalClientArtifacts = await Promise.all(clientArtifactPaths()
     .map(async path => [path, await readFile(path)] as const))
   const originalClientArtifactPaths = new Set(originalClientArtifacts.map(([path]) => path))
   const originalSource = await readFile(sourcePath)
-  const oldText = 'Shield Break Agent'
-  const sourceNeedle = "'hero.headline': 'Shield Break Agent'"
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
-  const updatedSource = originalSource.toString().replace(sourceNeedle, `'hero.headline': '${newText}'`)
+  const sourceNeedle = '<span key={headline} className={css.headlineText} data-text={headline}>'
+  const updatedSource = originalSource.toString().replace(
+    sourceNeedle,
+    `<span key={headline} className={css.headlineText} data-text={headline} data-hmr-probe="${newText}">`,
+  )
   if (updatedSource === originalSource.toString()) throw new Error(`HMR source lacks ${JSON.stringify(sourceNeedle)}`)
 
   const subprocessCtx = new Context()
@@ -111,11 +116,12 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     // Watchers only: the built `dsh web` below is the server under test, and the
     // built tree is this lane's precondition rather than something to rebuild.
     watcher = subprocessCtx.subprocess.spawn(spawnSpec(
-      ['pnpm', 'run', 'dev:web', '--skip-build', '--no-serve'],
+      watcherArgv,
       REPO_ROOT,
       { ...clientBuildEnvironment },
     ))
-    await waitForOutput(watcher, /dev-web: watching/, 'pnpm run dev:web --skip-build --no-serve')
+    await waitForOutput(watcher, /dev-web: watching/, 'pnpm run dev:web')
+    await waitForOutput(watcher, /built in \d+(?:\.\d+)?(?:ms|s)/, 'initial vite build')
     host = subprocessCtx.subprocess.spawn(spawnSpec(
       [process.execPath, binPath, 'web', '--no-open', '--port', '0'],
       world,
@@ -130,7 +136,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     const pageErrors: string[] = []
     page.on('pageerror', error => pageErrors.push(String(error)))
     await page.goto(baseUrl, { waitUntil: 'load' })
-    await page.getByText(oldText, { exact: true }).waitFor({ timeout: 15_000 })
+    await page.locator('[data-text]').first().waitFor({ timeout: 15_000 })
     const pageIdentity = await page.evaluate(() => {
       // In-page code: an import would not survive serialization, and the page
       // entropy source available in every context is getRandomValues.
@@ -139,8 +145,10 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       return identity
     })
 
+    const rebuilt = waitForOutput(watcher, /built in \d+(?:\.\d+)?(?:ms|s)/, 'vite rebuild')
     await writeFile(sourcePath, updatedSource)
-    await page.getByText(newText, { exact: true }).waitFor({ timeout: 30_000 })
+    await rebuilt
+    await page.locator(`[data-hmr-probe="${newText}"]`).waitFor({ timeout: 30_000 })
     expect(await page.evaluate(() => (window as Window & { __dshHmrPageIdentity?: string }).__dshHmrPageIdentity))
       .toBe(pageIdentity)
     expect(pageErrors).toEqual([])

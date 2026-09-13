@@ -114,7 +114,14 @@ async function bench(options: {
       settingsSaved = true
       return Promise.resolve({ ok: true as const, value: {} })
     },
-
+    mutate: (_ns: string, ops: unknown) => {
+      calls.push(`settings:${JSON.stringify(ops)}`)
+      return Promise.resolve({ ok: true as const, value: {} })
+    },
+    openAgentPresetDirectory: (agentPreset: string) => {
+      calls.push(`openAgentPresetDirectory:${agentPreset}`)
+      return Promise.resolve({ ok: true as const, value: { opened: true as const } })
+    },
   }
   const remote = new TestRemote(ctx, { settings })
   // The roster and the switch are the AgentPresets Remote namespace; the
@@ -148,7 +155,20 @@ async function bench(options: {
     },
   }
   ctx.provide('remote.agentPresets', agentPresets as never)
-  Object.assign(remote, { agentPresets })
+  Object.assign(remote, {
+    agentPresets,
+    session: {
+      modelCatalog: () => Promise.resolve({
+        ok: true as const,
+        value: {
+          default: { provider: 'test', model: 'test-model' },
+          routableProviders: [],
+          groups: [],
+          failures: [],
+        },
+      }),
+    },
+  })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
   return { ctx, slots: ctx.get('slots') as SlotRegistry, calls, moveDefault, remote, settingsRosterStarted: settingsRosterStarted.promise }
 }

@@ -122,7 +122,15 @@ kind: "package-reference"
 
 #### 模型看到的内容
 
-独立的 DeepSeek 模型会原样接收 `Perform a web search for the query: <query>` 作为用户文本，并收到一个原生 `web_search` 服务器工具定义。该请求不属于会话模型上下文。
+独立的 DeepSeek 模型会收到以下用户文本与一个原生 `web_search` 服务器工具定义。语言指引防止提供方把非中文查询默认导向中文来源。该请求不属于会话模型上下文。
+
+##### 搜索指引
+
+```markdown
+Search the web for the query exactly as written. Prefer sources in the query's language. Do not default to Chinese-language sources unless the query is Chinese or no relevant sources exist.
+
+Query: <query>
+```
 
 #### Token 影响
 

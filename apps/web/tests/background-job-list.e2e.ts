@@ -22,12 +22,22 @@ const RUNNING_EXPECTED = join(SNAPSHOT_DIR, 'running.expected.md')
 const SETTLED_EXPECTED = join(SNAPSHOT_DIR, 'settled.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'background-job-list-web-e2e'
-// A hold on a barrier file the test owns in the job's cwd: the process never
-// exits on its own, so no CI stall can settle it before the scenario kills it.
-// The bounded loop only caps an orphan's lifetime if the runner dies before
-// `afterAll` releases the barrier.
-const RELEASE = '.background-job-list.release'
-const COMMAND = `for _ in $(seq 1 3000); do [ -e ${RELEASE} ] && break; sleep 0.2; done`
+const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
+// Long enough that the running assertions never race the process exiting on
+// their own; the test kills it explicitly to reach the settled state.
+const COMMAND = 'sleep 45'
+
+function normalizeShellSnapshot(snapshot: string): string {
+  return process.platform === 'win32'
+    ? snapshot
+      .replaceAll('Pwsh', 'Bash')
+      .replaceAll('pwsh', 'bash')
+      .replaceAll(
+        'listitem: bash sleep 45 killed before exit {{duration}}',
+        'listitem: "bash sleep 45 signal: SIGTERM {{duration}}"',
+      )
+    : snapshot
+}
 
 /**
  * Wait for opening a session to publish its live Agent.
@@ -61,10 +71,10 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
 
-    const groupRow = page.locator('[role="treeitem"]').first()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
-    await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
 
@@ -90,14 +100,14 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     const started = await scaffold.ctx.tools.execute({
       signal: new AbortController().signal,
       callId: ToolCallId('background-job-list-e2e'),
-      name: 'bash',
+      name: SHELL_TOOL,
       arguments: { command: COMMAND, description: 'Hold a background slot open', run_in_background: true },
       agent,
     })
     const reported = started.content.map(block => block.type === 'text' ? block.text : '').join('')
-    const matched = /\bbash-\d+\b/.exec(reported)
-    if (matched === null) throw new Error(`background bash reported no job id: ${reported}`)
-    const jobId = JobId(matched[0])
+    const matched = new RegExp(`\\b${SHELL_TOOL}-\\d+\\b`).exec(reported)
+    if (matched === null) throw new Error(`background ${SHELL_TOOL} reported no job id: ${reported}`)
+    jobId = JobId(matched[0])
 
     await trigger.waitFor({ timeout: 15_000 })
     await trigger.click()
@@ -105,8 +115,8 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     await row.waitFor({ timeout: 10_000 })
     await expect.poll(() => row.textContent()).toContain(COMMAND)
 
-    const running = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd, { runningJobs: 'keep' })
-    await compareOrRefreshGolden(RUNNING_EXPECTED, running, MODE)
+    const snapshot = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(RUNNING_EXPECTED, normalizeShellSnapshot(snapshot), MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
 
@@ -129,8 +139,8 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     ).toContain('cancelled by the user')
     expect(scaffold.ctx.jobs.get(jobId, agent.id).status).toBe('killed')
 
-    const settled = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd)
-    await compareOrRefreshGolden(SETTLED_EXPECTED, settled, MODE)
+    const snapshot = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(SETTLED_EXPECTED, normalizeShellSnapshot(snapshot), MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 90_000)

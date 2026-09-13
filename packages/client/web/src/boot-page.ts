@@ -34,7 +34,14 @@ export class BootPage {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
-    this.wordmark = div(css.wordmark, 'HARNESS')
+    this.wordmark = div(css.wordmark)
+    const logo = document.createElement('img')
+    logo.className = css.logo ?? ''
+    logo.src = '/new-logo.png'
+    logo.alt = ''
+    logo.width = 48
+    logo.height = 48
+    this.wordmark.append(logo, 'Shield Break Agent')
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
     this.hint = div(css.hint, 'Loading plugins…')

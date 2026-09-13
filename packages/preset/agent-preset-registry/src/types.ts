@@ -18,12 +18,26 @@ export interface AgentPresetRow {
   readonly broken?: string
 }
 
-/** The roster one deployment currently supplies. */
+/** One model route offered for preset binding. */
+export interface AgentPresetModelRow {
+  readonly provider: string
+  readonly providerName: string
+  readonly id: string
+  readonly name: string
+}
+
+/** The roster one deployment currently supplies, with its authoring capability. */
 export interface AgentPresetRoster {
   /** Every current declaration, including activation failures. */
   readonly presets: readonly AgentPresetRow[]
-  /** Whether visible mode selection is enabled for unnamed new sessions. */
-  readonly modeSelectionEnabled: boolean
+  /** Whether this deployment has a root locally authored presets go to. */
+  readonly authorable: boolean
+  /** Every model currently advertised by the live providers. */
+  readonly models: readonly AgentPresetModelRow[]
+  /** User-selected preset ids by provider and model; absent routes use the default preset. */
+  readonly modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>
+  /** Model a new session uses before it selects another one. */
+  readonly defaultModel?: { readonly provider: string; readonly model: string }
 }
 
 declare module '@deepseek-ai/dsh-typert-protocol' {

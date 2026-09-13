@@ -109,10 +109,10 @@ describe('web e2e: whole-session stats survive history paging', () => {
 
   it('renders full-session counts on the partial tail page and keeps them across load-older', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-stats-paged'))
-    const groupRow = page.locator('[role="treeitem"]').first()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
-    await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
     // Settled barrier: the newest recorded reply renders from the tail page.
@@ -138,6 +138,7 @@ describe('web e2e: whole-session stats survive history paging', () => {
 
   it('matches the paged-stats aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-stats-paged-aria'))
+    await page.getByRole('button', { name: /^Web search automatic/ }).waitFor({ timeout: 15_000 })
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)

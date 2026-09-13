@@ -1,18 +1,28 @@
 - tree "Sessions":
-  - treeitem "{{workspace}}" [expanded]
-  - treeitem "Review deepseek-ai/deepseek-harness#314 Session actions for Review deepseek-ai/deepseek-harness#314 Archive session Pin session" [selected]:
-    - text: Review deepseek-ai/deepseek-harness#314
-    - button "Session actions for Review deepseek-ai/deepseek-harness#314"
-    - button "Archive session"
-    - button "Pin session"
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
+    - img
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "{{workspace}}" [expanded]:
+      - img
+      - text: {{workspace}}
+    - treeitem "Review deepseek-harness/deepseek-harness#314 Session actions for Review deepseek-harness/deepseek-harness#314" [selected]:
+      - text: Review deepseek-harness/deepseek-harness#314
+      - button "Session actions for Review deepseek-harness/deepseek-harness#314":
+        - img
 
 ---
 
 - banner:
   - navigation "Session hierarchy": Review deepseek-ai/deepseek-harness#314
   - text: Standard mode
-  - button "More actions"
-  - button "Open right sidebar"
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
@@ -30,6 +40,12 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Read Only"': Read Only
-- button "Select model, current github-webhook-review-test/reply": github-webhook-review-test/reply
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current github-webhook-review-test · reply":
+  - text: github-webhook-review-test · reply
+  - img
 - button "Send message" [disabled]
 - button "1 turns 1 steps"

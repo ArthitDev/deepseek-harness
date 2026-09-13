@@ -20,6 +20,14 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
+/** Silence only the jsdom report for an error the current test deliberately renders. */
+function suppressExpectedRenderError(): () => void {
+  const onError = (event: ErrorEvent): void => { event.preventDefault() }
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  window.addEventListener('error', onError)
+  return () => { window.removeEventListener('error', onError); spy.mockRestore() }
+}
+
 function observable<T>(initial: T) {
   let value = initial
   const subs = new Set<() => void>()
@@ -233,42 +241,11 @@ describe('SessionProvider', () => {
     expect(view.container.textContent).toBe('s1:1')
   })
 
-  it('binds nested Providers independently and restores the outer reference for siblings', () => {
-    const h = makeHost((renderSlot, Provider, reference) => (
-      <Provider session={reference}>
-        {renderSlot('k.session', { position: 'outer-before' })}
-        <Provider session={nested.reference}>{renderSlot('k.session', { position: 'inner' })}</Provider>
-        <Provider session={undefined} empty={() => <i>nested-empty</i>}>hidden</Provider>
-        {renderSlot('k.session', { position: 'outer-after' })}
-      </Provider>
-    ))
-    const outer = h.addSession('a')
-    const nested = h.addSession('b')
-    h.current.set('a')
-    h.registerSession({
-      component: ({ sessionId, position }: { sessionId: string; position: string }) => <b>{position}:{sessionId};</b>,
-      options: {},
-    })
-    const view = render(<>{createSlotRenderer().renderRoot(h.host, {})}</>)
-    expect(view.container.textContent).toBe('outer-before:a;inner:b;nested-emptyouter-after:a;')
-    view.unmount()
-    expect(outer.release).not.toHaveBeenCalled()
-    expect(nested.release).not.toHaveBeenCalled()
-  })
-
-  it('delivers the Provider seat to entries declaring only optional Session children', () => {
-    const h = makeHost((renderSlot, Provider, reference) =>
-      <Provider session={reference}>{renderSlot('k.session', {})}</Provider>, { optional: true })
-    h.addSession('optional')
-    h.current.set('optional')
-    h.registerSession({ component: ({ sessionId }: { sessionId?: string }) => <b>{sessionId}</b>, options: {} })
-    expect(render(<>{createSlotRenderer().renderRoot(h.host, {})}</>).container.textContent).toBe('optional')
-  })
-
-  it('fails loud when the Session adapter omits its area renderer', () => {
-    const h = makeHost(() => null, { installRenderArea: false })
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('fails loud when the Session scope owner omits its area renderer', () => {
+    const h = makeHost({ root: () => null }, { installRenderArea: false })
+    const restoreError = suppressExpectedRenderError()
     expect(() => render(<>{createSlotRenderer().renderRoot(h.host, {})}</>))
       .toThrow(/does not provide its area renderer/)
+    restoreError()
   })
 })

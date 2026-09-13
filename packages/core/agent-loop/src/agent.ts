@@ -577,16 +577,12 @@ export class ReactLoopAgent implements Agent {
     return { config, ...preparedCall === undefined ? {} : { preparedCall } }
   }
 
-  /** Log the resolved envelope and derive a frozen request from the admitted surface. */
-  private buildRequest(
-    config: LlmCallConfig,
-    preparedCall: PreparedLlmCall | undefined,
-    tools: GenerateOptions['tools'] & object,
-    startsRequestSeries: boolean,
-    signal: AbortSignal,
-  ): GenerateOptions {
-    const { session } = this
-    const surfaceGeneration = session.surface.contentGeneration
+    const toolChoice = await this.dispatch.waterfall(
+      'agent/tool-choice', { turn, step, signal },
+      (): Promise<GenerateOptions['toolChoice']> => Promise.resolve(undefined),
+    )
+    signal.throwIfAborted()
+
     const header = canonicalHeader({
       config,
       ...preparedCall === undefined ? {} : { adapterDefaults: preparedCall.adapterDefaults },
@@ -639,6 +635,7 @@ export class ReactLoopAgent implements Agent {
       ...header.config,
       messages: boundaryMessages,
       ...header.tools !== undefined ? { tools: header.tools } : {},
+      ...toolChoice !== undefined ? { toolChoice } : {},
       sessionId: this.session.id,
       signal,
     }))

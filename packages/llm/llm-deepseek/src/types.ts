@@ -6,9 +6,98 @@ import type { AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import type { DeepSeekLlmApiExtensionRequest, PreparedDeepSeekLlmApiExtensions } from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
 import type { DeepSeekFileStore, DeepSeekFilePolicy } from './file-store.ts'
 
-/** One optional model entry advertised by the direct-fetch adapter. */
-export interface DeepSeekCatalogModel {
-  /** Wire model id accepted by the configured endpoint. */
+/** Request body for `POST {baseURL}/chat/completions`. */
+export interface WireRequest {
+  model: string
+  messages: WireMessage[]
+  stream: true
+  stream_options: { include_usage: true }
+  /** Thinking-mode toggle (top level, NOT inside extra_body on the wire). */
+  thinking?: { type: 'enabled' | 'disabled' }
+  /** Thinking effort (official levels). */
+  reasoning_effort?: 'low' | 'high' | 'max'
+  tools?: WireTool[]
+  tool_choice?: 'auto' | 'required' | 'none'
+  temperature?: number
+  max_tokens?: number
+  /**
+   * Stop sequences (OpenAI `stop`): generation halts as soon as the model
+   * produces any one of these strings. Mapped from `GenerateOptions.stop`.
+   */
+  stop?: string[]
+}
+
+/** System-role message: a single string of instructions. */
+export interface WireSystemMessage {
+  role: 'system'
+  content: string
+}
+
+/** Text part inside a multimodal user message. */
+export interface WireTextContentPart {
+  type: 'text'
+  text: string
+}
+
+/** Files API reference inside a multimodal user message. */
+export interface WireFileContentPart {
+  type: 'file'
+  file_id: string
+}
+
+/** Inline base64 data URL inside a multimodal user message. */
+export interface WireImageUrlContentPart {
+  type: 'image_url'
+  image_url: { url: string }
+}
+
+/** One image representation accepted by a multimodal user message. */
+export type WireImageContentPart = WireFileContentPart | WireImageUrlContentPart
+
+/** Ordered input part accepted by a multimodal user message. */
+export type WireUserContentPart = WireTextContentPart | WireImageContentPart
+
+/** User-role message: text-only string or ordered multimodal input. */
+export interface WireUserMessage {
+  role: 'user'
+  content: string | WireUserContentPart[]
+}
+
+/** Tool-role message: the result of one tool call, keyed by its call id. */
+export interface WireToolMessage {
+  role: 'tool'
+  tool_call_id: string
+  content: string
+}
+
+/** One entry of the request `messages` array, discriminated on `role`. */
+export type WireMessage =
+  | WireSystemMessage
+  | WireUserMessage
+  | WireAssistantMessage
+  | WireToolMessage
+
+/**
+ * Assistant-role history message. The harness replays `content: ""` (never
+ * null) on tool-call-only turns — some gateways reject null — and sends null
+ * only when the turn carried neither text nor tool calls.
+ */
+export interface WireAssistantMessage {
+  role: 'assistant'
+  content: string | null
+  /**
+   * CoT passback, present on every turn whose assistant content carried
+   * reasoning. REQUIRED on tool-call turns in thinking mode (see
+   * guides/thinking_mode.mdx § Tool Calls); DeepSeek ignores it elsewhere,
+   * while a gateway re-encoding for another vendor recovers that turn's
+   * thinking signature by hashing it.
+   */
+  reasoning_content?: string
+  tool_calls?: WireToolCall[]
+}
+
+/** A completed tool call replayed on an assistant history message; `arguments` is the raw JSON string. */
+export interface WireToolCall {
   id: string
   /** Selector label; defaults to {@link id}. */
   name?: string

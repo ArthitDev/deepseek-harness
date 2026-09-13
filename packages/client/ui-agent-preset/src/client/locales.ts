@@ -19,6 +19,7 @@ export type AgentPresetSettingsKey =
   | 'openLocation' | 'showLocation' | 'revealedPathLabel'
   | 'idRequired' | 'idInvalid' | 'idTaken'
   | 'deleteTitle' | 'deleteDescription' | 'deleteConfirm' | 'deleting'
+  | 'modelBindings'
 
 /** English copy. */
 export const en: Record<AgentPresetSettingsKey, string> = {
@@ -84,6 +85,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'The preset directory is deleted. Sessions already running on it keep working; new sessions cannot select it.',
   deleteConfirm: 'Delete',
   deleting: 'Deleting…',
+  modelBindings: 'Models',
 }
 
 /** Simplified Chinese copy. */
@@ -141,6 +143,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   deleteDescription: '预设目录将被删除。已在其上运行的会话不受影响；新会话将无法再选择它。',
   deleteConfirm: '删除',
   deleting: '正在删除…',
+  modelBindings: '模型',
 }
 
 // The resolution itself is the shared fold in `dsh-agent-preset-registry/display`,

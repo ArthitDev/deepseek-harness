@@ -240,6 +240,8 @@
     - id: pwsh-sandbox
       name: '@deepseek-ai/dsh-pwsh-sandbox'
       disabled: !!js process.platform !== 'win32'
+      config:
+        timeoutMs: 60000
 
     - id: approval
       name: '@deepseek-ai/dsh-user-approval'

@@ -359,6 +359,23 @@ describe('LlmRuntime', () => {
     expect(finish.reason.failure.message).toContain('no adapter registered')
   })
 
+  it('rejects required tool choice before adapter dispatch when no tools are present', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    const adapter = new RecordingAdapter(SCRIPT)
+    ctx.llm.registerAdapter(['test'], adapter)
+
+    const chunks = await collect(ctx.llm.stream({
+      provider: 'test', model: 'test', messages: [], toolChoice: 'required',
+    }))
+
+    expect(chunks.at(-1)).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'INVALID_REQUEST' } },
+    })
+    expect(adapter.lastOptions).toBeUndefined()
+  })
+
   it.each(['done', 'value'] as const)('normalizes a throwing IteratorResult.%s getter', async (field) => {
     const original = new LlmError(`${field} getter failed`, 'RESULT_GETTER_FAILED')
     const result = field === 'done' ? {} : { done: false }

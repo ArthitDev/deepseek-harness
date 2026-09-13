@@ -11,13 +11,15 @@
 import type { ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Button, IconFolderCloseRegular, IconPlusOutlineRegular, Menu, Modal, type MenuEntry,
+  Button, IconPlusOutline16, Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
+import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
+import { ComputerIcon } from './RemoteMachines.tsx'
 import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
@@ -48,6 +50,8 @@ export interface WorkspacePickFlowProps {
   side?: 'bottom' | 'top' | 'right'
   /** Currently active workspace (trailing check in the picker list). */
   selectedId?: WorkspaceId | undefined
+  /** Redacted saved-machine names used for remote group headings. */
+  machines?: readonly { readonly id: string; readonly name: string }[] | undefined
 }
 
 /**
@@ -68,9 +72,11 @@ export function WorkspacePickFlow({
   addOnly = false,
   side = 'bottom',
   selectedId,
+  machines = [],
 }: WorkspacePickFlowProps) {
   const workspaceSnapshot = useWorkspaces(state => state)
   const workspaces = workspaceSnapshot.items
+  const machineNames = new Map(machines.map(machine => [machine.id, machine.name]))
   const getAnchorRect = useCallback(
     () => anchorRef?.current?.getBoundingClientRect() ?? null,
     [anchorRef],
@@ -104,14 +110,33 @@ export function WorkspacePickFlow({
   // With workspaces listed, the add action pins below the scroll region
   // (divider + always visible); otherwise it IS the menu.
   const pinAdd = !addOnly && workspaces.length > 0
-  const items: MenuEntry[] = pinAdd
-    ? workspaces.map(workspace => ({
-      id: workspace.workspaceId,
-      label: workspace.title,
-      icon: <IconFolderCloseRegular size={16} />,
-      disabled: flowBusy,
-    }))
-    : addEntries
+  const workspaceEntries: MenuEntry[] = []
+  if (!addOnly) {
+    const local = workspaces.filter(workspace => parseRemoteExecutionPath(workspace.path) === undefined)
+    if (local.length > 0) {
+      workspaceEntries.push({ type: 'label', id: 'machine-local', text: t('remote.local') })
+      workspaceEntries.push(...local.map(workspace => ({
+        id: workspace.workspaceId,
+        label: workspace.title,
+        icon: <ComputerIcon />,
+        disabled: flowBusy,
+      })))
+    }
+    const remoteIds = [...new Set(workspaces.flatMap((workspace) => {
+      const remote = parseRemoteExecutionPath(workspace.path)
+      return remote === undefined ? [] : [remote.machineId]
+    }))]
+    for (const machineId of remoteIds) {
+      workspaceEntries.push({ type: 'label', id: `machine-${machineId}`, text: machineNames.get(machineId) ?? machineId })
+      workspaceEntries.push(...workspaces.flatMap((workspace) => {
+        const remote = parseRemoteExecutionPath(workspace.path)
+        return remote?.machineId === machineId
+          ? [{ id: workspace.workspaceId, label: workspace.title, icon: <ComputerIcon remote />, disabled: flowBusy }]
+          : []
+      }))
+    }
+  }
+  const items: MenuEntry[] = pinAdd ? workspaceEntries : addEntries
   // Nothing listed and nothing to add with (a composition that mounts this
   // package without any directory-picker): an empty popover would claim a
   // choice that does not exist, so the anchor gesture shows nothing at all.
@@ -231,9 +256,11 @@ export function WorkspacePicker({
   onClose,
   createWorkspace,
   useDirectoryFlow,
+  useRemoteMachines,
   renderSlot,
   t,
 }: WorkspacePickerProps) {
+  const machines = useRemoteMachines?.(state => state.machines) ?? []
   return (
     <WorkspacePickFlow
       t={t}
@@ -242,6 +269,7 @@ export function WorkspacePicker({
       useWorkspaces={useWorkspaces}
       createWorkspace={createWorkspace}
       useDirectoryFlow={useDirectoryFlow}
+      machines={machines}
       renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}
       selectedId={selectedId}
       onPick={onPick}

@@ -269,8 +269,11 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)
 
-    const original = page.locator('[role="treeitem"][aria-selected]').filter({ hasText: 'Reply with the single word' }).first()
+    const original = page.locator('[data-workspace-group] [role="treeitem"]')
+      .filter({ hasText: 'Reply with the single word' }).first()
     await original.click()
+    expect(tripwire.pageErrors).toEqual([])
+    await expect.poll(() => original.getAttribute('aria-selected')).toBe('true')
     await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)

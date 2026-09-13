@@ -1,7 +1,13 @@
 - banner:
-  - navigation "Session hierarchy": "Run two shell commands: wait"
-  - button "More actions"
-  - button "Open right sidebar"
+  - navigation "Session hierarchy":
+    - 'button "Run two shell commands: wait" [disabled]'
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
@@ -17,7 +23,13 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Full access"': Full access
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash":
+  - text: DeepSeek · DeepSeek-V4-Flash
+  - img
 - button "Send message" [disabled]
 - button "1 turns 1 steps"
 - button "20 tok · Cache hit 0%": 20 tokCache hit 0%

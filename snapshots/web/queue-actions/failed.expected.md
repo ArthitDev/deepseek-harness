@@ -3,5 +3,11 @@
   - paragraph: Queue submission to retry
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
-- button "Queue message"
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash":
+  - text: DeepSeek · DeepSeek-V4-Flash
+  - img
+- button "Send message"

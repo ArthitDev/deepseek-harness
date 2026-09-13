@@ -213,8 +213,12 @@ describe('web e2e: Markdown image rendering', () => {
 
   it.skipIf(MODE === 'record')('loads permitted images and shows authored text for failures', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-markdown-images'))
-    await page.getByRole('treeitem').first().click()
-    await page.getByRole('treeitem').nth(1).click()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
+    await groupRow.waitFor({ timeout: 15_000 })
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
+    await sessionRow.waitFor({ timeout: 10_000 })
+    await sessionRow.click()
     await expect.poll(() => page.getByText('REMOTE_IMAGE_DONE', { exact: true }).count(), {
       timeout: 15_000,
     }).toBe(1)

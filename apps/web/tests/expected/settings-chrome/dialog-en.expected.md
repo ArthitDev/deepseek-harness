@@ -1,10 +1,24 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
-    - button "General"
-    - button "Models"
-    - button "Built-in plugins"
-    - button "Agent presets"
+    - button "General":
+      - img
+      - text: General
+    - button "Models":
+      - img
+      - text: Models
+    - button "Plugins":
+      - img
+      - text: Plugins
+    - button "Agent presets":
+      - img
+      - text: Agent presets
+    - button "Remote machines":
+      - img
+      - text: Remote machines
+    - button "Skills":
+      - img
+      - text: Skills
   - button "Open configuration file"
   - button "Close"
   - text: Permission Choose the default permission mode for new sessions

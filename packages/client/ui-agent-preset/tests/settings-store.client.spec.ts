@@ -42,12 +42,7 @@ function fakeRoster(
       agentPresets: {
         list: () => {
           return Promise.resolve(options.failList === undefined
-            ? {
-              ok: true as const,
-              value: {
-                presets, modeSelectionEnabled: options.showPicker ?? true,
-              },
-            }
+            ? { ok: true as const, value: { presets, authorable: true, models: [], modelPresets: {} } }
             : {
               ok: false as const,
               error: new RemoteError(options.failListCode ?? 'gateway/internal', options.failList, {}),
@@ -226,12 +221,7 @@ describe('the new-session chip controller', () => {
         agentPresets: {
           list: options.list ?? (() => {
             return Promise.resolve(options.failList === undefined
-              ? {
-                ok: true as const,
-                value: {
-                  presets, modeSelectionEnabled: options.showPicker ?? true,
-                },
-              }
+              ? { ok: true as const, value: { presets, authorable: true, models: [], modelPresets: {} } }
               : {
                 ok: false as const,
                 error: new RemoteError(options.failListCode ?? 'gateway/internal', options.failList, {}),

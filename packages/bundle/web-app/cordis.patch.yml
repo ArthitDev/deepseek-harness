@@ -37,6 +37,14 @@
     # once the web UI owns the choice per session.
     mode: !!js process.env.DSH_TOOLS_MODE
 
+# Web supports local and saved SSH execution worlds through one pair of hybrid
+# providers. Their local branch subclasses the base implementations verbatim.
+- id: subprocess
+  disabled: true
+
+- id: fs-sandbox
+  disabled: true
+
 # ── web-only host rows, the transport layer, and the browser roster ─────────
 
 # `dsh.client` rows are the browser roster the modules node half scans into
@@ -71,6 +79,9 @@
 
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
+
+    - id: remote-machines
+      name: '@deepseek-ai/dsh-remote-machines'
 
     - id: session-reference
       name: '@deepseek-ai/dsh-session-reference'
@@ -369,6 +380,9 @@
 
     - id: ui-permission
       name: '@deepseek-ai/dsh-client-ui-permission-presets'
+
+    - id: ui-web-search-mode
+      name: '@deepseek-ai/dsh-client-ui-web-search-mode'
 
     # The agent-preset row in General settings: the default preset for
     # sessions created later. Absent a roster it renders nothing.

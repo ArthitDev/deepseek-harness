@@ -49,9 +49,12 @@ export type { AgentPresetLabelInjected, AgentPresetLabelProps } from './AgentPre
 export type { AgentPresetSeatInjected, AgentPresetSeatProps } from './AgentPresetSeat.tsx'
 export type { AgentPresetSectionInjected, AgentPresetSectionProps } from './AgentPresetSection.tsx'
 export type { AgentPresetSeatState } from './seat-store.ts'
-export type { AgentPresetSectionState } from './section-store.ts'
+export {
+  draftBlocker, type AgentPresetSectionState, type CopyDraft, type CreateDraft,
+  type PresetModelRow, type PresetRow, type PresetView,
+} from './section-store.ts'
 export type { AgentPresetOption, AgentPresetSettingsState } from './settings-store.ts'
-export { AGENT_PRESET_SETTINGS_NS, writeDefaultPreset } from './settings-store.ts'
+export { AGENT_PRESET_SETTINGS_NS, writeDefaultPreset, writeModelPreset } from './settings-store.ts'
 
 /** Required services (cordis fiber inject). */
 export const inject = [
@@ -210,8 +213,11 @@ export function apply(ctx: ClientContext): void {
     confirmCopy: () => section.confirmCopy(),
     openLocation: (id: string) => section.openLocation(id),
     ...creatorDraft === undefined ? {} : { startCreatorDraft: creatorDraft },
-    makeDefault: (id: string) => section.makeDefault(id, captureBlankSessionSync()),
-    setPickerVisible: (showPicker: boolean) => section.setPickerVisible(showPicker, captureBlankSessionSync()),
+    confirmDelete: (id: string | null) => { section.confirmDelete(id) },
+    remove: () => section.remove(),
+    makeDefault: (id: string) => section.makeDefault(id),
+    bindModel: (provider: string, model: string, preset: string | undefined) =>
+      section.bindModel(provider, model, preset),
   })
 
   // Ordered after Models: choosing a model is routine, and composing an

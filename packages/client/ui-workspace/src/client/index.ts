@@ -31,12 +31,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import {
-  type ArchiveSessionInjected, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
-  type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
-  type RenameSessionInjected, type RowToast, type RowToastInjected, type RowToastState, type SessionRenameDialogInjected,
-  type SessionRenameTarget, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
-} from './contract/slots.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
@@ -47,6 +43,10 @@ import { PinSessionMenuItem, PinSessionRowButton } from './session-actions/PinSe
 import { RenameSessionMenuItem, SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import {
+  RemoteMachineControl, RemoteMachinesSection, type RemoteMachineInjected,
+} from './RemoteMachines.tsx'
+import { RemoteMachineController } from './remote-machine-store.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type { UiWorkspace } from './navigation.ts'
@@ -57,6 +57,8 @@ export type {
   WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
+export type { RemoteMachineInjected } from './RemoteMachines.tsx'
+export type { RemoteMachineSnapshot } from './remote-machine-store.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface GlobalStandardProps {
@@ -88,7 +90,7 @@ const NS = 'workspace'
  * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = [
-  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout',
+  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines',
 ]
 
 /**
@@ -110,8 +112,8 @@ export function apply(ctx: Context): void {
   let toastSeq = 0
   const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
   const uiWorkspace = new UiWorkspaceService(
-    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
-  )
+    ctx, ctx.remote.directoryPicker, workspaces, sessions)
+  const remoteMachines = new RemoteMachineController(ctx)
   ctx.slots.provideRoot({ hooks: { workspaces: workspaces.list } })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
 
@@ -250,14 +252,28 @@ export function apply(ctx: Context): void {
     },
     unarchiveSession: async (sessionId) => { await uiWorkspace.unarchiveSession(sessionId) },
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: browserFlowSource, hostInfo },
+    hooks: { directoryFlow: browserFlowSource, hostInfo, remoteMachines: remoteMachines.store },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource },
+    hooks: { directoryFlow: pickerFlowSource, remoteMachines: remoteMachines.store },
   })
-  // Each registration declares its owned children in the same call; slot
-  // injection follows both the owner and declaration HMR lifetimes.
+  const remoteMachineInjected = (): RemoteMachineInjected => ({
+    controller: remoteMachines,
+    hooks: { hostInfo, remoteMachines: remoteMachines.store },
+    createWorkspace: async path => await workspaces.create({ path }),
+    startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
+  })
+  ctx.effect(() => {
+    const refresh = (): void => { void remoteMachines.load() }
+    const disposers = [
+      ctx.remote.$on('settings/document-updated', (ns) => { if (ns === 'remote-machines') refresh() }),
+      ctx.on('connection/reset', refresh),
+    ]
+    return () => { for (const dispose of disposers) dispose() }
+  }, 'ui-workspace: remote machine roster refresh')
+  // Each registration declares its directory-flow child in the same call;
+  // slot injection follows both the owner and declaration HMR lifetimes.
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
@@ -313,6 +329,19 @@ export function apply(ctx: Context): void {
     },
     WorkspacePicker,
   ))
+  ctx.slots.inject('conversation.input.machine', () => ctx.slots.register({
+    name: 'conversation.input.machine',
+    locale: NS,
+    inject: remoteMachineInjected,
+  }, RemoteMachineControl))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'remote-machines',
+    order: 25,
+    label: () => ctx.locale.bind(NS)('remote.section.title'),
+    locale: NS,
+    inject: remoteMachineInjected,
+  }, RemoteMachinesSection))
 }
 
 /**

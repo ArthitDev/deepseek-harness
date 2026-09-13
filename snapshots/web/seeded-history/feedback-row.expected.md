@@ -1,7 +1,13 @@
 - banner:
-  - navigation "Session hierarchy": Use the read tool twice
-  - button "More actions"
-  - button "Open right sidebar"
+  - navigation "Session hierarchy":
+    - button "Use the read tool twice" [disabled]
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
@@ -35,7 +41,13 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Read Only"': Read Only
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash":
+  - text: DeepSeek · DeepSeek-V4-Flash
+  - img
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s
 - button "16K tok · Cache hit 98%": 16K tokCache hit 98%

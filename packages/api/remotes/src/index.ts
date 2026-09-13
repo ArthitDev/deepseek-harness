@@ -1,6 +1,6 @@
 /** Host BFF entry and Loader shell for the Remote contribution assembly. */
 
-import { homedir } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {
@@ -26,6 +26,7 @@ import type {} from '@deepseek-ai/dsh-llm/types'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import type {} from '@deepseek-ai/dsh-permission-presets/types'
 import type {} from '@deepseek-ai/dsh-settings/types'
+import type {} from '@deepseek-ai/dsh-remote-machines/types'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
 export type {} from '@deepseek-ai/dsh-api-session-controller/types'
@@ -39,7 +40,7 @@ export const inject = ['typertGateway']
 /** Host plugin body registering this application's selected Cordis event source. */
 export function apply(ctx: Context): void {
   ctx.effect(
-    () => ctx.typertGateway.registerRemoteEvents(remoteEventSource(ctx), { home: homedir() }),
+    () => ctx.typertGateway.registerRemoteEvents(remoteEventSource(ctx), { home: homedir(), hostname: hostname() }),
     'api-remotes: forwarded Cordis event source',
   )
 }

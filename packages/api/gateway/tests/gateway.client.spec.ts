@@ -602,12 +602,12 @@ describe('Client Remote transport readiness', () => {
     const remote = ctx.remote
 
     const beforeReady = remote.$host
-    expect(beforeReady).toEqual({ home: undefined, isLoopback: true })
+    expect(beforeReady).toEqual({ home: undefined, hostname: undefined, isLoopback: true })
     expect(remote.$host).toBe(beforeReady)
 
-    live.snapshot = { id: 1, host: { home: '/hosts/primary' } }
+    live.snapshot = { id: 1, host: { home: '/hosts/primary', hostname: 'primary-host' } }
     const afterReady = remote.$host
-    expect(afterReady).toEqual({ home: '/hosts/primary', isLoopback: true })
+    expect(afterReady).toEqual({ home: '/hosts/primary', hostname: 'primary-host', isLoopback: true })
     expect(afterReady).not.toBe(beforeReady)
     expect(remote.$host).toBe(afterReady)
 
@@ -664,11 +664,12 @@ describe('Client Remote transport readiness', () => {
         const opening = JSON.parse(replacement.sent[0]!) as { streamId: string }
         replacement.receive({
           type: 'item', streamId: opening.streamId,
-          value: { type: 'ready', clientId: 'recovered-client', host: { home: '/recovered' } },
+          value: { type: 'ready', clientId: 'recovered-client', host: { home: '/recovered', hostname: 'recovered-host' } },
         })
         await vi.advanceTimersByTimeAsync(0)
         expect(connection.state.getSnapshot()).toBe('connected')
         expect(connection.generation.getSnapshot()?.host.home).toBe('/recovered')
+        expect(connection.generation.getSnapshot()?.host.hostname).toBe('recovered-host')
         expect(reset).toHaveBeenCalledOnce()
         expect(vi.getTimerCount()).toBe(0)
       } finally {
@@ -949,10 +950,13 @@ describe('Client Typert API', () => {
     await expect(ctx.remote.$mount({
       package: '@fixture/scoped-conflict', descriptors: [{ ...context, id: '@fixture/other#probe/rename' }],
     })).rejects.toThrow('scoped method probe/rename is already mounted')
-    await expect(ctx.remote.$mount({
+    const disposeRemove = await ctx.remote.$mount({
       package: '@fixture/service-method-conflict',
-      descriptors: [{ ...context, id: '@fixture/probe#probe/remove', method: 'remove' }],
-    })).rejects.toThrow('conflicts with its namespace service')
+      descriptors: [{ ...direct, id: '@fixture/probe#probe/remove', method: 'remove' }],
+    })
+    expect(typeof (ctx.remote.probe as unknown as Record<string, unknown>).remove).toBe('function')
+    await disposeRemove()
+    expect((ctx.remote.probe as unknown as Record<string, unknown>).remove).toBeUndefined()
     const scopedService = ctx.get('remote.probe') as unknown as object
     Object.defineProperty(scopedService, 'custom', { configurable: true, value: () => undefined })
     await expect(ctx.remote.$mount({

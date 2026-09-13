@@ -58,6 +58,8 @@ declare module '@deepseek-ai/dsh-llm' {
  */
 const PTC_ONLY_INSTRUCTION = `\`${RUN_CODE_NAME}\` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.`
 
+const TOOL_CALL_INSTRUCTION = 'Never announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.'
+
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
   python: renderToolsSdkPy,
@@ -851,6 +853,11 @@ export class ToolRuntime extends Service {
     this.defaultMode = config.mode ?? 'native'
     this.maxParallelSubCalls = resolveMaxParallelSubCalls(config.maxParallelSubCalls)
     ctx.systemPrompt.tools(context => this.wireSchemas(context.scope))
+    ctx.systemPrompt.section({
+      name: 'tools:calling',
+      order: ctx.systemPrompt.getSectionOrder('PTC_ONLY'),
+      text: context => this.wireSchemas(context.scope).schemas.length > 0 ? TOOL_CALL_INSTRUCTION : '',
+    })
     if (this.defaultMode !== 'native') {
       ctx.systemPrompt.section(this.collapseSection())
       ctx.systemPrompt.section(this.sdkSection())

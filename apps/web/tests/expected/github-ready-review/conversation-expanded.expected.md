@@ -1,26 +1,54 @@
 - tree "Sessions":
-  - treeitem "{{workspace}}" [expanded]
-  - treeitem "Review deepseek-ai/deepseek-harness#314 Session actions for Review deepseek-ai/deepseek-harness#314 Archive session Pin session" [selected]:
-    - text: Review deepseek-ai/deepseek-harness#314
-    - button "Session actions for Review deepseek-ai/deepseek-harness#314"
-    - button "Archive session"
-    - button "Pin session"
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
+    - img
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "{{workspace}}" [expanded]:
+      - img
+      - text: {{workspace}}
+    - treeitem "Review deepseek-harness/deepseek-harness#314 Session actions for Review deepseek-harness/deepseek-harness#314" [selected]:
+      - text: Review deepseek-harness/deepseek-harness#314
+      - button "Session actions for Review deepseek-harness/deepseek-harness#314":
+        - img
 
 ---
 
 - banner:
   - navigation "Session hierarchy": Review deepseek-ai/deepseek-harness#314
   - text: Standard mode
-  - button "More actions"
-  - button "Open right sidebar"
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
-- button "GitHub event received {{clock}}":
-  - text: GitHub event received
-  - time: {{clock}}
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- button "Thought for a while" [expanded]:
+  - text: Thought for a while
+  - img
+- button "Context injection webhook github webhook handled by review-pr-when-ready":
+  - img
+  - img
+  - text: Context injection webhook github webhook handled by review-pr-when-ready
+- button "Context injection AGENTS.md, CLAUDE.md":
+  - img
+  - img
+  - text: Context injection AGENTS.md, CLAUDE.md
+- button "Context injection @deepseek-ai/dsh-system-prompt":
+  - img
+  - img
+  - text: Context injection @deepseek-ai/dsh-system-prompt
+- button "Context injection skill-catalog":
+  - img
+  - img
+  - text: Context injection skill-catalog
 - paragraph: "Review complete: no actionable findings."
 - button "Copy"
 - button "Good response"
@@ -30,6 +58,12 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Read Only"': Read Only
-- button "Select model, current github-webhook-review-test/reply": github-webhook-review-test/reply
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current github-webhook-review-test · reply":
+  - text: github-webhook-review-test · reply
+  - img
 - button "Send message" [disabled]
 - button "1 turns 1 steps"

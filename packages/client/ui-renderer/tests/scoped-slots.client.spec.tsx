@@ -37,6 +37,14 @@ type DeclaredSpec = SlotSpec<SlotEntryDef>
 const entryOf = (partial: Omit<StoredEntry, 'options'> & { options?: StoredEntry['options'] }): StoredEntry =>
   ({ options: {}, ...partial })
 
+/** Silence only the jsdom report for an error the current test deliberately renders. */
+function suppressExpectedRenderError(): () => void {
+  const onError = (event: ErrorEvent): void => { event.preventDefault() }
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  window.addEventListener('error', onError)
+  return () => { window.removeEventListener('error', onError); spy.mockRestore() }
+}
+
 /**
  * Minimal store handle satisfying the StoreDecl contract shape (spec +
  * create(scopeKey?) + instance with clearPersisted): the machinery consumes
@@ -310,10 +318,10 @@ describe('root outlet', () => {
     expect(view.container.textContent).toBe('shell')
 
     const empty = makeHost()
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const restoreError = suppressExpectedRenderError()
     expect(() => render(<>{createSlotRenderer().renderRoot(empty.host, {})}</>))
       .toThrow(/boot order/)
-    spy.mockRestore()
+    restoreError()
   })
 
   it('passes renderRoot owner props into the root component', () => {
@@ -388,10 +396,10 @@ describe('child outlets and the renderSlot binding', () => {
     h.declare('k.list', { kind: 'list', scope: 'root' })
     h.add('k.list', { component: () => { throw new Error('entry boom') }, options: { id: 'bad', order: 1 } })
     h.add('k.list', { component: () => <span>alive</span>, options: { id: 'ok', order: 2 } })
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const restoreError = suppressExpectedRenderError()
     const { view } = mountRoot(h, { 'k.list': { kind: 'list', scope: 'root' } },
       renderSlot => renderSlot('k.list', {}))
-    spy.mockRestore()
+    restoreError()
     expect(view.container.textContent).toBe('alive')
     expect(view.container.querySelector('[data-slot-error]')).not.toBeNull()
   })
@@ -453,10 +461,10 @@ describe('chain outlets and the renderSlotChain binding', () => {
       select: owner => (owner as { pick?: string }).pick === 'B' ? {} : null,
     }))
     let pick = 'A'
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const restoreError = suppressExpectedRenderError()
     const { view } = mountChainRoot(h, { 'k.chain': CHAIN_ROOT },
       renderSlotChain => renderSlotChain('k.chain', { pick }))
-    spy.mockRestore()
+    restoreError()
     expect(view.container.querySelector('[data-slot-error]')).not.toBeNull()
     // Re-elect entry B: the entry-keyed boundary remounts fresh instead of
     // holding A's failed state over the healthy replacement.
@@ -857,11 +865,11 @@ describe('standard-kit synthesis', () => {
     const h = makeHost()
     h.declare('k.session', SINGLE_SESSION)
     h.add('k.session', { component: () => <b>x</b> })
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const restoreError = suppressExpectedRenderError()
     expect(() => mountRoot(h, { 'k.session': SINGLE_SESSION },
       renderSlot => renderSlot('k.session', {})))
       .toThrow("strict session slot 'k.session' rendered without a scope binding")
-    spy.mockRestore()
+    restoreError()
   })
 
   it('delivers the store pair for store-declaring entries and writes through baked actions', () => {
@@ -1050,10 +1058,10 @@ describe('inject: execution point, parameter derivation, cache granularity', () 
       inject: () => { throw new Error('inject boom') },
     })
     h.add('k.list', { component: () => <span>alive</span>, options: { id: 'ok', order: 2 } })
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const restoreError = suppressExpectedRenderError()
     const { view } = mountRoot(h, { 'k.list': { kind: 'list', scope: 'root' } },
       renderSlot => <main>{renderSlot('k.list', {})}</main>)
-    spy.mockRestore()
+    restoreError()
     // The failing entry blacks out alone; the sibling and the tree above survive.
     expect(view.container.querySelector('main')).not.toBeNull()
     expect(view.container.textContent).toBe('alive')

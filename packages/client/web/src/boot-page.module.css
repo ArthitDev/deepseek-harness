@@ -29,11 +29,18 @@
 }
 
 .wordmark {
-  font-size: 16px;
-  line-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 600;
-  letter-spacing: 0.08em;
   color: var(--dsw-alias-label-primary, var(--dsh-boot-label-primary));
+}
+
+.logo {
+  display: block;
+  object-fit: contain;
 }
 
 .hint {

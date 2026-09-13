@@ -57,6 +57,9 @@
       "path": "../../preset/agent-preset-registry"
     },
     {
+      "path": "../../remote/remote-machines"
+    },
+    {
       "path": "../../settings/settings"
     },
     {

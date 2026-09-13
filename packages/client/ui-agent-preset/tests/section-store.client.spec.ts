@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AgentPresetSectionController } from '../src/client/section-store.ts'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { AgentPresetSectionController, draftBlocker } from '../src/client/section-store.ts'
@@ -27,6 +27,14 @@ interface FakeOptions {
   failRemove?: string
   /** Reject `settings.update` with this message. */
   failSettings?: string
+  /** Model groups flattened into the preset roster. */
+  modelGroups?: readonly {
+    id: string
+    name: string
+    models: readonly { id: string; name: string }[]
+  }[]
+  /** Mutable model-preset settings returned with the roster. */
+  modelPresets?: Record<string, Record<string, string>>
   /** Whether the deployment configures a writable root. */
   authorable?: boolean
   /** Whether the host can open a preset directory on a desktop. */
@@ -35,6 +43,8 @@ interface FakeOptions {
   failCapability?: string
   /** Hold `remove` until this resolves, to observe the in-flight state. */
   holdRemove?: Promise<void>
+  /** Hold the optional directory-opener capability. */
+  holdCapability?: Promise<void>
 }
 
 const remoteOk = (value: unknown) => Promise.resolve({ ok: true as const, value })
@@ -55,6 +65,7 @@ function fakeCtx(
   options: FakeOptions = {},
 ): ClientContext {
   const record = (method: string, payload: unknown): void => { options.calls?.push({ method, payload }) }
+  const modelPresets = options.modelPresets ?? {}
   return {
     remote: {
       agentPresets: {
@@ -67,6 +78,13 @@ function fakeCtx(
               ...preset.name === undefined ? {} : { name: preset.name },
             })),
             authorable: options.authorable ?? true,
+            models: (options.modelGroups ?? []).flatMap(group => group.models.map(model => ({
+              provider: group.id,
+              providerName: group.name,
+              id: model.id,
+              name: model.name,
+            }))),
+            modelPresets: structuredClone(modelPresets),
           })
         },
         read: (agentPreset: string) => {
@@ -120,17 +138,36 @@ function fakeCtx(
         },
       },
       settings: {
-        canOpenAgentPresetDirectory: () => {
+        canOpenAgentPresetDirectory: async () => {
           record('canOpenAgentPresetDirectory', {})
-          return options.failCapability === undefined
+          await options.holdCapability
+          return await (options.failCapability === undefined
             ? remoteOk(options.hasDocument ?? true)
-            : remoteFail(options.failCapability)
+            : remoteFail(options.failCapability))
         },
         update: (ns: string, patch: { default?: string }) => {
           record('settings.update', { ns, patch })
           if (options.failSettings !== undefined) return remoteFail(options.failSettings)
           /* v8 ignore next -- the controller only ever sets `default` */
           defaultId.id = patch.default ?? defaultId.id
+          return remoteOk({})
+        },
+        mutate: (ns: string, ops: readonly {
+          op: 'set' | 'unset'
+          path: readonly string[]
+          value?: string
+        }[]) => {
+          record('settings.mutate', { ns, ops })
+          if (options.failSettings !== undefined) return remoteFail(options.failSettings)
+          const [op] = ops
+          const [, provider, model] = op?.path ?? []
+          if (provider !== undefined && model !== undefined && op !== undefined) {
+            if (op.op === 'set' && op.value !== undefined) {
+              ;(modelPresets[provider] ??= {})[model] = op.value
+            } else {
+              delete modelPresets[provider]?.[model]
+            }
+          }
           return remoteOk({})
         },
         openAgentPresetDirectory: (agentPreset: string) => {
@@ -184,6 +221,27 @@ function copyOf(controller: AgentPresetSectionController): CopyDraft {
 }
 
 describe('loading the roster', () => {
+  it('renders every roster model without waiting for the optional opener', async () => {
+    const opener = Promise.withResolvers<undefined>()
+    const { controller, calls } = harness({
+      holdCapability: opener.promise,
+      modelGroups: [{
+        id: 'test', name: 'Test',
+        models: [{ id: 'first', name: 'First' }, { id: 'second', name: 'Second' }],
+      }],
+    })
+
+    const loading = controller.load()
+    await vi.waitFor(() => { expect(controller.store.getSnapshot().status).toBe('ready') })
+    await loading
+    expect(controller.store.getSnapshot().rows.map(row => row.id)).toEqual(['standard', 'mine'])
+    expect(controller.store.getSnapshot().models.map(model => model.id)).toEqual(['first', 'second'])
+    expect(calls[0]?.method).toBe('list')
+    expect(calls.findIndex(call => call.method === 'list'))
+      .toBeLessThan(calls.findIndex(call => call.method === 'canOpenAgentPresetDirectory'))
+    opener.resolve(undefined)
+  })
+
   it('still lists the roster when the opener capability is refused', async () => {
     const { controller } = harness({ failCapability: 'no opener here' })
 
@@ -553,5 +611,47 @@ describe('deleting', () => {
     const writes = remote.settings.update.mock.calls.length
     await controller.makeDefault('standard')
     expect(remote.settings.update).toHaveBeenCalledTimes(writes)
+  })
+})
+
+describe('model bindings', () => {
+  it('loads, changes, and removes one model preset override', async () => {
+    const calls: Recorded[] = []
+    const modelPresets = { provider: { model: 'mine' } }
+    const controller = new AgentPresetSectionController(
+      fakeCtx(seed(), { id: 'standard' }, {
+        calls,
+        modelPresets,
+        modelGroups: [{ id: 'provider', name: 'Provider', models: [{ id: 'model', name: 'Model' }] }],
+      }),
+    )
+    await controller.load()
+
+    expect(controller.store.getSnapshot().models).toEqual(expect.arrayContaining([
+      { provider: 'provider', providerName: 'Provider', id: 'model', name: 'Model' },
+    ]))
+    expect(controller.store.getSnapshot().modelPresets).toEqual({ provider: { model: 'mine' } })
+
+    await controller.bindModel('provider', 'model', 'standard')
+    expect(modelPresets.provider.model).toBe('standard')
+
+    await controller.bindModel('provider', 'model', undefined)
+    expect(modelPresets.provider.model).toBeUndefined()
+    expect(calls.filter(call => call.method === 'settings.mutate')).toEqual([
+      {
+        method: 'settings.mutate',
+        payload: {
+          ns: 'agent-presets',
+          ops: [{ op: 'set', path: ['models', 'provider', 'model'], value: 'standard' }],
+        },
+      },
+      {
+        method: 'settings.mutate',
+        payload: {
+          ns: 'agent-presets',
+          ops: [{ op: 'unset', path: ['models', 'provider', 'model'] }],
+        },
+      },
+    ])
   })
 })

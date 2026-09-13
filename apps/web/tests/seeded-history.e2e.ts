@@ -344,10 +344,10 @@ describe('web e2e: seeded history renders through cold resume', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-history'))
     // The sidebar tree collapses workspace groups by default: click the group
     // row (treeitem 0) to expand, then the revealed session row.
-    const groupRow = page.locator('[role="treeitem"]').first()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
-    await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
     // Settled barrier for history: the recorded final assistant text renders.

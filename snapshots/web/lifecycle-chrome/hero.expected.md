@@ -9,17 +9,35 @@
 - button "View options"
 - button "Add workspace"
 - tree "Sessions":
-  - treeitem "workspace" [expanded]
-  - treeitem "New Session" [selected]
-- button "Settings"
-- banner:
-  - button "Open right sidebar"
-- text: Into the Unknown Preview
-- button "Choose workspace": workspace
-- button "Standard mode"
-- textbox "Describe what you want to build, / commands, @ files or sessions":
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
+    - img
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "workspace" [expanded]:
+      - img
+      - text: workspace
+    - treeitem "New Session" [selected]
+- button "Settings":
+  - img
+  - text: Settings
+- text: Break All Shield Break All Shield
+- button "Choose workspace":
+  - img
+  - text: workspace
+  - img
+- button "Standard mode":
+  - img
+  - text: Standard mode
+  - img
+- textbox "Describe what you want to build... / commands, @ files or sessions":
   - paragraph
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash":
+  - text: DeepSeek · DeepSeek-V4-Flash
+  - img
 - button "Send message" [disabled]

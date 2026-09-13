@@ -356,7 +356,7 @@ describe('registration', () => {
       workdir: { type: 'string' },
       run_in_background: { type: 'boolean' },
     })
-    expect(schema?.parameters.required).toEqual(['command', 'description'])
+    expect(schema?.parameters.required).toEqual(['command'])
     const prompt = renderPrompt(await ctx.systemPrompt.assemble())
     expect(prompt).toContain('Non-zero exits are reported as `[exit code: N]` markers')
     expect(prompt).toContain('without a signal marker')
@@ -399,6 +399,17 @@ describe('argument validation', () => {
     expect(text(await call(ctx, 'pwsh', { command: 'Write-Output hi', description: ' ' }))).toContain('expected a non-empty string')
     expect(text(await call(ctx, 'pwsh', { command: 'Write-Output hi', description: 'd', timeoutMs: -1 })))
       .toContain('invalid timeoutMs: expected a positive number')
+  })
+
+  it('accepts an omitted description and uses the command as its UI label', async () => {
+    const { ctx } = await setup()
+    const args = { command: 'Get-Date -Format "HH:mm:ss"' }
+    expect((await call(ctx, 'pwsh', args)).isError).toBe(false)
+    expect(ctx.tools.get('pwsh')?.presentCall?.(args)).toEqual({
+      card: 'terminal',
+      title: args.command,
+      description: args.command,
+    })
   })
 })
 

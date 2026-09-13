@@ -4,7 +4,7 @@ import LlmRuntime, { createUserMessage, ToolCallId, HarnessError, type ContentBl
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
@@ -78,6 +78,7 @@ describe('ToolRuntime', () => {
 
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.tools.map(t => t.name)).toEqual(['echo'])
+    expect(renderPrompt(assembly)).toContain('emit its structured tool call immediately')
   })
 
   it('schemas() drops host callbacks — they must never reach the model', async () => {

@@ -78,6 +78,8 @@ export function isOwnerAuthorizedRuntime(name: string): boolean {
  * Each entry documents why the store cannot answer.
  */
 const OVERRIDES: Record<string, { license?: string; repo?: string }> = {
+  // Legacy manifest uses `licenses[]`; the installed LICENSE contains the MIT text.
+  'ssh2': { license: 'MIT' },
   // Rust workspaces publishing npm bins without `license` in package.json.
   'oxlint': { license: 'MIT', repo: 'https://github.com/oxc-project/oxc' },
   'oxlint-tsgolint': { license: 'MIT', repo: 'https://github.com/oxc-project/tsgolint' },

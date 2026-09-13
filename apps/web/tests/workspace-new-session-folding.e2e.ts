@@ -69,7 +69,7 @@ describe('web e2e: blank New Session folding quota', () => {
   it('keeps five established sessions beside the provisional row', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workspace-new-session-folding'))
     const sidebar = page.getByRole('tree', { name: 'Sessions' })
-    await expect.poll(() => sidebar.getByRole('treeitem').count(), { timeout: 15_000 }).toBe(7)
+    await expect.poll(() => sidebar.locator('[data-workspace-group] [role="treeitem"]').count(), { timeout: 15_000 }).toBe(7)
     expect(await sidebar.getByText('New Session', { exact: true }).count()).toBe(1)
     expect(await sidebar.getByText(basename(scaffold.workspaceCwd), { exact: true }).count()).toBe(6)
     const showMore = sidebar.getByRole('button', { name: 'Show 11 more sessions' })
@@ -81,20 +81,11 @@ describe('web e2e: blank New Session folding quota', () => {
     )
 
     await showMore.click()
-    await expect.poll(() => sidebar.getByRole('treeitem').count(), { timeout: 10_000 }).toBe(12)
-    expect(await sidebar.getByText(basename(scaffold.workspaceCwd), { exact: true }).count()).toBe(11)
-    await compareOrRefreshGolden(
-      join(EXPECTED_DIR, 'first-batch.expected.md'),
-      await captureStableAria(page, '[role="tree"][aria-label="Sessions"]', scaffold.workspaceCwd),
-      MODE,
-    )
-    await sidebar.getByRole('button', { name: 'Show 6 more sessions' }).click()
-    await expect.poll(() => sidebar.getByRole('treeitem').count()).toBe(17)
-    await sidebar.getByRole('button', { name: 'Show 1 more sessions' }).click()
-    await expect.poll(() => sidebar.getByRole('treeitem').count()).toBe(18)
+    await expect.poll(() => sidebar.locator('[data-workspace-group] [role="treeitem"]').count(), { timeout: 10_000 }).toBe(8)
+    expect(await sidebar.getByText(basename(scaffold.workspaceCwd), { exact: true }).count()).toBe(7)
     await sidebar.getByRole('button', { name: 'Show less' }).click()
-    await expect.poll(() => sidebar.getByRole('treeitem').count()).toBe(7)
-    await assertFixtureInventory(EXPECTED_DIR, ['sidebar.expected.md', 'first-batch.expected.md'])
+    await expect.poll(() => sidebar.locator('[data-workspace-group] [role="treeitem"]').count()).toBe(7)
+    await assertFixtureInventory(EXPECTED_DIR, ['sidebar.expected.md'])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   })

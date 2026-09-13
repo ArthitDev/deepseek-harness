@@ -68,6 +68,12 @@ interface ListingTopProvider {
   max_completion_tokens?: unknown
 }
 
+/** Reasoning capability OpenRouter nests under one model entry. */
+interface ListingReasoning {
+  supported_efforts?: unknown
+  mandatory?: unknown
+}
+
 /** One entry of a supported `GET /models` reply. */
 interface ListingEntry {
   id?: unknown
@@ -85,7 +91,12 @@ interface ListingEntry {
   maxTokens?: unknown
   limit?: ListingLimit | null
   top_provider?: ListingTopProvider | null
+  reasoning?: ListingReasoning | null
+  supported_reasoning_efforts?: unknown
 }
+
+/** Reasoning levels the pi-ai profile schema can advertise. */
+const REASONING_LEVELS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
 /** A positive integer field of a listing entry, or `undefined` when absent or unusable. */
 function capacity(...candidates: readonly unknown[]): number | undefined {
@@ -101,6 +112,27 @@ function label(...candidates: readonly unknown[]): string | undefined {
     if (typeof candidate === 'string' && candidate.length > 0) return candidate
   }
   return undefined
+}
+
+/** Normalize advertised OpenRouter, LiteLLM, and Codex effort lists for profile adoption. */
+function reasoningEfforts(entry: ListingEntry | null): Readonly<Record<string, string | null>> | undefined {
+  const nested = entry?.reasoning
+  const nestedEfforts = nested?.supported_efforts
+  const advertised = nestedEfforts === null ? null : nestedEfforts ?? entry?.supported_reasoning_efforts
+  const values = advertised === null && nested !== null && nested !== undefined
+    ? [...REASONING_LEVELS, 'none']
+    : Array.isArray(advertised) ? advertised : []
+  const efforts: Record<string, string | null> = {}
+  for (const value of values) {
+    const item = value as { effort?: unknown; reasoning_effort?: unknown } | null
+    const wire = label(value, item?.effort, item?.reasoning_effort)
+    if (wire === 'none') {
+      if (nested?.mandatory !== true) efforts.off = 'none'
+    } else if (wire !== undefined && REASONING_LEVELS.has(wire)) {
+      efforts[wire] = wire
+    }
+  }
+  return Object.keys(efforts).some(level => level !== 'off') ? efforts : undefined
 }
 
 /**
@@ -219,11 +251,13 @@ function readListing(body: unknown): LlmDiscoveredModel[] {
       entry?.limit?.output,
       entry?.top_provider?.max_completion_tokens,
     )
+    const efforts = reasoningEfforts(entry)
     models.push({
       id,
       name,
       ...contextWindow === undefined ? {} : { contextWindow },
       ...maxTokens === undefined ? {} : { maxTokens },
+      ...efforts === undefined ? {} : { reasoningEfforts: efforts },
     })
   }
   return models

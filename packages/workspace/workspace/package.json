@@ -46,7 +46,8 @@
     "@deepseek-ai/dsh-typert-protocol": "workspace:*"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-remote-machines": "workspace:^",
+    "@deepseek-ai/dsh-brand": "workspace:^",
     "zod": "^4.4.3"
   },
   "devDependencies": {

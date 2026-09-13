@@ -70,6 +70,19 @@ interface PiAiSnapshot {
   models: Models
 }
 
+type PiToolChoice = NonNullable<SimpleStreamOptions['toolChoice']> | 'required' | 'any'
+
+/** Translate the neutral required value to each pi-ai provider's native vocabulary. */
+function piToolChoice(api: Api, choice: GenerateOptions['toolChoice']): PiToolChoice | undefined {
+  if (choice !== 'required') return choice
+  return api === 'anthropic-messages'
+    || api === 'bedrock-converse-stream'
+    || api === 'google-generative-ai'
+    || api === 'google-vertex'
+    ? 'any'
+    : 'required'
+}
+
 /** Constructor options for {@link PiAiAdapter}: the two resolution hooks the plugin owns. */
 export interface PiAiAdapterOptions {
   /** Current validated profiles by provider route; called once per operation. */
@@ -377,8 +390,11 @@ export class PiAiAdapter extends LlmAdapter {
             maxBytes: profile.requestImageMaxBytes,
           },
         }, onReplayDegrade)
+      const toolChoice = piToolChoice(model.api, options.toolChoice)
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
+        // pi-ai's common type is narrower than the provider-specific adapters it dispatches to.
+        ...toolChoice === undefined ? {} : { toolChoice: toolChoice as NonNullable<SimpleStreamOptions['toolChoice']> },
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

@@ -9,7 +9,7 @@ import type {
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
+import { remoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { DirectoryFlowOwnerProps, WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
@@ -93,13 +93,17 @@ function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setDat
   return { effectAllowed: 'uninitialized', dropEffect: 'none', setData: vi.fn() }
 }
 
-// The default child stub: an open directory flow shows its marker; the two
-// Session row lists stay empty (their entries have their own spec). A stub
-// satisfies the generic render signature only with an erased owner type.
-const renderDirectoryFlowOnly: WorkspaceBrowserProps['renderSlot'] = (name: string, owner: object) =>
-  name === 'sidebar.workspaces.directoryFlow' && (owner as DirectoryFlowOwnerProps).open
-    ? <div data-testid="directory-flow" />
-    : null
+function treeRow(title: string): HTMLElement {
+  return screen.getByText(title).closest('[role="treeitem"]') as HTMLElement
+}
+
+function workspaceSection(title: string): HTMLElement {
+  return screen.getByText(title).closest('[data-workspace-group]') as HTMLElement
+}
+
+function expectTreeOrder(first: string, second: string): void {
+  expect(treeRow(first).compareDocumentPosition(treeRow(second)) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+}
 
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const store = createWorkspaceViewStore().create()
@@ -126,8 +130,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     insertWorkspaceBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
-    useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
-    renderSlot: renderDirectoryFlowOnly,
+    useHostInfo: selector => selector({ home: undefined, hostname: undefined, isLoopback: true }),
+    renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
     ...overrides,
   }
@@ -277,10 +281,10 @@ describe('WorkspaceBrowser', () => {
           path: '/home/u/Documents/project',
           title: 'Project',
         }])),
-        useHostInfo: selector => selector({ home: '/home/u', isLoopback: true }),
+        useHostInfo: selector => selector({ home: '/home/u', hostname: undefined, isLoopback: true }),
       })
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(800) })
+      fireEvent.pointerEnter(treeRow('Project').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('~/Documents/project')).toBeTruthy()
     } finally {
       vi.useRealTimers()
@@ -465,110 +469,47 @@ describe('WorkspaceBrowser', () => {
     expect(b.store.getSnapshot().groupBy).toBe('workspace')
   })
 
-  it('picking 显示已归档 keeps existing rows and reveals archived ones in place', () => {
+  it('groups Workspace history under the local computer and each remote machine', () => {
+    const kaliSession = summary('kali-session', 1)
+    const local = workspace('local-project', [])
+    const kali = { ...workspace('kali-project', ['kali-session']), path: remoteExecutionPath('kali', '/srv/kali') }
+    const lab = { ...workspace('lab-project', []), path: remoteExecutionPath('lab', '/srv/lab') }
     mount({
-      useSessions: hook(sessionState([summary('kept', 2), summary('stored', 1)])),
-      useWorkspaces: hook(workspaceState([workspace('alpha', ['kept', 'stored'])], [sid('stored')])),
+      useSessions: hook(sessionState([kaliSession], { current: kaliSession.id })),
+      useWorkspaces: hook(workspaceState([local, kali, lab])),
+      useHostInfo: selector => selector({ home: undefined, hostname: 'EPIT-DEV', isLoopback: true }),
+      useRemoteMachines: hook({
+        status: 'ready' as const,
+        error: null,
+        machines: [
+          {
+            id: 'kali', name: 'Kali', host: 'kali.test', port: 22, username: 'tester', auth: 'agent' as const,
+            hasPassword: false, hasPrivateKey: false, hasPassphrase: false,
+          },
+          {
+            id: 'lab', name: 'Lab server', host: 'lab.test', port: 22, username: 'tester', auth: 'agent' as const,
+            hasPassword: false, hasPrivateKey: false, hasPassphrase: false,
+          },
+        ],
+      }),
     })
-    fireEvent.click(screen.getByText('alpha'))
-    expect(screen.getByText('kept')).toBeTruthy()
-    expect(screen.queryByText('stored')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '显示已归档' }))
-    expect(screen.getByText('kept')).toBeTruthy()
-    expect(screen.getByText('stored')).toBeTruthy()
-  })
+    const machines = screen.getAllByRole('treeitem').filter(row => row.tagName === 'BUTTON')
+    expect(machines).toHaveLength(3)
+    const localMachine = screen.getByText('EPIT-DEV').closest('[role="treeitem"]') as HTMLElement
+    const kaliMachine = screen.getByText('Kali').closest('[role="treeitem"]') as HTMLElement
+    const labMachine = screen.getByText('Lab server').closest('[role="treeitem"]') as HTMLElement
+    expect(localMachine.parentElement?.contains(screen.getByText('local-project'))).toBe(true)
+    expect(kaliMachine.parentElement?.contains(screen.getByText('kali-project'))).toBe(true)
+    expect(labMachine.parentElement?.contains(screen.getByText('lab-project'))).toBe(true)
+    expect(kaliMachine.getAttribute('aria-current')).toBe('true')
+    expect([localMachine, kaliMachine, labMachine].filter(machine => machine.hasAttribute('aria-current'))).toHaveLength(1)
 
-  it('the two archived filters are mutually exclusive and re-picking returns to default', () => {
-    const b = mount({
-      useSessions: hook(sessionState([summary('kept', 2), summary('stored', 1)])),
-      useWorkspaces: hook(workspaceState([workspace('alpha', ['kept', 'stored'])], [sid('stored')])),
-    })
-    fireEvent.click(screen.getByText('alpha'))
-    const pick = (name: string) => {
-      fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
-      fireEvent.click(screen.getByRole('menuitem', { name }))
-    }
-
-    // 仅显示已归档 hides the live rows and shows the archived one.
-    pick('仅显示已归档')
-    expect(b.store.getSnapshot().archivedFilter).toBe('only')
-    expect(screen.queryByText('kept')).toBeNull()
-    expect(screen.getByText('stored')).toBeTruthy()
-
-    // Picking the other filter replaces it: everything visible.
-    pick('显示已归档')
-    expect(b.store.getSnapshot().archivedFilter).toBe('show')
-    expect(screen.getByText('kept')).toBeTruthy()
-    expect(screen.getByText('stored')).toBeTruthy()
-
-    // Re-picking the selected filter returns to the default hidden view.
-    pick('显示已归档')
-    expect(b.store.getSnapshot().archivedFilter).toBe('default')
-    expect(screen.getByText('kept')).toBeTruthy()
-    expect(screen.queryByText('stored')).toBeNull()
-
-    // The same toggle-off applies to 仅显示已归档.
-    pick('仅显示已归档')
-    pick('仅显示已归档')
-    expect(b.store.getSnapshot().archivedFilter).toBe('default')
-    expect(screen.getByText('kept')).toBeTruthy()
-    expect(screen.queryByText('stored')).toBeNull()
-  })
-
-  it('keeps the picked archived filter across remounts through the view store', () => {
-    const seats = {
-      useSessions: hook(sessionState([summary('kept', 2), summary('stored', 1)])),
-      useWorkspaces: hook(workspaceState([workspace('alpha', ['kept', 'stored'])], [sid('stored')])),
-    }
-    const b = mount(seats)
-    fireEvent.click(screen.getByText('alpha'))
-    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '显示已归档' }))
-    expect(b.store.getSnapshot().archivedFilter).toBe('show')
-
-    cleanup()
-    const remounted = mount(seats)
-    expect(remounted.store.getSnapshot().archivedFilter).toBe('show')
-    // The persisted group expansion also survives, so the rows are already out.
-    expect(screen.getByText('stored')).toBeTruthy()
-  })
-
-  it('keeps Workspaces as siblings by default and restores the selected tree grouping', () => {
-    const workspaces = hook(workspaceState([
-      { ...workspace('root', [], 'Projects'), path: '/projects' },
-      workspace('child', ['child-session'], 'Child'),
-    ]))
-    const sessions = hook(sessionState([summary('child-session', 1)]))
-    const b = mount({ useWorkspaces: workspaces, useSessions: sessions })
-    const parentSection = () => screen.getByText('Projects').closest<HTMLElement>('[class*="groupSection"]')!
-    const choose = (name: string) => {
-      fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
-      fireEvent.click(screen.getByRole('menuitem', { name }))
-    }
-    expect(b.store.getSnapshot().groupBy).toBe('workspace')
-    expect(screen.getByText('Child')).toBeTruthy()
-    expect(within(parentSection()).queryByText('Child')).toBeNull()
-    choose('按工作区树')
-    expect(b.store.getSnapshot().groupBy).toBe('workspace-tree')
-    expect(within(parentSection()).getByText('Child')).toBeTruthy()
-    fireEvent.click(screen.getByText('Projects'))
-    expect(screen.queryByText('Child')).toBeNull()
-    choose('按工作区')
-    expect(screen.getByText('Child')).toBeTruthy()
-    expect(within(parentSection()).queryByText('Child')).toBeNull()
-    choose('按工作区树')
-    expect(screen.queryByText('Child')).toBeNull()
-    b.view.unmount()
-    const restored = mount({ useWorkspaces: workspaces, useSessions: sessions })
-    expect(restored.store.getSnapshot().groupBy).toBe('workspace-tree')
-    expect(screen.queryByText('Child')).toBeNull()
-    fireEvent.click(screen.getByText('Projects'))
-    expect(within(parentSection()).getByText('Child')).toBeTruthy()
-    choose('单列表')
-    expect(screen.queryByText('Projects')).toBeNull()
-    expect(screen.getByText('child-session')).toBeTruthy()
+    fireEvent.click(kaliMachine)
+    expect(kaliMachine.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('kali-project')).toBeNull()
+    expect(screen.getByText('local-project')).toBeTruthy()
+    expect(screen.getByText('lab-project')).toBeTruthy()
   })
 
   it('persists flat-list drag order locally and applies Last updated within that account', async () => {
@@ -946,12 +887,10 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '最近更新' }))
     await waitFor(() => {
-      const rows = screen.getAllByRole('treeitem').slice(1)
-      expect(rows[0]?.textContent).toContain('one')
-      expect(rows[1]?.textContent).toContain('two')
+      expectTreeOrder('one', 'two')
     })
 
-    const [one, two] = screen.getAllByRole('treeitem').slice(1) as [HTMLElement, HTMLElement]
+    const [one, two] = [treeRow('one'), treeRow('two')]
     two.getBoundingClientRect = () => ({
       top: 150, bottom: 184, left: 0, right: 200, width: 200, height: 34, x: 0, y: 150, toJSON: () => ({}),
     })
@@ -965,25 +904,25 @@ describe('WorkspaceBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '手动排序' }))
-    expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
+    expectTreeOrder('two', 'one')
 
     const updated = sessionState([summary('one', 4), summary('two', 2)])
     rerender(b, { useSessions: hook(updated) })
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
-    expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
+    expectTreeOrder('two', 'one')
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '最近更新' }))
     await waitFor(() => {
-      expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({})
-      expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('one')
+      expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['one', 'two'])
+      expectTreeOrder('one', 'two')
     })
 
     const promoted = sessionState([summary('one', 4), summary('two', 5)])
     rerender(b, { useSessions: hook(promoted) })
     await waitFor(() => {
-      expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({})
-      expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
+      expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
+      expectTreeOrder('two', 'one')
     })
 
     b.view.unmount()
@@ -991,8 +930,8 @@ describe('WorkspaceBrowser', () => {
       useSessions: hook(promoted),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['two', 'one'])])),
     })
-    expect(restored.store.getSnapshot().sessionOrderByAccount).toEqual({})
-    expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
+    expect(restored.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
+    expectTreeOrder('two', 'one')
   })
 
   it('hides archived rows in both modes once the archive set carries them', () => {
@@ -1807,10 +1746,7 @@ describe('WorkspaceBrowser', () => {
     })
     fireEvent.click(screen.getByText('beta'))
     const source = screen.getByText('tail').closest('[role="treeitem"]') as HTMLElement
-    let targetSection = screen.getByText('beta').closest('[role="treeitem"]')?.parentElement as HTMLElement
-    while (targetSection.parentElement?.getAttribute('role') !== 'tree') {
-      targetSection = targetSection.parentElement as HTMLElement
-    }
+    const targetSection = workspaceSection('beta')
     targetSection.getBoundingClientRect = () => ({
       top: 100, bottom: 300, left: 0, right: 200, width: 200, height: 200, x: 0, y: 100, toJSON: () => ({}),
     })
@@ -1821,7 +1757,7 @@ describe('WorkspaceBrowser', () => {
     expect(insertWorkspaceBefore).toHaveBeenCalledWith(wid('tail'), wid('beta'))
   })
 
-  it('draws the first Workspace insertion boundary on the scroll container', () => {
+  it('draws the first Workspace insertion boundary below its machine', () => {
     mount({
       useWorkspaces: hook(workspaceState([
         workspace('alpha', []),
@@ -1829,18 +1765,13 @@ describe('WorkspaceBrowser', () => {
       ])),
     })
     const source = screen.getByText('beta').closest('[role="treeitem"]') as HTMLElement
-    let firstSection = screen.getByText('alpha').closest('[role="treeitem"]')?.parentElement as HTMLElement
-    while (firstSection.parentElement?.getAttribute('role') !== 'tree') {
-      firstSection = firstSection.parentElement as HTMLElement
-    }
+    const firstSection = workspaceSection('alpha')
     firstSection.getBoundingClientRect = () => ({
       top: 100, bottom: 134, left: 0, right: 200, width: 200, height: 34, x: 0, y: 100, toJSON: () => ({}),
     })
     fireEvent.dragStart(source, { dataTransfer: dragData() })
     fireDrag(firstSection, 'dragOver', 105)
-    expect(firstSection.parentElement?.className).toContain('listTopDropActive')
-    const marker = firstSection.parentElement?.previousElementSibling
-    expect(marker?.className).toContain('listTopDropIndicator')
+    expect(firstSection.className).toContain('workspaceDropBefore')
   })
 
   it('accepts a document-level drop and commits the last Workspace marker on drag end', () => {
@@ -1854,10 +1785,7 @@ describe('WorkspaceBrowser', () => {
       insertWorkspaceBefore,
     })
     const source = screen.getByText('tail').closest('[role="treeitem"]') as HTMLElement
-    let target = screen.getByText('beta').closest('[role="treeitem"]')?.parentElement as HTMLElement
-    while (target.parentElement?.getAttribute('role') !== 'tree') {
-      target = target.parentElement as HTMLElement
-    }
+    const target = workspaceSection('beta')
     target.getBoundingClientRect = () => ({
       top: 100, bottom: 134, left: 0, right: 200, width: 200, height: 34, x: 0, y: 100, toJSON: () => ({}),
     })
@@ -1878,8 +1806,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two', 'three'])])),
     })
     fireEvent.click(screen.getByText('alpha'))
-    const rows = screen.getAllByRole('treeitem').slice(1) // drop the group header
-    const [one, , three] = rows as [HTMLElement, HTMLElement, HTMLElement]
+    const [one, three] = [treeRow('one'), treeRow('three')]
     three.getBoundingClientRect = () => ({
       top: 200, bottom: 234, left: 0, right: 200, width: 200, height: 34, x: 0, y: 200, toJSON: () => ({}),
     })
@@ -2093,7 +2020,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([])),
     })
     expect(restored.store.getSnapshot().sessionOrderByAccount[UNGROUPED_KEY]).toEqual(['two', 'three', 'one'])
-    expect(screen.getAllByRole('treeitem').slice(1).map(row => row.textContent)).toEqual([
+    expect(['two', 'three', 'one'].map(title => treeRow(title).textContent)).toEqual([
       expect.stringContaining('two'),
       expect.stringContaining('three'),
       expect.stringContaining('one'),
@@ -2127,7 +2054,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
     })
     fireEvent.click(screen.getByText('alpha'))
-    const [one, two] = screen.getAllByRole('treeitem').slice(1) as [HTMLElement, HTMLElement]
+    const [one, two] = [treeRow('one'), treeRow('two')]
     two.getBoundingClientRect = () => ({
       top: 150, bottom: 184, left: 0, right: 200, width: 200, height: 34, x: 0, y: 150, toJSON: () => ({}),
     })
@@ -2151,7 +2078,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
     })
     fireEvent.click(screen.getByText('alpha'))
-    const [one, two] = screen.getAllByRole('treeitem').slice(1) as [HTMLElement, HTMLElement]
+    const [one, two] = [treeRow('one'), treeRow('two')]
     two.getBoundingClientRect = () => ({
       top: 150, bottom: 184, left: 0, right: 200, width: 200, height: 34, x: 0, y: 150, toJSON: () => ({}),
     })
@@ -2162,7 +2089,31 @@ describe('WorkspaceBrowser', () => {
     fireEvent(document.body, outsideDrop)
     expect(outsideDrop.defaultPrevented).toBe(true)
     fireEvent.dragEnd(one)
-    expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
+    expect(insertSessionBefore).toHaveBeenCalledWith(wid('alpha'), sid('one'), undefined)
+  })
+
+  it('logs and keeps the order when the reorder call rejects', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const insertSessionBefore = vi.fn(async () => { throw new Error('stale anchor') })
+      const sessions = sessionState([summary('one', 2), summary('two', 1)])
+      mount({
+        useSessions: hook(sessions),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
+        insertSessionBefore,
+      })
+      fireEvent.click(screen.getByText('alpha'))
+      const [one, two] = [treeRow('one'), treeRow('two')]
+      two.getBoundingClientRect = () => ({
+        top: 150, bottom: 184, left: 0, right: 200, width: 200, height: 34, x: 0, y: 150, toJSON: () => ({}),
+      })
+      const dataTransfer = dragData()
+      fireEvent.dragStart(one, { dataTransfer })
+      fireDrag(two, 'drop', 180)
+      await waitFor(() => { expect(warn).toHaveBeenCalledWith('session reorder rejected:', expect.any(Error)) })
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('renames a workspace through the row menu dialog', async () => {

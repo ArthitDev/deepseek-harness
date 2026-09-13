@@ -54,6 +54,31 @@ export function writeModeSelectionEnabled(
   return writeAgentPresetSettings(ctx, { modeSelectionEnabled: enabled })
 }
 
+/**
+ * Set or remove one model's preset override.
+ * @param ctx - browser plugin context carrying the Settings Remote namespace.
+ * @param provider - model provider route.
+ * @param model - provider-owned model id.
+ * @param preset - preset override, or undefined to inherit the default preset.
+ * @returns the failure message, or undefined once the write landed.
+ */
+export async function writeModelPreset(
+  ctx: ClientContext,
+  provider: string,
+  model: string,
+  preset: string | undefined,
+): Promise<string | undefined> {
+  const path = ['models', provider, model]
+  const response = preset === undefined
+    ? await ctx.remote.settings.mutate(
+      AGENT_PRESET_SETTINGS_NS, [{ op: 'unset', path }], undefined,
+    )
+    : await ctx.remote.settings.mutate(
+      AGENT_PRESET_SETTINGS_NS, [{ op: 'set', path, value: preset }], undefined,
+    )
+  return response.ok ? undefined : response.error.message
+}
+
 /** One selectable preset. */
 export interface AgentPresetOption {
   /** Preset id, written to Settings and the label's fallback. */
@@ -70,7 +95,7 @@ export type RosterPreset = AgentPresetRoster['presets'][number]
 /** The roster, or the message to show in its place. */
 export type RosterRead = { ok: true; value: AgentPresetRoster } | { ok: false; error: string }
 
-const EMPTY_ROSTER: AgentPresetRoster = { presets: [], modeSelectionEnabled: false }
+const EMPTY_ROSTER: AgentPresetRoster = { presets: [], authorable: false, models: [], modelPresets: {} }
 
 /**
  * Read the roster, turning a refusal into the message every surface shows.

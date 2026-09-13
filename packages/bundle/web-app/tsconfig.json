@@ -43,6 +43,9 @@
     },
     {
       "path": "../../subprocess/subprocess"
+    },
+    {
+      "path": "../../remote/remote-machines"
     }
   ]
 }

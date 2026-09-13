@@ -118,6 +118,13 @@ describe('validateStoredEvents', () => {
     expect(validateStoredEvents(m, events)).toBe(events)
   })
 
+  it('accepts persisted web-search mode events during resume', () => {
+    const events = [
+      { type: 'web-search/mode', seq: 0, time: 1, data: { always: false } },
+    ] as unknown as SessionEvent[]
+    expect(validateStoredEvents(meta('web-search-mode'), events)).toBe(events)
+  })
+
   it('refuses an unknown event type before adopting anything', () => {
     const m = meta('unknown-type')
     const events = [

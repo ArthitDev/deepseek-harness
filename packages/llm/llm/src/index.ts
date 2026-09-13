@@ -615,7 +615,7 @@ export class LlmRuntime extends TypertRemoteService {
         ...model.name === undefined ? {} : { name: model.name },
         ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
         ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
-        ...model.inputModalities === undefined ? {} : { inputModalities: [...model.inputModalities] },
+        ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
       })
     }
     return models
@@ -1020,6 +1020,9 @@ export class LlmRuntime extends TypertRemoteService {
   ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
+      if (options.toolChoice === 'required' && (options.tools?.length ?? 0) === 0) {
+        throw new LlmError('toolChoice "required" requires at least one tool', 'INVALID_REQUEST')
+      }
       const registration = prepared?.registration ?? this.registration(options.provider)
       const adapter = registration.adapter
       let modelInfo: LlmResolvedModelInfo

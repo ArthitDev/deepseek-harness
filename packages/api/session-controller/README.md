@@ -80,6 +80,8 @@ References keep local Session data, scoped Contexts, and history streams alive, 
 
 `workspacePathApplications({ path })` returns the serving desktop’s file handlers after the same filesystem mapping check used by `openWorkspacePath`. An optional `application` in the open request selects a currently registered handler without changing the system default. Application names, default selection, icons, and platform coverage come from [native-command](../../util/native-command/README.md). These operations do not activate an Agent or append Session events. Native failures return bounded messages; original command errors remain Host-side causes.
 
+The root-addressed `skills/installed`, `skills/setEnabled`, `skills/remove`, `skills/search`, and `skills/add` Remotes manage user-global skills without opening a Session. `setEnabled` atomically moves a skill between `$DSH_HOME/skills` and `$DSH_HOME/disabled-skills`; `remove` moves either form into `$DSH_HOME/skill-backups` for recovery. Search delegates to `npx skills find`; installation runs the CLI without a shell or Harness credentials in an OS temporary directory, validates that exactly the requested catalog identifier produced a `SKILL.md`, and atomically publishes it under `$DSH_HOME/skills`. A replaced directory is preserved under `$DSH_HOME/skill-backups` and restored if the final move fails.
+
 -----
 
 <a id="configuration"></a>
@@ -110,8 +112,7 @@ No direct effect; model requests remain owned by the Agent and LLM packages.
 - A failed follow resumption remains visible to the caller instead of retrying indefinitely.
 - The raw browser upload is one streaming HTTP request without resumable offsets; a retry sends the file again from byte zero.
 - File-reference completion uses the shared Agent lookup and can resume a cold Session; the `skills/list` catalog is the non-activating alternative for skill metadata.
-- Accepted/running display memory lives only in Client memory and is lost on page reload.
-- That memory is not shared between tabs: one tab can show a converted row while another still shows `New Session` for the same Session.
+- Catalog search and installation require network access plus an available `npx`; the management Remote accepts only one `owner/repository@skill` identifier returned by the catalog.
 
 
 <a id="dev-note"></a>

@@ -213,13 +213,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Plan control inside the composer tool row. */
     'conversation.input.plan': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
-    /** Current-session permission control inside the composer tool row. */
-    'conversation.input.permission': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
-    /**
-     * Model selector inside the composer tool row. When expanded controls cannot
-     * share a line, the row sets --dsh-composer-model-text-display to none and
-     * --dsh-composer-model-icon-display to block for an occupant's compact display.
-     */
+    /** Per-session always-search control inside the composer tool row. */
+    'conversation.input.webSearch': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
+    /** Local or saved remote machine target inside the composer tool row. */
+    'conversation.input.machine': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
+    /** Model selector inside the composer tool row. */
     'conversation.input.model': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
   }
 
@@ -421,9 +419,8 @@ export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
     | 'conversation.input.attachments' | 'conversation.input.overlay'
-    | 'conversation.input.permission'
-    | 'conversation.input.left' | 'conversation.input.plan'
-    | 'conversation.input.right' | 'conversation.input.model' | 'conversation.input.activity'
+    | 'conversation.input.left' | 'conversation.input.plan' | 'conversation.input.webSearch'
+    | 'conversation.input.machine' | 'conversation.input.right' | 'conversation.input.model'
     | 'conversation.composer.dock'
   >
   & InjectFace<ComposerBarInjected>
