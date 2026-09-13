@@ -192,7 +192,7 @@ Execute a bash command (`bash -c`) and return its stdout/stderr. Each call runs 
     },
     "description": {
       "type": "string",
-      "description": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
+      "description": "Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
     },
     "timeoutMs": {
       "type": "number",
@@ -208,8 +208,7 @@ Execute a bash command (`bash -c`) and return its stdout/stderr. Each call runs 
     }
   },
   "required": [
-    "command",
-    "description"
+    "command"
   ]
 }
 ```
@@ -236,7 +235,7 @@ Execute a PowerShell command (`pwsh -Command`) and return its stdout/stderr. Eac
     },
     "description": {
       "type": "string",
-      "description": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"Get-Process\" → \"List running processes\"."
+      "description": "Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"Get-Process\" → \"List running processes\"."
     },
     "timeoutMs": {
       "type": "number",
@@ -252,8 +251,7 @@ Execute a PowerShell command (`pwsh -Command`) and return its stdout/stderr. Eac
     }
   },
   "required": [
-    "command",
-    "description"
+    "command"
   ]
 }
 ```

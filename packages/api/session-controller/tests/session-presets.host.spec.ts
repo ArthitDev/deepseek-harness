@@ -25,7 +25,10 @@ function stubAgent(session: Session): Agent {
   return { id: session.id, session, status: 'idle' } as unknown as Agent
 }
 
-function roster(ids: readonly string[]): unknown {
+function roster(
+  ids: readonly string[],
+  modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
+): unknown {
   const presetOf = (id: string): object => ({
     id,
     trust: 'system',
@@ -33,6 +36,7 @@ function roster(ids: readonly string[]): unknown {
   })
   return {
     defaultId: ids[0],
+    presetIdForModel: (provider: string, model: string) => modelPresets[provider]?.[model] ?? ids[0],
     resolve: (id?: string) => {
       const wanted = id ?? ids[0] ?? ''
       if (!ids.includes(wanted)) {
@@ -48,7 +52,10 @@ function roster(ids: readonly string[]): unknown {
   }
 }
 
-async function harness(presets?: readonly string[]) {
+async function harness(
+  presets?: readonly string[],
+  modelPresets?: Readonly<Record<string, Readonly<Record<string, string>>>>,
+) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-session-preset-')))
   tempDirs.push(cwd)
   const ctx = new Context()
@@ -56,7 +63,7 @@ async function harness(presets?: readonly string[]) {
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
   if (presets !== undefined) {
-    ctx.provide('agentPresets', roster(presets) as never)
+    ctx.provide('agentPresets', roster(presets, modelPresets) as never)
   }
 
   const factory: AgentFactory = {
@@ -101,6 +108,17 @@ describe('session.create Agent preset identity', () => {
     await remote.create({ sessionId: SessionId('s2') })
 
     expect(ctx.sessions.get(SessionId('s2'))?.header.agentPreset).toBe('standard')
+  })
+
+  it('records the current default model\'s preset when the caller names none', async () => {
+    const { ctx, remote } = await harness(
+      ['standard', 'minimal'],
+      { test: { 'test-model': 'minimal' } },
+    )
+
+    await remote.create({ sessionId: SessionId('s2-model') })
+
+    expect(ctx.sessions.get(SessionId('s2-model'))?.header.agentPreset).toBe('minimal')
   })
 
   it('rejects an unknown preset', async () => {

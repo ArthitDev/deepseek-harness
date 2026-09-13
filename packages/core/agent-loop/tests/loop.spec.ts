@@ -521,7 +521,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     const request = adapter.requests[0]
-    expect(request!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.')
+    expect(request!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.\n\nNever announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.')
     expect(request!.tools?.map(t => t.name)).toEqual(['noop'])
   })
 
@@ -1132,6 +1132,22 @@ describe('agent loop', () => {
     // a reconstructable fact, not silent drift.
     const headerEvent = agent.session.snapshotEvents().find(e => e.type === 'request/header')
     expect(headerEvent?.type === 'request/header' && headerEvent.data.header.config.model).toBe('other-model')
+  })
+
+  it('applies a provider-neutral tool choice policy to one request', async () => {
+    const adapter = new MockAdapter([textResponse('ok')])
+    const ctx = await harness(adapter)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'clock', description: 'read the clock', parameters: {},
+      async execute() { return [{ type: 'text', text: 'now' }] },
+    }))
+    const agent = await ctx.agentLoop.create(SessionId('tool-choice'), { provider: 'mock', model: 'mock' })
+    ctx.on('agent/tool-choice', ({ step }, next) => step === 1 ? Promise.resolve('required' as const) : next())
+
+    send(agent, 'what time is it?')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests[0]?.toolChoice).toBe('required')
   })
 
   it('agent/pre-step fires once per proposed step before the step is opened', async () => {

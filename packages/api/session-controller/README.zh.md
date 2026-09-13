@@ -33,6 +33,8 @@ Client adapter 提供 `SessionEventStream`，即绑定到一个普通 Session �
 
 Session 对象还承载本地提交回显：`session.beginSubmission` 在调用方序列化与 prompt 之前，同步把一条回显写入 `SessionSnapshot.pendingSubmissions`，会话 UI 因此能在点击提交的当帧显示消息。回显按顺序存放图片预览与持久文件引用。Session 根据当前运行状态与请求的投递模式推导其 `transcript`、`queued` 或 `steering` 位置，并在序列化期间保留该位置。prompt 的 `requestId` 是关联标识：Host 把它回显为 durable user source 的 `rpcId`，queue occurrence 也把它投影为 `SessionQueuedItem.rpcId`。回显在观察到其 durable event 或 queue occurrence 后延迟一个动画帧退休，带标识的 prompt 失败或被放弃时立即退休，销毁时按 failed 退休。每次退休恰好触发一次 `onRetire`；observed 退休还会携带有序的持久附件引用，让 composer 释放成功卡片并保留失败草稿。回显只存在于 Client 内存；刷新与重连只从 durable event 重建会话。
 
+根地址的 `skills/installed`、`skills/setEnabled`、`skills/remove`、`skills/search` 和 `skills/add` Remote 无需打开 Session 即可管理用户全局 skill。`setEnabled` 会在 `$DSH_HOME/skills` 与 `$DSH_HOME/disabled-skills` 之间原子移动 skill；`remove` 会把任一状态的 skill 移入 `$DSH_HOME/skill-backups` 以便恢复。搜索委托给 `npx skills find`；安装过程不会启动 shell，也不会向 CLI 传递 Harness 凭据，而是在操作系统临时目录运行 CLI，校验请求的目录标识恰好生成一个 `SKILL.md`，再原子发布到 `$DSH_HOME/skills`。被替换的目录会保存在 `$DSH_HOME/skill-backups`，最终移动失败时会自动恢复。
+
 -----
 
 <a id="configuration"></a>
@@ -63,6 +65,7 @@ Session 对象还承载本地提交回显：`session.beginSubmission` 在调用�
 - follow 恢复失败会对调用方可见，而不会无限重试。
 - 浏览器原始字节上传使用一次不带断点续传偏移的流式 HTTP 请求；重试会从第一个字节重新传输整个文件。
 - 文件引用补全使用共享 Agent lookup，因此可能恢复冷 Session；`skills/list` 目录是不激活 Agent 的 skill 元数据读取路径。
+- 目录搜索与安装需要网络访问和可用的 `npx`；管理 Remote 只接受目录返回的一个 `owner/repository@skill` 标识。
 
 
 <a id="dev-note"></a>

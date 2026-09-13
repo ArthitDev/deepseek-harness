@@ -377,6 +377,85 @@
   margin-top: 4px;
 }
 
+.machineSection + .machineSection {
+  margin-top: 8px;
+}
+
+.machineRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.machineRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.machineChevron,
+.machineIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.machineIcon {
+  width: 18px;
+}
+
+.machineIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.machineRowActive .machineIcon {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.machineArrow {
+  transition: transform 150ms var(--ds-ease-in-out);
+}
+
+.machineArrowOpen {
+  transform: rotate(90deg);
+}
+
+.machineName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.machineCount {
+  min-width: 20px;
+  border-radius: 10px;
+  padding: 1px 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.machineChildren {
+  margin-left: 16px;
+}
+
 .listTopDropIndicator,
 .workspaceDropBefore::before,
 .workspaceDropAfter::after {

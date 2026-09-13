@@ -12,8 +12,8 @@
 import { loadWin32DialogBindings } from './win32-dialog-bindings.ts'
 import { runFolderDialog } from './win32-dialog-logic.ts'
 
-/** The driver-to-child payload: the dialog title (passed via env). */
-export interface Win32DialogWorkerData { title: string }
+/** The driver-to-child payload (passed via env). */
+export interface Win32DialogWorkerData { title: string; iconPath: string }
 
 /** One notice or outcome posted back to the driver. */
 export type Win32DialogWorkerMessage =
@@ -22,6 +22,7 @@ export type Win32DialogWorkerMessage =
   | { kind: 'error'; message: string }
 
 const title = process.env.DSH_DIALOG_TITLE ?? ''
+const iconPath = process.env.DSH_DIALOG_ICON
 if (title === '') throw new Error('win32-dialog-worker: DSH_DIALOG_TITLE is required')
 if (process.send === undefined) throw new Error('win32-dialog-worker must run as a child process with an IPC channel')
 // node's internal `send` reads `this.connected`, so bind the receiver.
@@ -40,7 +41,7 @@ process.on('disconnect', () => process.exit(0))
 // No top-level await: the built worker ships as CJS, which cannot carry TLA.
 void (async () => {
   try {
-    const bindings = await loadWin32DialogBindings()
+    const bindings = await loadWin32DialogBindings(iconPath)
     const path = runFolderDialog(bindings, title, (threadId) => {
       post({ kind: 'showing', threadId } satisfies Win32DialogWorkerMessage)
     })

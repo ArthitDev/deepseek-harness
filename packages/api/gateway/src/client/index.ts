@@ -118,6 +118,8 @@ export interface ClientRemote extends TypertClientRemote {
 export interface RemoteHostFacts {
   /** Host home directory from the ready frame, undefined before it. */
   readonly home: string | undefined
+  /** OS hostname from the ready frame, undefined before it or on an older Host. */
+  readonly hostname: string | undefined
   /** Whether the carrier connects to the local Host. */
   readonly isLoopback: boolean
 }
@@ -191,9 +193,11 @@ class ClientRemoteService extends Service implements ClientRemote {
     // Identity-stable: readers (useSyncExternalStore snapshots, memo inputs)
     // compare by reference, so a fresh object is minted only when the fact
     // itself changed. isLoopback is fixed for the page lifetime.
-    const home = this.connection.generation.getSnapshot()?.host.home
-    if (this.hostFacts === undefined || this.hostFacts.home !== home) {
-      this.hostFacts = { home, isLoopback: this.connection.isLoopback }
+    const host = this.connection.generation.getSnapshot()?.host
+    const home = host?.home
+    const hostname = host?.hostname
+    if (this.hostFacts === undefined || this.hostFacts.home !== home || this.hostFacts.hostname !== hostname) {
+      this.hostFacts = { home, hostname, isLoopback: this.connection.isLoopback }
     }
     return this.hostFacts
   }
@@ -336,8 +340,8 @@ class ClientRemoteService extends Service implements ClientRemote {
         if (!method.token.active) continue
         method.token.active = false
         method.token.abort.abort()
-        if (method.scoped) handle.service.remove('scoped', method.descriptor.method, method.token)
-        if (method.direct) handle.service.remove('direct', method.descriptor.method, method.token)
+        if (method.scoped) handle.service[removeRemoteMethod]('scoped', method.descriptor.method, method.token)
+        if (method.direct) handle.service[removeRemoteMethod]('direct', method.descriptor.method, method.token)
       }
       await this.disposeNamespace(name, handle)
     }
@@ -529,6 +533,8 @@ type InvokeRemote = (
   args: readonly unknown[],
 ) => Promise<RemoteResult<unknown>> | AsyncIterable<unknown>
 
+const removeRemoteMethod = Symbol('removeRemoteMethod')
+
 class RemoteNamespaceService extends Service {
   private readonly methods = new Map<string, RemoteMethodRecord>()
   private readonly namespace: string
@@ -598,7 +604,7 @@ class RemoteNamespaceService extends Service {
     else record.scoped = value as ScopedMethod
   }
 
-  remove(kind: 'direct' | 'scoped', method: string, token: MountToken): void {
+  [removeRemoteMethod](kind: 'direct' | 'scoped', method: string, token: MountToken): void {
     const record = this.methods.get(method)
     const current = record?.[kind]
     /* v8 ignore next -- duplicate live variants are rejected before installation, so no newer token can replace this one. */
@@ -646,8 +652,8 @@ function installMethods(
     for (const method of [...installed].reverse()) {
       method.token.active = false
       method.token.abort.abort()
-      if (method.scoped) service.remove('scoped', method.descriptor.method, method.token)
-      if (method.direct) service.remove('direct', method.descriptor.method, method.token)
+      if (method.scoped) service[removeRemoteMethod]('scoped', method.descriptor.method, method.token)
+      if (method.direct) service[removeRemoteMethod]('direct', method.descriptor.method, method.token)
     }
     throw error
   }

@@ -13,6 +13,12 @@
     - button "Agent presets":
       - img
       - text: Agent presets
+    - button "Remote machines":
+      - img
+      - text: Remote machines
+    - button "Skills":
+      - img
+      - text: Skills
   - button "Open configuration file"
   - button "Close":
     - img

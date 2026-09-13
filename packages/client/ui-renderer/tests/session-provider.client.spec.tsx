@@ -13,6 +13,14 @@ import { createSlotRenderer } from '../src/client/scoped-slots.tsx'
 
 type SessionBinding = ScopedStandardSourceBinding
 
+/** Silence only the jsdom report for an error the current test deliberately renders. */
+function suppressExpectedRenderError(): () => void {
+  const onError = (event: ErrorEvent): void => { event.preventDefault() }
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  window.addEventListener('error', onError)
+  return () => { window.removeEventListener('error', onError); spy.mockRestore() }
+}
+
 function observable<T>(initial: T) {
   let value = initial
   const subs = new Set<() => void>()
@@ -230,9 +238,9 @@ describe('SessionProvider', () => {
 
   it('fails loud when the Session scope owner omits its area renderer', () => {
     const h = makeHost({ root: () => null }, { installRenderArea: false })
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const restoreError = suppressExpectedRenderError()
     expect(() => render(<>{createSlotRenderer().renderRoot(h.host, {})}</>))
       .toThrow(/does not provide its area renderer/)
-    spy.mockRestore()
+    restoreError()
   })
 })

@@ -184,7 +184,7 @@ Loop-retained response blocks append to the next request and preserve its earlie
 These limits define where the adapter stops and future work begins. They are current package constraints, not a general DeepSeek comparison or a task backlog.
 
 - **A settings `models` list replaces the composition list wholesale** — settings-layer merging is per-field, and arrays are one field; per-entry catalog merging would need a keyed shape.
-- **`tool_choice` is not mapped** — not part of the core vocabulary (shared with the pi-ai twin).
+- **`tool_choice` supports `auto`, `required`, and `none`** — the adapter maps the provider-neutral `GenerateOptions.toolChoice` directly to the OpenAI-compatible wire field.
 - **Requests use raw `fetch`, not `@cordisjs/plugin-http`** — no shared proxy or interception configuration.
 - **Plugin-added content block types are skipped** — core text and supported image blocks are serialized, and empty tool output crosses the wire as the literal `(no output)`.
 - **Images are input-only durable attachments** — direct external URLs and assistant image output are not supported; DeepSeek input normally uses the Files API and uses inline base64 only for per-request recovery.

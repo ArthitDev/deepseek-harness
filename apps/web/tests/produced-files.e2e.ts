@@ -132,10 +132,10 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
 
   it.skipIf(MODE === 'record')('adapts a ten-file summary without leaving one line', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-produced-files'))
-    const groupRow = page.locator('[role="treeitem"]').first()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
     if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
 

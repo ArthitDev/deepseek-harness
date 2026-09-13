@@ -28,6 +28,7 @@
   "files": [
     "lib/index.js",
     "lib/worker.cjs",
+    "assets/app.ico",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",

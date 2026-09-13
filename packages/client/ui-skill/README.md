@@ -27,6 +27,12 @@ English | [中文](README.zh.md)
 
 Type `/` in the composer and pick a skill from the suggestions, or type `/name` directly; the sent message carries the literal text, and the host loads the skill the same way for a menu pick or a hand-typed token. A name shared with a host command still resolves to the command — adjudication claims the line client-side before it ever becomes a prompt.
 
+### Manage global skills
+
+Open **Settings > Skills** to run a command in the host's native interactive shell or search the public skills.sh catalog. The installed list can enable, disable, or remove each global skill; disabled directories live under `$DSH_HOME/disabled-skills`, while removed skills move to `$DSH_HOME/skill-backups` for recovery. Terminal commands run with the host user's permissions after an in-app confirmation; output streams back to the page and prompts accept further input. Catalog result installs remain separate: the Host runs `npx skills` without a shell in an isolated staging directory, accepts exactly one requested skill with a valid `SKILL.md`, then publishes it to `$DSH_HOME/skills`; replacing an existing skill first moves the old copy to `$DSH_HOME/skill-backups/<timestamp-and-id>/`. Successful mutations clear the browser cache so subsequent skill discovery sees the filesystem update.
+
+Treat every skill as executable guidance: its instructions can direct the Agent to run commands, access services, and modify files. Install only sources you trust.
+
 ### What the source offers
 
 Ordinary-session candidates come from the `skills/list` Remote; the host serves every user-invocable skill, and a `modelInvocable: false` entry (a `disable-model-invocation` skill, whose only entry point is this path) wears the user-only marker as a description prefix in the active language. Results rank through the `/` menu's shared name ranker, `rankByName` from ui-primitives: the query matches a case-insensitive ordered subsequence of the skill name, prefix hits rank first, and ties keep the host order ([ranking decision](../../../.agents/notes/archived/feature/2026-08-04-web-slash-command-fuzzy-discovery.md)). A failed `skills/list` call is logged and folded into a silent menu-group drop — the menu shows only pending/ready states.
@@ -96,6 +102,7 @@ These limits define where the reference and the row fall back to generic behavio
 - **Result-only history pages use the generic row** — keyed dispatch needs the paired call in the runtime window; pagination that leaves the call outside has no tool identity. This client presentation feature does not extend the history wire contract to recover it.
 - **Text is the truth** — the reference is plain draft text; a hand-typed identical token is the same reference, and the host gesture boundary judges the sent text, not the menu interaction. Chip visuals derive from the lexicon scan; no occurrence identity, position tracking, or structured reference payload exists on the prompt wire.
 - **A menu opened before the prewarm settles** shows no skill candidates for that keystroke; the next keystroke re-polls the settled cache.
+- **Terminal rendering is intentionally minimal** — it keeps up to 512 KiB of recent output and accepts line input, Ctrl+C, and Stop, but does not emulate full ANSI terminal rendering or resize a running shell. The catalog UI still installs one skill at a time and does not yet update skills in place.
 
 <a id="dev-note"></a>
 ### Dev Note

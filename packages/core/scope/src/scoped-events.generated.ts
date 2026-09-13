@@ -20,6 +20,7 @@ const scopedSubjectResolvers: Readonly<Record<string, ScopedSubjectResolver | nu
   'agent/request-error': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/session-start': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/status': args => (args[0] as Record<string, unknown>)['agent'],
+  'agent/tool-choice': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/turn-stopping': args => (args[0] as Record<string, unknown>)['agent'],
   'approval/request': args => (args[0] as Record<string, unknown>)['agent'],
   'goal/changed': args => (args[0] as Record<string, unknown>)['agent'],

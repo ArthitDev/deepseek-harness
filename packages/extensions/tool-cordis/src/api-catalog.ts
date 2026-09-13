@@ -136,6 +136,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Registry over the deployment\'s agent presets.\n\nDiscovery is unmemoized: `list()` and `resolve()` re-read the roots on every call so a preset authored while the process runs is visible immediately, and a preset deleted underneath a picker disappears from the next read.',
     methods: [
       {
+        signature: 'presetIdForModel(provider: string, model: string): string',
+        description: 'Resolve the preset configured for one model route.',
+        parameters: [{ name: 'provider', description: 'model provider route.' }, { name: 'model', description: 'provider-owned model id.' }],
+        returns: 'the route override, or the current default preset when unbound.',
+      },
+      {
         signature: 'async list(): Promise<AgentPreset[]>',
         description: 'Every preset the configured roots currently supply.',
         parameters: [],
@@ -1426,6 +1432,54 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'remoteMachines',
+    summary: 'Owns saved SSH profiles, fingerprint trust, and shared remote transports.',
+    description: 'Owns saved SSH profiles, fingerprint trust, and shared remote transports.',
+    methods: [
+      {
+        signature: 'readonly connections: SshConnectionPool',
+        description: 'Fingerprint-verified connection pool shared by filesystem and subprocess providers.',
+        parameters: [],
+      },
+      {
+        signature: 'profile(id: string): RemoteMachineProfile | undefined',
+        description: 'Read a Host-only profile with any lifetime-only password applied.',
+        parameters: [{ name: 'id', description: 'Saved machine identifier.' }],
+        returns: 'the complete profile, or undefined when it is absent.',
+      },
+      {
+        signature: '@Remote(\'list\') list(): RemoteMachinesValue',
+        description: 'List every saved machine without credential fields.',
+        parameters: [],
+        returns: 'redacted views for every saved machine.',
+      },
+      {
+        signature: '@Remote(\'save\') async save(request: RemoteMachineSaveRequest): Promise<RemoteMachineValue>',
+        description: 'Create or update one saved profile.',
+        parameters: [{ name: 'request', description: 'Validated profile fields and optional secrets.' }],
+        returns: 'the redacted saved profile.',
+      },
+      {
+        signature: '@Remote(\'remove\') async remove(request: RemoteMachineIdRequest): Promise<RemoteMachineRemoveValue>',
+        description: 'Delete a saved profile that has no registered workspace.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier.' }],
+        returns: 'confirmation after settings and cached credentials are cleared.',
+      },
+      {
+        signature: '@Remote(\'probe\') async probe(request: RemoteMachineProbeRequest): Promise<RemoteMachineProbeValue>',
+        description: 'Observe an SSH host key and platform without trusting a new key.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier and optional lifetime-only password.' }],
+        returns: 'the observed fingerprint and remote platform details.',
+      },
+      {
+        signature: '@Remote(\'trust\') async trust(request: RemoteMachineTrustRequest): Promise<RemoteMachineValue>',
+        description: 'Re-probe and save one exact SSH host fingerprint.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier and observed fingerprint.' }],
+        returns: 'the updated redacted profile.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -1949,6 +2003,60 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     description: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     methods: [
+      {
+        signature: '@Remote async terminalOpen(request: SkillTerminalOpenRequest, signal: AbortSignal): Promise<SkillTerminalOpenValue>',
+        description: 'Start one unrestricted command in the host platform\'s native interactive shell.',
+        parameters: [{ name: 'request', description: 'Command and initial terminal dimensions.' }, { name: 'signal', description: 'Caller cancellation for terminal startup.' }],
+        returns: 'the caller-owned terminal identifier.',
+      },
+      {
+        signature: '@Remote terminalRead(request: SkillTerminalReadRequest): SkillTerminalReadValue',
+        description: 'Read terminal output from the caller-owned character offset.',
+        parameters: [{ name: 'request', description: 'Terminal identifier and character offset.' }],
+        returns: 'retained output and the next readable offset.',
+      },
+      {
+        signature: '@Remote async terminalWrite(request: SkillTerminalWriteRequest): Promise<SkillTerminalWriteValue>',
+        description: 'Write terminal input verbatim, including control characters.',
+        parameters: [{ name: 'request', description: 'Terminal identifier and input text.' }],
+        returns: 'whether the terminal accepted the input.',
+      },
+      {
+        signature: '@Remote async terminalClose(request: SkillTerminalCloseRequest): Promise<SkillTerminalCloseValue>',
+        description: 'Terminate and forget one Skills settings terminal.',
+        parameters: [{ name: 'request', description: 'Terminal identifier to close.' }],
+        returns: 'whether an open terminal was closed.',
+      },
+      {
+        signature: '@Remote async installed(): Promise<InstalledSkillsValue>',
+        description: 'List skills installed directly in the user-global DSH skill root.',
+        parameters: [],
+        returns: 'the installed skill names in stable order.',
+      },
+      {
+        signature: '@Remote async setEnabled(request: SkillSetEnabledRequest): Promise<SkillSetEnabledValue>',
+        description: 'Enable or disable one global skill by moving it into or out of discovery.',
+        parameters: [{ name: 'request', description: 'Installed skill name and desired state.' }],
+        returns: 'the persisted state.',
+      },
+      {
+        signature: '@Remote async remove(request: SkillRemoveRequest): Promise<SkillRemoveValue>',
+        description: 'Remove one global skill from discovery while retaining a recoverable backup.',
+        parameters: [{ name: 'request', description: 'Installed skill name to remove.' }],
+        returns: 'whether an installed directory was moved to backup.',
+      },
+      {
+        signature: '@Remote async search(request: SkillSearchRequest, signal: AbortSignal): Promise<SkillSearchValue>',
+        description: 'Search skills.sh through the maintained `skills` CLI.',
+        parameters: [{ name: 'request', description: 'validated search text.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'matching installable skills.',
+      },
+      {
+        signature: '@Remote(\'add\') async install(request: SkillInstallRequest, signal: AbortSignal): Promise<SkillInstallValue>',
+        description: 'Install one skills.sh source into the user-global DSH skill root.',
+        parameters: [{ name: 'request', description: 'canonical owner/repository and skill selection.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the installed skill identity.',
+      },
       {
         signature: '@Remote async list(request: SkillListRequest, signal: AbortSignal): Promise<SkillListValue>',
         description: 'List the user-invocable skills visible to one Session composition.',
@@ -3145,6 +3253,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.status - the status just entered (the transition\'s destination). Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
+    name: 'agent/tool-choice',
+    mode: 'waterfall',
+    signature: '\'agent/tool-choice\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<ToolChoice | undefined>): Promise<ToolChoice | undefined>',
+    summary: 'Select the provider-neutral tool-call policy for one exact model request.',
+    description: 'Select the provider-neutral tool-call policy for one exact model request. A mode that requires a tool returns `required`; otherwise call `next()`.',
+    parameters: [{ name: 'payload', description: '.signal - the current turn\'s cancellation signal. Scope-filtered dispatch: agent-scoped listeners receive only that agent.' }],
+  },
+  {
     name: 'agent/turn-stopping',
     mode: 'serial',
     signature: '\'agent/turn-stopping\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; signal: AbortSignal }): Promise<void> | void',
@@ -3621,8 +3737,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AgentPresetDocument {\n    readonly agentPreset: string;\n    readonly trust: PresetTrust;\n    readonly content: string;\n    readonly name?: string;\n    readonly description?: string;\n}',
   },
   {
+    name: 'AgentPresetModelRow',
+    declaration: 'export interface AgentPresetModelRow {\n    readonly provider: string;\n    readonly providerName: string;\n    readonly id: string;\n    readonly name: string;\n}',
+  },
+  {
     name: 'AgentPresetRoster',
-    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly authorable: boolean;\n}',
+    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly authorable: boolean;\n    readonly models: readonly AgentPresetModelRow[];\n    readonly modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>;\n    readonly defaultModel?: {\n        readonly provider: string;\n        readonly model: string;\n    };\n}',
   },
   {
     name: 'AgentPresetRow',
@@ -4290,7 +4410,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolChoice?: ToolChoice;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -4387,6 +4507,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'InspectorJsonValue',
     declaration: 'export type InspectorJsonValue = InspectorJsonPrimitive | readonly InspectorJsonValue[] | InspectorJsonObject;',
+  },
+  {
+    name: 'InstalledSkillEntry',
+    declaration: 'export interface InstalledSkillEntry {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
+  },
+  {
+    name: 'InstalledSkillsValue',
+    declaration: 'export interface InstalledSkillsValue {\n    readonly skills: readonly InstalledSkillEntry[];\n}',
   },
   {
     name: 'InvariantFailure',
@@ -4514,7 +4642,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    reasoningEfforts?: Readonly<Record<string, string | null>>;\n}',
   },
   {
     name: 'LlmFailure',
@@ -4890,7 +5018,51 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RemoteEventHostInfo',
-    declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
+    declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n    readonly hostname?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineAuth',
+    declaration: 'export type RemoteMachineAuth = \'agent\' | \'password\' | \'password-prompt\' | \'private-key\';',
+  },
+  {
+    name: 'RemoteMachineIdRequest',
+    declaration: 'export interface RemoteMachineIdRequest {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'RemoteMachineProbeRequest',
+    declaration: 'export interface RemoteMachineProbeRequest extends RemoteMachineIdRequest {\n    readonly password?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineProbeValue',
+    declaration: 'export interface RemoteMachineProbeValue {\n    readonly fingerprint: string;\n    readonly trusted: boolean;\n    readonly home?: string;\n    readonly platform?: \'linux\' | \'darwin\' | \'windows\' | \'unknown\';\n}',
+  },
+  {
+    name: 'RemoteMachineProfile',
+    declaration: 'export interface RemoteMachineProfile {\n    readonly id: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly password?: string;\n    readonly privateKey?: string;\n    readonly passphrase?: string;\n    readonly fingerprint?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineRemoveValue',
+    declaration: 'export interface RemoteMachineRemoveValue {\n    readonly removed: true;\n}',
+  },
+  {
+    name: 'RemoteMachineSaveRequest',
+    declaration: 'export interface RemoteMachineSaveRequest {\n    readonly id?: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port?: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly password?: string;\n    readonly privateKey?: string;\n    readonly passphrase?: string;\n}',
+  },
+  {
+    name: 'RemoteMachinesValue',
+    declaration: 'export interface RemoteMachinesValue {\n    readonly machines: readonly RemoteMachineView[];\n}',
+  },
+  {
+    name: 'RemoteMachineTrustRequest',
+    declaration: 'export interface RemoteMachineTrustRequest {\n    readonly id: string;\n    readonly fingerprint: string;\n}',
+  },
+  {
+    name: 'RemoteMachineValue',
+    declaration: 'export interface RemoteMachineValue {\n    readonly machine: RemoteMachineView;\n}',
+  },
+  {
+    name: 'RemoteMachineView',
+    declaration: 'export interface RemoteMachineView {\n    readonly id: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly fingerprint?: string;\n    readonly hasPassword: boolean;\n    readonly hasPrivateKey: boolean;\n    readonly hasPassphrase: boolean;\n}',
   },
   {
     name: 'ReplayEnvelope',
@@ -5617,6 +5789,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillEntry {\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
   },
   {
+    name: 'SkillInstallRequest',
+    declaration: 'export interface SkillInstallRequest {\n    readonly source: string;\n}',
+  },
+  {
+    name: 'SkillInstallValue',
+    declaration: 'export interface SkillInstallValue {\n    readonly installed: readonly string[];\n    readonly backedUp: readonly string[];\n}',
+  },
+  {
     name: 'SkillInvocationPolicy',
     declaration: 'export interface SkillInvocationPolicy {\n    readonly modelInvocable: boolean;\n    readonly userInvocable: boolean;\n}',
   },
@@ -5649,8 +5829,36 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SkillRegistration = Omit<SkillDefinition, \'invocation\' | \'provider\'> & {\n    readonly invocation?: SkillInvocationPolicy;\n    readonly provider?: string;\n};',
   },
   {
+    name: 'SkillRemoveRequest',
+    declaration: 'export interface SkillRemoveRequest {\n    readonly name: string;\n}',
+  },
+  {
+    name: 'SkillRemoveValue',
+    declaration: 'export interface SkillRemoveValue {\n    readonly name: string;\n    readonly removed: boolean;\n}',
+  },
+  {
     name: 'SkillResourceBase',
     declaration: 'export type SkillResourceBase = {\n    readonly kind: \'directory\';\n    readonly path: string;\n} | {\n    readonly kind: \'url\';\n    readonly url: string;\n} | {\n    readonly kind: \'opaque\';\n    readonly description: string;\n};',
+  },
+  {
+    name: 'SkillSearchEntry',
+    declaration: 'export interface SkillSearchEntry {\n    readonly source: string;\n    readonly name: string;\n    readonly url: string;\n}',
+  },
+  {
+    name: 'SkillSearchRequest',
+    declaration: 'export interface SkillSearchRequest {\n    readonly query: string;\n}',
+  },
+  {
+    name: 'SkillSearchValue',
+    declaration: 'export interface SkillSearchValue {\n    readonly skills: readonly SkillSearchEntry[];\n}',
+  },
+  {
+    name: 'SkillSetEnabledRequest',
+    declaration: 'export interface SkillSetEnabledRequest {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
+  },
+  {
+    name: 'SkillSetEnabledValue',
+    declaration: 'export interface SkillSetEnabledValue {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
   },
   {
     name: 'SkillSource',
@@ -5659,6 +5867,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillSummary',
     declaration: 'export interface SkillSummary {\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
+  },
+  {
+    name: 'SkillTerminalCloseRequest',
+    declaration: 'export interface SkillTerminalCloseRequest {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'SkillTerminalCloseValue',
+    declaration: 'export interface SkillTerminalCloseValue {\n    readonly closed: boolean;\n}',
+  },
+  {
+    name: 'SkillTerminalOpenRequest',
+    declaration: 'export interface SkillTerminalOpenRequest {\n    readonly command: string;\n    readonly rows?: number;\n    readonly cols?: number;\n}',
+  },
+  {
+    name: 'SkillTerminalOpenValue',
+    declaration: 'export interface SkillTerminalOpenValue {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'SkillTerminalReadRequest',
+    declaration: 'export interface SkillTerminalReadRequest {\n    readonly id: string;\n    readonly offset: number;\n}',
+  },
+  {
+    name: 'SkillTerminalReadValue',
+    declaration: 'export interface SkillTerminalReadValue {\n    readonly text: string;\n    readonly nextOffset: number;\n    readonly lossy: boolean;\n    readonly exited: boolean;\n    readonly exitCode?: number | null;\n    readonly error?: string;\n}',
+  },
+  {
+    name: 'SkillTerminalWriteRequest',
+    declaration: 'export interface SkillTerminalWriteRequest {\n    readonly id: string;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SkillTerminalWriteValue',
+    declaration: 'export interface SkillTerminalWriteValue {\n    readonly accepted: true;\n}',
   },
   {
     name: 'SkillViewOptions',
@@ -5687,6 +5927,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SpillSource',
     declaration: 'export type SpillSource = {\n    kind: \'tool\';\n    toolName: string;\n    callId: ToolCallId;\n    label: string;\n} | {\n    kind: \'session-reference\';\n    sessionId: SessionId;\n    label: string;\n};',
+  },
+  {
+    name: 'SshConnectionPool',
+    declaration: 'export class SshConnectionPool {\n    constructor(private readonly profileOf: (id: string) => RemoteMachineProfile | undefined);\n    async probe(id: string): Promise<RemoteMachineProbeValue>;\n    async client(id: string): Promise<Client>;\n    async sftp(id: string): Promise<SFTPWrapper>;\n    async exec(id: string, command: string, options: object = {}): Promise<ClientChannel>;\n    invalidate(id?: string): void;\n}',
   },
   {
     name: 'StorageBackend',
@@ -6019,6 +6263,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ToolCallView',
     declaration: 'export type ToolCallView = GenericCallView | TerminalCallView | DiffCallView;',
+  },
+  {
+    name: 'ToolChoice',
+    declaration: 'export type ToolChoice = \'auto\' | \'required\' | \'none\';',
   },
   {
     name: 'ToolDefinition',

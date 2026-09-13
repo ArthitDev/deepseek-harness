@@ -210,7 +210,10 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
       max_tokens: options.maxTokens,
       messages: [{
         role: 'user',
-        content: [{ type: 'text', text: `Perform a web search for the query: ${request.query}` }],
+        content: [{
+          type: 'text',
+          text: `Search the web for the query exactly as written. Prefer sources in the query's language. Do not default to Chinese-language sources unless the query is Chinese or no relevant sources exist.\n\nQuery: ${request.query}`,
+        }],
       }],
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: options.maxUses }],
     }

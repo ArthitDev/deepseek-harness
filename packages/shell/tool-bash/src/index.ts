@@ -43,7 +43,7 @@ export const Config: z<Config> = z.object({
 /** Parsed tool args; execute validates value constraints absent from ParameterSchemaSpec. */
 interface BashToolArgs {
   command: string
-  description: string
+  description?: string
   timeoutMs?: number
   workdir?: string
   run_in_background?: boolean
@@ -55,7 +55,7 @@ function validateBashArgs(args: BashToolArgs): void {
   if (args.command.trim().length === 0) {
     throw new Error('invalid command: expected a non-empty string')
   }
-  if (args.description.trim().length === 0) {
+  if (args.description !== undefined && args.description.trim().length === 0) {
     throw new Error('invalid description: expected a non-empty string')
   }
   if (args.timeoutMs !== undefined && (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0)) {
@@ -96,22 +96,23 @@ function bashDescription(backgroundEnabled: boolean, escalationModes: readonly S
  * The command remains the title on both paths; foreground cwd is passed through
  * for the bridge to resolve, while background descriptions remain card content.
  */
-type BashCallArgs = { command: string; description: string; workdir?: string; run_in_background?: boolean }
+type BashCallArgs = { command: string; description?: string; workdir?: string; run_in_background?: boolean }
 
 function presentBashCall(args: BashCallArgs): GenericCallView | TerminalCallView {
+  const description = args.description ?? args.command
   if (args.run_in_background === true) {
     return {
       card: 'generic',
       title: args.command,
       kind: 'execute',
       rawInput: args.command,
-      content: [{ type: 'text', text: args.description }],
+      content: [{ type: 'text', text: description }],
     }
   }
   return {
     card: 'terminal',
     title: args.command,
-    description: args.description,
+    description,
     ...args.workdir !== undefined ? { cwd: args.workdir } : {},
   }
 }
@@ -245,8 +246,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       command: { type: 'string', required: true, description: 'The bash command to execute.' },
       description: {
         type: 'string',
-        required: true,
-        description: 'Clear, concise description of what this command does in active voice, '
+        description: 'Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. '
           + '5-10 words (shown in the UI). Examples: "ls" → "List files in current directory"; '
           + '"git status" → "Show working tree status"; "npm install" → "Install package dependencies".',
       },

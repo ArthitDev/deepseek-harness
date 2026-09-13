@@ -55,6 +55,14 @@ const SIGDN_FILESYSPATH = 0x80058000 | 0
  */
 const DPI_AWARENESS_CONTEXTS = [-4, -3, -2]
 const WM_CLOSE = 0x10
+const WM_SETICON = 0x80
+const ICON_SMALL = 0
+const ICON_BIG = 1
+const IMAGE_ICON = 1
+const LR_LOADFROMFILE = 0x10
+const WS_EX_TOPMOST = 0x8
+const WS_EX_TOOLWINDOW = 0x80
+const WS_POPUP = 0x80000000
 
 /** IFileOpenDialog vtable slots (IUnknown 0-2, IModalWindow 3, IFileDialog 4+). */
 const SLOT_RELEASE = 2
@@ -85,9 +93,10 @@ const IID_IFILE_OPEN_DIALOG = guidBytes('d57c7288-d4ad-4768-be02-9d969532d960')
 
 /**
  * Load koffi and expose the dialog bindings for this thread.
+ * @param iconPath - Optional icon applied to the native owner window.
  * @returns the bindings {@link runFolderDialog} sequences against.
  */
-export async function loadWin32DialogBindings(): Promise<Win32DialogBindings> {
+export async function loadWin32DialogBindings(iconPath?: string): Promise<Win32DialogBindings> {
   const koffi = (await import('koffi')).default as unknown as Koffi
   const ole32 = koffi.load('ole32.dll')
   const user32 = koffi.load('user32.dll')
@@ -101,6 +110,12 @@ export async function loadWin32DialogBindings(): Promise<Win32DialogBindings> {
   const coCreateInstance = ole32.func('__stdcall', 'CoCreateInstance', 'int32', ['void *', 'void *', 'uint32', 'void *', 'void *'])
   const coTaskMemFree = ole32.func('__stdcall', 'CoTaskMemFree', 'void', ['void *'])
   const getCurrentThreadId = kernel32.func('__stdcall', 'GetCurrentThreadId', 'uint32', [])
+  const createWindowExW = user32.func('__stdcall', 'CreateWindowExW', 'void *', ['uint32', 'str16', 'str16', 'uint32', 'int32', 'int32', 'int32', 'int32', 'void *', 'void *', 'void *', 'void *'])
+  const destroyWindow = user32.func('__stdcall', 'DestroyWindow', 'int', ['void *'])
+  const setForegroundWindow = user32.func('__stdcall', 'SetForegroundWindow', 'int', ['void *'])
+  const loadImageW = user32.func('__stdcall', 'LoadImageW', 'void *', ['void *', 'str16', 'uint32', 'int32', 'int32', 'uint32'])
+  const sendMessageW = user32.func('__stdcall', 'SendMessageW', 'intptr', ['void *', 'uint32', 'uintptr', 'void *'])
+  const destroyIcon = user32.func('__stdcall', 'DestroyIcon', 'int', ['void *'])
 
   const protoShow = koffi.proto('int32 __stdcall DshDialogShow(void *self, void *owner)')
   const protoSetOptions = koffi.proto('int32 __stdcall DshDialogSetOptions(void *self, uint32 options)')
@@ -141,14 +156,32 @@ export async function loadWin32DialogBindings(): Promise<Win32DialogBindings> {
     },
     currentThreadId: () => getCurrentThreadId() as number,
     createFolderDialog: (): Win32FolderDialog => {
+      // The topmost owner keeps the user-initiated chooser in front; its
+      // icons replace the spawned node.exe identity in the taskbar.
+      const owner = createWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, 'STATIC', '', WS_POPUP, 0, 0, 0, 0, null, null, null, null)
+      const icons = iconPath === undefined || owner === null
+        ? []
+        : [
+          loadImageW(null, iconPath, IMAGE_ICON, 32, 32, LR_LOADFROMFILE),
+          loadImageW(null, iconPath, IMAGE_ICON, 16, 16, LR_LOADFROMFILE),
+        ].filter(icon => icon !== null)
+      if (owner !== null) {
+        if (icons[0] !== undefined) sendMessageW(owner, WM_SETICON, ICON_BIG, icons[0])
+        if (icons[1] !== undefined) sendMessageW(owner, WM_SETICON, ICON_SMALL, icons[1])
+        setForegroundWindow(owner)
+      }
       const out = Buffer.alloc(pointerSize)
       const created = coCreateInstance(CLSID_FILE_OPEN_DIALOG, null, CLSCTX_INPROC_SERVER, IID_IFILE_OPEN_DIALOG, out) as number
-      if (created < 0) throw new Error(`CoCreateInstance(FileOpenDialog) failed: HRESULT 0x${(created >>> 0).toString(16)}`)
+      if (created < 0) {
+        if (owner !== null) destroyWindow(owner)
+        for (const icon of icons) destroyIcon(icon)
+        throw new Error(`CoCreateInstance(FileOpenDialog) failed: HRESULT 0x${(created >>> 0).toString(16)}`)
+      }
       const dialog = koffi.decode(out, 'void *')
       return {
         setOptions: options => method(dialog, SLOT_SET_OPTIONS, protoSetOptions)(options),
         setTitle: title => method(dialog, SLOT_SET_TITLE, protoSetTitle)(title),
-        show: () => method(dialog, SLOT_SHOW, protoShow)(null),
+        show: () => method(dialog, SLOT_SHOW, protoShow)(owner),
         resultPath: () => {
           const itemOut: unknown[] = [null]
           const gotItem = method(dialog, SLOT_GET_RESULT, protoGetResult)(itemOut)
@@ -166,7 +199,12 @@ export async function loadWin32DialogBindings(): Promise<Win32DialogBindings> {
           }
         },
         release: () => {
-          method(dialog, SLOT_RELEASE, protoRelease)()
+          try {
+            method(dialog, SLOT_RELEASE, protoRelease)()
+          } finally {
+            if (owner !== null) destroyWindow(owner)
+            for (const icon of icons) destroyIcon(icon)
+          }
         },
       }
     },

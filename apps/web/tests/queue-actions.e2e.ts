@@ -95,6 +95,7 @@ describe('web e2e: queue row actions', () => {
     await input.fill(ACTIVE_PROMPT)
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await page.getByText('partial', { exact: true }).waitFor({ timeout: 15_000 })
 
     const received = Promise.withResolvers<undefined>()
     const release = Promise.withResolvers<undefined>()
@@ -147,6 +148,11 @@ describe('web e2e: queue row actions', () => {
     ).toBe(2)
 
     await page.setViewportSize({ width: 640, height: 1000 })
+    const collapsedFrame = page.locator('[data-sidebar-collapsed="true"]')
+    await collapsedFrame.waitFor()
+    await collapsedFrame.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map(animation => animation.finished))
+    })
     const queueBox = await page.locator('[data-queue-dock]').boundingBox()
     const composerBox = await page.locator('[data-composer-card]').boundingBox()
     expect(queueBox).not.toBeNull()

@@ -1,11 +1,15 @@
 - tree "Sessions":
-  - treeitem "{{workspace}}" [expanded]:
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
     - img
-    - text: {{workspace}}
-  - treeitem "Review deepseek-harness/deepseek-harness#314 Session actions for Review deepseek-harness/deepseek-harness#314" [selected]:
-    - text: Review deepseek-harness/deepseek-harness#314
-    - button "Session actions for Review deepseek-harness/deepseek-harness#314":
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "{{workspace}}" [expanded]:
       - img
+      - text: {{workspace}}
+    - treeitem "Review deepseek-harness/deepseek-harness#314 Session actions for Review deepseek-harness/deepseek-harness#314" [selected]:
+      - text: Review deepseek-harness/deepseek-harness#314
+      - button "Session actions for Review deepseek-harness/deepseek-harness#314":
+        - img
 
 ---
 
@@ -16,6 +20,8 @@
   - text: Standard mode
   - button "Session log":
     - text: Session log
+    - img
+  - button "Switch to dark mode":
     - img
   - button "Open the sidebar":
     - img
@@ -33,10 +39,18 @@
   - img
   - img
   - text: Context injection webhook github webhook handled by review-pr-when-ready
+- button "Context injection AGENTS.md, CLAUDE.md":
+  - img
+  - img
+  - text: Context injection AGENTS.md, CLAUDE.md
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
+- button "Context injection skill-catalog":
+  - img
+  - img
+  - text: Context injection skill-catalog
 - paragraph: "Review complete: no actionable findings."
 - button "Copy":
   - img
@@ -56,8 +70,12 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
-- button "Select model, current github-webhook-review-test/reply":
-  - text: github-webhook-review-test/reply
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current github-webhook-review-test · reply":
+  - text: github-webhook-review-test · reply
   - img
 - button "Send message" [disabled]
 - text: 1 turns · 1 steps LLM {{duration}}

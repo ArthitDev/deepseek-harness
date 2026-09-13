@@ -26,6 +26,9 @@ const READY: AgentPresetSectionState = {
     { id: 'standard', trust: 'system', isDefault: true, name: '标准模式', description: '完整的编码 agent。' },
     { id: 'mine', trust: 'user', isDefault: false },
   ],
+  models: [],
+  modelPresets: {},
+  binding: false,
   copy: null,
   create: null,
   view: null,
@@ -73,6 +76,7 @@ function renderSection(
     confirmDelete: vi.fn(),
     remove: vi.fn(() => Promise.resolve()),
     makeDefault: vi.fn(() => Promise.resolve()),
+    bindModel: vi.fn(() => Promise.resolve()),
   }
   const props = {
     ...actions,
@@ -109,6 +113,55 @@ describe('the preset list', () => {
     const mine = rowFor('mine')
     expect(within(mine).getAllByText('mine').length).toBeGreaterThan(0)
     expect(within(mine).getByText(en.noDescription)).toBeTruthy()
+  })
+
+  it('assigns models from each preset card', () => {
+    const actions = renderSection({
+      models: [{ provider: 'provider', providerName: 'Provider', id: 'model', name: 'Model' }],
+      modelPresets: { provider: { model: 'mine' } },
+    })
+    const standard = within(rowFor('standard'))
+      .getByRole('checkbox', { name: `${en.presetStandardName}: Provider / Model` })
+    const mine = within(rowFor('mine')).getByRole('checkbox', { name: 'mine: Provider / Model' })
+    const models = within(rowFor('standard')).getByText(`${en.modelBindings} (1)`).closest('details')
+
+    expect(models).toHaveProperty('open', false)
+    fireEvent.click(within(rowFor('standard')).getByText(`${en.modelBindings} (1)`))
+    expect(models).toHaveProperty('open', true)
+    expect(standard).toHaveProperty('checked', false)
+    expect(mine).toHaveProperty('checked', true)
+    fireEvent.click(standard)
+    fireEvent.click(mine)
+
+    expect(actions.bindModel).toHaveBeenNthCalledWith(1, 'provider', 'model', 'standard')
+    expect(actions.bindModel).toHaveBeenNthCalledWith(2, 'provider', 'model', undefined)
+
+    cleanup()
+    const defaults = renderSection({
+      models: [{ provider: 'provider', providerName: 'Provider', id: 'model', name: 'Model' }],
+    })
+    const fallback = within(rowFor('standard'))
+      .getByRole('checkbox', { name: `${en.presetStandardName}: Provider / Model` })
+    const custom = within(rowFor('mine')).getByRole('checkbox', { name: 'mine: Provider / Model' })
+    expect(fallback).toHaveProperty('checked', false)
+    expect(fallback).toHaveProperty('disabled', false)
+    expect(custom).toHaveProperty('checked', false)
+    fireEvent.click(fallback)
+    fireEvent.click(custom)
+    expect(defaults.bindModel).toHaveBeenNthCalledWith(1, 'provider', 'model', 'standard')
+    expect(defaults.bindModel).toHaveBeenNthCalledWith(2, 'provider', 'model', 'mine')
+
+    cleanup()
+    const explicitDefault = renderSection({
+      models: [{ provider: 'provider', providerName: 'Provider', id: 'model', name: 'Model' }],
+      modelPresets: { provider: { model: 'standard' } },
+    })
+    const boundDefault = within(rowFor('standard'))
+      .getByRole('checkbox', { name: `${en.presetStandardName}: Provider / Model` })
+    expect(boundDefault).toHaveProperty('checked', true)
+    expect(boundDefault).toHaveProperty('disabled', false)
+    fireEvent.click(boundDefault)
+    expect(explicitDefault.bindModel).toHaveBeenCalledWith('provider', 'model', undefined)
   })
 
   it('marks trust and the one in use, and offers no "set default" on it', () => {

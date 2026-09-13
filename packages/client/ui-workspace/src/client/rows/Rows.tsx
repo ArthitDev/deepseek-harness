@@ -15,6 +15,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
+import { displayExecutionPath, parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
@@ -122,6 +123,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   t: RowTranslate
 }) {
   const row = group
+  const remote = row.cwd === undefined ? undefined : parseRemoteExecutionPath(row.cwd)
   // The ungrouped bucket has no workspace title: its label is dictionary copy.
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
@@ -202,12 +204,14 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       anchor={ownRow}
       content={<WorkspaceHoverContent
         label={row.label}
-        cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
+        cwd={row.cwd === undefined
+          ? undefined
+          : remote === undefined ? abbreviateHomePath(row.cwd, home) : displayExecutionPath(row.cwd)}
         createdAt={row.createdAt}
         t={t}
       />}
       disabled={menuOpen}
-      copyText={row.cwd}
+      copyText={row.cwd === undefined ? undefined : displayExecutionPath(row.cwd)}
       copyLabel={t('copy')}
       copiedLabel={t('hover.copied')}
     />

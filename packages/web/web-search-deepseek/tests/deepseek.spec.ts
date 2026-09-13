@@ -193,7 +193,7 @@ describe('DeepSeekSearchProvider request mapping', () => {
     const body = {
       model: 'deepseek-chat',
       max_tokens: 4096,
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'Perform a web search for the query: hello' }] }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: "Search the web for the query exactly as written. Prefer sources in the query's language. Do not default to Chinese-language sources unless the query is Chinese or no relevant sources exist.\n\nQuery: hello" }] }],
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
     }
     expect(JSON.parse(init.body as string)).toEqual(body)

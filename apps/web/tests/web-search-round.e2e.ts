@@ -91,7 +91,7 @@ async function startSearchServer(captured: CapturedSearchRequest[]): Promise<{ s
         body: parsedBody,
       })
       const serializedBody = JSON.stringify(parsedBody)
-      const queryIndex = QUERIES.findIndex(query => serializedBody.includes(`Perform a web search for the query: ${query}`))
+      const queryIndex = QUERIES.findIndex(query => serializedBody.includes(`Query: ${query}`))
       if (queryIndex < 0) {
         response.writeHead(400, { 'content-type': 'application/json' })
         response.end(JSON.stringify({ error: 'unknown fixture query' }))
@@ -203,7 +203,7 @@ describe('web e2e: shipped default web search', () => {
       expect(request.body).toMatchObject({
         messages: [{
           role: 'user',
-          content: [{ type: 'text', text: `Perform a web search for the query: ${query}` }],
+          content: [{ type: 'text', text: `Search the web for the query exactly as written. Prefer sources in the query's language. Do not default to Chinese-language sources unless the query is Chinese or no relevant sources exist.\n\nQuery: ${query}` }],
         }],
       })
       const tools = (request.body as { tools?: unknown }).tools

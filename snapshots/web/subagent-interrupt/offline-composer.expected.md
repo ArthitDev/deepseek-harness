@@ -8,6 +8,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Switch to dark mode":
+    - img
   - button "Open the sidebar":
     - img
   - tablist:
@@ -41,5 +43,9 @@
 - button "Add attachment" [disabled]:
   - img
 - 'button "Access mode, current: Custom" [disabled]': Custom
+- button "Web search automatic, press to search on every request" [disabled]:
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB" [disabled]': MSI-Cyborg-15-NB
 - button "Stop generating"
 - button "Send message" [disabled]

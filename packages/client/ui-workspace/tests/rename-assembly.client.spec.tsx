@@ -37,8 +37,8 @@ async function createRuntime(): Promise<SlotTestRuntime> {
   // The rename flow never picks a directory; the namespace only has to be there
   // for ui-workspace's inject to settle.
   const directoryPicker = {}
-  Object.assign(new TestRemote(runtime.ctx), { directoryPicker })
-  runtime.ctx.provide('remote.directoryPicker', directoryPicker as never)
+  const remoteMachines = { list: async () => ({ ok: true as const, value: { machines: [] } }) }
+  new TestRemote(runtime.ctx, { directoryPicker, remoteMachines })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

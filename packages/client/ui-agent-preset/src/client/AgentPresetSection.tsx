@@ -72,6 +72,8 @@ export interface AgentPresetSectionInjected {
   remove: () => Promise<void>
   /** Make one preset the default for sessions created later. */
   makeDefault: (id: string) => Promise<void>
+  /** Set one model's preset, or return it to the default preset. */
+  bindModel: (provider: string, model: string, preset: string | undefined) => Promise<void>
 }
 
 /** Direct-create dialog over an id, display name, and system prompt. */
@@ -270,7 +272,6 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
   const viewedTitle = state.view === null
     ? ''
     : viewedRow === undefined ? state.view.title : presetDisplayText(viewedRow, t).name
-
   useEffect(() => {
     void load()
   }, [load])
@@ -413,6 +414,43 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                         : <span className={css.cardBrokenReason} role="alert">{row.broken}</span>}
                       <code className={css.cardId}>{row.id}</code>
                     </button>
+                    {state.models.length === 0 || row.broken !== undefined ? null : (
+                      <details className={css.cardModels}>
+                        <summary className={css.cardModelsTitle}>
+                          {`${t('modelBindings')} (${String(state.models.length)})`}
+                        </summary>
+                        <div
+                          className={css.cardModelList}
+                          role="group"
+                          aria-label={`${t('modelBindings')}: ${text.name}`}
+                        >
+                          {state.models.map((model) => {
+                            const checked = state.modelPresets[model.provider]?.[model.id] === row.id
+                            return (
+                              <label key={`${model.provider}\u0000${model.id}`} className={css.cardModelOption}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={state.binding}
+                                  aria-label={`${text.name}: ${model.providerName} / ${model.name}`}
+                                  onChange={(event) => {
+                                    void props.bindModel(
+                                      model.provider,
+                                      model.id,
+                                      event.target.checked ? row.id : undefined,
+                                    )
+                                  }}
+                                />
+                                <span className={css.cardModelIdentity}>
+                                  <span>{`${model.providerName} / ${model.name}`}</span>
+                                  <code>{`${model.provider}/${model.id}`}</code>
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </details>
+                    )}
                     <div className={css.cardFoot}>
                       {/* Shipped presets are the read-only compositions a copy
                         starts from; a custom preset gets an editor and keeps a

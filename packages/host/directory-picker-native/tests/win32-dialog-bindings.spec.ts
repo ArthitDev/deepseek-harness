@@ -13,6 +13,9 @@ import { HRESULT_CANCELLED, runFolderDialog } from '../src/win32-dialog-logic.ts
 
 const E_FAIL = 0x80004005 | 0
 const WM_CLOSE = 0x10
+const WM_SETICON = 0x80
+const ICON_SMALL = 0
+const ICON_BIG = 1
 /** Four-byte defaults catch hardcoded x64 vtable offsets on every host. */
 const FAKE_POINTER_SIZE = 4
 
@@ -38,6 +41,10 @@ interface ComWorld {
   registered: number
   unregistered: number
   uninitialized: number
+  destroyedWindows: unknown[]
+  destroyedIcons: unknown[]
+  foregroundWindows: unknown[]
+  windowMessages: { hwnd: unknown; message: number; wparam: number; lparam: unknown }[]
 }
 
 function comWorld(overrides: Partial<ComWorld> = {}): ComWorld {
@@ -48,6 +55,7 @@ function comWorld(overrides: Partial<ComWorld> = {}): ComWorld {
     titles: [], options: [], dpiContexts: [], freed: [], released: [], posted: [],
     str16PointerSizes: [],
     registered: 0, unregistered: 0, uninitialized: 0,
+    destroyedWindows: [], destroyedIcons: [], foregroundWindows: [], windowMessages: [],
     ...overrides,
   }
 }
@@ -116,6 +124,14 @@ function installFakeKoffi(world: ComWorld, options: {
             }
             case 'CoTaskMemFree': return (ptr: unknown) => { world.freed.push(ptr) }
             case 'GetCurrentThreadId': return () => 31337
+            case 'CreateWindowExW': return () => ({ kind: 'owner' })
+            case 'DestroyWindow': return (hwnd: unknown) => { world.destroyedWindows.push(hwnd); return 1 }
+            case 'SetForegroundWindow': return (hwnd: unknown) => { world.foregroundWindows.push(hwnd); return 1 }
+            case 'LoadImageW': return (_instance: unknown, path: unknown, _type: unknown, width: unknown) => ({ kind: 'icon', path, width })
+            case 'SendMessageW': return (hwnd: unknown, message: number, wparam: number, lparam: unknown) => {
+              world.windowMessages.push({ hwnd, message, wparam, lparam }); return 0
+            }
+            case 'DestroyIcon': return (icon: unknown) => { world.destroyedIcons.push(icon); return 1 }
             case 'SetThreadDpiAwarenessContext': {
               if (!world.hasThreadDpi) throw new Error(`${dll}: SetThreadDpiAwarenessContext not found`)
               return (context: unknown) => {
@@ -180,7 +196,7 @@ describe('loadWin32DialogBindings over the fake COM world', () => {
     const world = comWorld()
     installFakeKoffi(world)
     const { loadWin32DialogBindings } = await loadBindingsModule()
-    const bindings = await loadWin32DialogBindings()
+    const bindings = await loadWin32DialogBindings('C:\\brand.ico')
     const showing = vi.fn()
 
     expect(runFolderDialog(bindings, '选择工作区目录', showing)).toBe('C:\\选中\\directory')
@@ -191,6 +207,13 @@ describe('loadWin32DialogBindings over the fake COM world', () => {
     expect(world.freed).toHaveLength(1)
     expect(world.str16PointerSizes).toEqual([FAKE_POINTER_SIZE])
     expect(world.released).toEqual(['item', 'dialog'])
+    expect(world.foregroundWindows).toHaveLength(1)
+    expect(world.windowMessages.map(({ message, wparam }) => ({ message, wparam }))).toEqual([
+      { message: WM_SETICON, wparam: ICON_BIG },
+      { message: WM_SETICON, wparam: ICON_SMALL },
+    ])
+    expect(world.destroyedWindows).toHaveLength(1)
+    expect(world.destroyedIcons).toHaveLength(2)
     expect(world.uninitialized).toBe(1)
   })
 

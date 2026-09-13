@@ -64,9 +64,12 @@ The `default` config sets the deployment default. When a settings provider is co
 ```yaml
 agent-presets:
   default: minimal
+  models:
+    deepseek-official:
+      deepseek-reasoner: ptc
 ```
 
-The value is read when a session is created, so a changed default affects only sessions created afterwards; running sessions stay on the preset they were composed from. Clearing the user field re-inherits the composition default.
+The `models` map binds an exact provider and model route to a preset. A model binding overrides `default` for a new session and when that model is selected in a blank session; changing or removing a binding takes effect without a restart. A session that has started may still change models, but its preset stays fixed so its logged tool history remains valid. Clearing a model binding re-inherits the current default preset, and clearing `default` re-inherits the composition default.
 
 ### Authoring presets
 

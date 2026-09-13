@@ -20,7 +20,7 @@ async function personaText(ctx: Context, scope?: ScopeKey): Promise<string | und
 
 describe('the persona row', () => {
   it('normalizes legacy text without accepting an invalid explicit prefix', async () => {
-    const [config] = z.resolve({ text: 'Legacy identity.', suffix: 'Workspace.' }, Persona.Config, {})
+    const config = Persona.Config({ text: 'Legacy identity.', suffix: 'Workspace.' })
     const ctx = await harness('Deployment.')
     try {
       const key: ScopeKey = { agent: 'legacy' }

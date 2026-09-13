@@ -141,13 +141,14 @@ function capacitySpelling(value: number | undefined): string {
   return value === undefined ? '' : formatCapacity(value)
 }
 
-/** Adopt a candidate, keeping whatever capacities the provider disclosed. */
+/** Adopt a candidate, keeping whatever capabilities the provider disclosed. */
 function adopt(candidate: LlmDiscoveredModel): ModelDraft {
   return {
     id: candidate.id,
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
+    ...candidate.reasoningEfforts === undefined ? {} : { reasoningEfforts: candidate.reasoningEfforts },
   }
 }
 
@@ -245,12 +246,16 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         setFailure(t('fetchEmpty'))
         return
       }
-      // Everything already configured starts unchecked, so adopting a
-      // selection never silently rewrites a capacity the user corrected.
-      const known = new Set(models.map(model => textOf(model, 'id')))
+      // New models and configured models with newly disclosed reasoning
+      // metadata start checked. Adoption still preserves every stored field.
+      const configured = new Map(models.map(model => [textOf(model, 'id'), model]))
       setCandidateQuery('')
       setCandidates(found)
-      setPicked(new Set(found.filter(model => !known.has(model.id)).map(model => model.id)))
+      setPicked(new Set(found.filter((model) => {
+        const current = configured.get(model.id)
+        return current === undefined
+          || current.reasoningEfforts === undefined && model.reasoningEfforts !== undefined
+      }).map(model => model.id)))
     } finally {
       setBusy(false)
     }
@@ -268,11 +273,12 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     const byId = new Map(models.map(model => [textOf(model, 'id'), model]))
     for (const candidate of candidates) {
       if (!picked.has(candidate.id)) continue
-      // A row the user already tuned wins over the provider's own numbers.
+      // A row the user already tuned wins field by field; selecting it again
+      // may still fill capabilities the endpoint only began advertising later.
       // Keyed by id, so a half-typed row whose id is still empty is not a
       // match and the candidate joins as its own row — correct, since a row
       // without an id is not yet a model and the create/apply gates refuse it.
-      byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate))
+      byId.set(candidate.id, { ...adopt(candidate), ...byId.get(candidate.id) })
     }
     onChange([...byId.values()])
     closePicker()

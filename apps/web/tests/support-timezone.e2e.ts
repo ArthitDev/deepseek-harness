@@ -3,9 +3,9 @@ import { expect, it } from 'vitest'
 import { newEnglishPage } from './support.ts'
 
 it.each(['UTC', 'America/Los_Angeles'])('isolates the recorded browser timezone from %s', async (hostTimeZone) => {
-  const browser = await chromium.launch({ env: { ...process.env, TZ: hostTimeZone } })
+  const browser = await chromium.launch()
   try {
-    const ambientPage = await browser.newPage()
+    const ambientPage = await browser.newPage({ timezoneId: hostTimeZone })
     expect(await ambientPage.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(hostTimeZone)
 
     const page = await newEnglishPage(browser)
@@ -14,7 +14,7 @@ it.each(['UTC', 'America/Los_Angeles'])('isolates the recorded browser timezone 
     expect(await ambientPage.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(hostTimeZone)
 
     await page.close()
-    const nextPage = await browser.newPage()
+    const nextPage = await browser.newPage({ timezoneId: hostTimeZone })
     expect(await nextPage.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(hostTimeZone)
   } finally {
     await browser.close()

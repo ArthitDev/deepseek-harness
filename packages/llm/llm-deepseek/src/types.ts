@@ -20,6 +20,7 @@ export interface WireRequest {
   /** Thinking effort (official levels). */
   reasoning_effort?: 'low' | 'high' | 'max'
   tools?: WireTool[]
+  tool_choice?: 'auto' | 'required' | 'none'
   temperature?: number
   max_tokens?: number
   /**

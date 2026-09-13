@@ -2,6 +2,7 @@
 // phase does not remount its textarea.
 
 import type { ReactNode, RefObject } from 'react'
+import { useEffect, useState } from 'react'
 import {
   IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -11,6 +12,13 @@ import css from './HeroShell.module.css'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
 type HeroTranslate = ConversationSlotProps['t']
+
+const HERO_ALTERNATE_HEADLINES = [
+  'Break All Shield',
+  'Red Team Agent',
+  'Your Guard Still Broken',
+] as const
+const HERO_HEADLINE_CYCLE_MS = 6_300
 
 /**
  * Basename label for the workspace chip (the shared derivation);
@@ -81,6 +89,19 @@ function LocalHeroMark() {
  * @returns the centered hero element tree.
  */
 export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
+  const [headlineIndex, setHeadlineIndex] = useState(0)
+  const primaryHeadline = t('hero.headline')
+  const headline = headlineIndex === 0
+    ? primaryHeadline
+    : HERO_ALTERNATE_HEADLINES[headlineIndex - 1] ?? primaryHeadline
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setHeadlineIndex(index => (index + 1) % (HERO_ALTERNATE_HEADLINES.length + 1))
+    }, HERO_HEADLINE_CYCLE_MS)
+    return () =>{  window.clearInterval(timer) }
+  }, [])
+
   return (
     <div className={css.root}>
       <div className={css.stack}>
@@ -90,8 +111,8 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
               fallback: <LocalHeroMark />,
             })}
           </span>
-          <span className={css.headlineText}>
-            {t('hero.headline')}
+          <span key={headline} className={css.headlineText} data-text={headline}>
+            {headline}
           </span>
         </div>
         <div className={css.body}>

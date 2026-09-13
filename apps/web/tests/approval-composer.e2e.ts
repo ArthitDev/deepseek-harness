@@ -1,6 +1,7 @@
 // Browser geometry for a pending approval whose model-supplied command would
 // push the actions outside the viewport without a capped text region.
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
@@ -35,10 +36,19 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let sidecarDir: string | undefined
   const sessionEvents: SessionEvent[] = []
 
   beforeAll(async () => {
-    scaffold = await launchWebScaffold(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: 15, compareReplaySession: true })
+    let replayFixture = FIXTURE
+    if (process.platform === 'win32' && MODE !== 'record') {
+      sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
+      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      await writeFile(replayFixture, (await readFile(FIXTURE, 'utf8')).replaceAll('"name":"bash"', '"name":"pwsh"'))
+    }
+    scaffold = await launchWebScaffold(MODE === 'record'
+      ? {}
+      : { replayFixture, paceMs: 15, compareReplaySession: process.platform !== 'win32' })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
@@ -51,6 +61,7 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
+    if (sidecarDir) await rm(sidecarDir, { recursive: true, force: true })
   })
 
   it('caps the long command, answers through the panel, and runs the escalated command', async () => {

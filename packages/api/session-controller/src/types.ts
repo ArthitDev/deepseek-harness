@@ -234,6 +234,117 @@ export interface SkillListValue {
   readonly skills: readonly SkillEntry[]
 }
 
+/** Search request for the public skills.sh catalog through its CLI. */
+export interface SkillSearchRequest {
+  readonly query: string
+}
+
+/** One skills.sh search result accepted directly by the installer. */
+export interface SkillSearchEntry {
+  readonly source: string
+  readonly name: string
+  readonly url: string
+}
+
+/** Parsed skills.sh search results. */
+export interface SkillSearchValue {
+  readonly skills: readonly SkillSearchEntry[]
+}
+
+/** One skill installed in the user-global DSH skill root. */
+export interface InstalledSkillEntry {
+  readonly name: string
+  readonly enabled: boolean
+}
+
+/** User-global skills currently installed for DSH. */
+export interface InstalledSkillsValue {
+  readonly skills: readonly InstalledSkillEntry[]
+}
+
+/** Request to enable or disable one user-global skill. */
+export interface SkillSetEnabledRequest {
+  readonly name: string
+  readonly enabled: boolean
+}
+
+/** Updated state of one user-global skill. */
+export interface SkillSetEnabledValue {
+  readonly name: string
+  readonly enabled: boolean
+}
+
+/** Request to remove one user-global skill. */
+export interface SkillRemoveRequest {
+  readonly name: string
+}
+
+/** Result of removing one user-global skill. */
+export interface SkillRemoveValue {
+  readonly name: string
+  readonly removed: boolean
+}
+
+/** Request to install one exact skills.sh source into DSH. */
+export interface SkillInstallRequest {
+  readonly source: string
+}
+
+/** Receipt for a completed DSH skill installation. */
+export interface SkillInstallValue {
+  readonly installed: readonly string[]
+  readonly backedUp: readonly string[]
+}
+
+/** Request to start one user-controlled command in the host's native terminal. */
+export interface SkillTerminalOpenRequest {
+  readonly command: string
+  readonly rows?: number
+  readonly cols?: number
+}
+
+/** Identity of one live Skills settings terminal. */
+export interface SkillTerminalOpenValue {
+  readonly id: string
+}
+
+/** Incremental terminal output request. */
+export interface SkillTerminalReadRequest {
+  readonly id: string
+  readonly offset: number
+}
+
+/** Incremental terminal output and process state. */
+export interface SkillTerminalReadValue {
+  readonly text: string
+  readonly nextOffset: number
+  readonly lossy: boolean
+  readonly exited: boolean
+  readonly exitCode?: number | null
+  readonly error?: string
+}
+
+/** Text to write verbatim to one Skills settings terminal. */
+export interface SkillTerminalWriteRequest {
+  readonly id: string
+  readonly text: string
+}
+
+/** Request to terminate one Skills settings terminal. */
+export interface SkillTerminalCloseRequest {
+  readonly id: string
+}
+
+/** Acknowledgement for a terminal write. */
+export interface SkillTerminalWriteValue {
+  readonly accepted: true
+}
+
+/** Acknowledgement for terminal cleanup. */
+export interface SkillTerminalCloseValue {
+  readonly closed: boolean
+}
+
 /** Session list request. */
 export interface SessionListRequest {
   readonly cursor?: string

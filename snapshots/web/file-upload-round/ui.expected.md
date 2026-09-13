@@ -6,6 +6,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Switch to dark mode":
+    - img
   - button "Open the sidebar":
     - img
   - tablist:
@@ -46,8 +48,12 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash-Vision-Exp, reasoning effort high":
-  - text: DeepSeek-V4-Flash-Vision-Exp high
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash-Vision-Exp, reasoning effort high":
+  - text: DeepSeek · DeepSeek-V4-Flash-Vision-Exp high
   - img
 - button "1% of context used"
 - button "Send message" [disabled]

@@ -42,6 +42,10 @@ const LIVE_TOOL_FIRST = 'CHAT_SCROLL_TOOL_STREAM_FIRST'
 const LIVE_TOOL_DONE = 'CHAT_SCROLL_TOOL_STREAM_DONE'
 const TOOL_READY_FILE = '.chat-scroll-tool-ready'
 const TOOL_RELEASE_FILE = '.chat-scroll-tool-release'
+const LIVE_SHELL_NAME = process.platform === 'win32' ? 'pwsh' : 'bash'
+const LIVE_SHELL_ROW_SELECTOR = `[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] ${
+  process.platform === 'win32' ? '[data-tool="pwsh"]' : '[data-sample="bash"]'
+}`
 const INPUTS_SESSION_ID = 'chat-scroll-inputs-e2e'
 const RAIL_SESSION_ID = 'chat-scroll-rail-e2e'
 const FLING_SESSION_ID = 'chat-scroll-fling-e2e'
@@ -116,12 +120,18 @@ function textStream(first: string, done: string, deltaCount: number): StreamChun
 }
 
 function toolStream(): StreamChunk[] {
-  const command = [
-    `: > ${TOOL_READY_FILE}`,
-    `while [ ! -f ${TOOL_RELEASE_FILE} ]; do sleep 0.02; done`,
-    'line=1',
-    `while [ "$line" -le 64 ]; do printf '${LIVE_TOOL_RESULT} line %02d\\n' "$line"; line=$((line + 1)); done`,
-  ].join('; ')
+  const command = process.platform === 'win32'
+    ? [
+      `$null = New-Item -ItemType File -Path '${TOOL_READY_FILE}' -Force`,
+      `while (-not (Test-Path -LiteralPath '${TOOL_RELEASE_FILE}')) { Start-Sleep -Milliseconds 20 }`,
+      `1..64 | ForEach-Object { '${LIVE_TOOL_RESULT} line {0:D2}' -f $_ }`,
+    ].join('; ')
+    : [
+      `: > ${TOOL_READY_FILE}`,
+      `while [ ! -f ${TOOL_RELEASE_FILE} ]; do sleep 0.02; done`,
+      'line=1',
+      `while [ "$line" -le 64 ]; do printf '${LIVE_TOOL_RESULT} line %02d\\n' "$line"; line=$((line + 1)); done`,
+    ].join('; ')
   const args = JSON.stringify({ command, description: LIVE_TOOL_RESULT })
   return [
     { type: 'block-start', index: 0, blockType: 'tool-call' },
@@ -129,13 +139,13 @@ function toolStream(): StreamChunk[] {
       type: 'tool-call-delta',
       index: 0,
       id: LIVE_TOOL_CALL_ID,
-      name: 'bash',
+      name: LIVE_SHELL_NAME,
       argumentsDelta: args,
     },
     {
       type: 'block-end',
       index: 0,
-      block: { type: 'tool-call', id: LIVE_TOOL_CALL_ID, name: 'bash', arguments: args },
+      block: { type: 'tool-call', id: LIVE_TOOL_CALL_ID, name: LIVE_SHELL_NAME, arguments: args },
     },
     { type: 'usage', usage: { inputTokens: 256, outputTokens: 48 } },
     { type: 'finish', reason: { kind: 'tool-calls' } },
@@ -656,7 +666,7 @@ describe('web e2e: long Chat scroll contract', () => {
         await composer.fill(LIVE_TOOL_PROMPT)
         await world.page.getByRole('button', { name: 'Send message', exact: true }).click()
         await expect.poll(() => fileExists(readyPath), { timeout: 15_000 }).toBe(true)
-        const liveRow = world.page.locator(`[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] [data-sample="bash"]`)
+        const liveRow = world.page.locator(LIVE_SHELL_ROW_SELECTOR)
         await liveRow.waitFor({ timeout: 15_000 })
         expect(await liveRow.getAttribute('data-state')).toBe('running')
         await expectBottom(world.page)
@@ -698,10 +708,9 @@ describe('web e2e: long Chat scroll contract', () => {
       await expectBottom(world.page)
       await expectMarkerAboveComposer(world.page, LIVE_TOOL_DONE)
 
-      const liveRowSelector = `[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] [data-sample="bash"]`
-      const liveRow = world.page.locator(liveRowSelector)
+      const liveRow = world.page.locator(LIVE_SHELL_ROW_SELECTOR)
       await expandOwningTurnProcess(world.page, liveRow)
-      await wheelUntilVisible(world.page, liveRowSelector, -300)
+      await wheelUntilVisible(world.page, LIVE_SHELL_ROW_SELECTOR, -300)
       const toolAnchor = await liveRow.evaluate((row) => {
         const flow = row.closest<HTMLElement>('[data-chat-anchor-key]')
         const host = row.closest<HTMLElement>('[data-conversation-scroll]')
@@ -713,16 +722,18 @@ describe('web e2e: long Chat scroll contract', () => {
           top: flow.getBoundingClientRect().top - host.getBoundingClientRect().top,
         }
       })
-      await liveRow.click()
-      await expect.poll(() => liveRow.getAttribute('aria-expanded'), { timeout: 10_000 }).toBe('true')
+      const disclosure = process.platform === 'win32' ? liveRow.locator('[aria-expanded]') : liveRow
+      await disclosure.click()
+      await expect.poll(() => disclosure.getAttribute('aria-expanded'), { timeout: 10_000 }).toBe('true')
       await expectSameFlowTop(world.page, toolAnchor)
       await wheelToHistoryStart(world.page)
       await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).click()
       await expectBottom(world.page)
-      await wheelUntilMounted(world.page, liveRowSelector, -1_100)
-      const restoredRow = world.page.locator(liveRowSelector)
+      await wheelUntilMounted(world.page, LIVE_SHELL_ROW_SELECTOR, -1_100)
+      const restoredRow = world.page.locator(LIVE_SHELL_ROW_SELECTOR)
       await restoredRow.waitFor({ timeout: 10_000 })
-      expect(await restoredRow.getAttribute('aria-expanded')).toBe('true')
+      const restoredDisclosure = process.platform === 'win32' ? restoredRow.locator('[aria-expanded]') : restoredRow
+      expect(await restoredDisclosure.getAttribute('aria-expanded')).toBe('true')
       expect(await world.page.getByText(LIVE_TOOL_RESULT, { exact: false }).count()).toBeGreaterThan(0)
       assertClean(world)
     })

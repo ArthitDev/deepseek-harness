@@ -364,6 +364,7 @@ function requestWithMessages(
       ? { reasoning_effort: resolvedThinking.reasoningEffort }
       : {},
     ...tools !== undefined && tools.length > 0 ? { tools } : {},
+    ...options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {},
     ...options.temperature !== undefined ? { temperature: options.temperature } : {},
     ...options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens },
     ...options.stop !== undefined ? { stop: options.stop } : {},

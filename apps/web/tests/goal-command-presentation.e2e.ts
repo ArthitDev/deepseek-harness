@@ -91,7 +91,7 @@ describe('web e2e: /goal human transcript presentation', () => {
     await expect.poll(() => resultRow.count(), { timeout: 10_000 }).toBe(1)
     expect(await resultRow.getByText('goal', { exact: true }).count()).toBe(1)
     await expect.poll(() => page.locator('[data-phase="active"]').count()).toBe(1)
-    expect(await page.getByText('Shield Break Agent', { exact: false }).count()).toBe(0)
+    expect(await page.locator('[data-text="Shield Break Agent"]').count()).toBe(0)
 
     const run = events.find(event => event.type === 'command/run')
     expect(run).toMatchObject({

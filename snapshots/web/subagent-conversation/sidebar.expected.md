@@ -1,5 +1,9 @@
 - tree "Sessions":
-  - treeitem "workspace" [expanded]:
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
     - img
-    - text: workspace
-  - treeitem "Ask a research subagent to now"
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "workspace" [expanded]:
+      - img
+      - text: workspace
+    - treeitem "Ask a research subagent to now"

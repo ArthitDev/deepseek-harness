@@ -64,9 +64,12 @@ kind: "package-reference"
 ```yaml
 agent-presets:
   default: minimal
+  models:
+    deepseek-official:
+      deepseek-reasoner: ptc
 ```
 
-该值在会话创建时读取，因此更改默认值只影响此后创建的会话；运行中的会话仍停留在它们当初据以组装的 preset 上。清空用户字段即重新继承组装默认值。
+`models` 映射把准确的 provider 与 model 路由绑定到一个 preset。模型绑定会为新会话以及在空白会话中选择该模型时覆盖 `default`；更改或移除绑定无需重启即可生效。已开始的会话仍可更换模型，但其 preset 保持不变，以确保已记录的工具历史仍然有效。清空模型绑定会重新继承当前默认 preset，清空 `default` 则重新继承组装默认值。
 
 ### 创作 preset
 

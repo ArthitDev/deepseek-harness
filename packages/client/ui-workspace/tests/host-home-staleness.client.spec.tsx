@@ -30,9 +30,8 @@ async function bench() {
   const runtime = await SlotTestRuntime.create()
   runtime.releaseWorkspaceSource()
   const directoryPicker = {}
-  const remote = new TestRemote(runtime.ctx)
-  Object.assign(remote, { directoryPicker })
-  runtime.ctx.provide('remote.directoryPicker', directoryPicker as never)
+  const remoteMachines = { list: async () => ({ ok: true as const, value: { machines: [] } }) }
+  const remote = new TestRemote(runtime.ctx, { directoryPicker, remoteMachines })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
@@ -52,14 +51,14 @@ async function bench() {
 
 /** Open the Workspace row's hover card, which is where the home abbreviation shows. */
 function openHoverCard(): void {
-  const row = screen.getByRole('treeitem').parentElement as HTMLElement
+  const row = screen.getByRole('treeitem', { name: /Project/ }).parentElement as HTMLElement
   fireEvent.pointerEnter(row)
   act(() => { vi.advanceTimersByTime(500) })
 }
 
 /** Close it again, so the next hover rebuilds the card from current props. */
 function closeHoverCard(): void {
-  const row = screen.getByRole('treeitem').parentElement as HTMLElement
+  const row = screen.getByRole('treeitem', { name: /Project/ }).parentElement as HTMLElement
   fireEvent.pointerLeave(row)
   act(() => { vi.advanceTimersByTime(500) })
 }

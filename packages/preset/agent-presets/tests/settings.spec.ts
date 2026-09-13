@@ -11,12 +11,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import LlmRuntime from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
+import type { LlmModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import AgentDefaultModel from '@deepseek-ai/dsh-agent-default-model'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -25,6 +27,19 @@ import AgentPresets, { COMPOSITION_FILE, SETTINGS_NAMESPACE } from '@deepseek-ai
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const ROOTS = [{ path: join(FIXTURES, 'system'), trust: 'system' as const }]
 const NS = SETTINGS_NAMESPACE
+
+class CatalogAdapter extends LlmAdapter {
+  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    return Promise.resolve([
+      { provider, id: 'fixture-model', name: 'Fixture Model' },
+      { provider, id: 'other-model', name: 'Other Model' },
+    ])
+  }
+
+  override async * stream(): AsyncIterable<StreamChunk> {
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+}
 
 /** Every temp root created by this file, removed after each test. */
 const roots: string[] = []
@@ -49,11 +64,13 @@ async function harness(
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
   await ctx.plugin(LlmRuntime)
+  ctx.llm.registerAdapter(['fixture'], new CatalogAdapter())
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, { personaPrefix: '' })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentDefaultModel, { provider: 'fixture', model: 'fixture-model' })
   await ctx.plugin(AgentLoop, { agents: [] })
   const settingsFiber = ctx.plugin(FileSettingsProvider, { path: settingsFile, watch: false })
   await settingsFiber
@@ -69,6 +86,12 @@ describe('the default preset as a user setting', () => {
     const { ctx } = await harness()
 
     expect(ctx.agentPresets.defaultId).toBe('standard')
+    const roster = await ctx.agentPresets.remoteExportList()
+    expect(roster.defaultModel).toEqual({ provider: 'fixture', model: 'fixture-model' })
+    expect(roster.models).toEqual([
+      { provider: 'fixture', providerName: 'fixture', id: 'fixture-model', name: 'Fixture Model' },
+      { provider: 'fixture', providerName: 'fixture', id: 'other-model', name: 'Other Model' },
+    ])
   })
 
   it('takes the user default over the composition default', async () => {
@@ -77,6 +100,20 @@ describe('the default preset as a user setting', () => {
     await ctx.settings.update(NS, { default: 'minimal' })
 
     expect(ctx.agentPresets.defaultId).toBe('minimal')
+  })
+
+  it('resolves a model override live and falls back to the current default', async () => {
+    const { ctx } = await harness()
+
+    expect(ctx.agentPresets.presetIdForModel('deepseek-official', 'deepseek-chat')).toBe('standard')
+
+    await ctx.settings.update(NS, {
+      models: { 'deepseek-official': { 'deepseek-chat': 'minimal' } },
+    })
+    expect(ctx.agentPresets.presetIdForModel('deepseek-official', 'deepseek-chat')).toBe('minimal')
+
+    await ctx.settings.update(NS, { default: 'minimal' })
+    expect(ctx.agentPresets.presetIdForModel('deepseek-official', 'deepseek-reasoner')).toBe('minimal')
   })
 
   it('composes a new session from the user default', async () => {
@@ -143,6 +180,24 @@ describe('the default preset as a user setting', () => {
     // exposes the deployment's own default underneath.
     expect(ctx.agentPresets.defaultId).toBe('standard')
     expect((await ctx.agentPresets.resolve()).id).toBe('standard')
+  })
+
+  it('clears model bindings to a preset it has just deleted', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-preset-authored-'))
+    roots.push(root)
+    await mkdir(join(root, 'mine'))
+    await writeFile(
+      join(root, 'mine', COMPOSITION_FILE),
+      `- id: only\n  name: ${join(FIXTURES, 'plugins', 'contribute.js')}\n  config:\n    tool: only\n`,
+    )
+    const { ctx } = await harness([{ path: root, trust: 'user' as const }])
+    await ctx.settings.update(NS, {
+      models: { 'deepseek-official': { 'deepseek-chat': 'mine' } },
+    })
+
+    await ctx.agentPresets.remove('mine')
+
+    expect(ctx.agentPresets.presetIdForModel('deepseek-official', 'deepseek-chat')).toBe('standard')
   })
 
   it('reports an unknown user default only when a session tries to use it', async () => {

@@ -41,7 +41,10 @@ function providePresentation(ctx: Context): PresentationCapture {
   const slots = new SlotRegistry(ctx)
   slots.register({
     name: 'root',
-    children: { 'tool.call.toolview': { kind: 'keyed', scope: 'session' } },
+    children: {
+      'tool.call.toolview': { kind: 'keyed', scope: 'session' },
+      'settings.section': { kind: 'list', scope: 'root' },
+    },
   } as never, () => null)
   const capture: PresentationCapture = {
     slots,
@@ -69,7 +72,14 @@ async function bench(list: ListFn, addressed?: SessionId) {
       ? { parentSessionId: sid('parent'), childSessionId: id, mode: 'continuable' as const }
       : undefined,
   })
-  const remote = new TestRemote(ctx, { skills: { list } })
+  const remote = new TestRemote(ctx, {
+    skills: {
+      list,
+      installed: () => Promise.resolve({ ok: true, value: { skills: [] } }),
+      search: () => Promise.resolve({ ok: true, value: { skills: [] } }),
+      add: () => Promise.resolve({ ok: true, value: { installed: [], backedUp: [] } }),
+    },
+  })
   providePresentation(ctx)
   await ctx.plugin({ inject: [...inject], apply }).await()
   return { ctx, source: captured!, remote }
@@ -109,7 +119,14 @@ describe('apply', () => {
     const ctx = new Context()
     ctx.provide('inputTriggers', { registerSource: () => () => {} })
     ctx.provide('sessions', { subagentAddress: () => undefined })
-    new TestRemote(ctx, { skills: { list: listOk(CATALOG) } })
+    new TestRemote(ctx, {
+      skills: {
+        list: listOk(CATALOG),
+        installed: () => Promise.resolve({ ok: true, value: { skills: [] } }),
+        search: () => Promise.resolve({ ok: true, value: { skills: [] } }),
+        add: () => Promise.resolve({ ok: true, value: { installed: [], backedUp: [] } }),
+      },
+    })
     const presentation = providePresentation(ctx)
     await ctx.plugin({ inject: [...inject], apply }).await()
     const entry = presentation.slots.entries('tool.call.toolview')[0]
@@ -126,6 +143,48 @@ describe('apply', () => {
           'row.instructions': '说明',
           'row.inspect': '查看',
           'menu.userOnly': '仅用户',
+          'manager.nav': 'Skills',
+          'manager.title': 'Skill 管理',
+          'manager.intro': '粘贴 skills.sh 的 npx 命令，或搜索目录，将 skill 安装到 DSH 的全局 skill 目录。',
+          'manager.warning': '安装前请检查来源。Skill 可指导 Agent 运行命令和修改文件。',
+          'manager.commandLabel': 'Skills 终端',
+          'manager.commandHint': '在主机的本机终端中运行命令。运行前请检查命令和来源。',
+          'manager.commandPlaceholder': 'npx skills add owner/repo --skill skill-name',
+          'manager.inputPlaceholder': '输入终端响应',
+          'manager.commandSubmit': 'Enter',
+          'manager.interrupt': 'Ctrl+C',
+          'manager.stop': '停止',
+          'manager.exited': '已退出',
+          'manager.outputTruncated': '[较早的输出已截断]\n',
+          'manager.runTitle': '运行此命令？',
+          'manager.runDescription': '此命令将在主机上以你的用户权限运行。请先检查命令。',
+          'manager.run': '运行',
+          'manager.searchLabel': '搜索 skill',
+          'manager.searchPlaceholder': '例如：pentest、playwright、fastapi',
+          'manager.search': '搜索',
+          'manager.loading': '正在读取已安装的 skill…',
+          'manager.searching': '正在搜索…',
+          'manager.openCatalog': '浏览 skills.sh',
+          'manager.results': '搜索结果',
+          'manager.noResults': '没有找到匹配的 skill。',
+          'manager.install': '安装',
+          'manager.installing': '正在安装…',
+          'manager.confirmTitle': '安装 {source}？',
+          'manager.confirmDescription': '这会将 skill 安装到 DSH 的全局目录。只安装你信任的 skill。',
+          'manager.cancel': '取消',
+          'manager.close': '关闭',
+          'manager.installed': '已安装到 DSH',
+          'manager.empty': '还没有全局 skill。',
+          'manager.enableSkill': '启用 {name}',
+          'manager.disableSkill': '停用 {name}',
+          'manager.remove': '移除',
+          'manager.removeSkill': '移除 {name}',
+          'manager.removeTitle': '移除 {name}？',
+          'manager.removeDescription': '这会从 DSH 中移除该 skill，并保留可恢复的备份。',
+          'manager.removedNotice': '已移除 {name}，并保留了备份。',
+          'manager.alreadyRemovedNotice': '{name} 已经不在 DSH 中。',
+          'manager.installedNotice': '已安装：{names}',
+          'manager.backupNotice': '旧版本已备份：{names}',
         },
         en: {
           'row.title': 'Skill',
@@ -135,6 +194,48 @@ describe('apply', () => {
           'row.instructions': 'Instructions',
           'row.inspect': 'Inspect',
           'menu.userOnly': 'user-only',
+          'manager.nav': 'Skills',
+          'manager.title': 'Skill manager',
+          'manager.intro': 'Paste a skills.sh npx command or search the catalog to install a skill into the global DSH skill directory.',
+          'manager.warning': 'Check the source before installing. A skill can instruct the agent to run commands and edit files.',
+          'manager.commandLabel': 'Skills terminal',
+          'manager.commandHint': 'Run commands in the host\'s native terminal. Check the command and source before running it.',
+          'manager.commandPlaceholder': 'npx skills add owner/repo --skill skill-name',
+          'manager.inputPlaceholder': 'Send input to the terminal',
+          'manager.commandSubmit': 'Enter',
+          'manager.interrupt': 'Ctrl+C',
+          'manager.stop': 'Stop',
+          'manager.exited': 'Exited',
+          'manager.outputTruncated': '[Earlier output was truncated]\n',
+          'manager.runTitle': 'Run this command?',
+          'manager.runDescription': 'This command runs on the host with your user permissions. Check it before continuing.',
+          'manager.run': 'Run',
+          'manager.searchLabel': 'Search skills',
+          'manager.searchPlaceholder': 'Try pentest, Playwright, or FastAPI',
+          'manager.search': 'Search',
+          'manager.loading': 'Reading installed skills…',
+          'manager.searching': 'Searching…',
+          'manager.openCatalog': 'Browse skills.sh',
+          'manager.results': 'Search results',
+          'manager.noResults': 'No matching skills found.',
+          'manager.install': 'Install',
+          'manager.installing': 'Installing…',
+          'manager.confirmTitle': 'Install {source}?',
+          'manager.confirmDescription': 'This installs the skill into the global DSH directory. Only install skills you trust.',
+          'manager.cancel': 'Cancel',
+          'manager.close': 'Close',
+          'manager.installed': 'Installed in DSH',
+          'manager.empty': 'No global skills are installed.',
+          'manager.enableSkill': 'Enable {name}',
+          'manager.disableSkill': 'Disable {name}',
+          'manager.remove': 'Remove',
+          'manager.removeSkill': 'Remove {name}',
+          'manager.removeTitle': 'Remove {name}?',
+          'manager.removeDescription': 'This removes the skill from DSH and keeps a recoverable backup.',
+          'manager.removedNotice': 'Removed {name} and kept a backup.',
+          'manager.alreadyRemovedNotice': '{name} is already absent from DSH.',
+          'manager.installedNotice': 'Installed: {names}',
+          'manager.backupNotice': 'Previous versions backed up: {names}',
         },
       },
     }])
@@ -145,7 +246,14 @@ describe('apply', () => {
     // InputTriggerService itself injects 'sessions'; the stub unblocks its fiber.
     ctx.provide('sessions', {})
     await ctx.plugin(InputTriggerService).await()
-    new TestRemote(ctx, { skills: { list: listOk(CATALOG) } })
+    new TestRemote(ctx, {
+      skills: {
+        list: listOk(CATALOG),
+        installed: () => Promise.resolve({ ok: true, value: { skills: [] } }),
+        search: () => Promise.resolve({ ok: true, value: { skills: [] } }),
+        add: () => Promise.resolve({ ok: true, value: { installed: [], backedUp: [] } }),
+      },
+    })
     const presentation = providePresentation(ctx)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()

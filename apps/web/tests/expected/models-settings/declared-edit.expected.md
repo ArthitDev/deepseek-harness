@@ -13,6 +13,12 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "远程计算机":
+      - img
+      - text: 远程计算机
+    - button "Skills":
+      - img
+      - text: Skills
   - button "打开配置文件"
   - button "关闭":
     - img

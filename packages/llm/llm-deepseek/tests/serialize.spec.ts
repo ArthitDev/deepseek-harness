@@ -270,6 +270,14 @@ describe('serializeRequest', () => {
     ])
   })
 
+  it('maps the provider-neutral tool choice', () => {
+    expect(serializeRequest(request({
+      messages: history,
+      tools: [{ name: 'a', description: 'A', parameters: {} }],
+      toolChoice: 'required',
+    })).tool_choice).toBe('required')
+  })
+
   it('omits an empty tools array', () => {
     const wire = serializeRequest(request({ messages: history, tools: [] }))
     expect(wire.tools).toBeUndefined()

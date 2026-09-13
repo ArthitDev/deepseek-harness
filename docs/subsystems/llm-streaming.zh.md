@@ -589,6 +589,8 @@ interface GenerateOptions {
   system?: string
   /** Tool schemas (adapters map to the provider's `tools` field). */
   tools?: ToolSchema[]
+  /** Tool-call policy for this request. `required` is valid only when at least one tool is present. */
+  toolChoice?: ToolChoice
   temperature?: number
   maxTokens?: number
   /**
@@ -630,7 +632,7 @@ interface FinishReasonMap {
 
 `FinishReason = FinishReasonMap[keyof FinishReasonMap]`。`TokenUsage`（逐调用计量，含不相交的缓存字段）详见[下文](#tokenusage)。
 
-`GenerateOptions.tools` 携带 `ToolSchema`——工具的 JSON Schema 描述，发送给模型。它声明在 dsh-llm（而非 dsh-tools）中，正是因为它是循环每一步组装请求的一部分：
+`GenerateOptions.tools` 携带 `ToolSchema`——发送给模型的工具 JSON Schema 描述。`GenerateOptions.toolChoice` 独立选择该请求自动、强制或禁用工具调用；当没有工具时，runtime 会拒绝 `required`。它声明在 dsh-llm（而非 dsh-tools）中，正是因为它是循环每一步组装请求的一部分：
 
 ```ts type-equiv
 /**
@@ -683,7 +685,7 @@ interface LlmModelDiscoveryRequest {
 /**
  * One model an endpoint reports about itself. Every field but the id is
  * optional because most provider listings disclose an id and nothing else;
- * a surface adopting one of these still owes the capacities its adapter needs.
+ * a surface adopting one may retain the capabilities its adapter understands.
  */
 interface LlmDiscoveredModel {
   /** Model id the endpoint accepts. */
@@ -694,6 +696,8 @@ interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Selectable reasoning levels and their endpoint-facing spellings, when disclosed. */
+  reasoningEfforts?: Readonly<Record<string, string | null>>
 }
 ```
 

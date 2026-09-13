@@ -173,10 +173,10 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
 
   it.skipIf(MODE === 'record')('enables branch only on the completed transcript tail', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-message-actions'))
-    const groupRow = page.locator('[role="treeitem"]').first()
+    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
-    await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
     await expect.poll(() => page.getByText(MID_TURN_TEXT, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
@@ -226,7 +226,7 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       { timeout: 15_000 },
     ).toBeDefined()
     await expect.poll(
-      () => page.locator('[role="treeitem"]').count(),
+      () => page.locator('[data-workspace-group] [role="treeitem"]').count(),
       { timeout: 10_000 },
     ).toBe(3)
     await expect.poll(
@@ -250,7 +250,7 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       { timeout: 15_000 },
     ).toBe(2)
     await expect.poll(
-      () => page.locator('[role="treeitem"]').count(),
+      () => page.locator('[data-workspace-group] [role="treeitem"]').count(),
       { timeout: 10_000 },
     ).toBe(4)
     await expect.poll(

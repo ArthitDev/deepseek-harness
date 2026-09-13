@@ -15,7 +15,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { beginRosterRead, writeDefaultPreset } from './settings-store.ts'
+import { beginRosterRead, writeDefaultPreset, writeModelPreset } from './settings-store.ts'
 
 /** Ids a preset directory may be named, mirroring the host's own rule. */
 const PRESET_ID = /^[a-z0-9][a-z0-9-]*$/
@@ -39,6 +39,18 @@ export interface PresetRow {
    * is where both of those live.
    */
   broken?: string
+}
+
+/** One model offered for a preset binding. */
+export interface PresetModelRow {
+  /** Provider route and settings-map key. */
+  provider: string
+  /** Provider display name. */
+  providerName: string
+  /** Provider-owned model id and settings-map key. */
+  id: string
+  /** Model display name. */
+  name: string
 }
 
 /** The copy dialog: a new id and optional display name over a fixed source. */
@@ -158,6 +170,12 @@ export interface AgentPresetSectionState {
   hasDocument: boolean
   /** Every preset the deployment currently supplies. */
   rows: readonly PresetRow[]
+  /** Every model the Host currently offers. */
+  models: readonly PresetModelRow[]
+  /** User-selected preset ids by provider and model. */
+  modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>
+  /** Whether one model binding write is in flight. */
+  binding: boolean
   /** The open copy dialog, or null. */
   copy: CopyDraft | null
   /** The open direct-create dialog, or null. */
@@ -181,6 +199,9 @@ const INITIAL: AgentPresetSectionState = {
   authorable: false,
   hasDocument: false,
   rows: [],
+  models: [],
+  modelPresets: {},
+  binding: false,
   copy: null,
   create: null,
   view: null,
@@ -256,21 +277,16 @@ export class AgentPresetSectionController {
    * @returns once the snapshot reflects the host.
    */
   async load(): Promise<void> {
-    // Whether a preset's directory can be opened is the Host's opener
-    // capability rather than a roster property, so the page joins the two.
-    // Issued together: one round trip decides the page, and a load that waited
-    // for them in turn would hold the section in `loading` twice as long,
-    // where a concurrent reload silently returns instead of refreshing.
-    const opener = this.ctx.remote.settings.canOpenAgentPresetDirectory()
     const roster = await beginRosterRead(this.ctx, this.store)
-    // A refused describe leaves the reveal-the-path path, which needs no opener.
-    const described = await opener
     if (roster === undefined) return
-    const { presets, authorable } = roster
-    const hasDocument = described.ok && described.value
+    const { presets, authorable, models, modelPresets } = roster
+    const { hasDocument } = this.store.getSnapshot()
     if (presets.length === 0) {
       // Nothing to manage leaves nothing to keep a dialog open over.
-      this.set({ status: 'unavailable', rows: [], authorable, hasDocument, copy: null, create: null, view: null })
+      this.set({
+        status: 'unavailable', rows: [], models, modelPresets,
+        authorable, hasDocument, copy: null, create: null, view: null,
+      })
       return
     }
     // A reveal outlives a reload but not its preset: a path for a row the
@@ -284,8 +300,32 @@ export class AgentPresetSectionController {
       authorable,
       hasDocument,
       rows: presets.map(preset => ({ ...preset })),
+      models,
+      modelPresets,
       revealedPaths: kept,
     })
+    void this.ctx.remote.settings.canOpenAgentPresetDirectory().then((described) => {
+      this.set({ hasDocument: described.ok && described.value })
+    }).catch(() => {})
+  }
+
+  /**
+   * Set one model's preset, or return it to the default preset.
+   * @param provider - model provider route.
+   * @param model - provider-owned model id.
+   * @param preset - preset override, or undefined to inherit the default.
+   * @returns once the settings write and roster refresh settle.
+   */
+  async bindModel(provider: string, model: string, preset: string | undefined): Promise<void> {
+    if (this.store.getSnapshot().binding) return
+    this.set({ binding: true, error: null })
+    const failure = await writeModelPreset(this.ctx, provider, model, preset)
+    if (failure !== undefined) {
+      this.set({ binding: false, error: failure })
+      return
+    }
+    await this.load()
+    this.set({ binding: false })
   }
 
   /**

@@ -1,7 +1,9 @@
 // PTC mode browser round trip with nested sub-calls and details selection.
 // Record: DSH_SNAPSHOT=record writes session.v2.jsonl, then a keyless
 // DSH_SNAPSHOT=refresh regenerates ui.expected.md.
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
@@ -16,6 +18,14 @@ import { connectFreshWorkspace, expandOwningTurnProcess, newEnglishPage, saveFai
 const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/ptc-round/session.v2.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('../../../snapshots/web/ptc-round/ui.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
+const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
+const SHELL_ROW_SELECTOR = process.platform === 'win32' ? '[data-tool="pwsh"]' : '[data-sample="bash"]'
+
+function normalizeShellSnapshot(snapshot: string): string {
+  return process.platform === 'win32'
+    ? snapshot.replaceAll('Pwsh', 'Bash').replaceAll('workspace\\\\missing.txt', 'workspace/missing.txt')
+    : snapshot
+}
 
 // Elicits the successful and failed sub-rows this scenario asserts.
 const PROMPT = 'Using ONE run_code program: run bash `echo CODE_ROUND_OK`, then read the file missing.txt '
@@ -26,13 +36,20 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let sidecarDir: string | undefined
   const sessionEvents: SessionEvent[] = []
 
   beforeAll(async () => {
+    let replayFixture = FIXTURE
+    if (process.platform === 'win32' && MODE !== 'record') {
+      sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
+      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      await writeFile(replayFixture, (await readFile(FIXTURE, 'utf8')).replaceAll('tools.bash', 'tools.pwsh'))
+    }
     scaffold = await launchWebScaffold({
       agentPresets: { roots: [], default: 'ptc' },
-      compareReplaySession: true,
-      ...(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: 15 }),
+      compareReplaySession: process.platform !== 'win32',
+      ...(MODE === 'record' ? {} : { replayFixture, paceMs: 15 }),
     })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
@@ -46,6 +63,7 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
+    if (sidecarDir) await rm(sidecarDir, { recursive: true, force: true })
   })
 
   it('drives the recorded prompt to a settled turn (all modes)', async () => {
@@ -82,10 +100,10 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
       expect(Array.isArray(data.content)).toBe(true)
       expect(typeof data.isError).toBe('boolean')
     }
-    const bash = dispatches.find(dispatch => (dispatch.data as { name: string }).name === 'bash')
-    expect(bash).toBeDefined()
-    const bashContent = (bash!.data as { content: { type: string; text?: string }[] }).content
-    expect(bashContent.filter(block => block.type === 'text').map(block => block.text).join('')).toContain('CODE_ROUND_OK')
+    const shell = dispatches.find(dispatch => (dispatch.data as { name: string }).name === SHELL_TOOL)
+    expect(shell).toBeDefined()
+    const shellContent = (shell!.data as { content: { type: string; text?: string }[] }).content
+    expect(shellContent.filter(block => block.type === 'text').map(block => block.text).join('')).toContain('CODE_ROUND_OK')
   })
 
   it.skipIf(MODE === 'record')('renders the code parent row with always-visible nested sub-rows', async () => {
@@ -98,7 +116,7 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
     await codeRow.waitFor({ timeout: 10_000 })
     const nest = page.locator('[data-subcalls]').first()
     await nest.waitFor({ timeout: 10_000 })
-    expect(await nest.locator('[data-sample="bash"]').count()).toBeGreaterThanOrEqual(1)
+    expect(await nest.locator(SHELL_ROW_SELECTOR).count()).toBeGreaterThanOrEqual(1)
     expect(await nest.locator('[data-state="error"]').count()).toBeGreaterThanOrEqual(1)
   }, 60_000)
 
@@ -116,12 +134,13 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
       const frame = page.locator('[style*="grid-template-columns"]').first()
       expect(await frame.getAttribute('data-rightbar-collapsed')).toBe('true')
       await expandOwningTurnProcess(page, nest)
-      const row = nest.locator('[data-sample="bash"]').first()
-      await expect.poll(() => row.getAttribute('data-state')).toBe('ok')
+      const call = nest.locator(SHELL_ROW_SELECTOR).first()
+      const row = SHELL_TOOL === 'pwsh' ? call.getByRole('button').first() : call
+      await expect.poll(() => call.getAttribute('data-state')).toBe('ok')
       await expect.poll(() => row.getAttribute('aria-expanded')).toBe('false')
       await row.click()
       await expect.poll(() => row.getAttribute('aria-expanded')).toBe('true')
-      const terminal = row.locator('xpath=..').locator('[data-terminal]')
+      const terminal = (SHELL_TOOL === 'pwsh' ? call : row.locator('xpath=..')).locator('[data-terminal]')
       await terminal.waitFor()
       await terminal.getByText('echo CODE_ROUND_OK', { exact: true }).waitFor()
       await terminal.getByText('CODE_ROUND_OK', { exact: true }).waitFor()
@@ -135,15 +154,16 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
 
   it.skipIf(MODE === 'record')('matches the expanded conversation aria golden with stable anchors', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ptc-aria'))
-    const row = page.locator('[data-subcalls] [data-sample="bash"]').first()
-    await expandOwningTurnProcess(page, row)
+    const call = page.locator(`[data-subcalls] ${SHELL_ROW_SELECTOR}`).first()
+    const row = SHELL_TOOL === 'pwsh' ? call.getByRole('button').first() : call
+    await expandOwningTurnProcess(page, call)
     if (await row.getAttribute('aria-expanded') !== 'true') await row.click()
     const snapshot = await captureExpandedTurnProcessAria(
       page,
       '[class*="centerCol"]',
       scaffold.workspaceCwd,
     )
-    await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
+    await compareOrRefreshGolden(UI_EXPECTED, normalizeShellSnapshot(snapshot), MODE)
   })
 
   it.skipIf(MODE === 'record')('stayed clean: no page errors, no reconnect churn', () => {

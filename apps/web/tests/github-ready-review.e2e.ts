@@ -154,7 +154,7 @@ describe.skipIf(MODE === 'record')('web e2e: GitHub ready-for-review', () => {
     if (content?.type !== 'text') throw new Error('webhook prompt was not text')
     expect(content.text).toContain('exact head SHA bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
 
-    const workspaceRow = page.locator('[role="treeitem"]').first()
+    const workspaceRow = page.locator('[data-workspace-group] [role="treeitem"]').first()
     if (await workspaceRow.getAttribute('aria-expanded') !== 'true') await workspaceRow.click()
     await page.getByText(TITLE, { exact: true }).click()
     await page.getByText(REPLY, { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })

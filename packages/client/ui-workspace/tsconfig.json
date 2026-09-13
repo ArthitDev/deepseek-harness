@@ -54,6 +54,12 @@
       "path": "../ui-session"
     },
     {
+      "path": "../ui-settings"
+    },
+    {
+      "path": "../../remote/remote-machines"
+    },
+    {
       "path": "../../util/workspace-path"
     }
   ]

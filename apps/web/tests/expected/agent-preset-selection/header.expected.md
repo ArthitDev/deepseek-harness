@@ -9,5 +9,7 @@
 - button "Session log":
   - text: Session log
   - img
+- button "Switch to dark mode":
+  - img
 - button "Open the sidebar":
   - img

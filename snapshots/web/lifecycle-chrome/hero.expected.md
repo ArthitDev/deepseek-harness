@@ -13,14 +13,18 @@
 - button "Add workspace":
   - img
 - tree "Sessions":
-  - treeitem "workspace" [expanded]:
+  - treeitem "MSI-Cyborg-15-NB 1" [expanded]:
     - img
-    - text: workspace
-  - treeitem "New Session" [selected]
+    - text: MSI-Cyborg-15-NB 1
+  - group:
+    - treeitem "workspace" [expanded]:
+      - img
+      - text: workspace
+    - treeitem "New Session" [selected]
 - button "Settings":
   - img
   - text: Settings
-- text: Into the Unknown Preview
+- text: Break All Shield Break All Shield
 - button "Choose workspace":
   - img
   - text: workspace
@@ -36,7 +40,11 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash":
-  - text: DeepSeek-V4-Flash
+- button "Web search automatic, press to search on every request":
+  - img
+  - text: Web Search
+- 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
+- button "Select model, current DeepSeek · DeepSeek-V4-Flash":
+  - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]

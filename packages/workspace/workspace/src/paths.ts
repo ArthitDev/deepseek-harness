@@ -5,6 +5,7 @@
 
 import { realpath } from 'node:fs/promises'
 import { posix, win32 } from 'node:path'
+import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 
 /**
  * Check whether a path names one fixed Host location without process cwd or
@@ -32,6 +33,8 @@ export function defaultWorkspaceTitle(
   path: string,
   platform: NodeJS.Platform = process.platform,
 ): string {
+  const remote = parseRemoteExecutionPath(path)
+  if (remote !== undefined) return posix.basename(remote.path) || remote.path
   const pathApi = platform === 'win32' ? win32 : posix
   return pathApi.basename(path) || pathApi.parse(path).root
 }

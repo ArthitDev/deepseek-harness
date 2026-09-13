@@ -8,7 +8,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type {
-  LlmAttemptId, LlmCallConfig, LlmFailure, MessageId, ReasoningEffortId, ResolvedRetryPolicy, StreamChunk,
+  LlmAttemptId, LlmCallConfig, LlmFailure, MessageId, ReasoningEffortId, ResolvedRetryPolicy, StreamChunk, ToolChoice,
 } from '@deepseek-ai/dsh-llm'
 import type { AgentCancelCause, Session, SessionSeq, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
@@ -341,6 +341,18 @@ declare module '@deepseek-ai/cordis' {
      * @mode waterfall
     */
     'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
+    /**
+     * Select the provider-neutral tool-call policy for one exact model request.
+     * A mode that requires a tool returns `required`; otherwise call `next()`.
+     * @param payload - identity and boundary of the request being selected.
+     * @param payload.agent - the agent making the model call.
+     * @param payload.turn - the open turn number.
+     * @param payload.step - the step whose request this is.
+     * @param payload.signal - the current turn's cancellation signal.
+     * Scope-filtered dispatch: agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/tool-choice'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<ToolChoice | undefined>): Promise<ToolChoice | undefined>
     /**
      * Handle one failed model-request attempt before the loop retries or closes
      * its step. A listener returns `{ kind: 'retry' }` without calling `next()`

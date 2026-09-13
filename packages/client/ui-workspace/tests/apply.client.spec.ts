@@ -7,6 +7,7 @@ import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
+import { RemoteMachineControl, RemoteMachinesSection } from '../src/client/RemoteMachines.tsx'
 import { apply as hostApply } from '../src/index.ts'
 
 async function bench() {
@@ -61,8 +62,14 @@ async function bench() {
   } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
-  Object.assign(new TestRemote(ctx), { directoryPicker })
-  ctx.provide('remote.directoryPicker', directoryPicker as never)
+  const remoteMachines = {
+    list: vi.fn(async () => ({
+      ok: false as const,
+      error: new RemoteError('gateway/invocation-unavailable', 'not composed', { endpoint: 'remoteMachines/list' }),
+    })),
+    save: vi.fn(), remove: vi.fn(), probe: vi.fn(), trust: vi.fn(),
+  }
+  new TestRemote(ctx, { directoryPicker, remoteMachines })
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -90,7 +97,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines',
     ])
   })
 
@@ -110,6 +117,26 @@ describe('ui-workspace apply', () => {
     await Promise.resolve()
     expect(after.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
     // expect(after.slots.entries('conversation.empty.workspace')[0]!.component).toBe(WorkspacePicker)
+  })
+
+  it('composes the remote machine settings and session target surfaces', async () => {
+    const b = await bench()
+    const root = b.slots.register({
+      name: 'root',
+      children: {
+        'settings.section': { kind: 'list', scope: 'root' },
+        'conversation.input.machine': { kind: 'single', scope: 'session' },
+      },
+    } as never, () => null)
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+
+    expect(b.slots.entries('settings.section').find(entry => entry.options.id === 'remote-machines')?.component)
+      .toBe(RemoteMachinesSection)
+    expect(b.slots.entries('conversation.input.machine')[0]?.component).toBe(RemoteMachineControl)
+
+    await fiber.dispose()
+    root()
   })
 
   it('routes browser actions and picker creation to the services', async () => {

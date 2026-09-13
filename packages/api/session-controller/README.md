@@ -33,6 +33,8 @@ The Client adapter exposes `SessionEventStream`, a Gateway `RemoteJournalStream`
 
 The Session object also carries local submission echoes: `session.beginSubmission` inserts one into `SessionSnapshot.pendingSubmissions` synchronously, before the caller serializes and prompts, so a conversation UI can show the message on the submit click's own frame. The echo stores ordered image previews and durable file references. Session derives its `transcript`, `queued`, or `steering` placement from the current running state and requested delivery mode, then retains that placement while serialization is in flight. The prompt's `requestId` is the correlation identity: the Host echoes it as the durable user source's `rpcId`, and queue occurrences project it as `SessionQueuedItem.rpcId`. An echo retires one animation frame after its durable event or queue occurrence is observed, immediately when its identified prompt fails or is abandoned, and as failed on disposal. Each retirement fires `onRetire` exactly once; an observed retirement includes the ordered durable attachment references so the composer can release successful cards while preserving failed drafts. Echoes are Client memory only; reload and reconnect rebuild the conversation from durable events alone.
 
+The root-addressed `skills/installed`, `skills/setEnabled`, `skills/remove`, `skills/search`, and `skills/add` Remotes manage user-global skills without opening a Session. `setEnabled` atomically moves a skill between `$DSH_HOME/skills` and `$DSH_HOME/disabled-skills`; `remove` moves either form into `$DSH_HOME/skill-backups` for recovery. Search delegates to `npx skills find`; installation runs the CLI without a shell or Harness credentials in an OS temporary directory, validates that exactly the requested catalog identifier produced a `SKILL.md`, and atomically publishes it under `$DSH_HOME/skills`. A replaced directory is preserved under `$DSH_HOME/skill-backups` and restored if the final move fails.
+
 -----
 
 <a id="configuration"></a>
@@ -63,6 +65,7 @@ No direct effect; model requests remain owned by the Agent and LLM packages.
 - A failed follow resumption remains visible to the caller instead of retrying indefinitely.
 - The raw browser upload is one streaming HTTP request without resumable offsets; a retry sends the file again from byte zero.
 - File-reference completion uses the shared Agent lookup and can resume a cold Session; the `skills/list` catalog is the non-activating alternative for skill metadata.
+- Catalog search and installation require network access plus an available `npx`; the management Remote accepts only one `owner/repository@skill` identifier returned by the catalog.
 
 
 <a id="dev-note"></a>

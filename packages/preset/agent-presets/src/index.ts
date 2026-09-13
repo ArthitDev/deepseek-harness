@@ -30,6 +30,8 @@ import { bindScopeParent, createScope, scopeOf, type Scope, type ScopeKey, type 
 // Type-only: resolves the `agent/created` lifecycle event this service watches.
 import type {} from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
+import type {} from '@deepseek-ai/dsh-llm'
 import type { AgentPresetDocument, AgentPresetRoster } from './types.ts'
 import type {} from '@deepseek-ai/dsh-session-projection'
 // Type-only: resolves the registry notification emitted after scope reparenting.
@@ -51,7 +53,7 @@ export type {
   AgentPresetComposition, AgentPresetCompositionRow, CompositionRowEnablement,
 } from './composition-inventory.ts'
 
-/** Settings namespace carrying the user's chosen default preset. */
+/** Settings namespace carrying the user's default and per-model presets. */
 export const SETTINGS_NAMESPACE = 'agent-presets'
 
 /** Refuse an empty preset id before invoking a domain operation. */
@@ -65,11 +67,14 @@ function validatePresetId(value: string, field: 'agentPreset' | 'from'): void {
 export interface AgentPresetSettings {
   /** Preset mounted when a session names none. */
   default?: string
+  /** Preset overrides by provider and model. */
+  models?: Record<string, Record<string, string>>
 }
 
 /** Runtime schema for the user-writable slice. */
 export const AgentPresetSettingsSchema: z<AgentPresetSettings> = z.object({
   default: z.string(),
+  models: z.dict(z.dict(z.string())),
 })
 
 export { COMPOSITION_FILE, discoverPresets, scanRoot, SHIPPED_PRESET_ROOT } from './discovery.ts'
@@ -242,6 +247,16 @@ export class AgentPresets extends TypertRemoteService {
   }
 
   /**
+   * Resolve the preset configured for one model route.
+   * @param provider - model provider route.
+   * @param model - provider-owned model id.
+   * @returns the route override, or the current default preset when unbound.
+   */
+  presetIdForModel(provider: string, model: string): string {
+    return this.settings?.get().models?.[provider]?.[model] ?? this.defaultId
+  }
+
+  /**
    * Every preset the configured roots currently supply.
    * @returns the presets, first-root-wins per id.
    */
@@ -260,6 +275,32 @@ export class AgentPresets extends TypertRemoteService {
   @Remote('list')
   async remoteExportList(): Promise<AgentPresetRoster> {
     const defaultId = this.defaultId
+    const defaultModel = this.selfCtx.get('agentDefaultModel')?.currentSelection()
+    const llm = this.selfCtx.get('llm')
+    const models = llm === undefined
+      ? []
+      : (await Promise.all(llm.listProviders().map(async (provider) => {
+        try {
+          return (await llm.listModels(provider.id)).map(model => ({
+            provider: provider.id,
+            providerName: provider.name,
+            id: model.id,
+            name: model.name,
+          }))
+        } catch {
+          return []
+        }
+      }))).flat()
+    if (defaultModel !== undefined && !models.some(
+      model => model.provider === defaultModel.provider && model.id === defaultModel.model,
+    )) {
+      models.unshift({
+        provider: defaultModel.provider,
+        providerName: defaultModel.provider,
+        id: defaultModel.model,
+        name: defaultModel.model,
+      })
+    }
     return {
       presets: (await this.list()).map(preset => ({
         id: preset.id,
@@ -270,6 +311,11 @@ export class AgentPresets extends TypertRemoteService {
         ...preset.broken === undefined ? {} : { broken: preset.broken },
       })),
       authorable: this.authorable,
+      models,
+      modelPresets: this.settings?.get().models ?? {},
+      ...defaultModel === undefined
+        ? {}
+        : { defaultModel: { provider: defaultModel.provider, model: defaultModel.model } },
     }
   }
 
@@ -647,11 +693,14 @@ export class AgentPresets extends TypertRemoteService {
     // not that case: nothing will ever supply it again, and left in place every
     // session created without an explicit pick would fail to start. Clearing it
     // exposes the deployment's own default underneath, which is the layering.
-    if (this.settings?.get().default !== id) return
-    await this.settingsService?.mutate(
-      SETTINGS_NAMESPACE,
-      [{ op: 'unset', path: ['default'] }],
-    )
+    const settings = this.settings?.get()
+    const ops = [
+      ...settings?.default === id ? [{ op: 'unset' as const, path: ['default'] }] : [],
+      ...Object.entries(settings?.models ?? {}).flatMap(([provider, models]) =>
+        Object.entries(models).flatMap(([model, preset]) =>
+          preset === id ? [{ op: 'unset' as const, path: ['models', provider, model] }] : [])),
+    ]
+    if (ops.length > 0) await this.settingsService?.mutate(SETTINGS_NAMESPACE, ops)
   }
 
   /**

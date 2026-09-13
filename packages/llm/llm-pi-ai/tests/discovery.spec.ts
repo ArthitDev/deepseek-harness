@@ -107,15 +107,22 @@ describe('catalog-route model discovery', () => {
 })
 
 describe('draft-provider model discovery', () => {
-  it('reads an OpenAI-compatible listing and keeps the capacities it discloses', async () => {
+  it('reads an OpenAI-compatible listing and keeps the capabilities it discloses', async () => {
     const server = await listingServer({
       body: JSON.stringify({
         data: [
-          { id: 'acme-large', display_name: 'Acme Large', context_length: 65_536, max_output_tokens: 4096 },
-          { id: 'acme-camel', displayName: 'Acme Camel', contextWindow: 131_072, maxOutputTokens: 8192 },
+          {
+            id: 'acme-large', display_name: 'Acme Large', context_length: 65_536, max_output_tokens: 4096,
+            reasoning: { supported_efforts: ['high', 'low', 'none'] },
+          },
+          {
+            id: 'acme-camel', displayName: 'Acme Camel', contextWindow: 131_072, maxOutputTokens: 8192,
+            supported_reasoning_efforts: [{ effort: 'medium' }, { reasoning_effort: 'xhigh' }],
+          },
           { id: 'acme-mixed', name: 'Acme Mixed', context_window: 32_768, maxTokens: 2048 },
           { id: 'acme-legacy', max_tokens: 1024 },
-          { id: 'acme-small' },
+          { id: 'acme-all', reasoning: { supported_efforts: null } },
+          { id: 'acme-small', supported_reasoning_efforts: ['unknown'] },
         ],
       }),
     })
@@ -124,10 +131,22 @@ describe('draft-provider model discovery', () => {
     const models = await ctx.llm.discoverModels('llm-pi-ai', { baseURL: `${server.url}/v1`, apiKey: 'probe-key' })
 
     expect(models).toEqual([
-      { id: 'acme-large', name: 'Acme Large', contextWindow: 65_536, maxTokens: 4096 },
-      { id: 'acme-camel', name: 'Acme Camel', contextWindow: 131_072, maxTokens: 8192 },
+      {
+        id: 'acme-large', name: 'Acme Large', contextWindow: 65_536, maxTokens: 4096,
+        reasoningEfforts: { high: 'high', low: 'low', off: 'none' },
+      },
+      {
+        id: 'acme-camel', name: 'Acme Camel', contextWindow: 131_072, maxTokens: 8192,
+        reasoningEfforts: { medium: 'medium', xhigh: 'xhigh' },
+      },
       { id: 'acme-mixed', name: 'Acme Mixed', contextWindow: 32_768, maxTokens: 2048 },
       { id: 'acme-legacy', name: 'acme-legacy', maxTokens: 1024 },
+      {
+        id: 'acme-all', name: 'acme-all',
+        reasoningEfforts: {
+          minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max', off: 'none',
+        },
+      },
       { id: 'acme-small', name: 'acme-small' },
     ])
     expect(server.paths).toEqual(['/v1/models'])
@@ -496,10 +515,18 @@ const RECORDED_LISTINGS = [
     file: 'openrouter-2026-09-02.json',
     api: 'openai-completions',
     models: [
-      { id: 'anthropic/claude-fable-5.1', name: 'Anthropic: Claude Fable 5.1', contextWindow: 1_000_000, maxTokens: 128_000 },
+      {
+        id: 'anthropic/claude-fable-5.1', name: 'Anthropic: Claude Fable 5.1',
+        contextWindow: 1_000_000, maxTokens: 128_000,
+        reasoningEfforts: { max: 'max', xhigh: 'xhigh', high: 'high', medium: 'medium', low: 'low' },
+      },
       // The router's own aggregate route reports no completion cap.
       { id: 'openrouter/auto-beta', name: 'Auto Router (Beta)', contextWindow: 2_000_000 },
-      { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek: DeepSeek V4 Flash 0423', contextWindow: 1_048_576, maxTokens: 384_000 },
+      {
+        id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek: DeepSeek V4 Flash 0423',
+        contextWindow: 1_048_576, maxTokens: 384_000,
+        reasoningEfforts: { xhigh: 'xhigh', high: 'high' },
+      },
     ],
   },
   {

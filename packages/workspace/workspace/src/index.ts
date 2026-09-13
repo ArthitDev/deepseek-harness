@@ -8,6 +8,8 @@
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-fs'
+import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
@@ -108,6 +110,8 @@ export class WorkspaceRegistry extends Service {
       this.sessionPaths.set(id, path)
       this.invalidSessionPaths.delete(id)
     },
+    resolveDirectory: path => this.resolveDirectory(path),
+    directoryStatus: path => this.directoryStatus(path),
   }
 
   constructor(ctx: Context) {
@@ -155,10 +159,7 @@ export class WorkspaceRegistry extends Service {
   // drop the parameter with its @param clause and the `create(path, title?)`
   // lines in this package's README pair.
   async create(path: string, title?: string): Promise<Workspace> {
-    const canonical = await realpathNormalize(path)
-    if (!(await stat(canonical)).isDirectory()) {
-      throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
-    }
+    const canonical = await this.resolveDirectory(path)
     return await this.enqueueOperation(() => this.createCanonical(canonical, title))
   }
 
@@ -295,7 +296,7 @@ export class WorkspaceRegistry extends Service {
    * @returns the workspace owning the canonical path, when one exists.
    */
   async resolveByPath(path: string): Promise<Workspace | undefined> {
-    const canonical = await realpathNormalize(path)
+    const canonical = await this.resolveDirectory(path)
     for (const entity of this.entities.values()) {
       if (entity.path === canonical) return entity
     }
@@ -596,6 +597,14 @@ export class WorkspaceRegistry extends Service {
       this.invalidSessionPaths.set(header.id, 'header has no cwd')
       return
     }
+    if (parseRemoteExecutionPath(header.cwd) !== undefined) {
+      // Remote cwd values were canonicalized when their Workspace was created.
+      // Keep membership available while the machine is offline; live status is
+      // checked only when the user opens or creates against that Workspace.
+      this.sessionPaths.set(header.id, header.cwd)
+      this.invalidSessionPaths.delete(header.id)
+      return
+    }
     try {
       const path = await realpathNormalize(header.cwd)
       if (!(await stat(path)).isDirectory()) {
@@ -606,6 +615,32 @@ export class WorkspaceRegistry extends Service {
       this.invalidSessionPaths.delete(header.id)
     } catch {
       this.invalidSessionPaths.set(header.id, `cwd '${header.cwd}' does not resolve`)
+    }
+  }
+
+  private async resolveDirectory(path: string): Promise<string> {
+    if (parseRemoteExecutionPath(path) === undefined) {
+      const canonical = await realpathNormalize(path)
+      if (!(await stat(canonical)).isDirectory()) throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
+      return canonical
+    }
+    const fs = this.ctx.get('fs')
+    if (fs === undefined) throw new Error('remote workspace support is not available')
+    const target = await fs.resolve(path)
+    const info = await fs.stat(target)
+    if (info?.type !== 'directory') throw new Error(`cannot create a workspace at '${path}': path is not a directory`)
+    return target.displayPath
+  }
+
+  private async directoryStatus(path: string): Promise<'ok' | 'missing-dir'> {
+    try {
+      if (parseRemoteExecutionPath(path) === undefined) return (await stat(path)).isDirectory() ? 'ok' : 'missing-dir'
+      const fs = this.ctx.get('fs')
+      if (fs === undefined) return 'missing-dir'
+      const target = await fs.resolve(path)
+      return (await fs.stat(target))?.type === 'directory' ? 'ok' : 'missing-dir'
+    } catch {
+      return 'missing-dir'
     }
   }
 

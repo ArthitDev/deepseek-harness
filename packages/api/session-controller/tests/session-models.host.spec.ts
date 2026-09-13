@@ -158,6 +158,41 @@ function currentSelection(ctx: Context, sessionId: SessionId) {
 }
 
 describe('Web session model selection', () => {
+  it('applies the model preset when possible and keeps model selection available after the preset locks', async () => {
+    const { ctx, sessionId } = await harness()
+    const selectedPresets: string[] = []
+    let locked = false
+    ctx.provide('agentPresets', {
+      presetIdForModel: () => 'minimal',
+      select: (_agent: Agent, preset: string) => {
+        selectedPresets.push(preset)
+        return locked
+          ? Promise.reject(new RemoteError(
+            'agent-preset/locked', 'session already started', { sessionId, agentPreset: preset },
+          ))
+          : Promise.resolve(preset)
+      },
+    } as never)
+    const remote = createSessionTestRemote(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    expectValue(await remote.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner',
+    })))
+    locked = true
+    expectValue(await remote.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-chat',
+    })))
+
+    expect(selectedPresets).toEqual(['minimal', 'minimal'])
+    expect(currentSelection(ctx, sessionId)).toMatchObject({
+      provider: 'deepseek-official', model: 'deepseek-chat',
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('validates an ordered image batch before persisting any member', async () => {
     const { ctx, agent, sessionId } = await harness()
     const validateImage = vi.fn((_input: { data: Uint8Array }) => Promise.resolve())

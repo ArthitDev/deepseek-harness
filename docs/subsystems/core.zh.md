@@ -501,6 +501,14 @@ Discovery is unmemoized: `list()` and `resolve()` re-read the roots on every cal
 
 ```ts cordis-catalog
 /**
+ * Resolve the preset configured for one model route.
+ * @param provider - model provider route.
+ * @param model - provider-owned model id.
+ * @returns the route override, or the current default preset when unbound.
+ */
+presetIdForModel(provider: string, model: string): string
+
+/**
  * Every preset the configured roots currently supply.
  * @returns the presets, first-root-wins per id.
  */
@@ -1233,6 +1241,31 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 ```
 
 Types: [Scoped](scope.zh.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
+<a id="agenttool-choice--waterfall"></a>
+
+#### `agent/tool-choice` — waterfall
+
+Select the provider-neutral tool-call policy for one exact model request. A mode that requires a tool returns `required`; otherwise call `next()`.
+
+```ts cordis-catalog
+/**
+ * Select the provider-neutral tool-call policy for one exact model request.
+ * A mode that requires a tool returns `required`; otherwise call `next()`.
+ * @param payload - identity and boundary of the request being selected.
+ * @param payload.agent - the agent making the model call.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the step whose request this is.
+ * @param payload.signal - the current turn's cancellation signal.
+ * Scope-filtered dispatch: agent-scoped listeners receive only that agent.
+ * @mode waterfall
+ */
+'agent/tool-choice'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<ToolChoice | undefined>): Promise<ToolChoice | undefined>
+```
+
+Types: [Scoped](scope.zh.md) · [ToolChoice](llm-streaming.zh.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

@@ -539,6 +539,12 @@ export class ReactLoopAgent implements Agent {
     }
     signal.throwIfAborted()
 
+    const toolChoice = await this.dispatch.waterfall(
+      'agent/tool-choice', { turn, step, signal },
+      (): Promise<GenerateOptions['toolChoice']> => Promise.resolve(undefined),
+    )
+    signal.throwIfAborted()
+
     const header = canonicalHeader({
       config,
       ...preparedCall === undefined ? {} : { adapterDefaults: preparedCall.adapterDefaults },
@@ -589,6 +595,7 @@ export class ReactLoopAgent implements Agent {
       messages: boundaryMessages,
       ...header.system !== undefined ? { system: header.system } : {},
       ...header.tools !== undefined ? { tools: header.tools } : {},
+      ...toolChoice !== undefined ? { toolChoice } : {},
       sessionId: this.session.id,
       signal,
     }))

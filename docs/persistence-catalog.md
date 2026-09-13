@@ -1095,3 +1095,16 @@ Source: [`packages/core/session/src/types.ts:294`](../packages/core/session/src/
 ```
 
 Source: [`packages/web/web-search-deepseek/src/provider.ts:83`](../packages/web/web-search-deepseek/src/provider.ts)
+
+### `web-search/*`
+
+<a id="web-searchmode--log-only"></a>
+
+#### `web-search/mode` — log-only
+
+```ts persistence-catalog
+/** Whether every answer must begin with current web research. */
+'web-search/mode': { always: boolean }
+```
+
+Source: [`packages/web/tool-web/src/index.ts:30`](../packages/web/tool-web/src/index.ts)

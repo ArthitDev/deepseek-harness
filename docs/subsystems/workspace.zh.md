@@ -183,6 +183,57 @@ Host service backing the generated `ctx.remote.directoryPicker` namespace. The s
 
 Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
 
+<a id="ctxremotemachines--remotemachines"></a>
+
+### `ctx.remoteMachines` — `RemoteMachines`
+
+Owns saved SSH profiles, fingerprint trust, and shared remote transports.
+
+```ts cordis-catalog
+/**
+ * Read a Host-only profile with any lifetime-only password applied.
+ * @param id - Saved machine identifier.
+ * @returns the complete profile, or undefined when it is absent.
+ */
+profile(id: string): RemoteMachineProfile | undefined
+
+/**
+ * List every saved machine without credential fields.
+ * @returns redacted views for every saved machine.
+ */
+@Remote('list') list(): RemoteMachinesValue
+
+/**
+ * Create or update one saved profile.
+ * @param request - Validated profile fields and optional secrets.
+ * @returns the redacted saved profile.
+ */
+@Remote('save') async save(request: RemoteMachineSaveRequest): Promise<RemoteMachineValue>
+
+/**
+ * Delete a saved profile that has no registered workspace.
+ * @param request - Saved machine identifier.
+ * @returns confirmation after settings and cached credentials are cleared.
+ */
+@Remote('remove') async remove(request: RemoteMachineIdRequest): Promise<RemoteMachineRemoveValue>
+
+/**
+ * Observe an SSH host key and platform without trusting a new key.
+ * @param request - Saved machine identifier and optional lifetime-only password.
+ * @returns the observed fingerprint and remote platform details.
+ */
+@Remote('probe') async probe(request: RemoteMachineProbeRequest): Promise<RemoteMachineProbeValue>
+
+/**
+ * Re-probe and save one exact SSH host fingerprint.
+ * @param request - Saved machine identifier and observed fingerprint.
+ * @returns the updated redacted profile.
+ */
+@Remote('trust') async trust(request: RemoteMachineTrustRequest): Promise<RemoteMachineValue>
+```
+
+Source: [`packages/remote/remote-machines/src/index.ts`](../../packages/remote/remote-machines/src/index.ts)
+
 <a id="ctxworkspacecontroller--workspacecontroller"></a>
 
 ### `ctx.workspaceController` — `WorkspaceController`

@@ -36,6 +36,10 @@ const PiAiConfig = Schema.object({
       name: Schema.string(),
       contextWindow: Schema.number(),
       maxTokens: Schema.number(),
+      reasoningEfforts: Schema.dict(
+        Schema.union([Schema.string(), Schema.const(null)]),
+        Schema.union(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']),
+      ),
     })),
     reasoning: Schema.union(['off', 'high']),
   })),
@@ -530,7 +534,10 @@ describe('endpoint interrogation', () => {
   it('adopts only the picked candidates, keeping a row the user already tuned', async () => {
     const discover = vi.fn(() => Promise.resolve(ok([
       { id: 'kept', contextWindow: 999 },
-      { id: 'fresh', contextWindow: 4096, maxTokens: 2048, name: 'Fresh' },
+      {
+        id: 'fresh', contextWindow: 4096, maxTokens: 2048, name: 'Fresh',
+        reasoningEfforts: { off: 'none', low: 'low', high: 'high' },
+      },
     ])))
     const { mutate } = await mountSection({
       discover,
@@ -555,8 +562,33 @@ describe('endpoint interrogation', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     expect(firstMutate(mutate).ops[0]?.value).toEqual([
       { id: 'kept', contextWindow: 111 },
-      { id: 'fresh', contextWindow: 4096, maxTokens: 2048, name: 'Fresh' },
+      {
+        id: 'fresh', contextWindow: 4096, maxTokens: 2048, name: 'Fresh',
+        reasoningEfforts: { off: 'none', low: 'low', high: 'high' },
+      },
     ])
+  })
+
+  it('fills newly advertised capabilities without replacing tuned fields', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok([{
+      id: 'kept', contextWindow: 999, reasoningEfforts: { off: 'none', high: 'high' },
+    }])))
+    const { mutate } = await mountSection({
+      discover,
+      providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'kept', contextWindow: 111 }] } },
+    })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    expect(document.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true)
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{
+      id: 'kept', contextWindow: 111, reasoningEfforts: { off: 'none', high: 'high' },
+    }])
   })
 
   it('keeps the rows editable when the provider cannot be interrogated', async () => {

@@ -13,18 +13,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCloseFill14, IconPersonalizationOutline16,
-  IconProjectAddOutline16, IconSearchOutline16, Menu, Modal, Tooltip,
+  IconProjectAddOutline16, IconSearchOutline16, IconTriangleRightFill14, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   SessionListState, SessionSearchResultItem,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { SessionNode, SessionOrderBy } from '../tree.ts'
+import type { GroupNode, SessionNode, SessionOrderBy } from '../tree.ts'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, owningGroupKey, UNGROUPED_KEY,
 } from '../tree.ts'
+import { ComputerIcon } from '../RemoteMachines.tsx'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
@@ -41,6 +43,37 @@ const SEARCH_DEBOUNCE_MS = 250
 const SEARCH_QUERY_MAX_CODE_UNITS = 500
 /** Session rows visible per Workspace before the local overflow control. */
 const COLLAPSED_SESSION_LIMIT = 5
+const LOCAL_MACHINE_KEY = 'local:'
+
+interface MachineSection {
+  key: string
+  label: string
+  remote: boolean
+  groups: GroupNode[]
+}
+
+function executionMachineKey(cwd: string | undefined): string {
+  if (cwd === undefined) return LOCAL_MACHINE_KEY
+  return parseRemoteExecutionPath(cwd)?.machineId ?? LOCAL_MACHINE_KEY
+}
+
+function groupByMachine(
+  groups: readonly GroupNode[],
+  machineNames: ReadonlyMap<string, string>,
+  localLabel: string,
+): MachineSection[] {
+  const sections = new Map<string, MachineSection>([
+    [LOCAL_MACHINE_KEY, { key: LOCAL_MACHINE_KEY, label: localLabel, remote: false, groups: [] }],
+    ...[...machineNames].map(([key, label]): [string, MachineSection] => [key, { key, label, remote: true, groups: [] }]),
+  ])
+  for (const group of groups) {
+    const key = executionMachineKey(group.cwd)
+    const section = sections.get(key)
+    if (section !== undefined) section.groups.push(group)
+    else sections.set(key, { key, label: key, remote: true, groups: [group] })
+  }
+  return [...sections.values()].filter(section => section.groups.length > 0)
+}
 
 /** Fold one Workspace without charging its provisional New Session against the ordinary-row limit. */
 function collapsedSessionRows(sessions: readonly SessionNode[]): {
@@ -240,6 +273,8 @@ type SessionTreeProps = Pick<
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
+  machineNames: ReadonlyMap<string, string>
+  localMachineLabel: string
   /** Whether the current Workspace stream has a complete Host baseline. */
   workspaceReady: boolean
   /** Explicit persisted zero-or-five-session state by Workspace group. */
@@ -277,6 +312,7 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, useSessionPendingInteraction, startSession, open, forkSession, workspaces, archivedSessionIds,
+  machineNames, localMachineLabel,
   workspaceReady,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive, onSessionDelete,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
@@ -291,6 +327,7 @@ function SessionTree({
     ? undefined
     : owningGroupKey(workspaces, revealSessionId)
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
+  const [collapsedMachines, setCollapsedMachines] = useState<string[]>([])
   // Transient drag marker state; the selected mode owns the resulting order.
   const [drag, setDrag] = useState<DragState | null>(null)
   const sessionDropCommitted = useRef(false)
@@ -361,6 +398,21 @@ function SessionTree({
     }),
     [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, sessionOrderByAccount],
   )
+  const machineSections = useMemo(
+    () => groupByMachine(groups, machineNames, localMachineLabel),
+    [groups, machineNames, localMachineLabel],
+  )
+  const currentMachineKey = currentGroup === undefined
+    ? undefined
+    : executionMachineKey(groups.find(group => group.key === currentGroup)?.cwd)
+  const visibleGroupKey = revealGroup ?? currentGroup
+  const visibleMachineKey = visibleGroupKey === undefined
+    ? undefined
+    : executionMachineKey(groups.find(group => group.key === visibleGroupKey)?.cwd)
+  useEffect(() => {
+    if (visibleMachineKey === undefined) return
+    setCollapsedMachines(keys => keys.filter(key => key !== visibleMachineKey))
+  }, [visibleMachineKey])
   useEffect(() => {
     if (revealGroup === undefined || groupExpansion[revealGroup] === true) return
     setGroupExpanded(revealGroup, true)
@@ -433,9 +485,15 @@ function SessionTree({
     if (workspaceDropCommitted.current) return
     workspaceDropCommitted.current = true
     setWorkspaceDrag(null)
-    const rowIndex = workspaces.findIndex(workspace => workspace.workspaceId === over.id)
+    const source = workspaces.find(workspace => workspace.workspaceId === activeDrag.workspaceId)
+    const target = workspaces.find(workspace => workspace.workspaceId === over.id)
+    if (source === undefined || target === undefined
+      || executionMachineKey(source.path) !== executionMachineKey(target.path)) return
+    const machineWorkspaces = workspaces.filter(workspace =>
+      executionMachineKey(workspace.path) === executionMachineKey(source.path))
+    const rowIndex = machineWorkspaces.findIndex(workspace => workspace.workspaceId === over.id)
     if (rowIndex === -1) return
-    const anchor = over.half === 'before' ? over.id : workspaces[rowIndex + 1]?.workspaceId
+    const anchor = over.half === 'before' ? over.id : machineWorkspaces[rowIndex + 1]?.workspaceId
     if (anchor === activeDrag.workspaceId) return
     const sourceIndex = workspaces.findIndex(workspace => workspace.workspaceId === activeDrag.workspaceId)
     const anchorIndex = anchor === undefined
@@ -446,169 +504,205 @@ function SessionTree({
       console.warn('workspace reorder rejected:', reason)
     })
   }
-  const workspaceDropAtListStart = groups[0]?.workspaceId !== undefined
-    && workspaceDrag?.over?.id === groups[0].workspaceId
-    && workspaceDrag.over.half === 'before'
+  const draggedWorkspaceMachineKey = workspaceDrag === null
+    ? undefined
+    : executionMachineKey(workspaces.find(workspace => workspace.workspaceId === workspaceDrag.workspaceId)?.path)
 
   return (
     <div className={clsx(css.treeBody, css.wide)}>
-      {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
       <div
-        className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
+        className={css.list}
         role="tree"
         aria-label={t('section.sessions')}
       >
         {groups.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}
-        {groups.map((group) => {
-          const workspaceId = group.workspaceId
-          const collapsed = collapsedSessionRows(group.sessions)
-          const sessionsExpanded = expandedSessionGroups.includes(group.key)
-          const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
-            ? workspaceDrag.over.half
-            : null
-          const workspaceDragProps = workspaceId === undefined ? undefined : {
-            start: () => {
-              workspaceDropCommitted.current = false
-              setWorkspaceDrag({ workspaceId, over: null })
-            },
-            end: () => {
-              if (workspaceDrag?.over !== null && workspaceDrag?.over !== undefined) {
-                commitWorkspaceDrag(workspaceDrag, workspaceDrag.over)
-              } else {
-                setWorkspaceDrag(null)
-              }
-              workspaceDropCommitted.current = false
-            },
-          }
-          const hoverWorkspace = workspaceId === undefined
-            ? undefined
-            : (half: 'before' | 'after') => {
-              setWorkspaceDrag(active => active === null
-                ? active
-                : { ...active, over: { id: workspaceId, half } })
-            }
-          const dropWorkspace = workspaceId === undefined
-            ? undefined
-            : (half: 'before' | 'after') => {
-              if (workspaceDrag === null) return
-              commitWorkspaceDrag(workspaceDrag, { id: workspaceId, half })
-            }
+        {machineSections.map((machine) => {
+          const machineExpanded = !collapsedMachines.includes(machine.key)
+          const machineActive = machine.key === currentMachineKey
+          const workspaceCount = machine.groups.filter(group => group.workspaceId !== undefined).length
           return (
-          // Group section: header row + expanded top-level session rows. The
-          // inter-group breathing room is the section's own margin
-          // (WorkspaceBrowser.module.css).
             <div
-              key={group.key}
-              className={clsx(
-                css.groupSection,
-                workspaceMarker === 'before' && css.workspaceDropBefore,
-                workspaceMarker === 'after' && css.workspaceDropAfter,
-              )}
-              onDragOver={workspaceDrag === null || hoverWorkspace === undefined
-                ? undefined
-                : (e) => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  hoverWorkspace(workspaceGroupHalf(e))
-                }}
-              onDrop={workspaceDrag === null || dropWorkspace === undefined
-                ? undefined
-                : (e) => {
-                  e.preventDefault()
-                  dropWorkspace(workspaceGroupHalf(e))
-                }}
+              key={machine.key}
+              className={css.machineSection}
+              role="none"
             >
-              <ProjectRowItem
-                group={group}
-                home={home}
-                t={t}
-                onToggle={() => {
-                  if (group.expanded) {
-                    setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
-                  }
-                  setGroupExpanded(group.key, !group.expanded)
-                }}
-                onCreate={() => {
-                  if (group.workspaceId !== undefined) {
-                    setGroupExpanded(group.key, true)
-                    startSession(group.workspaceId)
-                  }
-                }}
-                drag={workspaceDragProps}
-                actions={group.workspaceId === undefined
-                  ? undefined
-                  : {
-                    rename: () => {
-                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                      if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
-                    },
-                    delete: () => {
-                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                      if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
-                    },
-                  }}
-              />
-              {(sessionsExpanded
-                ? group.sessions
-                : collapsed.rows
-              ).map((node) => {
-              // Session drag never leaves its group. Ungrouped writes only the
-              // browser-local account; real Workspaces may also write Host order.
-                const sameGroupDrag = drag !== null && drag.accountKey === group.key
-                const dragProps = {
-                  start: () => {
-                    sessionDropCommitted.current = false
-                    setDrag({ accountKey: group.key, sessionId: node.id, over: null })
-                  },
-                  active: sameGroupDrag,
-                  marker: sameGroupDrag && drag.over?.id === node.id ? drag.over.half : null,
-                  hover: (half: 'before' | 'after') => {
-                  /* v8 ignore next -- narrowing guard: Rows gates hover on `active`, which is false while the drag state is null. */
-                    setDrag(d => (d === null ? d : { ...d, over: { id: node.id, half } }))
-                  },
-                  drop: (half: 'before' | 'after') => {
-                  /* v8 ignore next -- narrowing guard: Rows gates drop on `active`, which is false while the drag state is null. */
-                    if (drag === null) return
-                    commitSessionDrag(drag, { id: node.id, half })
-                  },
-                  end: () => {
-                    if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
-                    else setDrag(null)
-                    sessionDropCommitted.current = false
-                  },
-                }
-                return (
-                  <SessionNodeItem
-                    key={node.id}
-                    node={node}
-                    currentId={current}
-                    now={now}
-                    onOpen={open}
-                    onRename={onSessionRename}
-                    onFork={forkSession}
-                    onArchive={onSessionArchive}
-                    onDelete={onSessionDelete}
-                    onReveal={node.id === revealSessionId && group.key === revealGroup
-                      ? () => { onSessionRevealed(node.id) }
-                      : undefined}
-                    drag={dragProps}
-                    t={t}
-                  />
-                )
-              })}
-              {collapsed.hiddenCount > 0 && (
-                <button
-                  type="button"
-                  className={css.sessionOverflowButton}
-                  aria-expanded={sessionsExpanded}
-                  onClick={() => { setExpandedSessionGroups(keys => toggled(keys, group.key)) }}
-                >
-                  {sessionsExpanded
-                    ? t('sessions.collapse')
-                    : t('sessions.expand', { n: collapsed.hiddenCount })}
-                </button>
+              <button
+                type="button"
+                className={clsx(css.machineRow, machineActive && css.machineRowActive)}
+                role="treeitem"
+                aria-expanded={machineExpanded}
+                aria-current={machineActive ? 'true' : undefined}
+                onClick={() => { setCollapsedMachines(keys => toggled(keys, machine.key)) }}
+              >
+                <span className={css.machineChevron}>
+                  <IconTriangleRightFill14 className={clsx(css.machineArrow, machineExpanded && css.machineArrowOpen)} />
+                </span>
+                <span className={css.machineIcon}><ComputerIcon remote={machine.remote} /></span>
+                <span className={css.machineName}>{machine.label}</span>
+                <span className={css.machineCount}>{workspaceCount}</span>
+              </button>
+              {machineExpanded && (
+                <div className={css.machineChildren} role="group">
+                  {machine.groups.map((group) => {
+                    const workspaceId = group.workspaceId
+                    const collapsed = collapsedSessionRows(group.sessions)
+                    const sessionsExpanded = expandedSessionGroups.includes(group.key)
+                    const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
+                      ? workspaceDrag.over.half
+                      : null
+                    const workspaceDragProps = workspaceId === undefined ? undefined : {
+                      start: () => {
+                        workspaceDropCommitted.current = false
+                        setWorkspaceDrag({ workspaceId, over: null })
+                      },
+                      end: () => {
+                        if (workspaceDrag?.over !== null && workspaceDrag?.over !== undefined) {
+                          commitWorkspaceDrag(workspaceDrag, workspaceDrag.over)
+                        } else {
+                          setWorkspaceDrag(null)
+                        }
+                        workspaceDropCommitted.current = false
+                      },
+                    }
+                    const hoverWorkspace = workspaceId === undefined
+                      ? undefined
+                      : (half: 'before' | 'after') => {
+                        setWorkspaceDrag(active => active === null
+                          ? active
+                          : { ...active, over: { id: workspaceId, half } })
+                      }
+                    const dropWorkspace = workspaceId === undefined
+                      ? undefined
+                      : (half: 'before' | 'after') => {
+                        if (workspaceDrag === null) return
+                        commitWorkspaceDrag(workspaceDrag, { id: workspaceId, half })
+                      }
+                    return (
+                    // Group section: header row + expanded top-level session rows. The
+                    // inter-group breathing room is the section's own margin
+                    // (WorkspaceBrowser.module.css).
+                      <div
+                        key={group.key}
+                        data-workspace-group={group.key}
+                        className={clsx(
+                          css.groupSection,
+                          workspaceMarker === 'before' && css.workspaceDropBefore,
+                          workspaceMarker === 'after' && css.workspaceDropAfter,
+                        )}
+                        onDragOver={workspaceDrag === null || hoverWorkspace === undefined
+                || draggedWorkspaceMachineKey !== machine.key
+                          ? undefined
+                          : (e) => {
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            hoverWorkspace(workspaceGroupHalf(e))
+                          }}
+                        onDrop={workspaceDrag === null || dropWorkspace === undefined
+                || draggedWorkspaceMachineKey !== machine.key
+                          ? undefined
+                          : (e) => {
+                            e.preventDefault()
+                            dropWorkspace(workspaceGroupHalf(e))
+                          }}
+                      >
+                        <ProjectRowItem
+                          group={group}
+                          home={home}
+                          t={t}
+                          onToggle={() => {
+                            if (group.expanded) {
+                              setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
+                            }
+                            setGroupExpanded(group.key, !group.expanded)
+                          }}
+                          onCreate={() => {
+                            if (group.workspaceId !== undefined) {
+                              setGroupExpanded(group.key, true)
+                              startSession(group.workspaceId)
+                            }
+                          }}
+                          drag={workspaceDragProps}
+                          actions={group.workspaceId === undefined
+                            ? undefined
+                            : {
+                              rename: () => {
+                                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                                if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
+                              },
+                              delete: () => {
+                                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                                if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
+                              },
+                            }}
+                        />
+                        {(sessionsExpanded
+                          ? group.sessions
+                          : collapsed.rows
+                        ).map((node) => {
+                          // Session drag never leaves its group. Ungrouped writes only the
+                          // browser-local account; real Workspaces may also write Host order.
+                          const sameGroupDrag = drag !== null && drag.accountKey === group.key
+                          const dragProps = {
+                            start: () => {
+                              sessionDropCommitted.current = false
+                              setDrag({ accountKey: group.key, sessionId: node.id, over: null })
+                            },
+                            active: sameGroupDrag,
+                            marker: sameGroupDrag && drag.over?.id === node.id ? drag.over.half : null,
+                            hover: (half: 'before' | 'after') => {
+                              /* v8 ignore next -- narrowing guard: Rows gates hover on `active`,
+                               * which is false while the drag state is null. */
+                              setDrag(d => (d === null ? d : { ...d, over: { id: node.id, half } }))
+                            },
+                            drop: (half: 'before' | 'after') => {
+                              /* v8 ignore next -- narrowing guard: Rows gates drop on `active`,
+                               * which is false while the drag state is null. */
+                              if (drag === null) return
+                              commitSessionDrag(drag, { id: node.id, half })
+                            },
+                            end: () => {
+                              if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
+                              else setDrag(null)
+                              sessionDropCommitted.current = false
+                            },
+                          }
+                          return (
+                            <SessionNodeItem
+                              key={node.id}
+                              node={node}
+                              currentId={current}
+                              now={now}
+                              onOpen={open}
+                              onRename={onSessionRename}
+                              onFork={forkSession}
+                              onArchive={onSessionArchive}
+                              onDelete={onSessionDelete}
+                              onReveal={node.id === revealSessionId && group.key === revealGroup
+                                ? () => { onSessionRevealed(node.id) }
+                                : undefined}
+                              drag={dragProps}
+                              t={t}
+                            />
+                          )
+                        })}
+                        {collapsed.hiddenCount > 0 && (
+                          <button
+                            type="button"
+                            className={css.sessionOverflowButton}
+                            aria-expanded={sessionsExpanded}
+                            onClick={() => { setExpandedSessionGroups(keys => toggled(keys, group.key)) }}
+                          >
+                            {sessionsExpanded
+                              ? t('sessions.collapse')
+                              : t('sessions.expand', { n: collapsed.hiddenCount })}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )
@@ -859,10 +953,17 @@ export function WorkspaceBrowser({
   searchResultLimit,
   useDirectoryFlow,
   useHostInfo,
+  useRemoteMachines,
   renderSlot,
   t,
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
+  const hostname = useHostInfo(info => info.hostname)
+  const localMachineLabel = hostname === undefined || hostname.length === 0
+    ? t('remote.local')
+    : hostname
+  const machines = useRemoteMachines?.(state => state.machines) ?? []
+  const machineNames = useMemo(() => new Map(machines.map(machine => [machine.id, machine.name])), [machines])
   const workspaces = useWorkspaces(state => state.items)
   const workspacePhase = useWorkspaces(state => state.phase)
   const workspaceStreamState = useWorkspaces(state => state.state)
@@ -1320,6 +1421,8 @@ export function WorkspaceBrowser({
                 onSessionDelete={onSessionDelete}
                 forkSession={forkSession}
                 workspaces={workspaces}
+                machineNames={machineNames}
+                localMachineLabel={localMachineLabel}
                 workspaceReady={workspacePhase === 'ready' && workspaceStreamState !== 'loading'}
                 groupExpansion={groupExpansion}
                 setGroupExpanded={actions.setGroupExpanded}

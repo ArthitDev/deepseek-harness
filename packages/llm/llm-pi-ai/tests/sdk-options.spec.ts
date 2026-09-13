@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 
 const streamSimple = vi.hoisted(() => vi.fn())
+const anthropicStreamSimple = vi.hoisted(() => vi.fn())
 
 // A hand-declared route is built by `createProvider` over the protocol table in
 // `src/provider.ts`, so the table's lazy api module is the SDK boundary this
@@ -10,19 +11,25 @@ const streamSimple = vi.hoisted(() => vi.fn())
 vi.mock('@earendil-works/pi-ai/api/openai-completions.lazy', () => ({
   openAICompletionsApi: () => ({ stream: streamSimple, streamSimple }),
 }))
+vi.mock('@earendil-works/pi-ai/api/anthropic-messages.lazy', () => ({
+  anthropicMessagesApi: () => ({ stream: anthropicStreamSimple, streamSimple: anthropicStreamSimple }),
+}))
 
 import { PiAiAdapter } from '../src/adapter.ts'
 import { resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 
-afterEach(() => { streamSimple.mockReset() })
+afterEach(() => {
+  streamSimple.mockReset()
+  anthropicStreamSimple.mockReset()
+})
 
 /** A hand-declared OpenAI-compatible route with one fully described model. */
-function gatewayAdapter(): PiAiAdapter {
+function gatewayAdapter(api: 'openai-completions' | 'anthropic-messages' = 'openai-completions'): PiAiAdapter {
   return new PiAiAdapter({
     profiles: () => resolveProfiles({
       'local-gateway': {
-        api: 'openai-completions',
+        api,
         baseURL: 'http://127.0.0.1:9/v1',
         models: [{ id: 'local-model', contextWindow: 8192, maxTokens: 1024 }],
       },
@@ -32,12 +39,16 @@ function gatewayAdapter(): PiAiAdapter {
   })
 }
 
-async function drain(adapter: PiAiAdapter): Promise<StreamChunk[]> {
+async function drain(adapter: PiAiAdapter, toolChoice?: 'auto' | 'required' | 'none'): Promise<StreamChunk[]> {
   const chunks: StreamChunk[] = []
   for await (const chunk of adapter.stream({
     provider: 'local-gateway',
     model: 'local-model',
     messages: [],
+    ...toolChoice === undefined ? {} : {
+      toolChoice,
+      tools: [{ name: 'clock', description: 'Read the clock', parameters: {} }],
+    },
   })) chunks.push(chunk)
   return chunks
 }
@@ -71,5 +82,21 @@ describe('pi-ai SDK retry boundary', () => {
       contextWindow: 8192,
       maxTokens: 1024,
     })
+  })
+
+  it('forwards required tool choice to an OpenAI-compatible gateway', async () => {
+    streamSimple.mockImplementation(() => { throw new Error('mock SDK boundary') })
+
+    await drain(gatewayAdapter(), 'required')
+
+    expect(streamSimple.mock.calls[0]?.[2]).toMatchObject({ toolChoice: 'required' })
+  })
+
+  it('maps required tool choice to the Anthropic any vocabulary', async () => {
+    anthropicStreamSimple.mockImplementation(() => { throw new Error('mock SDK boundary') })
+
+    await drain(gatewayAdapter('anthropic-messages'), 'required')
+
+    expect(anthropicStreamSimple.mock.calls[0]?.[2]).toMatchObject({ toolChoice: 'any' })
   })
 })

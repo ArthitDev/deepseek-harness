@@ -1097,3 +1097,16 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/web/web-search-deepseek/src/provider.ts:83`](../packages/web/web-search-deepseek/src/provider.ts)
+
+### `web-search/*`
+
+<a id="web-searchmode--log-only"></a>
+
+#### `web-search/mode` — log-only
+
+```ts persistence-catalog
+/** Whether every answer must begin with current web research. */
+'web-search/mode': { always: boolean }
+```
+
+来源：[`packages/web/tool-web/src/index.ts:30`](../packages/web/tool-web/src/index.ts)

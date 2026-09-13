@@ -544,7 +544,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     const forkReceipt = await (await forkResponse).json() as { result: { ok: boolean } }
     expect(forkReceipt.result).toMatchObject({ ok: true })
     await expect.poll(
-      () => page.getByRole('tree', { name: 'Sessions' }).getByRole('treeitem').count(),
+      () => page.getByRole('tree', { name: 'Sessions' }).locator('[data-workspace-group] [role="treeitem"]').count(),
       { timeout: 15_000 },
     ).toBe(3)
     expect(await page.getByText('Ungrouped', { exact: true }).count()).toBe(0)

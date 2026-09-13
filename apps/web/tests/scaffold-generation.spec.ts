@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   assertFixtureInventory,
+  normalizeWebSessionVolatiles,
+  omitMachineLocalContextMessages,
   recordedSessionFixturePath,
   selectedSessionFixture,
 } from './scaffold.ts'
@@ -15,6 +17,37 @@ afterEach(async () => {
 })
 
 describe('Web snapshot generation filenames', () => {
+  it('normalizes a Windows Harness Home inside nested JSON strings', () => {
+    const workspace = 'C:\\Users\\runner\\AppData\\Local\\Temp\\dsh-web-e2e-ws-test'
+    const harnessHome = `${workspace}\\.dsh-home`
+    const attachment = `${harnessHome}\\attachments\\poem.txt`
+    const log = JSON.stringify({
+      type: 'tool/call',
+      data: {
+        arguments: JSON.stringify({ file_path: attachment }),
+        text: `<path>${attachment.replaceAll('\\', '/')}</path>`,
+      },
+    })
+
+    const normalized = normalizeWebSessionVolatiles(log, `${workspace}\\workspace`, harnessHome)
+    const record = JSON.parse(normalized) as { data: { arguments: string } }
+    expect(JSON.parse(record.data.arguments)).toEqual({ file_path: '{{harnessHome}}/attachments/poem.txt' })
+    expect(normalized).toContain('<path>{{harnessHome}}/attachments/poem.txt</path>')
+    expect(normalized).not.toContain(workspace)
+  })
+
+  it('drops machine-local instruction and skill catalog injections', () => {
+    const records = ['agent-instructions', 'plugin', 'skill-catalog'].map(kind => JSON.stringify({
+      type: 'user/message',
+      data: { source: { kind } },
+    }))
+    const sourced = JSON.stringify({ type: 'tool/result', sourceEventSeqs: [0, 1, 2] })
+    expect(omitMachineLocalContextMessages([...records, sourced].join('\n'))).toBe([
+      records[1],
+      JSON.stringify({ type: 'tool/result', sourceEventSeqs: [0] }),
+    ].join('\n'))
+  })
+
   it('selects the highest parent and child generations without counting retained inputs twice', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-web-fixture-generations-'))
     roots.push(root)

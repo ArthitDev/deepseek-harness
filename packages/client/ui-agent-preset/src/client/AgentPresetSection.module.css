@@ -47,9 +47,7 @@
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
-  /* Every row the same height, so a short description does not make its card
-     shorter than the one beside it. */
-  grid-auto-rows: 1fr;
+  align-items: start;
   gap: 12px;
 }
 
@@ -228,6 +226,57 @@
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.cardModels {
+  padding: 10px 16px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.cardModelList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.cardModelsTitle {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cardModelOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cardModelOption:has(input:disabled) {
+  cursor: default;
+}
+
+.cardModelOption input {
+  margin: 2px 0 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.cardModelIdentity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cardModelIdentity code {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 
 .cardFoot {

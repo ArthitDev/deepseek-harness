@@ -31,6 +31,8 @@ Mount this plugin alongside the settings and conversation packages; the preset s
 
 The settings section shows the roster as cards. Add preset collects an id, optional name, and system prompt, then creates a custom preset with the current default preset's capabilities. Duplicate keeps the selected source unchanged and opens the copy in the prompt editor. Every custom card also keeps a location action for its metadata, skills, and assets. Save sends only the preset id and text, preserves the draft on failure, and affects later sessions rather than sessions already composed. The default is set from any surface; deleting removes the preset directory while sessions already composed from it keep running. A shipped preset opens in a read-only viewer and offers no edit, location, or delete. A roster row carrying `broken` renders as a marked card whose body and duplication are disabled; broken custom rows keep their location and delete actions so the files can be fixed and ghost directories cleared.
 
+The Model bindings list joins the Host's current model catalog with the preset roster. Each model can select a healthy preset or Default preset; choosing Default preset removes that route's override. A changed binding applies to new sessions and to a blank session when the model is selected, while a session that has started keeps its current preset.
+
 ### The conversational entry
 
 When the roster carries the self-referential `cordis` preset, a dashed add-card stages it and starts a new session — the section closes the settings panel and the new-session chip's own applier composes the blank session the workspace flow produces.
