@@ -85,6 +85,7 @@ function fakeCtx(
               ...preset.name === undefined ? {} : { name: preset.name },
             })),
             authorable: options.authorable ?? true,
+            modeSelectionEnabled: true,
             models: (options.modelGroups ?? []).flatMap(group => group.models.map(model => ({
               provider: group.id,
               providerName: group.name,

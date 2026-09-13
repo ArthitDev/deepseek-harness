@@ -10,7 +10,7 @@ export type AgentPresetSettingsKey =
   | 'presetCordisName' | 'presetCordisDescription'
   | 'duplicate' | 'duplicateUnavailable' | 'delete' | 'presetId' | 'presetIdPlaceholder' | 'copyOf'
   | 'displayName' | 'displayNamePlaceholder'
-  | 'inUse' | 'noDescription' | 'builtInGroup' | 'customGroup'
+  | 'inUse' | 'selectionOffDefault' | 'noDescription' | 'builtInGroup' | 'customGroup'
   | 'brokenBadge' | 'brokenNoCopy' | 'switchRefused'
   | 'composition' | 'systemPrompt' | 'systemPromptHelp' | 'cancel' | 'close' | 'retry'
   | 'copyTitle' | 'copyIntro' | 'create' | 'creating' | 'creatorDraft'
@@ -19,6 +19,8 @@ export type AgentPresetSettingsKey =
   | 'idRequired' | 'idInvalid' | 'idTaken'
   | 'deleteTitle' | 'deleteDescription' | 'deleteConfirm' | 'deleting'
   | 'modelBindings'
+  | 'showPicker' | 'showPickerBeta' | 'showPickerDescription'
+  | 'enablePickerToSetDefault' | 'enablePickerToCreate'
 
 /** English copy. */
 export const en: Record<AgentPresetSettingsKey, string> = {
@@ -57,6 +59,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   displayName: 'Name',
   displayNamePlaceholder: 'Shown in the picker; defaults to the identifier',
   inUse: 'In use',
+  selectionOffDefault: 'Default',
   builtInGroup: 'Built-in',
   customGroup: 'Custom',
   noDescription: 'No description.',
@@ -93,6 +96,11 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   deleteConfirm: 'Delete',
   deleting: 'Deleting…',
   modelBindings: 'Models',
+  showPicker: 'Allow switching Agent modes',
+  showPickerBeta: 'Beta',
+  showPickerDescription: 'When enabled, new tasks can choose any available mode. When disabled, all new tasks use the configured default. Only affects new tasks.',
+  enablePickerToSetDefault: 'Turn on Agent mode selection to choose a default',
+  enablePickerToCreate: 'Turn on Agent mode selection to start Creator mode',
 }
 
 /** Simplified Chinese copy. */
@@ -126,6 +134,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   displayName: '名称',
   displayNamePlaceholder: '选择器中显示的名字，缺省用标识符',
   inUse: '当前使用',
+  selectionOffDefault: '默认',
   builtInGroup: '内置',
   customGroup: '自定义',
   noDescription: '暂无描述。',
@@ -159,6 +168,11 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   deleteConfirm: '删除',
   deleting: '正在删除…',
   modelBindings: '模型',
+  showPicker: '允许切换 Agent 模式',
+  showPickerBeta: 'Beta',
+  showPickerDescription: '开启后，新任务可以选择可用模式。关闭后，所有新任务使用配置的默认模式。仅影响新任务。',
+  enablePickerToSetDefault: '开启 Agent 模式选择后才能设置默认模式',
+  enablePickerToCreate: '开启 Agent 模式选择后才能启动创造者模式',
 }
 
 // The resolution itself is the shared fold in `dsh-agent-presets/display`,

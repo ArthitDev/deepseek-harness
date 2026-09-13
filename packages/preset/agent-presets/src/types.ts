@@ -37,6 +37,8 @@ export interface AgentPresetRoster {
   readonly presets: readonly AgentPresetRow[]
   /** Whether this deployment has a root locally authored presets go to. */
   readonly authorable: boolean
+  /** Whether visible mode selection is enabled for unnamed new sessions. */
+  readonly modeSelectionEnabled: boolean
   /** Every model currently advertised by the live providers. */
   readonly models: readonly AgentPresetModelRow[]
   /** User-selected preset ids by provider and model; absent routes use the default preset. */

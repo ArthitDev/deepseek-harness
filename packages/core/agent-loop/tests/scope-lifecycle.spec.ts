@@ -142,17 +142,14 @@ describe('agent scope lifecycle', () => {
     await ctx.fiber.dispose()
   })
 
-  it('wires agent.ctx: tagged with the agent, DX field set, ctx.agent safe elsewhere', async () => {
+  it('tags agent.ctx with the Agent scope key', async () => {
     const ctx = await harness()
     const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     expect(scopeOf(agent.ctx)).toBe(agent)
-    expect(agent.ctx.agent).toBe(agent)
-    // The root accessor default: a plain context answers undefined, not a throw.
-    expect(ctx.agent).toBeUndefined()
     await agent.whenIdle()
   })
 
-  it('records agents created through an agent context as non-root runtime children', async () => {
+  it('records an explicitly owned Agent as a non-root runtime child', async () => {
     const ctx = await harness()
     const root = await ctx.agents.create({
       sessionId: SessionId('runtime-root'),
@@ -161,6 +158,7 @@ describe('agent scope lifecycle', () => {
     const child = await root.agent.ctx.agents.create({
       sessionId: SessionId('runtime-child'),
       agentOptions: { model: 'mock' },
+      parentAgent: root.agent,
     })
 
     expect(ctx.agents.list()).toEqual([root.agent, child.agent])
@@ -285,8 +283,8 @@ describe('agent scope lifecycle', () => {
     const creating = ctx.agents.create({
       sessionId: SessionId('atomic'),
       agentOptions: acceptedOptions,
-      setup: async (agentCtx) => {
-        expect(agentCtx.agent?.id).toBe(SessionId('atomic'))
+      setup: async (agentCtx, agent) => {
+        expect(agent.id).toBe(SessionId('atomic'))
         agentCtx.on('session/created', () => void order.push('setup-listener:session/created'))
         agentCtx.on('agent/created', () => void order.push('setup-listener:agent/created'))
         order.push('setup:start')

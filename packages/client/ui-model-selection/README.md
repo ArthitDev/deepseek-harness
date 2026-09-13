@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides model selection in the Web GUI: the `/model` popup command and the composer's model seat, both over one per-session directory of provider-grouped models. Choosing a model submits the complete selection — provider, model, and reasoning effort — which the Host snapshots at the next prompt-assembly boundary, so the following request uses it while a running step keeps its assembled selection. The composer seat shows the provider when the Session route differs from the Host default, plus a two-level Model/Effort menu: models stay provider-grouped, and the selected exact model supplies its adapter-owned effort names and default. When the Host reports that no adapter serves the session's route, the composer input goes inert until a route becomes available.
+The Web GUI offers model selection through `/model` and the composer. Both show provider-grouped models for the current session, including the provider name and adapter-defined reasoning efforts. A complete provider, model, and effort selection applies at the next request boundary; an active step keeps its assembled route. If no adapter serves the route, the composer remains disabled until one becomes available.
 
 ## Table of Contents
 

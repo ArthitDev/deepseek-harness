@@ -16,14 +16,14 @@ import type { Message } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, SessionLogOffset, SessionSeq } from './types.ts'
 import type { TypertLookup } from '@deepseek-ai/dsh-typert-protocol'
 import type { CreateSessionOptions, EpochHeader, PrepareSessionOptions, RequestContext, SessionEvent, SessionEventMap, SessionEventType, SessionHeader, SessionId, SessionSeedEventState, SurfaceIntent, SurfaceEventType } from './types.ts'
-import { deriveEventMessage, SurfaceManager } from './surface.ts'
+import { deriveEventMessage, SurfaceManager, validateSessionEventData, validateSurfaceMetadata } from './surface.ts'
 import type { SessionSurface } from './surface.ts'
 import { foldRequestHeader } from './request-header.ts'
 
 export * from './types.ts'
 export { SessionPreparation } from './preparation.ts'
 export type { SessionPreparationOptions } from './preparation.ts'
-export type { AssistantMessage, ToolResultMessage, UserMessage } from '@deepseek-ai/dsh-llm'
+export type { AssistantMessage, SystemMessage, ToolResultMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 export { interruptedTurnClosers, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from './repair.ts'
 export type { SessionSurface, SurfaceFoldReplacement, SurfaceFoldResult } from './surface.ts'
 export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
@@ -161,8 +161,11 @@ function snapshotSessionHeader(id: SessionId, source?: SessionHeader): SessionHe
  * Use {@link snapshotSessionEvent} when exclusive ownership is not guaranteed.
  * @param event - exclusively owned event imported across a trusted boundary.
  * @returns the same event object with a validated, deeply frozen message.
+ * @throws when event-local surface metadata, request-header fields, or message invariants are invalid; history relations are not checked.
  */
 export function adoptSessionEvent<T extends SessionEvent>(event: T): T {
+  validateSessionEventData(event, `session event at seq ${event.seq}`)
+  validateSurfaceMetadata(event)
   assertMessageEventShape(
     event,
     `session event at seq ${event.seq}`,
@@ -171,6 +174,7 @@ export function adoptSessionEvent<T extends SessionEvent>(event: T): T {
     case 'user/message':
       deepFreeze(event.data)
       break
+    case 'system/message':
     case 'assistant/message':
     case 'tool/result':
       deepFreeze(event.data.message)
@@ -192,8 +196,11 @@ export function snapshotSessionEvent<T extends SessionEvent>(event: T): T {
 }
 
 /** Validate the fixed event envelope after one-pass JSON materialization. */
-function assertSessionEventEnvelope(value: Record<string, unknown>, index: number): asserts value is SessionEvent {
-  const event = value
+function assertSessionEventEnvelope(value: unknown, index: number): asserts value is SessionEvent {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`seed event at index ${index} has an invalid event envelope`)
+  }
+  const event = value as Record<string, unknown>
   for (const key in event) {
     switch (key) {
       case 'type':
@@ -218,8 +225,10 @@ function assertSessionEventEnvelope(value: Record<string, unknown>, index: numbe
     || (event['ignorable'] !== undefined && event['ignorable'] !== true)) {
     throw new Error(`seed event at index ${index} has an invalid event envelope`)
   }
+  validateSessionEventData(event as SessionEvent, `seed ${type} at index ${index}`)
   switch (type) {
     case 'request/header':
+    case 'system/message':
     case 'user/message':
     case 'assistant/attempt':
     case 'assistant/message':
@@ -236,11 +245,8 @@ function assertCurrentLlmShape(event: Record<string, unknown>, index: number): v
     ? data as Record<string, unknown>
     : undefined
   if (event['type'] === 'request/header') {
-    const header = record?.['header']
-    const headerRecord = typeof header === 'object' && header !== null && !Array.isArray(header)
-      ? header as Record<string, unknown>
-      : undefined
-    const config = headerRecord?.['config']
+    const headerRecord = record?.['header'] as Record<string, unknown>
+    const config = headerRecord['config']
     if (!hasProviderModel(config)) throw new Error(`seed request/header at index ${index} lacks provider/model`)
     const configRecord = config as Record<string, unknown>
     const reasoningEffort = configRecord['reasoningEffort']
@@ -248,7 +254,7 @@ function assertCurrentLlmShape(event: Record<string, unknown>, index: number): v
       && (typeof reasoningEffort !== 'string' || reasoningEffort.length === 0)) {
       throw new Error(`seed request/header at index ${index} has an invalid reasoningEffort`)
     }
-    assertAdapterDefaults(headerRecord?.['adapterDefaults'], configRecord, index)
+    assertAdapterDefaults(headerRecord['adapterDefaults'], configRecord, index)
     const reason = record?.['reason']
     if (reason !== 'initial' && reason !== 'resume' && reason !== 'change' && reason !== 'series') {
       throw new Error(`seed request/header at index ${index} has an invalid reason`)
@@ -262,8 +268,7 @@ function assertCurrentLlmShape(event: Record<string, unknown>, index: number): v
     assertAssistantSettlementShape(record, type, index)
     return
   }
-  if (type !== 'user/message' && type !== 'assistant/message'
-    && type !== 'tool/result') return
+  if (!isMessageEventType(type)) return
   assertMessageEventShape(event, `seed ${type} at index ${index}`)
   if (type === 'assistant/message') {
     assertAssistantSettlementShape(record, type, index)
@@ -306,11 +311,23 @@ function assertAdapterDefaults(
   }
 }
 
+/** The four surface event types whose payload carries an identified message. */
+function isMessageEventType(type: unknown): type is SurfaceEventType {
+  return type === 'system/message' || type === 'user/message'
+    || type === 'assistant/message' || type === 'tool/result'
+}
+
+const MESSAGE_ROLE_BY_TYPE: Record<SurfaceEventType, Message['role']> = {
+  'system/message': 'system',
+  'user/message': 'user',
+  'assistant/message': 'assistant',
+  'tool/result': 'user',
+}
+
 /** Validate only the event-specific invariants needed to safely replay a message. */
 function assertMessageEventShape(event: Record<string, unknown>, subject: string): void {
   const type = event['type']
-  if (type !== 'user/message' && type !== 'assistant/message'
-    && type !== 'tool/result') return
+  if (!isMessageEventType(type)) return
   const data = event['data']
   const record = typeof data === 'object' && data !== null
     ? data as Record<string, unknown>
@@ -322,7 +339,7 @@ function assertMessageEventShape(event: Record<string, unknown>, subject: string
     throw new Error(`${subject} lacks an identified message`)
   }
   const messageRecord = message as Record<string, unknown>
-  const expectedRole = type === 'assistant/message' ? 'assistant' : 'user'
+  const expectedRole = MESSAGE_ROLE_BY_TYPE[type]
   if (messageRecord['role'] !== expectedRole) {
     throw new Error(`${subject} message must have role "${expectedRole}"`)
   }
@@ -336,6 +353,13 @@ function assertMessageEventShape(event: Record<string, unknown>, subject: string
     throw new Error(`${subject} message has invalid content`)
   }
   const sourceRecord = source as Record<string, unknown>
+  if (type === 'system/message') {
+    if (sourceRecord['kind'] !== 'plugin' || typeof sourceRecord['plugin'] !== 'string'
+      || sourceRecord['plugin'] === '') {
+      throw new Error(`${subject} message must have plugin source`)
+    }
+    return
+  }
   if (type === 'assistant/message') {
     if (sourceRecord['kind'] !== 'model' || !hasProviderModel(sourceRecord)) {
       throw new Error(`${subject} message must have model source`)
@@ -591,6 +615,8 @@ export class Session {
 
   /**
    * Return the immutable event stored at one exact sequence number.
+   * @deprecated Existing logic may remain unmigrated for now, but new calls are prohibited.
+   * See the [Agent Note](../../../../.agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md).
    * @param seq - event sequence number.
    * @returns the accepted event, or undefined when the log does not contain it.
    */
@@ -602,6 +628,8 @@ export class Session {
    * Materialize an immutable snapshot of a half-open event sequence range.
    * A full current snapshot is reused until the next append; every previously
    * returned snapshot remains stable after later appends.
+   * @deprecated Existing logic may remain unmigrated for now, but new calls are prohibited.
+   * See the [Agent Note](../../../../.agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md).
    * @param fromSeq - non-negative inclusive sequence number; defaults to the log start.
    * @param toSeqExclusive - non-negative exclusive sequence number; defaults to the current end.
    * @returns a frozen array of the selected deeply frozen events.
@@ -619,9 +647,12 @@ export class Session {
 
   /**
    * Return this Session's events after its fork-inherited prefix.
+   * @deprecated Existing logic may remain unmigrated for now, but new calls are prohibited.
+   * See the [Agent Note](../../../../.agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md).
    * @returns a fresh array containing child-owned events in log order.
    */
   ownEvents(): readonly SessionEvent[] {
+    // oxlint-disable-next-line typescript/no-deprecated -- Deprecated reader delegates to the deprecated range read.
     return this.snapshotEvents(this.inheritedEventCount)
   }
 
@@ -665,6 +696,7 @@ export class Session {
    *   (BigInt, function, symbol, undefined, negative zero, non-finite number,
    *   circular reference, sparse array, or an exotic object such as
    *   Map/Set/Date/class instance), or when the candidate violates the
+   *   request-header empty-field or tool-error consistency rules, or the
    *   canonical surface contract (marker shape and eligibility, unique
    *   earlier source-event references, positional replacement validity, and complete
    *   shadowed-node coverage). One iterative pass reads, validates, and
@@ -704,6 +736,7 @@ export class Session {
       data: dataSnapshot,
       ...(surfaceMetadataSnapshot as { surfaceOp?: unknown; sourceEventSeqs?: unknown }),
     } as unknown as SessionEvent<T>)
+    validateSessionEventData(event, `session event "${type}" at seq ${event.seq}`)
     this.surfaceManager.validateNext(event as SessionEvent)
 
     if (entry !== undefined) entry.appending = true
@@ -1185,6 +1218,7 @@ export class SessionStore extends Service {
   }
 
   private _forkSeed(session: Session, requestedBoundary: SessionSeq | undefined): readonly SessionEvent[] {
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     const lastEvent = session.snapshotEvents().at(-1)
     let boundary: SessionSeq
     if (requestedBoundary !== undefined) {
@@ -1207,6 +1241,7 @@ export class SessionStore extends Service {
       )
     }
 
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     const boundaryEvent = session.eventAt(boundary)
     if (boundaryEvent === undefined || boundaryEvent.seq !== boundary) {
       throw new SessionForkError(
@@ -1214,6 +1249,7 @@ export class SessionStore extends Service {
         'INVALID_BOUNDARY',
       )
     }
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     const events = session.snapshotEvents(SessionLogOffset(0), SessionLogOffset(boundary + 1))
     const lastTurnBoundary = events
       .findLast(event => event.type === 'turn/start' || event.type === 'turn/end')

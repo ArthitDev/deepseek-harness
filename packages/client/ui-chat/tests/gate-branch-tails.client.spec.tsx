@@ -1,25 +1,17 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/chat/AssistantMarkdown.tsx'
-import { StatsLine } from '../src/client/chat/StatsLine.tsx'
+import { StatsPills } from '../src/client/chat/StatsPills.tsx'
 import { zh } from '../src/client/locale.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
 const t: AssistantMarkdownProps['t'] = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
 
-/** jsdom has no ResizeObserver; StatsLine watches its row for ellipsis truncation through one. */
-class ResizeObserverStub {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
-
-beforeEach(() => { vi.stubGlobal('ResizeObserver', ResizeObserverStub) })
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -40,7 +32,7 @@ describe('render branch tails', () => {
     expect(view.container.querySelector('[data-state="ok"]')).not.toBeNull()
   })
 
-  it('StatsLine falls back to window-node counts and drops every token group without projections', () => {
+  it('StatsPills falls back to window-node counts and drops the usage pill without projections', () => {
     // No sessionStats key → the window fold supplies the counts (the
     // assembly-without-the-unit fallback). Node `usage` is deliberately
     // ignored: billing rides the durable tokenUsage projection, so an absent
@@ -53,13 +45,15 @@ describe('render branch tails', () => {
     const snap = chatSnapshotFixture({ nodes })
     const source = { getSnapshot: () => snap, subscribe: () => () => {} }
     const view = render(
-      <StatsLine
+      <StatsPills
         t={t}
         useChat={bindSnapshotSelector(source)}
         useProjection={() => undefined}
       />,
     )
-    expect(view.container.textContent).toBe('2 轮 · 3 步')
+    expect(view.container.textContent).toBe('2 轮 3 步')
+    // Window-fold counts carry no timed figure, so the pill is a static reading.
+    expect(view.queryAllByRole('button')).toHaveLength(0)
   })
 
   it('AssistantMarkdown reasoning as the streaming tail renders the running ring', () => {

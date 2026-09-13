@@ -65,8 +65,10 @@ function validatePresetId(value: string, field: 'agentPreset' | 'from'): void {
 
 /** The user-writable slice of this plugin's config. */
 export interface AgentPresetSettings {
-  /** Preset mounted when a session names none. */
-  default?: string
+  /** Saved default used when mode selection is enabled. */
+  default: string
+  /** Whether visible mode selection and saved model bindings govern unnamed new sessions. */
+  modeSelectionEnabled: boolean
   /** Preset overrides by provider and model. */
   models?: Record<string, Record<string, string>>
 }
@@ -74,6 +76,7 @@ export interface AgentPresetSettings {
 /** Runtime schema for the user-writable slice. */
 export const AgentPresetSettingsSchema: z<AgentPresetSettings> = z.object({
   default: z.string(),
+  modeSelectionEnabled: z.boolean(),
   models: z.dict(z.dict(z.string())),
 })
 
@@ -194,7 +197,7 @@ export class AgentPresets extends TypertRemoteService {
       this.settings = settingsCtx.settings.register(
         SETTINGS_NAMESPACE,
         AgentPresetSettingsSchema,
-        { base: { default: config.default } },
+        { base: { default: config.default, modeSelectionEnabled: true } },
       )
       this.settingsService = settingsCtx.settings
       settingsCtx.effect(() => () => {
@@ -243,7 +246,18 @@ export class AgentPresets extends TypertRemoteService {
    * every running session on the preset it was composed from.
    */
   get defaultId(): string {
-    return this.settings?.get().default ?? this.config.default
+    return this.selectionPolicy().defaultId
+  }
+
+  /** Read one internally consistent snapshot of the selection policy. */
+  private selectionPolicy(): { enabled: boolean; defaultId: string } {
+    const settings = this.settings?.get()
+    if (settings === undefined) return { enabled: true, defaultId: this.config.default }
+    const enabled = settings.modeSelectionEnabled
+    return {
+      enabled,
+      defaultId: enabled ? settings.default : this.config.default,
+    }
   }
 
   /**
@@ -253,7 +267,9 @@ export class AgentPresets extends TypertRemoteService {
    * @returns the route override, or the current default preset when unbound.
    */
   presetIdForModel(provider: string, model: string): string {
-    return this.settings?.get().models?.[provider]?.[model] ?? this.defaultId
+    const policy = this.selectionPolicy()
+    if (!policy.enabled) return policy.defaultId
+    return this.settings?.get().models?.[provider]?.[model] ?? policy.defaultId
   }
 
   /**
@@ -274,7 +290,7 @@ export class AgentPresets extends TypertRemoteService {
    */
   @Remote('list')
   async remoteExportList(): Promise<AgentPresetRoster> {
-    const defaultId = this.defaultId
+    const policy = this.selectionPolicy()
     const defaultModel = this.selfCtx.get('agentDefaultModel')?.currentSelection()
     const llm = this.selfCtx.get('llm')
     const models = llm === undefined
@@ -305,12 +321,13 @@ export class AgentPresets extends TypertRemoteService {
       presets: (await this.list()).map(preset => ({
         id: preset.id,
         trust: preset.trust,
-        isDefault: preset.id === defaultId,
+        isDefault: preset.id === policy.defaultId,
         ...preset.name === undefined ? {} : { name: preset.name },
         ...preset.description === undefined ? {} : { description: preset.description },
         ...preset.broken === undefined ? {} : { broken: preset.broken },
       })),
       authorable: this.authorable,
+      modeSelectionEnabled: policy.enabled,
       models,
       modelPresets: this.settings?.get().models ?? {},
       ...defaultModel === undefined

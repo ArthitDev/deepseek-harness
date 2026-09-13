@@ -331,8 +331,12 @@ declare module '@deepseek-ai/cordis' {
     /**
      * Replace the frozen call configuration. `await next()` yields the config
      * the machine would use (agent options on the first request, the logged
-     * header afterwards); return a replacement to switch. Model-visible
-     * content must use logged channels; this waterfall cannot mutate messages.
+     * header afterwards); return a replacement to switch. On step admission,
+     * this runs after assembly and `step/start`, before the system prompt and
+     * accepted user batch are committed. Cancellation here or during subsequent
+     * `prepareCall()` resolution commits neither. The prepared call capability
+     * governs prompt admission. Model-visible content must use logged channels;
+     * this waterfall cannot mutate messages.
      * @param payload.agent - the agent making the model call.
      * @param payload.turn - the open turn number.
      * @param payload.step - the step whose request this is.

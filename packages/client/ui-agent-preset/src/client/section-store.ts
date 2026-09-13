@@ -15,10 +15,14 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { beginRosterRead, writeDefaultPreset, writeModelPreset } from './settings-store.ts'
+import {
+  beginRosterRead, writeDefaultPreset, writeModeSelectionEnabled, writeModelPreset,
+} from './settings-store.ts'
 
 /** Ids a preset directory may be named, mirroring the host's own rule. */
 const PRESET_ID = /^[a-z0-9][a-z0-9-]*$/
+
+const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
 /** One preset row the page renders. */
 export interface PresetRow {
@@ -168,6 +172,10 @@ export interface AgentPresetSectionState {
   authorable: boolean
   /** Whether the host can open a preset directory on a native desktop. */
   hasDocument: boolean
+  /** Whether new-session surfaces expose preset selection. */
+  showPicker: boolean
+  /** Whether a mode-selection policy write is in flight. */
+  policySaving: boolean
   /** Every preset the deployment currently supplies. */
   rows: readonly PresetRow[]
   /** Every model the Host currently offers. */
@@ -198,6 +206,8 @@ const INITIAL: AgentPresetSectionState = {
   error: null,
   authorable: false,
   hasDocument: false,
+  showPicker: false,
+  policySaving: false,
   rows: [],
   models: [],
   modelPresets: {},
@@ -252,6 +262,47 @@ export class AgentPresetSectionController {
     this.store.set({ ...this.store.getSnapshot(), ...patch })
   }
 
+  /** Read back and reflect the Host-effective default after a policy write. */
+  private async confirmEffectiveDefault(showPicker: boolean): Promise<string | undefined> {
+    await this.load()
+    if (this.store.getSnapshot().status === 'error') await this.load()
+    const state = this.store.getSnapshot()
+    if (state.status !== 'ready' || state.showPicker !== showPicker) return undefined
+    return state.rows.find(row => row.isDefault)?.id
+  }
+
+  /**
+   * Show or hide new-session preset selection without changing the saved default.
+   * @param showPicker - whether new-session surfaces expose preset selection.
+   * @param syncBlankSession - optional callback that applies the effective default to a blank session.
+   * @returns once the policy write and optional blank-session sync settle.
+   */
+  async setPickerVisible(
+    showPicker: boolean,
+    syncBlankSession?: (id: string) => Promise<string | undefined>,
+  ): Promise<void> {
+    const state = this.store.getSnapshot()
+    if (state.status !== 'ready' || state.policySaving || state.showPicker === showPicker) return
+    this.set({ policySaving: true, error: null })
+    try {
+      const failure = await writeModeSelectionEnabled(this.ctx, showPicker)
+      if (failure !== undefined) {
+        await this.load()
+        this.set({ error: failure })
+        return
+      }
+      const effectiveDefault = await this.confirmEffectiveDefault(showPicker)
+      if (effectiveDefault === undefined) return
+      const syncFailure = await syncBlankSession?.(effectiveDefault)
+      if (syncFailure !== undefined) this.set({ error: syncFailure })
+    } catch (error: unknown) {
+      await this.load()
+      this.set({ error: errorMessage(error) })
+    } finally {
+      this.set({ policySaving: false })
+    }
+  }
+
   private patchCopy(patch: Partial<CopyDraft>): void {
     const { copy } = this.store.getSnapshot()
     if (copy === null) return
@@ -279,12 +330,12 @@ export class AgentPresetSectionController {
   async load(): Promise<void> {
     const roster = await beginRosterRead(this.ctx, this.store)
     if (roster === undefined) return
-    const { presets, authorable, models, modelPresets } = roster
+    const { presets, authorable, modeSelectionEnabled: showPicker, models, modelPresets } = roster
     const { hasDocument } = this.store.getSnapshot()
     if (presets.length === 0) {
       // Nothing to manage leaves nothing to keep a dialog open over.
       this.set({
-        status: 'unavailable', rows: [], models, modelPresets,
+        status: 'unavailable', rows: [], models, modelPresets, showPicker,
         authorable, hasDocument, copy: null, create: null, view: null,
       })
       return
@@ -299,6 +350,7 @@ export class AgentPresetSectionController {
       error: null,
       authorable,
       hasDocument,
+      showPicker,
       rows: presets.map(preset => ({ ...preset })),
       models,
       modelPresets,
@@ -565,14 +617,30 @@ export class AgentPresetSectionController {
    * Make one preset the default for sessions created later. Running sessions
    * keep the composition they began with, so this never disturbs work.
    * @param id - the preset to make default.
+   * @param syncBlankSession - optional callback that applies the default to a blank session.
    * @returns once the write settled and the roster was re-read.
    */
-  async makeDefault(id: string): Promise<void> {
-    const failure = await writeDefaultPreset(this.ctx, id)
-    if (failure !== undefined) {
-      this.set({ error: failure })
-      return
+  async makeDefault(
+    id: string,
+    syncBlankSession?: (id: string) => Promise<string | undefined>,
+  ): Promise<void> {
+    const state = this.store.getSnapshot()
+    if (!state.showPicker || state.policySaving) return
+    this.set({ policySaving: true, error: null })
+    try {
+      const failure = await writeDefaultPreset(this.ctx, id)
+      if (failure !== undefined) {
+        this.set({ error: failure })
+        return
+      }
+      const effectiveDefault = await this.confirmEffectiveDefault(true)
+      if (effectiveDefault === undefined) return
+      const syncFailure = await syncBlankSession?.(effectiveDefault)
+      if (syncFailure !== undefined) this.set({ error: syncFailure })
+    } catch (error: unknown) {
+      this.set({ error: errorMessage(error) })
+    } finally {
+      this.set({ policySaving: false })
     }
-    await this.load()
   }
 }

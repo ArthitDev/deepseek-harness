@@ -99,7 +99,10 @@
       "path": "../ui-workspace"
     },
     {
-      "path": "../ui-sidebar-textpreview"
+      "path": "../ui-sidebar-documentpreview"
+    },
+    {
+      "path": "../ui-input-trigger"
     }
   ]
 }

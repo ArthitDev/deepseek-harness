@@ -33,10 +33,8 @@
   - img
   - text: Standard mode
   - img
-- textbox "Describe what you want to build... / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- textbox "Describe what you want to build, / commands, @ files or sessions"
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
 - button "Web search automatic, press to search on every request":

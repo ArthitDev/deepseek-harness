@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-agent-presets` composes each agent session from one preset: a directory holding a single `agent.cordis.yml` that names the plugins the session runs with. A session that names a preset gets that preset's tools, prompt sections, and skills, while every other session keeps its own, so one process can run several differently composed agents at once. The package maintains the preset roster: it lists every preset the configured roots supply — shipped ones and your own under `<dshHome>/.agent-presets` — shows a reason when a preset cannot start a session, and lets you create a preset directly from a system prompt or duplicate an existing one. The default preset is a setting you can override per deployment or per user, and a session can switch to a different preset only while it has produced nothing. A preset is as privileged as the plugins it names, so a preset you author carries the same trust as shell access.
+`dsh-agent-presets` gives each session tools, prompt sections, and skills from one `agent.cordis.yml` preset. It lists shipped and user presets, reports broken entries, and supports direct creation, duplication, deletion, defaults, and per-model bindings. A blank session may switch preset; a started session keeps its composition. Presets inherit every privilege of their plugins, so author only presets you trust.
 
 ## Table of Contents
 

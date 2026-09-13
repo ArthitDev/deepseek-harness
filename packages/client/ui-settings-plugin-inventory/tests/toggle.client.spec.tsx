@@ -18,13 +18,13 @@ it('refreshes the badge immediately after saving and polls later Host changes', 
     setEnabled: async (_id: string, _name: string, value: boolean) => { enabled = value; return { enabled, revision: 'v2' } },
   } as PluginInventorySettingsTabProps
   render(<PluginInventorySettingsTab {...props} />)
-  fireEvent.click(await screen.findByRole('button', { name: 'fs, Enabled' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'fs, tool, Enabled' }))
   fireEvent.click(await screen.findByRole('switch'))
   fireEvent.click(screen.getByRole('button', { name: en.save }))
-  await screen.findByRole('button', { name: 'fs, Disabled' })
+  await screen.findByRole('button', { name: 'fs, tool, Disabled' })
   expect(list.mock.calls.length).toBeGreaterThanOrEqual(2)
   enabled = true
-  await screen.findByRole('button', { name: 'fs, Enabled' }, { timeout: 2500 })
+  await screen.findByRole('button', { name: 'fs, tool, Enabled' }, { timeout: 2500 })
 })
 
 it('confirms preset changes, sends the read revision, and reports new-session timing', async () => {

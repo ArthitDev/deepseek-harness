@@ -427,14 +427,14 @@ export class ApiSessionAgentController {
     readonly setup: AgentSetup
   }> {
     const presets = this.ctx.get('agentPresets')
-    if (presets === undefined) return { setup: (agentCtx) => { this.installSelection(agentCtx) } }
+    if (presets === undefined) return { setup: (_agentCtx, agent) => { this.installSelection(agent) } }
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const requestedId = presetId ?? presets.presetIdForModel(selection.provider, selection.model)
     const resolvedId = (await presets.resolve(requestedId)).id
     return {
       agentPreset: resolvedId,
-      setup: async (agentCtx) => {
-        this.installSelection(agentCtx)
+      setup: async (agentCtx, agent) => {
+        this.installSelection(agent)
         await presets.mount(agentCtx, resolvedId)
       },
     }
@@ -551,9 +551,7 @@ export class ApiSessionAgentController {
     return { provider, model }
   }
 
-  private installSelection(agentCtx: Context): void {
-    const agent = agentCtx.agent
-    if (agent === undefined) throw new Error('api-session: Agent setup has no scoped Agent')
+  private installSelection(agent: Agent): void {
     this.selectionFor(agent)
   }
 

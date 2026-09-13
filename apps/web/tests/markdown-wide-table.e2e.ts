@@ -197,13 +197,24 @@ interface TableStop {
 }
 
 /**
- * Wait for the right column to sit at its rail. Expanded, it would pin the
- * transcript to exactly the message column and every breakout relation would
- * go vacuous; the frame's collapse marker is the settled signal.
+ * Wait for collapsed columns, completed grid transitions, and the
+ * ConversationRoot ResizeObserver's width publication before measuring tables.
  * @param target - the page whose frame to read.
  */
-async function awaitRightRail(target: Page): Promise<void> {
-  await target.waitForSelector('[data-rightbar-collapsed]', { timeout: 5_000 })
+async function awaitTableLayout(target: Page): Promise<void> {
+  await target.evaluate(async () => { await document.fonts.ready })
+  await target.waitForFunction(() => {
+    const element = document.querySelector('[data-sidebar-collapsed][data-rightbar-collapsed]')
+    if (element === null) return false
+    const tracks = getComputedStyle(element).gridTemplateColumns.split(' ').map(Number.parseFloat)
+    const root = element.querySelector<HTMLElement>('div[data-phase]')
+    // Mirrored from ui-layout's SIDEBAR_COLLAPSED; these tests use the Host compiler face.
+    return tracks[0] === 56 && tracks.at(-1) === 0
+      && element.getAnimations().every(animation =>
+        animation.playState === 'finished' || animation.playState === 'idle')
+      && root !== null
+      && root.style.getPropertyValue('--dsh-conversation-column-width') === `${String(root.offsetWidth)}px`
+  }, undefined, { timeout: 10_000 })
 }
 
 /**
@@ -268,7 +279,7 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
     // viewport identically on every platform, which is what keeps one
     // committed golden true for all lanes.
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
-    await awaitRightRail(page)
+    await awaitTableLayout(page)
   }, 180_000)
 
   afterAll(async () => {
@@ -285,15 +296,7 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
    */
   const settleAt = async (width: number): Promise<TableReading[]> => {
     await page.setViewportSize({ width, height: 900 })
-    // The wide wrapper follows the transcript width (the fill wrapper caps
-    // at the message column and would report "settled" mid-transition).
-    let previousWidth = -1
-    await expect.poll(async () => {
-      const current = (await readTables(page))[1]!.clientWidth
-      const settled = current === previousWidth
-      previousWidth = current
-      return settled
-    }, { timeout: 10_000 }).toBe(true)
+    await awaitTableLayout(page)
     return readTables(page)
   }
 
@@ -425,17 +428,8 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
       await sessionRow.click()
       await hidpiPage.getByText(TAIL_MARKER, { exact: true }).waitFor({ timeout: 15_000 })
       await hidpiPage.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
-      await awaitRightRail(hidpiPage)
-      // The pane collapses ease over the layout transition: compare only a
-      // settled reading (two consecutive equal wide-wrapper widths).
-      let readings: TableReading[] = []
-      let previousWide = -1
-      await expect.poll(async () => {
-        readings = await readTables(hidpiPage)
-        const settled = readings[1]!.clientWidth === previousWide
-        previousWide = readings[1]!.clientWidth
-        return settled
-      }, { timeout: 10_000 }).toBe(true)
+      await awaitTableLayout(hidpiPage)
+      const readings = await readTables(hidpiPage)
       const baseline = (await sweep()).find(stop => stop.width === 1100)!
       const relations = (tables: TableReading[]) => tables.map(table => ({
         marker: table.marker,

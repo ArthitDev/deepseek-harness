@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-客户端与设置页可以展示宿主当前组合了什么：调用 `pluginInventory/list` 即按 Loader 顺序返回当前的非组条目——条目 id、模块标识、有效启用状态与根 Fiber 阶段（`pending`、`loading`、`active`、`failed` 或 `unloading`；条目没有存活根 Fiber 时为 `null`）。当部署组合了 Agent 预设 roster 时，快照还携带每个预设一组——id、trust、显示名、默认标记、健康状态与压平后的组合行——因为挂载 roster 的部署把模型侧插件运行在预设组合里，而不是 Loader 自己的条目上。该快照只表示调用当下：Loader 是唯一的生命周期权威，本包不拥有缓存、历史、来源模型或事件流。Client 包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组合消费这个 Remote，而不导入 Host 实现。
+`pluginInventory/list` 为客户端提供当前非组 Loader 条目的即时视图，包括有效启停状态与存活 Fiber 阶段。存在 agent preset 时，它还返回每个 preset 的健康状态与压平后的组合。Loader 仍是生命周期权威；本包不存储缓存或历史。客户端通过 [`api-remotes`](../../api/remotes/README.zh.md) 访问数据，而不导入 Host 实现。
 
 ## 目录
 

@@ -1,4 +1,4 @@
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
 import { Context, symbols, type EffectMeta } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -63,6 +63,14 @@ function disposeChildLifecycle(parent: Agent): void {
     })
   if (lifecycle === undefined) throw new Error('child lifecycle effect not found')
   void lifecycle()
+}
+
+
+/** The system prompt a loop-built request carries as its leading system-role message ('' when none). */
+function systemPromptOf(request: GenerateOptions): string {
+  const head = request.messages[0]
+  if (head?.role !== 'system') return ''
+  return head.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
 }
 
 describe('dsh-subagent-spawn-in-process', () => {
@@ -403,9 +411,9 @@ describe('dsh-subagent-spawn-in-process', () => {
       })
       await run.result
       const childRequest = adapter.requests.at(-1)!
-      expect(childRequest.system).toContain('You are the tersest test runner.')
+      expect(systemPromptOf(childRequest)).toContain('You are the tersest test runner.')
       // The parent's earlier request carried no such persona.
-      expect(adapter.requests[0]!.system ?? '').not.toContain('tersest test runner')
+      expect(systemPromptOf(adapter.requests[0]!)).not.toContain('tersest test runner')
       await run.dispose()
     })
 

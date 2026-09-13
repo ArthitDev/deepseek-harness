@@ -8,6 +8,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { isPublicExperimentalPackageDirectory } from './experimental-package-policy.ts'
 import { hasTypertRemoteNavigation, isForbiddenPublicationFile } from './publication-payload.ts'
 import { collectProjectReferenceFaceViolations } from './project-reference-faces.ts'
 
@@ -18,7 +19,7 @@ const workspaceGlobs = [
   { dir: 'vendor', depth: 1 },
   { dir: 'packages', depth: 2 },
   { dir: 'native', depth: 1 },
-  { dir: 'native/landlock-run/packages', depth: 1 },
+  { dir: 'native/system/packages', depth: 1 },
   { dir: 'apps', depth: 1 },
 ] as const
 const vendoredPackages = new Set([
@@ -32,14 +33,16 @@ const vendoredPackages = new Set([
   '@deepseek-ai/cordis-plugin-hmr',
   '@deepseek-ai/cordis-plugin-logger-console',
 ])
-const publicLandlockPackages = new Set([
-  '@deepseek-ai/node-addon-landlock-run',
-  '@deepseek-ai/node-addon-landlock-run-linux-arm64',
-  '@deepseek-ai/node-addon-landlock-run-linux-x64',
+const publicNativePackages = new Set([
+  '@deepseek-ai/node-addon-system',
+  '@deepseek-ai/node-addon-system-darwin-arm64',
+  '@deepseek-ai/node-addon-system-darwin-x64',
+  '@deepseek-ai/node-addon-system-linux-arm64',
+  '@deepseek-ai/node-addon-system-linux-x64',
 ])
 /** Deliberate source payloads whose exact bytes are part of the package's audit surface. */
 const publicationSourceAllowlist: Readonly<Record<string, readonly string[]>> = {
-  '@deepseek-ai/node-addon-landlock-run': ['src/main.c'],
+  '@deepseek-ai/node-addon-system': ['src/main.c', 'src/flock.c'],
 }
 const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.git'
 /**
@@ -48,12 +51,12 @@ const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.
  * their trusted publishing against the repository that runs the workflow.
  */
 const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harness.git'
-/** Private packages that participate in workspace checks but not releases. */
+/** Packages that participate in the experimental policy. */
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
-/** npm namespace reserved for private experimental packages. */
+/** npm namespace reserved for experimental packages. */
 const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
-/** Directories whose packages this repository publishes: one release member each. */
-const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/(?!desktop(?:-host)?$)[^/]+|vendor\/[^/]+)$/
+/** Ordinary directories whose packages this repository publishes: one release member each. */
+const standardReleaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/(?!desktop(?:-host)?$)[^/]+|vendor\/[^/]+)$/
 /** Installable application assembled by electron-builder rather than published to npm. */
 const desktopApplicationDirectory = 'apps/desktop'
 const localArtifactDirs = new Set(['node_modules'])
@@ -114,8 +117,8 @@ function readJson(path: string): PackageManifest {
 
 const rootManifest = readJson(join(root, 'package.json'))
 const repositoryVersion = rootManifest.version
-const landlockWorkspaceManifest = readJson(join(root, 'native/landlock-run/package.json'))
-const landlockVersion = landlockWorkspaceManifest.version
+const nativeWorkspaceManifest = readJson(join(root, 'native/system/package.json'))
+const nativeVersion = nativeWorkspaceManifest.version
 
 /** Repo-relative dirs holding a package.json, walked to the configured depth. */
 function packageDirs(base: string, depth: number): string[] {
@@ -267,7 +270,7 @@ function usesEmittedTreeDefaults(manifest: PackageManifest): boolean {
     exportDefault(manifest, subpath)?.startsWith('./lib/types/') === true)
 }
 
-/** Experimental manifest requirements enforced independently from release metadata. */
+/** Experimental manifest requirements, including explicit public exceptions. */
 export function checkExperimentalManifest({ dir, manifest }: WorkspaceManifest): string[] {
   if (!experimentalPackageDirectory.test(dir)) return []
   const label = manifest.name ?? dir
@@ -275,9 +278,20 @@ export function checkExperimentalManifest({ dir, manifest }: WorkspaceManifest):
   if (manifest.name?.startsWith(experimentalPackageNamePrefix) !== true) {
     errors.push(`${label}: experimental package name must start with ${JSON.stringify(experimentalPackageNamePrefix)}`)
   }
-  if (manifest.private !== true) errors.push(`${label}: experimental package must set "private": true`)
-  if (manifest.publishConfig !== undefined) errors.push(`${label}: experimental package must omit publishConfig`)
+  if (isPublicExperimentalPackageDirectory(dir)) {
+    if (manifest.private === true) errors.push(`${label}: public experimental package must not set "private": true`)
+    if (manifest.publishConfig?.access !== 'public') {
+      errors.push(`${label}: public experimental package must set publishConfig.access to "public"`)
+    }
+  } else {
+    if (manifest.private !== true) errors.push(`${label}: experimental package must set "private": true`)
+    if (manifest.publishConfig !== undefined) errors.push(`${label}: experimental package must omit publishConfig`)
+  }
   return errors
+}
+
+function isReleaseMemberDirectory(dir: string): boolean {
+  return standardReleaseMemberDirectory.test(dir) || isPublicExperimentalPackageDirectory(dir)
 }
 
 /**
@@ -312,12 +326,12 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
   const label = manifest.name ?? dir
   const familyVersionError = checkDshFamilyVersion(manifest, repositoryVersion)
   if (familyVersionError !== undefined) errors.push(familyVersionError)
-  const isLandlockPackageDir = dir.startsWith('native/landlock-run/packages/')
-  const isPublicLandlockPackage = isLandlockPackageDir
+  const isNativePackageDir = dir.startsWith('native/system/packages/')
+  const isPublicNativePackage = isNativePackageDir
     && manifest.name !== undefined
-    && publicLandlockPackages.has(manifest.name)
+    && publicNativePackages.has(manifest.name)
 
-  if (isPublicLandlockPackage) {
+  if (isPublicNativePackage) {
     if (manifest.private === true) {
       errors.push(`${label}: published Landlock package must not set "private": true`)
     }
@@ -330,7 +344,7 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
       || manifest.repository.directory !== expectedDirectory) {
       errors.push(`${label}: published Landlock package repository must use ${repositoryUrl} with directory ${expectedDirectory} for trusted publishing`)
     }
-  } else if (releaseMemberDirectory.test(dir)) {
+  } else if (isReleaseMemberDirectory(dir)) {
     // Release members state that they are publishable: npm refuses a private
     // package, and the repository field is how a consumer finds the source of
     // the package it installed.
@@ -377,12 +391,12 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
     }
   }
 
-  if (isLandlockPackageDir) {
-    if (!isPublicLandlockPackage) {
+  if (isNativePackageDir) {
+    if (!isPublicNativePackage) {
       errors.push(`${label}: unexpected package in the public Landlock package family`)
     }
-    if (manifest.version !== landlockVersion) {
-      errors.push(`${label}: package.json version must match Landlock workspace version ${landlockVersion ?? '(missing)'}`)
+    if (manifest.version !== nativeVersion) {
+      errors.push(`${label}: package.json version must match native workspace version ${nativeVersion ?? '(missing)'}`)
     }
   }
 
@@ -482,7 +496,7 @@ export function checkExperimentalDependencyIsolation(manifests: readonly Workspa
     .filter(name => name !== undefined))
   const errors: string[] = []
   for (const { dir, manifest } of manifests) {
-    if (!releaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
+    if (!standardReleaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
     for (const section of runtimeDependencySections) {
       for (const name of Object.keys(manifest[section] ?? {})) {
         if (!experimentalNames.has(name)) continue

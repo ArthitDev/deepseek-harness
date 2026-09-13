@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`@deepseek-ai/dsh-llm-pi-ai` 是 harness LLM 服务基于 pi-ai 的多提供方适配器：一个插件实例拥有一份提供方路由字典，每条路由都通过 [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) 服务。点名已安装 pi-ai 提供方的路由会继承其端点、协议格式与模型目录作为默认值；pi-ai 不提供的路由可以直接声明，因此 OpenAI 兼容网关或自托管服务器只是配置，而非代码变更。profile 与凭据通过可选 settings 与凭据 seam 按请求解析，因此编辑用户设置文档即可改变下一个请求，无需重启。提供登录的提供方可以通过 harness 授权 seam 登录，存储的登录——OAuth grant，或在 pi-ai 自己的登录提示里键入的密钥——为其路由完成认证，并在存储的跨进程锁下自行刷新。插件可以零路由休眠挂载，一旦 settings 分节提供 profile 便立即激活它们。
+此适配器通过 pi-ai 提供方、OpenAI 兼容网关与自托管端点路由 harness LLM 服务。每条已配置路由会在可用时继承 pi-ai 默认值；自定义路由只需配置。settings 与凭据按请求解析，因此更改无需重启即可生效。受支持的提供方登录使用授权服务，存储的凭据在跨进程锁下刷新。插件可以零路由启动，并在 settings 添加 profile 时激活路由。
 
 ## 目录
 

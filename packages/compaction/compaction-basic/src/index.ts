@@ -10,11 +10,13 @@ import { CompactionEngine, ManualCompactionError } from '@deepseek-ai/dsh-compac
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
+import { z as zod } from 'zod'
 // Type-only: makes the optional sibling service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
 import {
@@ -48,6 +50,46 @@ export type {
 
 /** The region transaction's view of this service's dynamically dispatched summarizer. */
 type RegionSummarize = (input: SummarizationInput, agent: Agent, signal?: AbortSignal) => Promise<SummaryResult>
+
+interface OutputLimitContinuationState {
+  continuations: number
+  turn: number | null
+  maxTokens: boolean
+}
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    outputLimitContinuation: OutputLimitContinuationState
+  }
+}
+
+const outputLimitContinuationSchema = zod.object({
+  continuations: zod.number().int().nonnegative(),
+  turn: zod.number().int().nonnegative().nullable(),
+  maxTokens: zod.boolean(),
+}).readonly()
+
+const outputLimitContinuationProjection = {
+  key: 'outputLimitContinuation',
+  stateSchema: outputLimitContinuationSchema,
+  init: (): OutputLimitContinuationState => ({ continuations: 0, turn: null, maxTokens: false }),
+  apply(state, event) {
+    if (event.type === 'user/message') {
+      if (event.data.source.kind === 'user') return { ...state, continuations: 0 }
+      if (event.data.source.kind === 'plugin' && event.data.source.plugin === 'output-limit-continuation') {
+        return { ...state, continuations: state.continuations + 1 }
+      }
+      return state
+    }
+    if (event.type !== 'assistant/message' && event.type !== 'assistant/attempt') return state
+    return {
+      ...state,
+      turn: event.data.turn,
+      maxTokens: lastAssistantStreamChunk(event.data.stream, 'finish')?.reason.kind === 'max-tokens',
+    }
+  },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'outputLimitContinuation', OutputLimitContinuationState>
 
 /** Resolve the exact provider/model durably routed for the latest request. */
 function routedTarget(
@@ -102,7 +144,7 @@ const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
  * token meter.
  */
 export class BasicCompactionEngine extends CompactionEngine {
-  static inject = ['llm', 'tokenMeter', 'sessions']
+  static inject = ['llm', 'tokenMeter', 'sessions', 'sessionProjections']
 
   static Config: z<BasicCompactionConfig> = z.object({
     thresholdRatio: thresholdRatioSchema,
@@ -128,7 +170,10 @@ export class BasicCompactionEngine extends CompactionEngine {
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
     super(ctx)
     this.config = resolveConfig(config)
-    if (this.config.auto) this._registerAutomaticCompaction()
+    if (this.config.auto) {
+      ctx.sessionProjections.register(outputLimitContinuationProjection)
+      this._registerAutomaticCompaction()
+    }
   }
 
   /**
@@ -141,23 +186,8 @@ export class BasicCompactionEngine extends CompactionEngine {
     ctx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
       const limit = this.config.maxOutputContinuations
       if (limit === 0 || signal.aborted || agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) return
-      const events = agent.session.snapshotEvents()
-      const settlement = events.findLast(event => (event.type === 'assistant/message' || event.type === 'assistant/attempt')
-        && event.data.turn === turn)
-      if (settlement?.type !== 'assistant/message' && settlement?.type !== 'assistant/attempt') return
-      if (lastAssistantStreamChunk(settlement.data.stream, 'finish')?.reason.kind !== 'max-tokens') return
-
-      // Read the durable log, including shadowed input, so compaction and resume
-      // cannot replenish the continuation budget without a new user message.
-      let continuations = 0
-      for (let index = events.length - 1; index >= 0; index -= 1) {
-        const event = events[index]
-        if (event?.type !== 'user/message') continue
-        if (event.data.source.kind === 'user') break
-        if (event.data.source.kind === 'plugin'
-          && event.data.source.plugin === 'output-limit-continuation') continuations += 1
-      }
-      if (continuations >= limit) return
+      const state = ctx.sessionProjections.stateOf(agent.session, 'outputLimitContinuation')
+      if (state === undefined || state.turn !== turn || !state.maxTokens || state.continuations >= limit) return
       agent.followup(createUserMessage({
         content: [{
           type: 'text',
@@ -167,7 +197,7 @@ export class BasicCompactionEngine extends CompactionEngine {
         }],
         source: {
           kind: 'plugin', plugin: 'output-limit-continuation', form: 'notice',
-          summary: `Output limit reached; auto-continue ${continuations + 1}/${limit}`,
+          summary: `Output limit reached; auto-continue ${state.continuations + 1}/${limit}`,
         },
       }))
     })

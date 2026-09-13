@@ -77,6 +77,7 @@ async function write(path: string, content: string): Promise<void> {
 
 class RecordingFileSystem extends FileSystem {
   entries = new Map<string, { type: FsInfo['type']; content?: string; version?: FsVersion }>()
+  missingOnResolve = new Set<string>()
   throwOnStat = new Set<string>()
   throwOnRead = new Set<string>()
   omitSizes = new Set<string>()
@@ -90,6 +91,9 @@ class RecordingFileSystem extends FileSystem {
     // resolve(), not join(): entries are seeded with host join() keys, and on
     // Windows a joined '/'-rooted prefix would not match a resolved drive path.
     const absolute = resolve(opts?.cwd ?? '/', path)
+    if (this.missingOnResolve.has(absolute)) {
+      throw Object.assign(new Error(`not found: ${absolute}`), { code: 'FS_NOT_FOUND' })
+    }
     return { targetKey: FsTargetKey(absolute), displayPath: absolute }
   }
 
@@ -1744,7 +1748,7 @@ describe('workspace context request injection', () => {
         content: [{ type: 'text', text: 'compacted summary' }],
         source: { kind: 'plugin', plugin: 'compact' },
       }), {
-        surfaceOp: { op: 'replace', start: baseline!.seq, end: baseline!.seq },
+        surfaceOp: { op: 'replace', startSeq: baseline!.seq, endSeq: baseline!.seq },
         sourceEventSeqs: [baseline!.seq],
       })
 
@@ -1777,7 +1781,7 @@ describe('workspace context request injection', () => {
         content: [{ type: 'text', text: 'compacted summary' }],
         source: { kind: 'plugin', plugin: 'compact' },
       }), {
-        surfaceOp: { op: 'replace', start: baseline!.seq, end: baseline!.seq },
+        surfaceOp: { op: 'replace', startSeq: baseline!.seq, endSeq: baseline!.seq },
         sourceEventSeqs: [baseline!.seq],
       })
       const prompt = createUserMessage({
@@ -2073,6 +2077,30 @@ describe('workspace context request injection', () => {
     }
   })
 
+  it('continues provider root discovery when a marker is confirmed absent', async () => {
+    const root = join(await tempRepo(), 'virtual-repo')
+    const cwd = join(root, 'pkg')
+    const home = join(await tempRepo(), 'virtual-home')
+    const ctx = new Context()
+    try {
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      fs.missingOnResolve.add(join(cwd, '.git'))
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: 'provider parent rule' })
+      await mountWorkspaceContextPlugin(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = await stubAgent(cwd)
+
+      await composeBaselinePrefix(ctx, agent)
+
+      expect(derivedText(agent)).toContain('provider parent rule')
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(dirname(root), { recursive: true, force: true })
+      await rm(dirname(home), { recursive: true, force: true })
+    }
+  })
+
   it('keeps the direct provider API usable without an operation signal', async () => {
     const root = resolve('/virtual/no-signal-repo')
     const home = resolve('/virtual/no-signal-home')
@@ -2291,23 +2319,24 @@ describe('workspace context request injection', () => {
     }
   })
 
-  it('treats ctx.fs marker lookup failures as absent root markers', async () => {
+  it('surfaces ctx.fs marker lookup failures instead of crossing into an ancestor project', async () => {
     const root = await tempRepo()
+    const cwd = join(root, 'pkg')
     const home = await tempRepo()
     try {
-      await mkdir(join(root, '.git'), { recursive: true })
-      await write(join(root, 'AGENTS.md'), 'repo rule')
       const ctx = new Context()
       await ctx.plugin(RecordingFileSystem)
       const fs = ctx.fs as RecordingFileSystem
-      fs.throwOnStat.add(join(root, '.git'))
-      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: 'repo rule' })
+      fs.throwOnStat.add(join(cwd, '.git'))
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: 'ancestor rule must not load' })
       await mountWorkspaceContextPlugin(ctx, { dshHome: home, maxBytes: 65536 })
-      const agent = await stubAgent(root)
+      const agent = await stubAgent(cwd)
 
-      await composeBaselinePrefix(ctx, agent)
+      await expect(composeBaselinePrefix(ctx, agent))
+        .rejects.toThrow(`stat failed: ${join(cwd, '.git')}`)
 
-      expect(derivedText(agent)).toContain('repo rule')
+      expectNoDerivedMessages(agent)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
@@ -2533,6 +2562,42 @@ describe('workspace context request injection', () => {
       const rendered = await isolated.loadBaselineInstructions({ cwd: root, dshHome: home, maxBytes: 65536 })
 
       expect(rendered?.text).toContain('claude host sibling rule')
+    } finally {
+      vi.doUnmock('node:fs/promises')
+      vi.resetModules()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('surfaces host marker metadata failures instead of crossing into an ancestor project', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      const cwd = join(root, 'pkg')
+      const markerPath = join(cwd, '.git')
+      const failure = Object.assign(new Error(`permission denied: ${markerPath}`), {
+        code: 'EACCES',
+        path: markerPath,
+      })
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'ancestor rule must not load')
+      await mkdir(cwd, { recursive: true })
+      vi.resetModules()
+      vi.doMock('node:fs/promises', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('node:fs/promises')>()
+        return {
+          ...actual,
+          stat: async (path: string) => {
+            if (path === markerPath) throw failure
+            return actual.stat(path)
+          },
+        }
+      })
+      const isolated = await import('@deepseek-ai/dsh-agent-instructions')
+
+      await expect(isolated.loadBaselineInstructions({ cwd, dshHome: home, maxBytes: 65536 }))
+        .rejects.toBe(failure)
     } finally {
       vi.doUnmock('node:fs/promises')
       vi.resetModules()
@@ -3647,7 +3712,7 @@ describe('dynamic nested workspace context injection', () => {
         content: [{ type: 'text', text: 'compacted summary' }],
         source: { kind: 'plugin', plugin: 'compact' },
       }), {
-        surfaceOp: { op: 'replace', start: SessionSeq(contextSeq), end: SessionSeq(contextSeq) },
+        surfaceOp: { op: 'replace', startSeq: SessionSeq(contextSeq), endSeq: SessionSeq(contextSeq) },
         sourceEventSeqs: [SessionSeq(contextSeq)],
       })
 
@@ -3694,7 +3759,7 @@ describe('dynamic nested workspace context injection', () => {
         content: [{ type: 'text', text: 'compacted summary' }],
         source: { kind: 'plugin', plugin: 'compact' },
       }), {
-        surfaceOp: { op: 'replace', start: baseline!.seq, end: baseline!.seq },
+        surfaceOp: { op: 'replace', startSeq: baseline!.seq, endSeq: baseline!.seq },
         sourceEventSeqs: [baseline!.seq],
       })
 

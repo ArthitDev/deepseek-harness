@@ -112,11 +112,7 @@ async function bench(script: Script): Promise<{
         inject: () => {},
         whenIdle: () => idle,
       }
-      const agentCtx = ownerCtx.extend({ agent })
-      Object.assign(agent, {
-        ctx: agentCtx,
-      })
-      await options.setup?.(agentCtx)
+      await options.setup?.(ownerCtx, agent)
       script.before?.(session)
       ctx.agents.register(agent)
       return { agent, dispose: () => Promise.resolve() }

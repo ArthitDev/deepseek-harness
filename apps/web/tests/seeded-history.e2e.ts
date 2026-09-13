@@ -9,7 +9,7 @@
 // `/feedback` pins its expandable correlation ids. The seed is a recorded
 // fixture under the same record discipline as every other: DSH_SNAPSHOT=record drives the turn
 // live through the composer (real read tool against seeded workspace files)
-// and harvests session.v2.jsonl; replay/refresh seed it cold and only render.
+// and harvests session.v3.jsonl; replay/refresh seed it cold and only render.
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
@@ -30,7 +30,7 @@ import {
 import { expandOwningTurnProcess, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/seeded-history', import.meta.url))
-const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v2.jsonl', import.meta.url))
+const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/ui.expected.md', import.meta.url))
 const UI_EXPANDED_EXPECTED = fileURLToPath(
   new URL('../../../snapshots/web/seeded-history/ui-expanded.expected.md', import.meta.url),
@@ -157,7 +157,7 @@ function withCompaction(raw: string, meter: TokenMeter): string {
         kind: 'plugin', plugin: 'compact', compactionId, sourceCommandId: commandId,
       },
     }),
-    surfaceOp: { op: 'replace', start: first, end: last },
+    surfaceOp: { op: 'replace', startSeq: first, endSeq: last },
     sourceEventSeqs: [startSeq, summarySeq, ...surfaceSeqs],
   })
   at({
@@ -420,7 +420,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await fileLink.click()
     await expect.poll(() => frame.getAttribute('data-rightbar-collapsed'), { timeout: 5_000 }).toBe(null)
     const column = page.locator('[data-rightbar-col]')
-    await expect.poll(() => column.locator('[data-dockkit-tab-title]').count(), { timeout: 5_000 }).toBe(2)
+    await expect.poll(() => column.locator('[data-dockkit-tab-title]').allTextContents(), { timeout: 5_000 }).toEqual(['a.txt'])
     // Path label survives from the recorded args (a.txt).
     await expect.poll(() => page.getByText('a.txt', { exact: false }).count(), { timeout: 5_000 }).toBeGreaterThan(0)
     const path = column.locator('[data-textpreview-path]')
@@ -433,6 +433,8 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // Put the column back so the later goldens see the default frame.
     await column.locator('[data-sidebar-right-toggle]').click()
     await expect.poll(() => frame.getAttribute('data-rightbar-collapsed'), { timeout: 5_000 }).toBe('true')
+    await page.getByRole('button', { name: 'Open right sidebar', exact: true }).waitFor({ state: 'visible' })
+    await page.getByRole('navigation', { name: 'Turn navigation', exact: true }).waitFor({ state: 'visible' })
   })
 
   it.skipIf(MODE === 'record')('expands the cold-resumed compact summary', async () => {
@@ -461,7 +463,8 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // the command's own name).
     await page.getByRole('button', { name: 'Access mode, current: Workspace Write' }).click()
     await page.getByRole('menuitem', { name: 'Read Only' }).click()
-    await page.getByRole('button', { name: 'Access mode, current: Read Only' }).waitFor({ timeout: 10_000 })
+    const access = page.getByRole('button', { name: 'Access mode, current: Read Only' })
+    await expect.poll(() => access.isEnabled(), { timeout: 10_000 }).toBe(true)
     // Scoped to the row itself, so unrelated page text that happens to read
     // `permission` (a future resident slash menu) cannot satisfy or break it.
     const row = page.locator('[data-variant="others"]').filter({ hasText: 'preset read-only' })
@@ -501,6 +504,9 @@ describe('web e2e: seeded history renders through cold resume', () => {
       const userId = userLine?.match(/^Anonymous user: ([0-9a-f-]+)/i)?.[1]
       if (userId === undefined) throw new Error('feedback command omitted the user id')
 
+      // command/done can arrive before the submit reply releases the composer.
+      await expect.poll(() => input.textContent(), { timeout: 10_000 }).toBe('')
+      await expect.poll(() => page.getByRole('button', { name: 'Add files or run commands' }).isEnabled(), { timeout: 10_000 }).toBe(true)
       const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
         .split(SEED_ID).join('{{seededId}}')
         .split(userId).join('{{userId}}')
@@ -540,7 +546,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'command-row.expected.md', 'feedback-row.expected.md', 'file-preview.expected.md',
-      'session.v2.jsonl', 'ui.expected.md', 'ui-expanded.expected.md',
+      'session.v3.jsonl', 'ui.expected.md', 'ui-expanded.expected.md',
     ])
   })
 })

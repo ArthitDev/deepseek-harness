@@ -1,5 +1,5 @@
 ---
-description: "客户端资源模型：按协议注册的提供方把 URL 地址变成活数据，任何 slot 组件都通过 useResource 标准 hook 读取。"
+description: "客户端资源模型：按协议注册的提供方把 URL 地址解析为实时值，任何 slot 组件都通过 useResource 标准钩子读取。"
 kind: "package-reference"
 ---
 # @deepseek-ai/dsh-client-resources
@@ -8,7 +8,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web 客户端的资源模型。一份资源是一个地址，资源地址是 `dsh-resource://<type>/…` 形式的 URL，host 即协议键；协议所属的客户端包注册一个提供方把地址变成值的流，任何 slot 组件通过 `useResource` 全局标准 hook 读取这条流。需要作用域的协议把它编进路径（`dsh-resource://file/session/<sessionId>/<绝对路径>`）；模型本身只认地址，其它 scheme 的地址（`sidebar://guide`）不指向资源。当组件需要的活数据只以地址形式可知（tab 记录、链接、提及），而数据的拥有者是另一个客户端插件时，请使用它。
+当组件只知道实时数据的 URL 地址，而数据由另一个客户端包拥有时，请使用客户端资源；例如 tab 记录、链接或提及。资源地址使用 `dsh-resource://<type>/…`；需要作用域的协议把作用域编进路径。组件通过公开的 `useResource` 钩子接收当前值与后续更新。不支持的协议与非资源 scheme（例如 `sidebar://guide`）不指向任何资源。
 
 ## 目录
 
@@ -28,17 +28,17 @@ Web 客户端的资源模型。一份资源是一个地址，资源地址是 `ds
 <a id="use-this-package"></a>
 ## 使用本包
 
-挂载无需任何配置：插件提供 `ctx.resources`，并通过 `ctx.slots.provideRoot` 贡献 `resource` 根 keyed hook，因此每个 slot 组件不论作用域都能收到它。
+挂载无需任何配置：插件提供 `ctx.resources`，并通过 `ctx.slots.provideRoot` 贡献 `resource` 根 keyed 钩子，因此每个 slot 组件不论作用域都能收到它。
 
 <a id="read-a-resource"></a>
 ### 读取资源
 
-每个 slot 组件都在 props 上收到 `useResource`。`useResource<P>(address)` 以类型参数命名协议，返回 `{ status, value, failure, reload }`：地址协议没有提供方（或地址不是 `dsh-resource://` URL）时为 `none`，提供方尚未产出值时为 `loading`，`live` 携带最新一个 `ok` 帧的值，`failed` 表示最新一帧报告了失败，失败放在最后一个值旁。`reload()` 请提供方给一个新值，没有提供方时是空操作。通过 hook 订阅就是钉住资源的方式；另一个持有者让资源保持存活时，新挂载的组件立刻读到最新值。
+每个 slot 组件都在 props 上收到 `useResource`。`useResource<P>(address)` 以类型参数命名协议，返回 `{ status, value, failure }`：地址协议没有提供方（或地址不是 `dsh-resource://` URL）时为 `none`，提供方尚未产出值时为 `loading`，`live` 携带最新一个 `ok` 帧的值，`failed` 表示最新一帧报告了失败，失败放在最后一个值旁。通过钩子订阅就是钉住资源的方式；另一个持有者让资源保持存活时，新挂载的组件立刻读到最新值。
 
 <a id="provide-a-protocol"></a>
 ### 提供协议
 
-协议所属的客户端包在 `ResourceProtocolMap` 声明其值类型，并以自有 effect 注册一个提供方。`open` 产出 `RemoteResult` 帧：先是当前内容，之后每次变化一帧，失败以 `ok: false` 帧而非抛错表达；必须在 `signal` 中止时停止。`reload` 可选：
+协议所属的客户端包在 `ResourceProtocolMap` 声明其值类型，并以自有 effect 注册一个提供方。`open` 产出 `RemoteResult` 帧：先是当前内容，之后每次变化一帧，失败以 `ok: false` 帧而非抛错表达；必须在 `signal` 中止时停止：
 
 ```ts ignore-check
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -54,17 +54,16 @@ export function apply(ctx) {
       yield await readNote(address, signal)
       for await (const change of followNote(address, signal)) yield change
     },
-    reload(address) { requestReread(address) },
   }), 'my-notes: note resource provider')
 }
 ```
 
-一个协议恰有一个提供方；第二次注册会抛错。提供方注册时若其协议的地址已被持有，则立即开流；提供方 dispose 时结束这些流并让它们回到 `none`。
+一个协议恰有一个提供方；第二次注册会抛错。提供方注册时若其协议的地址已被持有，则立即开流；提供方 dispose（资源释放）时结束这些流并让它们回到 `none`。
 
 <a id="hold-a-resource-open"></a>
 ### 钉住资源
 
-`ctx.resources.pin(address, signal)` 在不订阅的情况下让资源保持打开，直到 `signal` 中止。右侧 Sidebar 在 tab 记录的存续期内钉住每个已打开 tab 的地址，因此切换 tab 卸载正文不会关闭其流，切回时读到最新值。`ctx.resources.source(address)` 是 hook 背后的裸 observable，供 React 之外的调用方使用。
+`ctx.resources.pin(address, signal)` 在不订阅的情况下让资源保持打开，直到 `signal` 中止。右侧 Sidebar 在 tab 记录的存续期内钉住每个已打开 tab 的地址，因此切换 tab 卸载正文不会关闭其流，切回时读到最新值。`ctx.resources.source(address)` 是钩子背后的裸 observable，供 React 之外的调用方使用。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -72,7 +71,7 @@ export function apply(ctx) {
 <a id="lifecycle"></a>
 ### 生命周期
 
-每个地址一条记录，持有一个快照 store、一个持有者计数（hook 订阅者加 pin）与运行中流的 `AbortController`。第一个持有者打开提供方的流；之后的持有者共享它；最后一个持有者释放时中止流并把快照重置为空闲（有提供方为 `loading`，没有为 `none`）。记录在页面存续期内保留，使 `source()` 在 React 渲染到订阅的窗口与 StrictMode 重挂载之间保持引用稳定。`reload` 每条记录一个函数，永不变化。
+每个地址一条记录，持有一个快照存储、一个持有者计数（钩子订阅者加 pin）与运行中流的 `AbortController`。第一个持有者打开提供方的流；之后的持有者共享它；最后一个持有者释放时中止流并把快照重置为空闲（有提供方为 `loading`，没有为 `none`）。记录在页面存续期内保留，使 `source()` 在 React 从渲染到订阅的窗口期以及 StrictMode 重挂载期间保持引用稳定。
 
 <a id="failures"></a>
 ### 失败

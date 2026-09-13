@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-fs` defines the `ctx.fs` filesystem service: a compact, backend-neutral contract for one execution world that resolves paths to stable identities, maps shared host files when supported, reads text and raw bytes within bounds, lists directories, and applies atomic writes and literal edits. It deliberately leaves storage mechanics to the backends that implement it — `fs-local` for the host filesystem, `fs-sandbox` for policy-enforced confinement, and `fs-e2b` for a remote execution world. Both mutations take an optional version guard, so a backend mounted without the policy plugin still gives complete, unconstrained, atomic file operations. The package also owns the `fs/*` policy-event vocabulary that the tool package dispatches and the policy plugin decides. Choose it when you need a swappable filesystem surface; the model-facing tools themselves live in `dsh-tool-fs`.
+Use `dsh-fs` when an application needs consistent filesystem operations across host, confined, or remote execution environments. It lets consumers resolve stable file identities, map shared host files where supported, perform bounded text and byte reads, list directories, and apply atomic text writes and literal edits. Version guards are optional, so a backend works without policy enforcement; callers can supply a guard to reject a mutation after the file changes. Choose `fs-local`, `fs-sandbox`, or `fs-e2b` for the required execution environment. Model-facing filesystem tools are provided separately by `dsh-tool-fs`.
 
 ## Table of Contents
 

@@ -48,9 +48,9 @@ Python SDK 遵循相同的应用架构。其运行时 wheel 把普通 `dsh` CLI 
 
 ## 桌面应用
 
-[Electron 桌面应用](../apps/desktop/README.zh.md)持有保留的 `$DSH_HOME/profiles/desktop` npm 项目。每个签名 Electron 发行版绑定一个确切 dsh 版本并携带第一方离线 seed；启动时通过内置 pnpm 把该版本安装进可写 profile，同时保留旧 profile 中桌面插件的确切版本。CLI profile 与 Desktop 共享 `$DSH_HOME` 下受支持的产品数据，但绝不共享可执行包、插件激活、lockfile 或 `node_modules`。
+[Electron 桌面应用](../apps/desktop/README.zh.md)在签名应用资源中携带精确版本的 dsh 生产运行时。保留的 `$DSH_HOME/profiles/desktop` 保存外部插件和指向宿主拥有包的链接；兼容升级保留插件文件并刷新这些链接，无需安装核心依赖。CLI profile 共享 `$DSH_HOME` 下受支持的产品数据，而可执行包、插件激活、锁文件和包管理器状态保持独立。
 
-Electron 通过内置的上游 Node.js 进程启动私有 Desktop Host 包；该包从保留 profile 加载已安装的 dsh 后端与匹配的客户端图。一元 RPC、Remote stream 与版本匹配的客户端资源经带版本的分帧字节管道传输，Node IPC 只保留生命周期控制，再通过安全的 `dsh-app://` 协议到达渲染进程；因此桌面组合不会开放 Web server 或 loopback 端口。只有壳自有 UI 能通过内置 pnpm 及其私有 `$DSH_HOME/desktop/pnpm/store` 执行插件事务。
+Electron 通过内置的上游 Node.js 进程启动私有 Desktop Host 包；该包加载内置 dsh 后端、匹配的客户端图和已启用的 profile 插件。一元 RPC、Remote stream 与版本匹配的客户端资源经带版本的分帧字节管道传输，Node IPC 只保留生命周期控制，再通过安全的 `dsh-app://` 协议到达渲染进程；因此桌面组合不会开放 Web server 或 loopback 端口。只有壳自有 UI 能通过内置 pnpm 及其私有 `$DSH_HOME/desktop/pnpm/store` 执行插件事务。
 
 ## 核心包
 
@@ -88,13 +88,15 @@ Electron 通过内置的上游 Node.js 进程启动私有 Desktop Host 包；该
 ```text
 turn/start
   claim next-step input plus one queued message
-  assemble prompt sections + tool schemas
+  assemble prompt sections + tool schemas; project runtime context
   -> agent/pre-step                   reject | enter(messages, startsRequestSeries?)
      reject, or a first enter rewritten empty -> close the turn with no step
      step/start
-     append entered messages as user/message
-     derive model history from the log
-     agent/request -> llm/stream -> agent/assistant-stream start
+     agent/request -> prepareCall (cancellation commits neither system nor users)
+     reconcile system/message using the prepared call capability
+     append entered messages as user/message; log request/header and request/context as needed
+     derive and freeze model history from the log
+     stream the bound prepared call -> llm/stream -> agent/assistant-stream start
        agent/assistant-stream chunk*
        assistant/message | assistant/attempt -> agent/assistant-stream end
      tool/call* -> tools/pre-execute -> tools/execute -> tools/post-execute -> tool/result*
@@ -104,11 +106,11 @@ turn/start
 turn/end
 ```
 
-`turn/*`、`step/*`、`user/message`、`assistant/message`、`assistant/attempt` 和 `tool/*` 是持久会话事件；其余是分属三个事件域的实时扩展点。`agent/assistant-stream` 发布进程本地 start、瞬态 chunk 与 end frame。loop 会在 committed end frame 前把完整紧凑 stream 提交为一个 message 或仅日志 attempt；Web Session-follow adapter 是该 live event 唯一的远程消费方。`agent/pre-step`、`agent/request`、`llm/stream` 和三个 `tools/*` 事件是 waterfall（瀑布式事件），其监听器必须调用 `next()` 才能委托下去；`agent/turn-stopping` 是 serial 事件，没有 `next()`。
+`turn/*`、`step/*`、`system/message`、`user/message`、`assistant/message`、`assistant/attempt` 和 `tool/*` 是持久会话事件；其余是分属三个事件域的实时扩展点。`agent/assistant-stream` 发布进程本地 start、瞬态 chunk 与 end frame。loop 会在 committed end frame 前把完整紧凑 stream 提交为一个 message 或仅日志 attempt；Web Session-follow adapter 是该 live event 唯一的远程消费方。`agent/pre-step`、`agent/request`、`llm/stream` 和三个 `tools/*` 事件是 waterfall（瀑布式事件），其监听器必须调用 `next()` 才能委托下去；`agent/turn-stopping` 是 serial 事件，没有 `next()`。
 
 输入通过同一个 inbox 到达驱动器。有些消息会立即唤醒它；注入的上下文会留在 inbox 中，直到另一条消息将其唤醒。
 
-`agent/pre-step` 决定模型看到什么。监听器可以改写已领取的消息，也可以直接拒绝它们；首次领取被拒绝或被改写为空时，仍会关闭一个不含步骤的持久轮次，因此日志会记录这次尝试。enter 决策还可以设置 `startsRequestSeries` 来开启独立的模型消息序列：loop 会随之记录一个新的 `request/header`（原因为 `series`，或在封装同时变化时为携带 `startsSeries: true` 的 `change`）。重建下游 enter 决策的监听器必须展开它（`{ ...decision, messages }`），该声明才能存活。每个步骤读取插件注册的提示词片段和工具 schema。
+`agent/pre-step` 决定接纳的输入。监听器可以改写或拒绝已领取消息；首次领取被拒绝或为空时，关闭不含步骤的持久轮次。enter 决策可设置 `startsRequestSeries`：循环记录新的 `request/header`（原因为 `series`，或在封装同时变化时为携带 `startsSeries: true` 的 `change`）。包装监听器通过 `{ ...decision, messages }` 保留该声明。组装与 `step/start` 之后，`agent/request` 和 `prepareCall()` 先解析实际路由，再提交系统提示词与已接纳用户消息；在任一异步阶段取消都不会提交这两者。提示词准入依据已准备调用的能力，而非先前的 `request/context`。每次尝试同步协调同一份已渲染组装结果、仅在首次尝试追加用户消息、按需记录 header/context、派生并冻结请求，再通过绑定调用发起流式请求。重试不重复组装或 `agent/pre-step`。附接后的 surface 替换开启新请求序列，包括恢复后的首次 pre-step 中发生的替换；未变化的恢复延续序列。首次接纳的步骤在用户消息之前预留系统头节点，即使提示词为空（不产生协议消息）。提示词仅通过 `system/message` 历史传递：空渲染文本清除所有生效的系统节点，模型不再看到旧提示词；具备能力的路由可在缓存前缀之后追加非空更新；不具备能力的路由与新请求序列将非空提示词文本归并到首个系统节点，并为非空的后续系统节点记录空内容替换（[决策](../.agents/notes/implemented/architecture/2026-09-02-system-prompt-as-surface-node.zh.md)；[决策规则](../packages/core/agent-loop/README.zh.md#understand-the-implementation)）。
 
 循环发送不可变请求，同时保留实时取消能力。只有已由该循环完整冻结的消息对象身份才能复用冻结证明；[agent-loop](../packages/core/agent-loop/README.zh.md)拥有请求构造规则。
 
@@ -130,7 +132,7 @@ Session 消费方只了解当前逻辑格式。仅 header 的 `stat` 与 `list` 
 
 seam 正是替换一个提供方就能改变整个产品的原因。文件系统与进程提供方共享同一个执行世界，因此把它们指向远程沙箱，也就把 Bash、PTY 和 LSP 一并搬了过去，无需提供方专用 fork。[subagent 提供方](subsystems/subagent.zh.md)在同一个接口之后同样千差万别，从新建一个子 agent，到把一个轮次委派给另一个产品。
 
-[实验性 Agent Teams](subsystems/agent-team.zh.md) 是 `ctx.agentTeams` 上的私有显式启用协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
+[实验性 Agent Teams](subsystems/agent-team.zh.md) 是 `ctx.agentTeams` 上公开发布、显式启用的协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
 
 ## 新行为的归属位置
 

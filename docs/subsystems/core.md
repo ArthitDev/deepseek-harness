@@ -46,9 +46,9 @@ interface AgentHandle {
 }
 ```
 
-`CreateAgentOptions` carries the shared identity and everything a fresh agent needs before publication: session metadata (`meta` — validated `cwd`, fork lineage, the `isSeeded` marker, origin classification, delegation depth, and `agentPreset`), the exact fork cut in sibling field `inheritedEventCount`, an optional `seed` replay prefix, per-agent `AgentOptions`, a creation-only cancellation `signal`, and `setup`. `ResumeAgentOptions` is the persisted-identity counterpart: `resumeSessionId`, `agentOptions`, `signal`, and `setup`. The `setup` callback (`AgentSetup`) composes the agent's scoped world while both ids are still unpublished — everything registered through `agentCtx` exists before `agent/created` and the first prompt assembly — and may return a synchronous commit invoked immediately before publication; a setup rejection, commit throw, or owner disposal rolls the transaction back without publishing either id.
+`CreateAgentOptions` carries the shared identity and everything a fresh agent needs before publication: an optional live `parentAgent`, session metadata (`meta` — validated `cwd`, fork lineage, the `isSeeded` marker, origin classification, delegation depth, and `agentPreset`), the exact fork cut in sibling field `inheritedEventCount`, an optional `seed` replay prefix, per-agent `AgentOptions`, a creation-only cancellation `signal`, and `setup`. `ResumeAgentOptions` is the persisted-identity counterpart: `resumeSessionId`, `parentAgent`, `agentOptions`, `signal`, and `setup`. The `setup` callback (`AgentSetup`) receives `(agentCtx, agent)` while both ids are still unpublished: the context owns scoped registrations, while the explicit Agent supplies the exact child Session without a reverse property on the Context. Everything registered through `agentCtx` exists before `agent/created` and the first prompt assembly. Setup may return a synchronous commit invoked immediately before publication; a setup rejection, commit throw, or owner disposal rolls the transaction back without publishing either id.
 
-`AgentFactory` is the creation interface behind the registry: the loop registers its factory via `ctx.agents.setFactory()`, so consumers use `ctx.agents` without depending on the concrete loop package. The exact `create`/`resume` signatures and rollback contracts are in the [generated section](#ctxagents--agentregistry) below.
+`AgentFactory` is the creation interface behind the registry: the loop registers its factory via `ctx.agents.setFactory()`, so consumers use `ctx.agents` without depending on the concrete loop package. A runtime child creator sets `options.parentAgent`; the registry passes the options and caller Context to the factory without deriving one from the other. The exact `create`/`resume` signatures and rollback contracts are in the [generated section](#ctxagents--agentregistry) below.
 
 ## The agent handle
 
@@ -347,7 +347,7 @@ type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 
 A `Session` is an **append-only log** of typed `SessionEvent`s — the single source of truth. The LLM message history is *derived* from the log (`deriveMessages()`), not stored separately. Every entry carries a monotonic `seq`, a `time`, and a `type`-discriminated `data` payload; surface variants may also list cited earlier events in `sourceEventSeqs` and carry a `surfaceOp`.
 
-The `SessionEvent` envelope's exact conditional fields, the twelve core event variants (`turn/start`, `turn/end`, `step/start`, `step/end`, `user/message`, `assistant/message`, `assistant/attempt`, `tool/call`, `tool/result`, `request/header`, `request/context`, `session/end-seed`), the `deriveMessages()` projection rules, the `TurnEndReason` reasons, and the execution-enclosure and standalone-event rules are on **[session.md](session.md)**. How the log is made durable — the `SessionPersistence` interface, JSONL provider, `session/flush` checkpoint, crash recovery, and `SessionHeader` — is on **[persistence.md](persistence.md)**.
+The `SessionEvent` envelope's exact conditional fields, the thirteen core event variants (`turn/start`, `turn/end`, `step/start`, `step/end`, `user/message`, `system/message`, `assistant/message`, `assistant/attempt`, `tool/call`, `tool/result`, `request/header`, `request/context`, `session/end-seed`), the `deriveMessages()` projection rules, the `TurnEndReason` reasons, and the execution-enclosure and standalone-event rules are on **[session.md](session.md)**. How the log is made durable — the `SessionPersistence` interface, JSONL provider, `session/flush` checkpoint, crash recovery, and `SessionHeader` — is on **[persistence.md](persistence.md)**.
 
 ## `ToolDefinition`
 
@@ -463,7 +463,7 @@ async create(id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader
 /**
  * Create an owned agent on a caller-supplied session id.
  * @param ownerCtx - caller context that structurally owns the lifecycle.
- * @param options - identities, session seed/metadata, loop options, setup, and cancellation.
+ * @param options - identities, optional live parent, session seed/metadata, loop options, setup, and cancellation.
  * @returns the published handle.
  */
 async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>
@@ -471,7 +471,7 @@ async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<Agent
 /**
  * Resume an owned agent from the configured persistence service.
  * @param ownerCtx - caller context that owns load, setup, and the live lifecycle.
- * @param options - persisted identity, loop options, setup, and cancellation.
+ * @param options - persisted identity, optional live parent, loop options, setup, and cancellation.
  * @returns the published handle.
  */
 async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>
@@ -785,7 +785,8 @@ Initiator methods provide same-process causal attribution only. Ambient presence
  * Read the Agent that initiated the inherited asynchronous driver chain.
  * Use this optional form for logging, tracing, metrics, or host attribution
  * that also supports agentless calls. When a parent creates a child, setup
- * reports the causal parent while `agentCtx.agent` identifies the child.
+ * reports the causal parent while the setup callback's Agent parameter
+ * identifies the child.
  * @returns the inherited Agent, or `undefined` outside an initiator boundary
  *   and inside an explicit clearing boundary.
  * @throws when this service instance has been disposed.
@@ -850,7 +851,7 @@ setFactory(factory: AgentFactory): () => void
  * agent): this constructs the agent and its session. Rejects if no factory is
  * registered or creation/setup fails. The resolved {@link AgentHandle} lets
  * the owner tear down exactly this agent.
- * @param options - shared identity, session seed/metadata, and agent options.
+ * @param options - shared identity, optional live parent, session seed/metadata, and agent options.
  * @returns the handle after setup, rollback-covered publication, and loop start complete.
  */
 async create(options: CreateAgentOptions): Promise<AgentHandle>
@@ -859,7 +860,7 @@ async create(options: CreateAgentOptions): Promise<AgentHandle>
  * Load a persisted session and resume an agent on it through the registered
  * factory. Rejects if no factory is registered; the factory rejects if
  * session persistence is not configured or persistence/setup fails.
- * @param options - persisted identity, configuration, and optional setup.
+ * @param options - persisted identity, optional live parent, configuration, and setup.
  * @returns the handle after setup, rollback-covered publication, and loop start complete.
  */
 async resume(options: ResumeAgentOptions): Promise<AgentHandle>
@@ -871,7 +872,8 @@ async resume(options: ResumeAgentOptions): Promise<AgentHandle>
  * (`scopeTarget(agent, agent)`): the subject is the agent in hand, so the
  * emits are scope-filtered regardless of which context invoked `register`
  * (calling through `agent.ctx` scopes EFFECTS; dispatch scoping always
- * requires passing the carrier). Returns the disposer.
+ * requires passing the carrier). The entry is a runtime root; factory-backed
+ * creation uses `options.parentAgent` for child ownership. Returns the disposer.
  * @param agent - the already-constructed agent to record in the store.
  * @returns the EXACT Cordis effect disposer (single-shot; a repeat call
  *   returns undefined without awaiting an in-flight teardown). Exact
@@ -891,7 +893,7 @@ register(agent: Agent): () => void
  * returned detach closure into its pre-installed composite teardown before
  * calling {@link announce}. Ordinary callers use {@link register}.
  * @param agent - the prepared, unpublished agent.
- * @param owner - live agent whose scoped context created this agent, or
+ * @param owner - explicitly supplied live runtime owner, or
  *   undefined for a top-level runtime root. This is runtime ownership, not
  *   the resumed session's durable parent lineage.
  * @returns an idempotent closure that removes this exact entry and emits
@@ -1136,14 +1138,18 @@ Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/s
 
 #### `agent/request` — waterfall
 
-Replace the frozen call configuration. `await next()` yields the config the machine would use (agent options on the first request, the logged header afterwards); return a replacement to switch. Model-visible content must use logged channels; this waterfall cannot mutate messages.
+Replace the frozen call configuration. `await next()` yields the config the machine would use (agent options on the first request, the logged header afterwards); return a replacement to switch. On step admission, this runs after assembly and `step/start`, before the system prompt and accepted user batch are committed. Cancellation here or during subsequent `prepareCall()` resolution commits neither. The prepared call capability governs prompt admission. Model-visible content must use logged channels; this waterfall cannot mutate messages.
 
 ```ts cordis-catalog
 /**
  * Replace the frozen call configuration. `await next()` yields the config
  * the machine would use (agent options on the first request, the logged
- * header afterwards); return a replacement to switch. Model-visible
- * content must use logged channels; this waterfall cannot mutate messages.
+ * header afterwards); return a replacement to switch. On step admission,
+ * this runs after assembly and `step/start`, before the system prompt and
+ * accepted user batch are committed. Cancellation here or during subsequent
+ * `prepareCall()` resolution commits neither. The prepared call capability
+ * governs prompt admission. Model-visible content must use logged channels;
+ * this waterfall cannot mutate messages.
  * @param payload.agent - the agent making the model call.
  * @param payload.turn - the open turn number.
  * @param payload.step - the step whose request this is.

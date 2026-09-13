@@ -65,6 +65,34 @@ describe('ToolCallTree', () => {
     expect(view.getByText('w1')).toBeTruthy()
   })
 
+  it('renders a current-ID leaf under its historical-ID parent', () => {
+    const owners: ToolCallOwnerProps[] = []
+    const leaf = {
+      ...root('unrelated:ptc:7', { name: 'read', argsRaw: '{"path":"a.ts"}' }),
+      parentCallId: 'parent:code:1',
+    }
+    const child = {
+      ...root('parent:code:1', { name: 'run_code', argsRaw: '{"code":"return 1"}' }),
+      parentCallId: 'parent',
+      subCalls: [leaf],
+    }
+    const block = {
+      ...root('parent', { name: 'run_code', argsRaw: '{"code":"return 1"}' }),
+      subCalls: [child],
+    }
+    const view = render(<ToolCallTree {...props(block, leaf.callId, undefined, owners)} />)
+    const nests = view.container.querySelectorAll('[data-subcalls]')
+    expect(nests[0]?.parentElement).toBe(view.container.querySelector('[data-chat-call-id="parent"]'))
+    expect(nests[1]?.parentElement).toBe(view.container.querySelector('[data-chat-call-id="parent:code:1"]'))
+    expect(view.container.querySelector('[data-chat-call-id="unrelated:ptc:7"]')).not.toBeNull()
+    expect(nests).toHaveLength(2)
+    expect(owners.map(owner => [owner.callId, owner.block.parentCallId ?? null])).toEqual([
+      ['parent', null],
+      ['parent:code:1', 'parent'],
+      ['unrelated:ptc:7', 'parent:code:1'],
+    ])
+  })
+
   it('abbreviates a POSIX home path in the generic tool summary', () => {
     const block = root('w1', { name: 'read', argsRaw: '{"path":"/h/docs/a.ts"}' })
     const view = render(<ToolCallTree {...props(block, 'w1', '/h')} />)

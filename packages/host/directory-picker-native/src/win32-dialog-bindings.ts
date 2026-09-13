@@ -55,6 +55,10 @@ const SIGDN_FILESYSPATH = 0x80058000 | 0
  */
 const DPI_AWARENESS_CONTEXTS = [-4, -3, -2]
 const WM_CLOSE = 0x10
+/** `VK_MENU`: the synthesized Alt press's virtual key. */
+const VK_MENU = 0x12
+/** `KEYEVENTF_KEYUP`: the synthesized Alt press's release flag. */
+const KEYEVENTF_KEYUP = 0x2
 const WM_SETICON = 0x80
 const ICON_SMALL = 0
 const ICON_BIG = 1
@@ -110,6 +114,7 @@ export async function loadWin32DialogBindings(iconPath?: string): Promise<Win32D
   const coCreateInstance = ole32.func('__stdcall', 'CoCreateInstance', 'int32', ['void *', 'void *', 'uint32', 'void *', 'void *'])
   const coTaskMemFree = ole32.func('__stdcall', 'CoTaskMemFree', 'void', ['void *'])
   const getCurrentThreadId = kernel32.func('__stdcall', 'GetCurrentThreadId', 'uint32', [])
+  const keybdEvent = user32.func('__stdcall', 'keybd_event', 'void', ['uint8', 'uint8', 'uint32', 'uintptr'])
   const createWindowExW = user32.func('__stdcall', 'CreateWindowExW', 'void *', ['uint32', 'str16', 'str16', 'uint32', 'int32', 'int32', 'int32', 'int32', 'void *', 'void *', 'void *', 'void *'])
   const destroyWindow = user32.func('__stdcall', 'DestroyWindow', 'int', ['void *'])
   const setForegroundWindow = user32.func('__stdcall', 'SetForegroundWindow', 'int', ['void *'])
@@ -155,6 +160,10 @@ export async function loadWin32DialogBindings(iconPath?: string): Promise<Win32D
       coUninitialize()
     },
     currentThreadId: () => getCurrentThreadId() as number,
+    pressAltForForeground: () => {
+      keybdEvent(VK_MENU, 0, 0, 0)
+      keybdEvent(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+    },
     createFolderDialog: (): Win32FolderDialog => {
       // The topmost owner keeps the user-initiated chooser in front; its
       // icons replace the spawned node.exe identity in the taskbar.

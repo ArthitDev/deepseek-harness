@@ -13,7 +13,7 @@ import { ComposerSubmissionPolicy } from '../src/client/input/submission-policy.
 import { en } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
-const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined })) as GlobalStandardProps['useResource']
 
 afterEach(() => {
   cleanup()
@@ -40,6 +40,7 @@ function mount() {
   const policy = new ComposerSubmissionPolicy()
   const setBusyEnter = vi.fn((behavior: 'queue' | 'steer') => { policy.setBusyEnter(behavior) })
   const props: EnterBehaviorRowProps = {
+    usePanelInfo: selector => selector({ activePanelId: null }),
     useSessions: emptySessions(),
     useSessionPendingInteraction: noPendingInteraction(),
     useResource,
@@ -53,10 +54,10 @@ function mount() {
 }
 
 describe('EnterBehaviorRow', () => {
-  it('explains the busy-only scope and shows Queue by default', () => {
+  it('explains the busy-only scope over Enter and Send and shows Queue by default', () => {
     mount()
-    expect(screen.getByText('Enter behavior while busy')).toBeDefined()
-    expect(screen.getByText('Busy only; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
+    expect(screen.getByText('Send behavior while busy')).toBeDefined()
+    expect(screen.getByText('What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
     expect(screen.getByRole('button', { name: /Queue/ }).getAttribute('aria-expanded')).toBe('false')
   })
 

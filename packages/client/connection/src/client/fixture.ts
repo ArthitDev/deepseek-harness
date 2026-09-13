@@ -2,6 +2,7 @@
 
 import {
   createAssistantMessage,
+  createSystemMessage,
   createToolResultMessage,
   createUserMessage,
 } from '@deepseek-ai/dsh-llm/message'
@@ -33,7 +34,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/client'
 // Type-only: the brand constructor is host-side; the fixture casts at its
 // wire-fabrication boundary (the schema layer's one-cast-point posture).
-import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
+import type { CommandDefinitionId, CommandId } from '@deepseek-ai/dsh-commands/brand'
 import type { CommandDescriptor, CommandExecution, CommandResult } from '@deepseek-ai/dsh-commands/types'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
 import type { DirectoryListing as FixtureDirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
@@ -686,6 +687,9 @@ function fixtureSettledStream(
   return stream
 }
 
+/** Rendered system prompt of the fx-alpha history: surface node 0. */
+const FIXTURE_SYSTEM_PROMPT = '你是 DeepSeek Harness 的 fixture 助手。用简洁的中文回答，并在需要时调用工具。'
+
 /** fx-alpha history script: 75 turns (~150+ messages -> 4 pages at PAGE_MESSAGES=50),
  *  mixing reasoning blocks / tool call+result / context. */
 function buildAlphaLog(): SessionEvent[] {
@@ -719,6 +723,13 @@ function buildAlphaLog(): SessionEvent[] {
   })
   for (let turn = 0; turn < 60; turn++) {
     push({ type: 'turn/start', data: { turn } })
+    // The rendered system prompt is surface node 0, ahead of the first user message.
+    if (turn === 0) {
+      push({
+        type: 'system/message', surfaceOp: 'append',
+        data: { turn, step: 0, message: createSystemMessage(FIXTURE_SYSTEM_PROMPT, '@deepseek-ai/dsh-system-prompt') },
+      })
+    }
     const userSeq = push({
       type: 'user/message', surfaceOp: 'append',
       data: userMessage(text(turn === 59 ? USER_MARKDOWN_LITERAL : `问题 ${turn}：fixture 历史消息，用于翻页与渲染验收。`)),
@@ -855,13 +866,13 @@ function buildAlphaLog(): SessionEvent[] {
     push({ type: 'tool/call', data: { turn, step: 0, callId, name: 'run_code', arguments: args } })
     const dispatchPair = (n: number, name: string, dispatchArgs: Record<string, unknown>, resultText: string, isError = false): void => {
       push({
-        type: 'tool/code-dispatch-start',
-        data: { rootCallId: callId, parentCallId: callId, subCallId: `${callId}:code:${n}`, name, arguments: dispatchArgs },
+        type: 'tool/ptc-dispatch-start',
+        data: { rootCallId: callId, parentCallId: callId, subCallId: `${callId}:ptc:${n}`, name, arguments: dispatchArgs },
       })
       push({
-        type: 'tool/code-dispatch',
+        type: 'tool/ptc-dispatch',
         data: {
-          rootCallId: callId, parentCallId: callId, subCallId: `${callId}:code:${n}`, name,
+          rootCallId: callId, parentCallId: callId, subCallId: `${callId}:ptc:${n}`, name,
           arguments: dispatchArgs, isError, content: [{ type: 'text', text: resultText }],
         },
       })
@@ -1255,23 +1266,35 @@ function estimateFixtureContent(blocks: readonly ContentBlock[]): number {
   }, 0)
 }
 
-/** Fixture parallel of token-meter's heuristic context-composition projection. */
+/**
+ * Fixture parallel of token-meter's heuristic context-composition projection.
+ * The system prompt is the system-role surface node; it prices as text plus
+ * role framing with no block overhead and stays out of the message figure.
+ */
 function contextBreakdownOf(log: readonly SessionEvent[]): FixtureContextBreakdownProjection {
   const headerEvent = log.findLast(event => event.type === 'request/header')
   const header = headerEvent === undefined
     ? undefined
     : headerEvent.data.header
+  let systemTokens = 0
   let messageTokens = 0
   for (const seq of foldSurface(log).nodes) {
     const event = log[seq]
     if (event === undefined) continue
     const message = deriveEventMessage(event)
-    if (message !== null) messageTokens += estimateFixtureContent(message.content) + ROLE_OVERHEAD
+    if (message === null) continue
+    if (message.role === 'system') {
+      const characters = message.content.reduce(
+        (total, block) => total + (block.type === 'text' ? block.text.length : JSON.stringify(block).length),
+        0,
+      )
+      systemTokens = Math.ceil(characters / CHARS_PER_TOKEN) + ROLE_OVERHEAD
+      continue
+    }
+    messageTokens += estimateFixtureContent(message.content) + ROLE_OVERHEAD
   }
   return {
-    systemTokens: header?.system === undefined
-      ? 0
-      : Math.ceil(header.system.length / CHARS_PER_TOKEN) + ROLE_OVERHEAD,
+    systemTokens,
     toolsTokens: header?.tools === undefined || header.tools.length === 0
       ? 0
       : Math.ceil(JSON.stringify(header.tools).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD,
@@ -1420,6 +1443,7 @@ function projectionFramesOf(
     })
   }
   if (type === 'request/header'
+    || type === 'system/message'
     || type === 'user/message'
     || type === 'assistant/message'
     || type === 'tool/result') {
@@ -1830,6 +1854,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     { sessionId: sid('fx-gamma'), updatedAt: Date.now() - 120_000, running: false, blank: false, cwd: '/tmp/fixture' },
   ]
   const logs = new Map<SessionId, SessionEvent[]>([[sid('fx-alpha'), buildAlphaLog()]])
+  const goalActivations = new Map<SessionId, 'armed' | 'disarmed'>()
   const modelSelections = new Map<SessionId, ModelSelection>(sessions.map(session => [
     session.sessionId,
     { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
@@ -2191,6 +2216,23 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     return backscanGoal(log) as FxGoalProjection
   }
 
+  /** Update process-local goal activation and publish the forwarded edge. */
+  const setGoalActivation = (id: SessionId, activation: 'armed' | 'disarmed'): void => {
+    const current = backscanGoal(logOf(id))
+    if (current === null) {
+      if (!goalActivations.delete(id)) return
+      emitRemote('goal/activation-changed', [{ sessionId: id }])
+      return
+    }
+    const previous = goalActivations.get(id)
+    goalActivations.set(id, activation)
+    if (previous === activation) return
+    emitRemote('goal/activation-changed', [{
+      sessionId: id,
+      goal: { id: current.goal.id, revision: current.goal.revision, activation },
+    }])
+  }
+
   type FxGoalRef = { id: string; revision: number }
   type FxGoalView = FxGoalProjection['goal'] & {
     roundsStarted: number
@@ -2220,9 +2262,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         value: [
           { name: 'compact', description: 'fixture：压缩当前会话上下文' },
           { name: 'echo', description: 'fixture：回显参数', input: { hint: 'text to echo' } },
-          { name: 'goal', description: 'set or view the goal for a long-running task', input: { hint: '<objective>', attachments: true } },
-          { name: 'permission', description: 'Switch the permission preset (sandbox mode + approval policy)', input: { hint: '<preset>' } },
-          { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', attachments: true } },
+          { definitionId: brandString<CommandDefinitionId>('@deepseek-ai/dsh-command-goal'), name: 'goal', description: 'Set or view the goal for a long-running task', input: { hint: '<objective>', attachments: true } },
+          { definitionId: brandString<CommandDefinitionId>('@deepseek-ai/dsh-permission-presets'), name: 'permission', description: 'Switch the permission preset (sandbox mode + approval policy)', input: { hint: '<preset>' } },
+          { definitionId: brandString<CommandDefinitionId>('@deepseek-ai/dsh-plan-mode'), name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', attachments: true } },
         ],
       }
     },
@@ -2293,6 +2335,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
             goal: { id: `fx-goal-${logOf(id).length}`, revision: 1, objective, phase: 'active', maxGoalRounds: 256 },
             roundsStarted: 0, createdAt: Date.now(), updatedAt: Date.now(),
           })
+          setGoalActivation(id, 'armed')
           text = `Goal created: ${created.goal.objective}`
         }
         const result: CommandResult = { kind: 'success', text }
@@ -2325,12 +2368,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     },
   }
 
-  const goalView = (projection: FxGoalProjection): FxGoalView => ({
+  const goalView = (id: SessionId, projection: FxGoalProjection): FxGoalView => ({
     ...projection.goal,
     roundsStarted: projection.roundsStarted,
     createdAt: projection.createdAt,
     updatedAt: projection.updatedAt,
-    activation: projection.goal.phase === 'active' ? 'armed' : 'disarmed',
+    activation: goalActivations.get(id) ?? (projection.goal.phase === 'active' ? 'armed' : 'disarmed'),
   })
 
   /** Canonical fixture implementation of the generated Goal Remote contract. */
@@ -2580,6 +2623,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   }
 
   const goalRemotes = {
+    get(id: SessionId): RpcResult<FxGoalView | undefined> {
+      const missing = requireGoalSession(id)
+      if (missing !== undefined) return missing
+      const current = backscanGoal(logOf(id))
+      return { ok: true, value: current === null ? undefined : goalView(id, current) }
+    },
     create(id: SessionId, request: { objective: string; maxGoalRounds?: number }): RpcResult<{ ref: FxGoalRef }> {
       const missing = requireGoalSession(id)
       if (missing !== undefined) return missing
@@ -2599,6 +2648,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         },
         roundsStarted: 0, createdAt: now, updatedAt: now,
       })
+      setGoalActivation(id, 'armed')
       return { ok: true, value: { ref: { id: projection.goal.id, revision: projection.goal.revision } } }
     },
     edit(id: SessionId, ref: FxGoalRef, request: { objective?: string; maxGoalRounds?: number }): RpcResult<FxGoalView> {
@@ -2638,6 +2688,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       appendGoalChange(id, {
         kind: 'goal/change', version: 1, operation: 'clear', cleared: tombstone, clearedAt: Date.now(),
       })
+      setGoalActivation(id, 'disarmed')
       return { ok: true, value: tombstone }
     },
   }
@@ -2666,19 +2717,29 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     if (goal === undefined) {
       return goalFailure(`invalid goal transition from "${current.goal.phase}"`)
     }
+    const currentActivation = goalActivations.get(id)
+      ?? (current.goal.phase === 'active' ? 'armed' : 'disarmed')
+    const activation = goal.phase === 'active'
+      ? current.goal.phase === 'active' ? currentActivation : 'armed'
+      : 'disarmed'
     const projection = appendGoalChange(id, {
       kind: 'goal/change', version: 1,
       operation: goal.phase === current.goal.phase ? 'edit' : goal.phase === 'paused' ? 'pause' : goal.phase === 'active' ? 'resume' : 'complete',
       goal, roundsStarted: current.roundsStarted, createdAt: current.createdAt, updatedAt: Date.now(),
     })
-    return { ok: true, value: goalView(projection) }
+    setGoalActivation(id, activation)
+    return { ok: true, value: goalView(id, projection) }
   }
 
   /** Canonical fixture implementation of the generated AgentPresets Remote contract. */
   const presetRemotes = {
     // Both trusts appear, because a surface must present a locally authored
     // preset differently from one the deployment vetted.
-    list(): RpcResult<{ presets: { id: string; trust: 'system' | 'user'; isDefault: boolean }[]; authorable: boolean }> {
+    list(): RpcResult<{
+      presets: { id: string; trust: 'system' | 'user'; isDefault: boolean }[]
+      authorable: boolean
+      modeSelectionEnabled: boolean
+    }> {
       return {
         ok: true,
         value: {
@@ -2688,6 +2749,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
             isDefault: id === fixtureDefaultPreset,
           })),
           authorable: true,
+          modeSelectionEnabled: true,
         },
       }
     },
@@ -2788,6 +2850,19 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       const log = logOf(sid(id))
       const messageSeqs = log.filter(event => event.type === 'user/message').map(event => event.seq)
       append(sid(id), { type: 'session/title', data: { title, messageSeqs, source: { kind: 'provider', provider: 'fixture' } } })
+    },
+    /** Disarm the single active goal without a durable phase change. */
+    disarmOnlyGoal(): void {
+      const active = [...logs.entries()].filter(([, log]) => {
+        const current = backscanGoal(log)
+        return current?.goal.phase === 'active'
+      })
+      if (active.length !== 1) {
+        throw new Error(`fixture: expected one active goal, found ${String(active.length)}`)
+      }
+      const [session] = active
+      if (session === undefined) return
+      setGoalActivation(session[0], 'disarmed')
     },
     /** Start an externally paced reasoning stream for the opt-in browser stress lane. */
     startReasoningChunkStorm(
@@ -3776,6 +3851,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         case 'directoryPicker/list': return Promise.resolve(directoryPickerRemotes.list(args.path))
         case 'directoryPicker/createDirectory':
           return Promise.resolve(directoryPickerRemotes.createDirectory(args.path ?? '', args.name ?? ''))
+        case 'goals/get': return Promise.resolve(goalRemotes.get(sessionId))
         case 'goals/create': return Promise.resolve(goalRemotes.create(sessionId, {
           objective: (request as { objective?: string } | undefined)?.objective as string,
           ...(request as { maxGoalRounds?: number } | undefined)?.maxGoalRounds === undefined

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-With `dsh-tool-web`, the model can search the web and fetch pages through the `web_search` and `web_fetch` tools, backed by the harness web service (`ctx.web`). Choose it when the model should search the web or fetch pages; the two tools register independently, so a product disables either via config. Every successful result labels provider-controlled text as external and untrusted, and HTML conversion removes active or hidden content. Tools stay visible even when their selected provider is missing or unavailable: execution then fails with a structured error the model can read. Neither tool exposes a model-facing timeout; per-tool budgets are deployment config enforced by the timeout policy.
+`dsh-tool-web` lets models call `web_search` and `web_fetch` through `ctx.web`. Deployments can enable either tool independently. Successful results mark provider-controlled text as external and untrusted, while HTML conversion removes active or hidden content. A missing provider produces a structured model-readable error without hiding the tools. Deployment timeout policy enforces each tool's budget.
 
 ## Table of Contents
 

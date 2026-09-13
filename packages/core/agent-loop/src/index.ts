@@ -534,6 +534,7 @@ export class AgentLoop extends Service implements AgentFactory {
     session: Session,
     callerSignal?: AbortSignal,
     handle?: SessionHandle,
+    parentAgent?: Agent,
   ): PreparedAgent {
     assertAgentOptions(options)
     ownerCtx.fiber.assertActive()
@@ -663,7 +664,7 @@ export class AgentLoop extends Service implements AgentFactory {
           detachSession = agent.ctx.sessions.enter(session)
           // The mounted backend routes announced live events into the active
           // write handle by session id; the loop only owns the handle itself.
-          detachAgent = loopCtx.agents.enter(agent, ownerCtx.agent)
+          detachAgent = loopCtx.agents.enter(agent, parentAgent)
           agent.ctx.sessions.announce(session)
           assertLive()
           loopCtx.agents.announce(agent)
@@ -747,6 +748,7 @@ export class AgentLoop extends Service implements AgentFactory {
    */
   private async appendUnstoredSuffix(stored: StoredSession | undefined, session: Session): Promise<void> {
     if (stored === undefined) return
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     const suffix = session.snapshotEvents(SessionLogOffset(stored.storedCount))
     if (suffix.length > 0) await stored.handle.append(suffix)
     // Advance by what was stored, not to `session.seq`: an event appended
@@ -757,7 +759,7 @@ export class AgentLoop extends Service implements AgentFactory {
   /**
    * Create an owned agent on a caller-supplied session id.
    * @param ownerCtx - caller context that structurally owns the lifecycle.
-   * @param options - identities, session seed/metadata, loop options, setup, and cancellation.
+   * @param options - identities, optional live parent, session seed/metadata, loop options, setup, and cancellation.
    * @returns the published handle.
    */
   async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle> {
@@ -792,6 +794,7 @@ export class AgentLoop extends Service implements AgentFactory {
         options.signal,
         'startup',
         stored,
+        options.parentAgent,
       )
     })()
     this.ownership.trackWrapper(published)
@@ -808,18 +811,19 @@ export class AgentLoop extends Service implements AgentFactory {
     signal: AbortSignal | undefined,
     source: SessionStartSource,
     stored?: StoredSession,
+    parentAgent?: Agent,
   ): Promise<AgentHandle> {
     using ownedPreparation = preparation
     const session = ownedPreparation.session
     let prepared: PreparedAgent
     try {
-      prepared = this.prepare(ownerCtx, id, agentOptions, session, signal, stored?.handle)
+      prepared = this.prepare(ownerCtx, id, agentOptions, session, signal, stored?.handle, parentAgent)
     } catch (error: unknown) {
       await stored?.handle.close().catch(() => {})
       throw error
     }
     try {
-      const setupCommit = await raceAbort(setup?.(prepared.agent.ctx), prepared.signal, id)
+      const setupCommit = await raceAbort(setup?.(prepared.agent.ctx, prepared.agent), prepared.signal, id)
       setupCommit?.commit()
       await this.appendUnstoredSuffix(stored, session)
       return prepared.publish(source)
@@ -834,7 +838,7 @@ export class AgentLoop extends Service implements AgentFactory {
   /**
    * Resume an owned agent from the configured persistence service.
    * @param ownerCtx - caller context that owns load, setup, and the live lifecycle.
-   * @param options - persisted identity, loop options, setup, and cancellation.
+   * @param options - persisted identity, optional live parent, loop options, setup, and cancellation.
    * @returns the published handle.
    */
   async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle> {
@@ -911,6 +915,7 @@ export class AgentLoop extends Service implements AgentFactory {
           options.signal,
           'resume',
           owned,
+          options.parentAgent,
         )
       } finally {
         preparation?.[Symbol.dispose]()

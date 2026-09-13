@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
 import { ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import {
@@ -28,6 +29,12 @@ const MODE = webSnapshotMode()
 const PROMPT = "Use the bash tool to run exactly: printf 'MINIMAL_BASH_CARD_OK\\n'. Then reply exactly MINIMAL_PRESET_REQUEST_OK and stop."
 const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
 const BASH_CARD_COMMAND = "printf 'MINIMAL_BASH_CARD_OK\\n'"
+
+/** Rendered text of the system prompt surface node, or undefined when the surface carries none. */
+function systemPromptText(session: Session): string | undefined {
+  const message = session.deriveMessages().find(candidate => candidate.role === 'system')
+  return message?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+}
 
 function rewriteWindowsShellCalls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(rewriteWindowsShellCalls)
@@ -119,6 +126,8 @@ describe('minimal agent preset', () => {
   it('sends the exact RL prompt and schemas, then executes the persistent shell and editor', async () => {
     const requestHeader = agentHandle.agent.session.requestHeader()
     if (requestHeader === undefined) throw new Error('the minimal agent issued no model request')
+    const systemPrompt = systemPromptText(agentHandle.agent.session)
+    if (systemPrompt === undefined) throw new Error('the minimal agent issued no system prompt')
     expect(agentHandle.agent.session.snapshotEvents().some(event => event.type === 'user/message'
       && event.data.source.kind === 'plugin'
       && event.data.source.plugin === '@deepseek-ai/dsh-system-prompt')).toBe(false)
@@ -175,7 +184,7 @@ describe('minimal agent preset', () => {
     expect(bash.isError).toBe(false)
     const shellText = text(bash).split('\n').map(line => line.trim()).filter(Boolean).at(-1) ?? ''
     expect({
-      prompt: requestHeader.system,
+      prompt: systemPrompt,
       tools: requestHeader.tools?.map(tool => process.platform === 'win32' && tool.name === 'pwsh' ? 'bash' : tool.name),
       goalCommand: scaffold.ctx.commands.find(agentHandle.agent, 'goal') !== undefined,
       bash: shellText,

@@ -45,7 +45,6 @@ describe('AgentRegistry', () => {
     await agentFiber
     await ctx.plugin(TypertRegistry)
     const agent = stubAgent('remote-agent')
-    Object.defineProperty(agent, 'ctx', { value: agent.ctx.extend({ agent }) })
     const disposeAgent = ctx.agents.register(agent)
 
     const lookup = ctx.typert.lookups.get('agent')
@@ -57,8 +56,6 @@ describe('AgentRegistry', () => {
     })
     expect(lookup?.resolve(agent.id)).toBe(agent)
     const context = ctx.typert.contexts.getHost('agent')
-    expect(context?.identity(agent.ctx)).toBe(agent.id)
-    expect(context?.identity(ctx)).toBeUndefined()
     expect(context?.resolve(agent.id)).toBe(agent.ctx)
 
     disposeAgent()
@@ -289,6 +286,22 @@ describe('AgentRegistry factory seam', () => {
     }, { inject: ['agents'] }))
     expect(calls.create[0]?.ownerCtx.fiber).toBe(callerFiber)
     expect(calls.resume[0]?.ownerCtx.fiber).toBe(callerFiber)
+    expect(calls.create[0]?.options.parentAgent).toBeUndefined()
+    expect(calls.resume[0]?.options.parentAgent).toBeUndefined()
+  })
+
+  it('keeps the runtime parent in options separately from the caller context', async () => {
+    const ctx = new Context()
+    await ctx.plugin(AgentRegistry)
+    const { factory, calls } = stubFactory()
+    ctx.agents.setFactory(factory)
+    const parent = stubAgent('parent')
+    const unregister = ctx.agents.register(parent)
+
+    await ctx.agents.create({ sessionId: SessionId('child'), parentAgent: parent })
+
+    expect(calls.create[0]?.options.parentAgent).toBe(parent)
+    unregister()
   })
 
   it('rejects a second factory and clears the slot with its owner (HMR)', async () => {

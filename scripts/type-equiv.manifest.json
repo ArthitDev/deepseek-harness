@@ -209,6 +209,11 @@
     },
     {
       "doc": "docs/subsystems/goal.md",
+      "symbol": "GoalActivationChanged",
+      "source": "packages/goal/goal/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/goal.md",
       "symbol": "GoalSnapshotChangeMeta",
       "source": "packages/goal/goal/src/domain.ts"
     },
@@ -2065,6 +2070,36 @@
       "doc": "docs/subsystems/feedback.md",
       "symbol": "MessageFeedbackDeleteResult",
       "source": "packages/feedback/message-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/feedback.md",
+      "symbol": "FeedbackCategory",
+      "source": "packages/feedback/command-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/feedback.md",
+      "symbol": "FeedbackRecord",
+      "source": "packages/feedback/command-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/feedback.md",
+      "symbol": "SessionFeedbackRecordRequest",
+      "source": "packages/feedback/command-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/feedback.md",
+      "symbol": "SessionFeedbackRecordValue",
+      "source": "packages/feedback/command-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/feedback.md",
+      "symbol": "SessionFeedbackSessionNotFound",
+      "source": "packages/feedback/command-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/feedback.md",
+      "symbol": "SessionFeedbackRecordResult",
+      "source": "packages/feedback/command-feedback/src/types.ts"
     },
     {
       "doc": "packages/client/ui-conversation/README.md",

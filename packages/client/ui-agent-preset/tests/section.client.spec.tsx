@@ -22,6 +22,8 @@ const READY: AgentPresetSectionState = {
   error: null,
   authorable: true,
   hasDocument: true,
+  showPicker: true,
+  policySaving: false,
   rows: [
     { id: 'standard', trust: 'system', isDefault: true, name: '标准模式', description: '完整的编码 agent。' },
     { id: 'mine', trust: 'user', isDefault: false },
@@ -76,6 +78,7 @@ function renderSection(
     confirmDelete: vi.fn(),
     remove: vi.fn(() => Promise.resolve()),
     makeDefault: vi.fn(() => Promise.resolve()),
+    setPickerVisible: vi.fn(() => Promise.resolve()),
     bindModel: vi.fn(() => Promise.resolve()),
   }
   const props = {
