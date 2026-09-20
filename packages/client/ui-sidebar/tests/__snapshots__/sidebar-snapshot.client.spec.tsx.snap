@@ -25,11 +25,10 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
             data-slot="sidebar.brand.mark"
             style="display: contents;"
           >
-            <img
-              alt=""
-              height="24"
-              src="/new-logo.png"
-              width="24"
+            <span
+              aria-hidden="true"
+              class="localBrandLogo"
+              data-dsh-agent-logo=""
             />
           </div>
         </span>
@@ -118,11 +117,10 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
               data-slot="sidebar.brand.mark"
               style="display: contents;"
             >
-              <img
-                alt=""
-                height="24"
-                src="/new-logo.png"
-                width="24"
+              <span
+                aria-hidden="true"
+                class="localBrandLogo"
+                data-dsh-agent-logo=""
               />
             </div>
           </span>
@@ -246,11 +244,10 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
               data-slot="sidebar.brand.mark"
               style="display: contents;"
             >
-              <img
-                alt=""
-                height="24"
-                src="/new-logo.png"
-                width="24"
+              <span
+                aria-hidden="true"
+                class="localBrandLogo"
+                data-dsh-agent-logo=""
               />
             </div>
           </span>

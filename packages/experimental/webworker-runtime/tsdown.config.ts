@@ -76,9 +76,9 @@ export default defineConfig([{
   fixedExtension: false,
   dts: false,
   clean: false,
-  noExternal: [/.*/],
+  deps: { alwaysBundle: [/.*/], onlyBundle: false },
   plugins: [moduleProxyPlugin, shellParserOnlyPlugin],
-  outputOptions: { inlineDynamicImports: true },
+  codeSplitting: false,
 }, {
   // Page half: an ordinary browser ES module the deployment's page imports. It
   // is not a `dsh.client` graph row — it installs the module loader the graph is

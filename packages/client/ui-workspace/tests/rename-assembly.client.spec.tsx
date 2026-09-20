@@ -17,7 +17,9 @@ import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import { RemoteError, SlotTestRuntime, TestRemote, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
+import {
+  RemoteError, SlotTestRuntime, TestRemote, stubSettingsScope, usePinnedBrowserLanguages,
+} from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 
@@ -34,12 +36,19 @@ beforeEach(() => { localStorage.clear() })
 async function createRuntime(): Promise<SlotTestRuntime> {
   const runtime = await SlotTestRuntime.create()
   runtime.ctx.provide('layout', { selectPanel: vi.fn() })
+  runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}) } as never)
+  runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   runtime.releaseWorkspaceSource()
   // The rename flow never picks a directory; the namespace only has to be there
   // for ui-workspace's inject to settle.
   const directoryPicker = {}
   const remoteMachines = { list: async () => ({ ok: true as const, value: { machines: [] } }) }
-  new TestRemote(runtime.ctx, { directoryPicker, remoteMachines })
+  new TestRemote(runtime.ctx, {
+    directoryPicker,
+    remoteMachines,
+    pentestRuns: { list: vi.fn(), snapshot: vi.fn(), control: vi.fn(), controlTask: vi.fn(), replaceScope: vi.fn() },
+    pentestLoop: { create: vi.fn(), start: vi.fn(), stop: vi.fn(), running: vi.fn() },
+  })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

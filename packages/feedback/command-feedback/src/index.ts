@@ -11,12 +11,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { CommandDefinitionId } from '@deepseek-ai/dsh-commands/brand'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
-import type { Session } from '@deepseek-ai/dsh-session'
 import { getOrCreateAnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   FeedbackCategory,
-  FeedbackRecord,
   SessionFeedbackRecordRequest,
   SessionFeedbackRecordResult,
 } from './types.ts'
@@ -40,27 +38,14 @@ export const FEEDBACK_CATEGORIES = [
 export const name = 'command-feedback'
 export const inject = ['commands']
 
+import { recordFeedback } from './record.ts'
+
 const USAGE = 'Usage: /feedback <text>'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionFeedback: SessionFeedbackService
   }
-}
-
-/**
- * Record feedback independently of any UI trigger. Surrounding whitespace is
- * discarded and a blank text is recorded as absent; an entry with neither
- * text nor category is still recorded.
- * @param session - session the feedback describes.
- * @param entry - human-authored remark and its category.
- */
-export function recordFeedback(session: Session, entry: FeedbackRecord): void {
-  const text = entry.text?.trim() ?? ''
-  session.append('feedback/record', {
-    ...(text.length === 0 ? {} : { text }),
-    ...(entry.category === undefined ? {} : { category: entry.category }),
-  })
 }
 
 /**

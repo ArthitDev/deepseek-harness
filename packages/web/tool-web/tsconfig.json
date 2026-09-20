@@ -28,6 +28,9 @@
       "path": "../../session/session-projection"
     },
     {
+      "path": "../../settings/settings"
+    },
+    {
       "path": "../../interaction/commands"
     },
     {

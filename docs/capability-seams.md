@@ -226,6 +226,13 @@ flowchart LR
   pkg_cordis_host_runner["cordis-host-runner"]
   svc_dynamicCordisRunner["ctx.dynamicCordisRunner<br/>Dynamic Cordis package host runner"]
   svc_cordisInspect["ctx.cordisInspect<br/>Dynamic Cordis inspect registry"]
+  pkg_pentest_run["pentest-run"]
+  svc_pentestRuns["ctx.pentestRuns<br/>Durable penetration-test run state"]
+  pkg_pentest_executor["pentest-executor"]
+  svc_pentestRunController["ctx.pentestRunController<br/>Penetration-test run Remote controller"]
+  svc_pentestModePolicy["ctx.pentestModePolicy<br/>Team-mode execution policy"]
+  svc_pentestLoop["ctx.pentestLoop<br/>Penetration-test control loop"]
+  svc_webSearchPolicy["ctx.webSearchPolicy<br/>Global web-search policy"]
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
   pkg_agent_loop --> svc_agentLoop
@@ -283,6 +290,10 @@ flowchart LR
   pkg_lsp --> svc_lsp
   pkg_lsp_stdio --> svc_lsp
   pkg_message_feedback --> svc_messageFeedback
+  pkg_pentest_executor --> svc_pentestLoop
+  pkg_pentest_executor --> svc_pentestModePolicy
+  pkg_pentest_run --> svc_pentestRunController
+  pkg_pentest_run --> svc_pentestRuns
   pkg_permission_presets --> svc_permissionPresets
   pkg_plan_mode --> svc_planMode
   pkg_plugin_package_inventory_deepseek --> svc_deepseekLlmApiExtensions
@@ -333,6 +344,7 @@ flowchart LR
   pkg_terminal_bash --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
+  pkg_tool_web --> svc_webSearchPolicy
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
@@ -389,6 +401,7 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_pentestRuns --> pkg_pentest_executor
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -550,5 +563,10 @@ flowchart LR
 | `ctx.lsp` | `seam` | [`lsp`](../packages/lsp/lsp) | [`lsp-stdio`](../packages/lsp/lsp-stdio) | [`tool-lsp`](../packages/lsp/tool-lsp) | - | Provider registration and selection plus normalized query execution over exactly four operations; the seam offers no protocol escape hatch, so a backend translates into the normalized request and result. |
 | `ctx.dynamicCordisRunner` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | Owns the in-memory definition registry, the vm sandbox for host halves, and the request-run round trip; browser pages reach the same service over the wire through its remote namespace. |
 | `ctx.cordisInspect` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | Registers host inspect providers, mirrors the client provider manifest, and routes client queries through the dynamic Cordis transport. |
+| `ctx.pentestRuns` | `core` | [`pentest-run`](../packages/pentest/pentest-run) | - | [`pentest-executor`](../packages/pentest/pentest-executor) | - | Owns canonical runs, task leases, episodes, evidence, findings, attack-graph state, and restart recovery in a serialized storage domain. |
+| `ctx.pentestRunController` | `core` | [`pentest-run`](../packages/pentest/pentest-run) | - | - | - | Projects canonical run snapshots and operator mutations onto the generated pentestRuns Remote namespace. |
+| `ctx.pentestModePolicy` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | Owns the persisted Red, Blue, or Black Team mode and contributes its mode-specific operating prompt to ordinary Sessions. |
+| `ctx.pentestLoop` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | Owns at most one host-process control loop per run while durable progress remains in the pentestRuns service across restarts. |
+| `ctx.webSearchPolicy` | `core` | [`tool-web`](../packages/web/tool-web) | - | - | - | Owns the persisted Always-use-web-search setting read by preset-scoped Web tools without forcing search in the default mode. |
 
 Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.

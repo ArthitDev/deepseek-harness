@@ -390,10 +390,20 @@ describe('web e2e: seeded history renders through cold resume', () => {
         scrolls: element.scrollHeight > element.clientHeight,
       }
     })
+    const palette = await page.evaluate(() => {
+      const probe = document.createElement('span')
+      probe.style.backgroundColor = 'var(--dsw-alias-markdown-code-block)'
+      probe.style.color = 'var(--dsw-alias-label-tertiary)'
+      document.body.append(probe)
+      const computed = getComputedStyle(probe)
+      const result = { backgroundColor: computed.backgroundColor, color: computed.color }
+      probe.remove()
+      return result
+    })
     expect(style).toEqual({
-      backgroundColor: 'rgb(249, 250, 251)',
+      backgroundColor: palette.backgroundColor,
       borderRadius: '8px',
-      color: 'rgb(129, 133, 140)',
+      color: palette.color,
       fontSize: '11px',
       lineHeight: '16px',
       padding: ['10px', '16px', '12px', '12px'],

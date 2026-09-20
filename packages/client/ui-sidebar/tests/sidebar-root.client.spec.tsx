@@ -121,7 +121,7 @@ describe('SidebarRoot shell', () => {
 
     expect(screen.getByText('Shield Break Agent')).toBeTruthy()
     expect(screen.getByText('1.2.3-rc.4-0123456-dirty')).toBeTruthy()
-    expect(container.querySelector('img[src="/new-logo.png"]')).not.toBeNull()
+    expect(container.querySelector('[data-dsh-agent-logo]')).not.toBeNull()
   })
 
   it.each([

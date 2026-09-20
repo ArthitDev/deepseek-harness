@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { c } from 'tar'
 import { expect, it } from 'vitest'
@@ -13,6 +13,7 @@ import { runtimeFixture, writePackage } from './runtime-fixture.ts'
 
 it('installs a real pnpm graph, then executes approved scripts with the shared host instance', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'desktop-real-pnpm-')))
+  const originalPath = process.env.PATH
   const server = createServer()
   const archives = new Map<string, Buffer>()
   try {
@@ -46,6 +47,7 @@ it('installs a real pnpm graph, then executes approved scripts with the shared h
     const pnpm = join(root, 'pnpm.mjs')
     const realPnpm = join(import.meta.dirname, '../node_modules/pnpm/bin/pnpm.mjs')
     writeFileSync(pnpm, `process.argv = process.argv.map(arg => arg === '--config.registry=https://registry.npmjs.org/' ? ${JSON.stringify(`--config.registry=${origin}`)} : arg); await import(${JSON.stringify(pathToFileURL(realPnpm).href)})`)
+    if (process.platform === 'win32') process.env.PATH = `${dirname(process.execPath)}${delimiter}`.repeat(500) + (originalPath ?? '')
     const manager = new DesktopProjectManager(resolveDesktopPaths(join(root, '.dsh')), { node: process.execPath, pnpm, dsh })
     const hooks: DesktopProjectHooks = { beforeChange: async () => {}, afterChange: async () => {} }
     await manager.applyRelease()
@@ -60,6 +62,8 @@ it('installs a real pnpm graph, then executes approved scripts with the shared h
     await manager.mutate({ type: 'plugin-remove', name: 'fixture-plugin' }, hooks)
     expect(manager.listPlugins()).toEqual([])
   } finally {
+    if (originalPath === undefined) delete process.env.PATH
+    else process.env.PATH = originalPath
     server.closeAllConnections()
     if (server.listening) await new Promise<void>((resolve, reject) => {
       server.close((error) => {

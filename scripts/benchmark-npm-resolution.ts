@@ -4,7 +4,7 @@ import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_pr
 import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
 
@@ -269,8 +269,10 @@ function close(server: Server): Promise<void> {
   })
 }
 
-function npmExecutable(): string {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm'
+function npmInvocation(): { command: string; args: readonly string[] } {
+  return process.platform === 'win32'
+    ? { command: process.execPath, args: [join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')] }
+    : { command: 'npm', args: [] }
 }
 
 function delay(ms: number): Promise<void> {
@@ -302,7 +304,7 @@ function signalProcessTree(child: ChildProcess, signal: 'SIGTERM' | 'SIGKILL'): 
 /**
  * Run one command with bounded process-tree termination after its deadline.
  * @param command - Executable path or name.
- * @param args - Arguments passed without shell interpolation on POSIX.
+ * @param args - Arguments passed without shell interpolation.
  * @param options - Working directory, environment, timeout, and termination grace.
  * @returns Exit facts, captured output, duration, and whether timeout handling began.
  */
@@ -321,7 +323,6 @@ export async function runCommandWithTimeout(
     cwd: options.cwd,
     detached: process.platform !== 'win32',
     env: options.env,
-    shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''
@@ -383,7 +384,9 @@ async function runNpm(
   writeFileSync(globalNpmrc, '')
   const inheritedEnvironment = Object.fromEntries(Object.entries(process.env)
     .filter(([name]) => !name.toLowerCase().startsWith('npm_config_')))
-  const result = await runCommandWithTimeout(npmExecutable(), [
+  const npm = npmInvocation()
+  const result = await runCommandWithTimeout(npm.command, [
+    ...npm.args,
     'install',
     '--package-lock-only',
     '--ignore-scripts',
@@ -515,7 +518,8 @@ async function main(): Promise<void> {
   const targetVersions = index.get(TARGET_PACKAGE)
   if (targetVersions === undefined) throw new Error(`local registry contains no ${TARGET_PACKAGE}`)
   const targetVersion = latestVersion(targetVersions)
-  const npmVersion = execFileSync(npmExecutable(), ['--version'], { encoding: 'utf8' }).trim()
+  const npm = npmInvocation()
+  const npmVersion = execFileSync(npm.command, [...npm.args, '--version'], { encoding: 'utf8' }).trim()
   console.log(
     `benchmark-npm-resolution: npm ${npmVersion}, ${options.ref === undefined ? 'working tree' : options.ref}, `
     + `${String(index.size)} package name(s), setup ${(performance.now() - started).toFixed(0)} ms.`,

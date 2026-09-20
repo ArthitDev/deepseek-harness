@@ -3,16 +3,16 @@
     - button "workspace" [disabled]
   - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - group "Command input": /goal Keep the composer context panels aligned
 - 'button "goal Goal created Status: active Objective: Keep the composer context panels aligned Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"':
   - img
@@ -44,14 +44,15 @@
   - img
 - button "2 queued messages"
 - textbox "Cmd/Ctrl+Enter steers all queued messages"
-- button "Commands":
-  - img
-- button "Add attachment":
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- 'button "Agent mode: Red Team"':
   - img
-  - text: Web Search
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash

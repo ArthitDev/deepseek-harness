@@ -113,6 +113,8 @@ function installFakeLefthook(root: string): void {
   const binDirectory = join(root, 'node_modules/.bin')
   mkdirSync(binDirectory, { recursive: true })
   writeFileSync(join(binDirectory, 'fake-lefthook.mjs'), fakeLefthookSource())
+  write(join(root, 'node_modules/lefthook/package.json'), '{"type":"module"}\n')
+  write(join(root, 'node_modules/lefthook/bin/index.js'), fakeLefthookSource())
   if (process.platform === 'win32') {
     writeFileSync(
       join(binDirectory, 'lefthook.cmd'),

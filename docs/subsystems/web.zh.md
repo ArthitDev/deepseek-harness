@@ -203,4 +203,20 @@ async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchRes
 ```
 
 Source: [`packages/web/web/src/index.ts`](../../packages/web/web/src/index.ts)
+
+<a id="ctxwebsearchpolicy--websearchpolicyconfig"></a>
+
+### `ctx.webSearchPolicy` — `WebSearchPolicyConfig`
+
+Own the global setting read by every preset-scoped tool-web instance.
+
+```ts cordis-catalog
+/**
+ * Read the setting at request time so changes apply without a restart.
+ * @returns the current global web-search policy.
+ */
+current(): WebSearchPolicySettings
+```
+
+Source: [`packages/web/tool-web/src/settings.ts`](../../packages/web/tool-web/src/settings.ts)
 <!-- END GENERATED cordis-surface -->

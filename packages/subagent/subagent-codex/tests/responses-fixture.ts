@@ -30,6 +30,12 @@ export type ResponsesBehavior =
       readonly arguments: Record<string, unknown>
     }[]
   }
+  | {
+    readonly kind: 'customToolCall'
+    readonly name: string
+    readonly input: string
+    readonly preamble?: string
+  }
   | { readonly kind: 'hold' }
 
 /** Running package-private Responses fixture. */
@@ -40,12 +46,13 @@ export interface ResponsesFixture {
   close(): Promise<void>
 }
 
-function responseObject(text: string): Record<string, unknown> {
+function responseObject(text: string, phase?: 'commentary'): Record<string, unknown> {
   const message = {
     id: 'msg_fixture',
     type: 'message',
     status: 'completed',
     role: 'assistant',
+    ...phase === undefined ? {} : { phase },
     content: [{
       type: 'output_text',
       annotations: [],
@@ -98,8 +105,8 @@ function responseObject(text: string): Record<string, unknown> {
  * @param text - exact assistant answer.
  * @returns ordered response lifecycle events.
  */
-export function completeResponsesEvents(text: string): Record<string, unknown>[] {
-  const completed = responseObject(text)
+export function completeResponsesEvents(text: string, phase?: 'commentary'): Record<string, unknown>[] {
+  const completed = responseObject(text, phase)
   const message = (completed.output as Record<string, unknown>[])[0]!
   const part = (message.content as Record<string, unknown>[])[0]!
   return [
@@ -206,6 +213,52 @@ function functionCallEvents(
   ]
 }
 
+function customToolCallEvents(
+  name: string,
+  input: string,
+  preamble?: string,
+): Record<string, unknown>[] {
+  const message = preamble === undefined
+    ? undefined
+    : (responseObject(preamble, 'commentary').output as Record<string, unknown>[])[0]
+  const outputIndex = message === undefined ? 0 : 1
+  const item = {
+    id: 'ctc_fixture',
+    type: 'custom_tool_call',
+    status: 'completed',
+    name,
+    input,
+    call_id: 'call_fixture',
+  }
+  const completed = {
+    ...responseObject(''),
+    output: [...message === undefined ? [] : [message], item],
+  }
+  return [
+    { type: 'response.created', response: { ...completed, status: 'in_progress', output: [] } },
+    ...preamble === undefined ? [] : completeResponsesEvents(preamble, 'commentary').slice(1, -1),
+    {
+      type: 'response.output_item.added',
+      output_index: outputIndex,
+      item: { ...item, status: 'in_progress', input: '' },
+    },
+    {
+      type: 'response.custom_tool_call_input.delta',
+      item_id: item.id,
+      output_index: outputIndex,
+      delta: input,
+    },
+    {
+      type: 'response.custom_tool_call_input.done',
+      item_id: item.id,
+      output_index: outputIndex,
+      input,
+    },
+    { type: 'response.output_item.done', output_index: outputIndex, item },
+    { type: 'response.completed', response: completed },
+  ]
+}
+
 function readRequest(request: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = ''
@@ -291,6 +344,8 @@ export async function startResponsesFixture(
       let events: Record<string, unknown>[]
       if (behavior.kind === 'complete') {
         events = completeResponsesEvents(behavior.text)
+      } else if (behavior.kind === 'customToolCall') {
+        events = customToolCallEvents(behavior.name, behavior.input, behavior.preamble)
       } else {
         const call = behavior.kind === 'functionCall'
           ? behavior

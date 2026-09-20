@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-用侧边栏浏览 Workspace 及其 Session、重排它们并新建会话；在 Session Intent 主视觉区用选择器为新会话选择 Workspace。打开的 Workspace 默认显示五条非空白 Session，并在首条提示词落地前把当前选中的空白**新会话**作为一条临时额外行。**展开其余**会显示隐藏条目；关闭再打开 Workspace 会恢复该折叠投影。
+用侧边栏浏览 Workspace 及其 Session、重排它们并新建会话；在 Session Intent 主视觉区先选择本地 Host 或已保存的远程计算机，再从该计算机选择用于新会话的 Workspace。本地计算机在可用时显示 Host 主机名。打开的 Workspace 默认显示五条非空白 Session，并在首条提示词落地前把当前选中的空白**新会话**作为一条临时额外行。**展开其余**会显示隐藏条目；关闭再打开 Workspace 会恢复该折叠投影。
 
 ### 重排序与视图选项
 
@@ -38,6 +38,10 @@ kind: "package-reference"
 ### 管理会话
 
 Session 行内的 Rename 操作打开一个以该行显示标题预填的对话框；确认未修改的标题是有意允许的——这正是把当前自动标题钉住、不再被重新生成覆盖的手势。Archive 不经确认对话框直接提交，归档集合回声落地后，该行从所有分组视图中消失。Delete 会打开破坏性操作确认框；成功后停止由 Web 持有的运行中任务，永久移除已存储的 Session 历史，从 Workspace 记账中摘除该 id，并保留项目文件。Fork 在源会话最后一个已完成轮次处 fork，在客户端递增继承的持久化标题后再打开子会话。Workspace 行内的 Delete 是另一项独立操作，其确认框会说明保留边界；成功后只移除分组，其 Session 仍留在 Ungrouped 下。
+
+### 渗透测试运行
+
+输入区的机器控件通过 `pentestRuns` 与 `pentestLoop` Remote 打开 Runs 仪表盘。仪表盘列出运行，并投影每个选中运行的快照——覆盖率、任务计数、已验证 finding、evidence、graph 规模、episode、artifact、token、费用、convergence warning、scope 拒绝诊断以及 operator decision journal。Pentest Task Tree 以嵌套列表渲染，提供逐任务的重排序，以及与其状态匹配的 block、approve、reject 操作。报告视图展示 scope、覆盖率、finding、observation、evidence 和诊断，并下载不含原始 artifact 的 JSON 或本地化 Markdown 报告。**新建运行**由目标、模式和 scope 文本创建运行；活动运行可以启动或停止其 host 侧后台控制循环；暂停、继续和终止保留各自的确认。scope 编辑器可以改写授权与排除目标，前提是所有开放任务的目标仍被授权。run manager 会从规范化的 run、task、result、evidence、finding、graph 与诊断文本中遮盖常见凭据；含嵌入式凭据的 scope 值会被拒绝，而不是被静默改写。原始工具 artifact 仍保存在已配置的私有 spill backend 中，并且不会进入报告导出。
 
 ### 待处理交互
 
@@ -63,7 +67,7 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 ### 目录流子 slot
 
-每个注册各自声明一个**目录流子 slot**（`single` kind：`conversation.hero.workspace.directoryFlow`／`sidebar.workspaces.directoryFlow`），由组合的选择器包 client half 填入其选取交互——`-native` 后端的无渲染 OS 选择器驱动，`-browse` 组合下则是应用内浏览对话框。平铺显示的**添加工作区…** 操作仅在当前界面的 slot 被占用时渲染；slot 为空意味着该组合没有目录选择能力。本包持有触发与接纳：占用方通过 slot 的属主交互约定（`open`/`busy`/`onPicked`/`onCancel`/`onError`）每次打开上报一个所选路径，owner 通过对象层接纳它，并等待 Workspace 列表投影刷新后才选中已提交的 Workspace。
+每个注册各自声明一个**目录流子 slot**（`single` kind：`conversation.hero.workspace.directoryFlow`／`sidebar.workspaces.directoryFlow`），由组合的选择器包 client half 填入其选取交互——`-native` 后端的无渲染 OS 选择器驱动，`-browse` 组合下则是应用内浏览对话框。侧边栏把**添加工作区…**显示为平铺操作；主视觉区则把它嵌套在本地计算机下。两种操作都仅在所属界面的 slot 被占用时渲染；slot 为空意味着该组合没有目录选择能力。本包持有触发与接纳：占用方通过 slot 的属主交互约定（`open`/`busy`/`onPicked`/`onCancel`/`onError`）每次打开上报一个所选路径，owner 通过对象层接纳它，并等待 Workspace 列表投影刷新后才选中已提交的 Workspace。
 
 ### 视图状态
 

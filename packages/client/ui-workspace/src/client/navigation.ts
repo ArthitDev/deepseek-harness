@@ -39,8 +39,8 @@ export interface UiWorkspace {
    */
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
   /**
-   * Start a New Session flow and navigate to its Session.
-   * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
+   * Create and navigate to a fresh Session.
+   * @param workspaceId - explicit target; absent inherits the current, just-deleted, or most recent Workspace.
    */
   startSession(workspaceId?: WorkspaceId): void
   /**
@@ -90,6 +90,8 @@ export class DirectoryBrowseError extends Error {
 class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
   private readonly lifetime = new AbortController()
+  private lastSessionId: SessionId | undefined
+  private lastWorkspaceId: WorkspaceId | undefined
 
   /**
    * @param ctx - Client root Context.
@@ -161,13 +163,20 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const recent = workspace.phase === 'ready' && sessions.phase === 'ready'
       ? recentWorkspace(workspace.items, sessions.byId)
       : undefined
-    const target = workspaceId ?? currentWorkspaceId ?? recent
+    const remembered = this.lastSessionId !== undefined
+      && sessions.byId[this.lastSessionId] === undefined
+      && workspace.items.some(item => item.workspaceId === this.lastWorkspaceId)
+      ? this.lastWorkspaceId
+      : undefined
+    const target = workspaceId ?? currentWorkspaceId ?? remembered ?? recent
     if (target === undefined) {
       this.sessions.clear()
       this.ctx.layout.selectPanel(null)
       return
     }
-    void this.openWorkspace(target).catch(
+    const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
+    void this.sessions.create({ workspaceId: target }).then(
+      (sessionId) => { if (!navigation.aborted) this.openSession(sessionId) },
       (reason: unknown) => { console.warn('new session failed:', reason) },
     )
   }
@@ -198,6 +207,14 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     let initial: 'waiting' | 'connecting' | 'done' = 'waiting'
     const reconcile = (): void => {
       if (this.lifetime.signal.aborted) return
+      const current = this.sessions.list.getSnapshot().current
+      const currentWorkspace = current === undefined
+        ? undefined
+        : this.workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(current))
+      if (currentWorkspace !== undefined) {
+        this.lastSessionId = current
+        this.lastWorkspaceId = currentWorkspace.workspaceId
+      }
       if (this.clearArchivedCurrent()) return
       if (initial !== 'waiting') return
       const workspace = this.workspaces.list.getSnapshot()

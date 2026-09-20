@@ -3,16 +3,16 @@
     - button "Use the ask_user_question tool to" [disabled]
   - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - button "System prompt":
   - img
   - img

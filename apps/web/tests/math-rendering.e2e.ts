@@ -127,7 +127,7 @@ describe('web e2e: settled Markdown math rendering', () => {
       { timeout: 10_000 },
     ).toBe(1)
 
-    await page.getByRole('button', { name: /^Web search automatic/ }).waitFor({ timeout: 15_000 })
+    await page.getByRole('button', { name: /^Agent mode:/ }).waitFor({ timeout: 15_000 })
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)

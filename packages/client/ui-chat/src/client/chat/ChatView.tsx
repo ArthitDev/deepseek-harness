@@ -14,6 +14,7 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { TurnNavigator } from './TurnNavigator.tsx'
 import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
 import { formatRunDuration } from './message-chrome.ts'
+import a11yCss from './accessibility.module.css'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -190,7 +191,8 @@ function TurnStatus({ startTime, t }: {
   const showClock = elapsedMs >= 15_000
   return (
     <div className={css.turnStatus} role="status" aria-live="polite">
-      {t('chat.deepDiving')}
+      <span className={css.turnStatusLogo} aria-hidden="true" />
+      <span className={a11yCss.visuallyHidden}>{t('chat.deepDiving')}</span>
       {showClock && (
         <span className={css.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}

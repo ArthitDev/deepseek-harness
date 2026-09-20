@@ -85,30 +85,15 @@
   display: inline-flex;
   align-items: center;
   height: calc(26px + var(--dsh-content-font-delta, 0px));
-  font: var(--dsw-font-s-strong-14);
-  /* The status line reads at the body size: the fixed 14 token supplies the
-     family/weight, the axis supplies the size. At default that is 14px text
-     on a 22px line inside a 26px row; both box heights shift by the same
-     delta, preserving the 8px (22 − 14) leading and the 4px (26 − 22) row
-     padding at every size. */
-  font-size: var(--dsh-content-font-size, 14px);
-  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
   white-space: nowrap;
-  background: linear-gradient(
-    90deg,
-    var(--dsw-static-deepseek-500) 0%,
-    var(--dsw-static-deepseek-500) 40%,
-    var(--dsw-static-deepseek-200) 50%,
-    var(--dsw-static-deepseek-500) 60%,
-    var(--dsw-static-deepseek-500) 100%
-  );
-  background-position: 100% 0;
-  background-size: 250% 100%;
-  background-clip: text;
-  color: transparent;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: dsh-turn-status-shimmer 1.8s linear infinite;
+}
+
+.turnStatusLogo {
+  width: 22px;
+  height: 22px;
+  background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
+  filter: drop-shadow(0 0 5px var(--dsh-agent-glow, rgb(255 51 71 / 70%)));
+  animation: dsh-turn-status-pulse 1.6s ease-in-out infinite;
 }
 
 .turnStatusClock {
@@ -122,18 +107,12 @@
   -webkit-text-fill-color: var(--dsw-alias-label-caption);
 }
 
-@keyframes dsh-turn-status-shimmer {
-  to {
-    background-position: 0 0;
-  }
+@keyframes dsh-turn-status-pulse {
+  50% { opacity: 0.55; transform: scale(0.92); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .turnStatus {
-    background-position: 0 0;
-    background-size: 100% 100%;
-    animation: none;
-  }
+  .turnStatusLogo { animation: none; }
 }
 
 .hint {

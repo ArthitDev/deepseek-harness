@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-session-query'
-import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { isPresentedData, isPresentedFile, PRESENT_OPEN_PATH, PRESENT_HOST_PATH, type PresentedHost } from './presented.ts'
 
 /**

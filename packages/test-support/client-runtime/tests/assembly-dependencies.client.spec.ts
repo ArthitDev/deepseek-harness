@@ -29,7 +29,7 @@ describe('bundle dependency closures', () => {
     expect(entry?.fiber?.state).toBe(FiberState.ACTIVE)
     expect(client.ctx.get('fileUpload')).toBeDefined()
     await vi.waitFor(() => {
-      expect(client.ctx.sessions.list.getSnapshot().phase).toBe('ready')
+      expect((client.ctx.sessions as unknown as { list: { getSnapshot(): { phase: string } } }).list.getSnapshot().phase).toBe('ready')
       expect(mock.log.calls('session/list')).toHaveLength(1)
       expect(mock.log.streams('session/control')).toHaveLength(1)
     })

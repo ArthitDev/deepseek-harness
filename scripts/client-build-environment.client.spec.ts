@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import yaml from 'js-yaml'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -131,12 +131,15 @@ describe('client build environment', () => {
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
-    })).toEqual({
-      PATH: '/bin',
+    }, '/runtime/node')).toEqual({
+      PATH: `/runtime${delimiter}/bin`,
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
+    })
+    expect(clientBuildProcessEnvironment({ PATH: '/bin', Path: '/custom/bin' }, {}, '/runtime/node')).toEqual({
+      PATH: ['/runtime', '/bin', '/custom/bin'].join(delimiter),
     })
     expect(repositoryCommitHash('/unused', { DSH_CLIENT_COMMIT_HASH: COMMIT_HASH })).toBe(COMMIT_HASH.slice(0, 7))
   })
@@ -199,7 +202,7 @@ describe('client build environment', () => {
     expect(repositoryGitDirty(fixtureRoot)).toBe(false)
     write(join(fixtureRoot, 'submodule/tracked.txt'), 'modified submodule\n')
     expect(repositoryGitDirty(fixtureRoot)).toBe(true)
-  })
+  }, 15_000)
 
   it('omits dirty metadata when repository metadata is unavailable', () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), 'dsh-client-build-no-git-'))

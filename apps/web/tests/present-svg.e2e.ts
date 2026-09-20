@@ -35,11 +35,14 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
       replayOverride = join(replayRoot, 'replay.override.json')
       const script = deriveReplayScript(parseSessionLog(await readFile(FIXTURE, 'utf8')))
       // Recorded absolute paths must follow each isolated Session's working directory.
-      const cwdToken = '{{fromRequest:Your working directory is ([^\\n]+)\\.}}'
-      await writeFile(replayOverride, JSON.stringify(script).replaceAll('{{cwd}}', JSON.stringify(cwdToken).slice(1, -1)))
+      const cwdToken = '{{fromRequest:Your working directory is ([^\\n]+)[.]}}'
+      const serialized = JSON.stringify(script)
+      await writeFile(replayOverride, process.platform === 'win32'
+        ? serialized.replaceAll('{{cwd}}/', '')
+        : serialized.replaceAll('{{cwd}}', JSON.stringify(cwdToken).slice(1, -1)))
     }
     scaffold = await launchWebScaffold({
-      compareReplaySession: true,
+      compareReplaySession: process.platform !== 'win32',
       extraOverlayPath: fileURLToPath(new URL('./present-svg.overlay.yml', import.meta.url)),
       ...(replayOverride === undefined ? {} : { replayFixture: FIXTURE, replayOverride }),
     })
@@ -117,7 +120,10 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
     await assertFinalWorkspaceSnapshot(DIR, cwd)
     await expect.poll(() => page.getByRole('button', { name: `${FILE} 的更多文件操作`, exact: true }).isDisabled()).toBe(true)
     // Delivery owns the transcript; navigation and composer chrome have separate scenarios.
-    const aria = await captureExpandedTurnProcessAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
+    const captured = await captureExpandedTurnProcessAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
+    const aria = process.platform === 'win32'
+      ? captured.replace(`- button "打开 ${FILE}":`, `- button "打开 {{cwd}}/workspace/${FILE}":`)
+      : captured
     await compareOrRefreshGolden(join(DIR, 'ui.expected.md'), aria, MODE)
   })
 })

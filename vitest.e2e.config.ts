@@ -1,6 +1,5 @@
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
+import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
 
 // Real-API suite, separate because it spends tokens. Each test self-skips without
 // its provider credential for keyless CI; credentialed workflows preflight the
@@ -29,14 +28,12 @@ function positiveIntFromEnv(name: string, fallback: number): number {
 const e2eMaxWorkers = positiveIntFromEnv('DSH_E2E_MAX_WORKERS', DEFAULT_E2E_MAX_WORKERS)
 
 export default defineConfig({
-  // Same resolution note as vitest.config.ts: bare workspace names resolve
-  // through the tsconfig.base.json paths facade (no include = match-all, so
-  // client-package sources get mapping too — dropping /client subpath imports
-  // onto package exports would load browser dist bundles into node).
+  // Bare workspace names resolve through the inherited tsconfig.base.json paths,
+  // keeping /client subpath imports on source instead of browser dist bundles.
   // Built-artifact e2e suites are unaffected: their built-ness lives in
   // subprocesses and createRequire lookups, which bypass vite resolution
   // entirely.
-  plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] }), standardDecoratorPlugin()],
+  plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
   test: {
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],

@@ -22,7 +22,7 @@ import {
 import { expandOwningTurnProcess, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/navigation-panes', import.meta.url))
-const SEED = join(SNAPSHOT_DIR, 'session.v2.jsonl')
+const SEED = join(SNAPSHOT_DIR, 'session.v3.jsonl')
 const TRAJECTORY_EXPECTED = join(SNAPSHOT_DIR, 'trajectory.expected.md')
 const SEARCH_EXPECTED = join(SNAPSHOT_DIR, 'search-results.expected.md')
 const TERMINAL_EXPECTED = join(SNAPSHOT_DIR, 'terminal-card.expected.md')
@@ -274,15 +274,15 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
   it.skipIf(MODE === 'record')('downloads through the Session Header and /export with one dialog', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-export'))
     await ensureSeedOpen(page)
-    const exportButton = page.getByRole('button', { name: 'Session log' })
-    expect(await exportButton.isDisabled()).toBe(false)
-    const header = exportButton.locator('xpath=ancestor::header[1]')
+    const moreButton = page.getByRole('button', { name: 'More actions' })
+    expect(await moreButton.isDisabled()).toBe(false)
+    const header = moreButton.locator('xpath=ancestor::header[1]')
     // The right Sidebar's expand button holds the header's corner; the theme
     // control sits between it and export.
-    const sidebarButton = page.getByRole('button', { name: 'Open the sidebar' })
+    const sidebarButton = page.getByRole('button', { name: 'Open right sidebar' })
     const themeButton = page.getByRole('button', { name: 'Switch to dark mode' })
     const [buttonBox, themeBox, sidebarBox, headerBox] = await Promise.all([
-      exportButton.boundingBox(), themeButton.boundingBox(), sidebarButton.boundingBox(), header.boundingBox(),
+      moreButton.boundingBox(), themeButton.boundingBox(), sidebarButton.boundingBox(), header.boundingBox(),
     ])
     if (buttonBox === null || themeBox === null || sidebarBox === null || headerBox === null) {
       throw new Error('Session Header export geometry is unavailable')
@@ -294,7 +294,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       response.request().method() === 'HEAD'
       && new URL(response.url()).pathname === '/api/session.export', { timeout: 30_000 })
     const downloadPromise = page.waitForEvent('download', { timeout: 30_000 })
-    await exportButton.click()
+    await moreButton.click()
+    await page.getByRole('menuitem', { name: 'Download session log' }).click()
     const response = await responsePromise
     expect(response.status()).toBe(200)
     const download = await downloadPromise
@@ -336,7 +337,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       const input = page.locator('[data-composer-input]').first()
       const slashDownloadPromise = page.waitForEvent('download', { timeout: 30_000 })
       await input.fill('/export')
-      await page.getByRole('option', { name: /export/u }).waitFor({ timeout: 10_000 })
       await input.press('Enter')
       const slashDownload = await slashDownloadPromise
       expect(slashDownload.suggestedFilename()).toBe(download.suggestedFilename())
@@ -405,13 +405,13 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await page.locator('[data-sample="bash"] ~ div [data-terminal] [class*="_copyButton_"]').first().click()
     await expect.poll(() => frame.getAttribute('data-rightbar-collapsed'), { timeout: 5_000 }).toBe('true')
     // Read summaries are file links: one click opens the file as a text-preview
-    // tab in the right Sidebar, which expands to show it beside the guide tab.
+    // tab in the right Sidebar, which expands to show the preview.
     const fileLink = page.locator('[data-variant="read"] button').first()
     await fileLink.waitFor({ timeout: 10_000 })
     await fileLink.click()
     await expect.poll(() => frame.getAttribute('data-rightbar-collapsed'), { timeout: 5_000 }).toBe(null)
     const column = page.locator('[data-rightbar-col]')
-    await expect.poll(() => column.locator('[data-dockkit-tab-title]').count(), { timeout: 5_000 }).toBe(2)
+    await expect.poll(() => column.locator('[data-dockkit-tab-title]').count(), { timeout: 5_000 }).toBe(1)
     // Put the column back so later cases start from the default frame.
     await column.locator('[data-sidebar-right-toggle]').click()
     await expect.poll(() => frame.getAttribute('data-rightbar-collapsed'), { timeout: 5_000 }).toBe('true')

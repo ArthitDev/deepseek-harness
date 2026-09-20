@@ -6,6 +6,20 @@
 import type { LoaderEntryState } from './loader-status.ts'
 import css from './boot-page.module.css'
 
+const BOOT_BRAND = {
+  blue: { logo: '/new-logo-blue.png', title: 'Blue Team Agent', glow: 'rgb(0 153 255 / 70%)' },
+  red: { logo: '/new-logo.png', title: 'Red Team Agent', glow: 'rgb(255 51 71 / 70%)' },
+  black: { logo: '/new-logo-black.png', title: 'Black Team Agent', glow: 'rgb(255 255 255 / 55%)' },
+} as const
+
+function bootMode(): keyof typeof BOOT_BRAND {
+  try {
+    const mode = typeof localStorage === 'undefined' ? null : localStorage.getItem('dsh.agentMode')
+    if (mode === 'blue' || mode === 'red' || mode === 'black') return mode
+  } catch {}
+  return 'red'
+}
+
 /** Create a div with one module class and optional text. */
 function div(className: string | undefined, text?: string): HTMLDivElement {
   const el = document.createElement('div')
@@ -33,15 +47,20 @@ export class BootPage {
   constructor(container: HTMLElement) {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
+    const mode = bootMode()
+    const brand = BOOT_BRAND[mode]
+    document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.setAttribute('href', brand.logo)
+    this.root.dataset.dshAgentMode = mode
+    this.root.style.setProperty('--dsh-agent-glow', brand.glow)
     this.card = div(css.card)
     this.wordmark = div(css.wordmark)
     const logo = document.createElement('img')
     logo.className = css.logo ?? ''
-    logo.src = '/new-logo.png'
+    logo.src = brand.logo
     logo.alt = ''
     logo.width = 48
     logo.height = 48
-    this.wordmark.append(logo, 'Shield Break Agent')
+    this.wordmark.append(logo, brand.title)
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
     this.hint = div(css.hint, 'Loading plugins…')

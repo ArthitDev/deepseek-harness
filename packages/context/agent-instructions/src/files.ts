@@ -6,6 +6,7 @@
 
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { FileSystem, FsInfo, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
@@ -184,13 +185,16 @@ export async function findProjectRoot(
   fileSystem?: FileSystem,
   signal?: AbortSignal,
 ): Promise<string> {
-  let current = resolve(cwd)
+  const start = resolve(cwd)
+  const home = fileSystem === undefined ? resolve(homedir()) : undefined
+  let current = start
   for (;;) {
+    if (current === home && current !== start) return start
     for (const marker of markers) {
       if (await existsAsMarker(join(current, marker), fileSystem, signal)) return current
     }
     const parent = dirname(current)
-    if (parent === current) return resolve(cwd)
+    if (parent === current) return start
     current = parent
   }
 }

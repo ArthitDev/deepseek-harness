@@ -3,16 +3,16 @@
     - button "Reply with a one-sentence description" [disabled]
   - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - button "System prompt":
   - img
   - img
@@ -27,18 +27,20 @@
 - status:
   - text: This turn failedAPI key is invalid
   - code: AUTH
-- textbox "Message or run a task... / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- 'button "Agent mode: Red Team"':
   - img
-  - text: Web Search
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps
+- img
+- text: 1 turns 1 steps

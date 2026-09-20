@@ -11,7 +11,7 @@ import { globSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { act, cleanup } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { bootInjections, orderByModuleGraph } from '@deepseek-ai/dsh-client-modules'
 import type { ClientModuleLoaderTarget, WebBootEntry, WebBootGraph } from '@deepseek-ai/dsh-client-modules/client'
@@ -281,6 +281,24 @@ export function mountAssembledApp(search = '?fixture', options: AssembledBootOpt
     void entry.run()
     unmount = () => entry.dispose()
   })
+}
+
+/** Start and await a fresh fixture Session, then return its editable composer. */
+export async function startFreshFixtureSession(): Promise<HTMLElement> {
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const previous = tree.querySelector('[role="treeitem"][aria-selected="true"]')
+  const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
+  if (start === null) throw new Error('fixture Workspace new-session action missing')
+  fireEvent.click(start)
+  await waitFor(() => {
+    const selected = tree.querySelector('[role="treeitem"][aria-selected="true"]')
+    if (selected === null || selected === previous) throw new Error('fresh fixture Session not selected')
+  }, { timeout: 10_000 })
+  return await waitFor(() => {
+    const composer = document.querySelector<HTMLElement>('[data-composer-input][contenteditable="true"]')
+    if (composer === null) throw new Error('composer surface missing')
+    return composer
+  }, { timeout: 10_000 })
 }
 
 /**

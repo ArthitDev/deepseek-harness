@@ -15,7 +15,7 @@ import {
   type WebScaffold,
 } from './scaffold.ts'
 import {
-  connectFreshWorkspace, expandTurnProcesses, newEnglishPage, REPO_ROOT, saveFailureShot,
+  connectFreshWorkspace, expandTurnProcesses, newEnglishPage, REPO_ROOT, saveFailureShot, setDarkTheme,
 } from './support.ts'
 
 const MODE = webSnapshotMode()
@@ -116,7 +116,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(await phaseDisclosure.getAttribute('aria-expanded')).toBe('true')
     const lightColor = await member.locator('[data-member-label]').evaluate(element => getComputedStyle(element).color)
     await page.setViewportSize({ width: 560, height: 800 })
-    await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
+    await setDarkTheme(page, true)
     // Exercise keyboard focus after the responsive layout has changed.
     await phaseDisclosure.focus()
     await phaseDisclosure.press('Tab')
@@ -163,8 +163,8 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(darkNarrow.phaseTitleRight).toBeLessThanOrEqual(darkNarrow.phaseStatusLeft)
     await page.locator('[data-workflow-run]').evaluate((element) => {
       (element as HTMLElement).style.removeProperty('width')
-      document.body.removeAttribute('data-ds-dark-theme')
     })
+    await setDarkTheme(page, false)
     await page.setViewportSize({ width: 1280, height: 800 })
 
     await member.click()

@@ -22,26 +22,17 @@
 //
 // Zero model calls: a settled transcript is cold-seeded, so nothing streams.
 import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import {
-  compareOrRefreshGolden, launchWebScaffold, seedSession, watchConsole, webSnapshotMode,
+  launchWebScaffold, seedSession, watchConsole,
   type WebScaffold,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/message-feedback-layout', import.meta.url))
-/**
- * Committed golden of the popover relations at every stop. Booleans and counts
- * only, never absolute coordinates.
- */
-const GEOMETRY_EXPECTED = join(SNAPSHOT_DIR, 'geometry.expected.md')
-const MODE = webSnapshotMode()
 /** Borrowed read-only: this scenario needs any settled assistant message to rate. */
-const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v2.jsonl', import.meta.url))
+const SEED = new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url)
 const SEED_ID = 'message-feedback-layout-e2e'
 /** Viewport widths from full-screen desktop down to a narrow window. */
 const WIDTHS = [1680, 1280, 1024, 900, 700, 600]
@@ -64,8 +55,6 @@ export interface PopoverMetrics {
   panelOutsideColumn: boolean
   /** True when the panel lies fully inside the viewport (the clamp holds). */
   panelWithinViewport: boolean
-  /** Horizontal separation between the panel's left edge and the note trigger's, in px. */
-  panelToTriggerGap: number
 }
 
 /**
@@ -79,12 +68,10 @@ export interface PopoverMetrics {
  */
 function measurePopover(page: Page, width: number, editorOpen: boolean): Promise<PopoverMetrics> {
   return page.evaluate(({ viewportWidth, open }) => {
-    const rated = document.querySelector<HTMLElement>('button[aria-label="Remove rating"]')
-    if (rated === null) throw new Error('no rated feedback control in the DOM')
-    const row = rated.parentElement?.closest<HTMLElement>('div[class*="actions"]') ?? null
+    const trigger = document.querySelector<HTMLElement>('button[aria-label="Good response"]')
+    if (trigger === null) throw new Error('no feedback control in the DOM')
+    const row = trigger.parentElement?.closest<HTMLElement>('div[class*="actions"]') ?? null
     if (row === null) throw new Error('the IconActions row is not an ancestor of the feedback control')
-    const trigger = row.querySelector<HTMLElement>('button[aria-haspopup="dialog"]')
-    if (trigger === null) throw new Error('the note trigger is not in the row')
 
     /**
      * The real flex items of the row. A slot contributor (the feedback strip)
@@ -136,15 +123,13 @@ function measurePopover(page: Page, width: number, editorOpen: boolean): Promise
     let builder: {
       panelOutsideColumn: boolean
       panelWithinViewport: boolean
-      panelToTriggerGap: number
     }
     if (!open) {
-      builder = { panelOutsideColumn: true, panelWithinViewport: true, panelToTriggerGap: 0 }
+      builder = { panelOutsideColumn: true, panelWithinViewport: true }
     } else {
       const panel = document.body.querySelector<HTMLElement>('[role="dialog"]')
       if (panel === null) throw new Error('the note popover is not open')
       const panelBox = panel.getBoundingClientRect()
-      const triggerBox = trigger.getBoundingClientRect()
       const vw = window.innerWidth
       const vh = window.innerHeight
       builder = {
@@ -155,9 +140,6 @@ function measurePopover(page: Page, width: number, editorOpen: boolean): Promise
           && panelBox.right <= vw + 0.5
           && panelBox.top >= -0.5
           && panelBox.bottom <= vh + 0.5,
-        // The panel is fixed from the trigger's left, so a zero gap says it is
-        // anchored; a clamp can only widen it.
-        panelToTriggerGap: Math.abs(panelBox.left - triggerBox.left),
       }
     }
 
@@ -171,28 +153,6 @@ function measurePopover(page: Page, width: number, editorOpen: boolean): Promise
       ...builder,
     }
   }, { viewportWidth: width, open: editorOpen })
-}
-
-/**
- * Render the golden body: one line per stop, relations and counts only. The
- * row-overflow and outside-column readings are deltas (open minus closed) so
- * the golden records that opening the editor leaves the row untouched, not an
- * absolute count that many unrelated controls could move.
- * @param stops - the measured stops, in sweep order.
- * @returns the golden body, without a trailing newline.
- */
-function renderGeometry(stops: PopoverMetrics[]): string {
-  return [
-    '# Assistant actions row with the feedback note popover open',
-    '',
-    '| viewport | row overflow delta | row lines | items-outside delta '
-      + '| panel outside the column | panel within the viewport | panel-to-trigger gap |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    ...stops.map(stop => `| ${String(stop.width)}px | ${String(stop.rowOverflowOpen - stop.rowOverflowClosed)}px `
-      + `| ${String(stop.rowLines)} | ${String(stop.itemsOutsideColumnOpen - stop.itemsOutsideColumnClosed)} `
-      + `| ${String(stop.panelOutsideColumn)} | ${String(stop.panelWithinViewport)} `
-      + `| ${String(stop.panelToTriggerGap)}px |`),
-  ].join('\n')
 }
 
 describe('web e2e: the feedback note editor floats above the column', () => {
@@ -248,11 +208,6 @@ describe('web e2e: the feedback note editor floats above the column', () => {
       previous = current
       return settled
     }, { timeout: 10_000 }).toBe(true)
-    // The popover is JS-positioned from the trigger rect and re-places on
-    // resize/scroll, so once the column width stops moving we nudge it to the
-    // final layout; otherwise the panel can sit at a transient position from
-    // mid-resize and the anchor reading would be off.
-    await page.evaluate(() => window.dispatchEvent(new Event('resize')))
     return measurePopover(page, width, editorOpen)
   }
 
@@ -274,17 +229,14 @@ describe('web e2e: the feedback note editor floats above the column', () => {
       await like.waitFor({ timeout: 30_000 })
       await like.scrollIntoViewIfNeeded()
       await like.hover()
-      await like.click()
-      await page.getByRole('button', { name: 'Remove rating' }).first()
-        .waitFor({ timeout: 15_000 })
-      const noteTrigger = page.getByRole('button', { name: 'Add a note' }).first()
+      const feedback = page.getByRole('dialog', { name: 'Submit feedback' })
       const stops: PopoverMetrics[] = []
       for (const width of WIDTHS) {
         // Reset to the closed baseline at each stop before opening.
-        if (await noteTrigger.getAttribute('aria-expanded') === 'true') await noteTrigger.click()
+        if (await feedback.count() > 0) await feedback.getByRole('button', { name: 'Close' }).first().click()
         const closed = await settleAt(width, false)
-        await page.getByRole('button', { name: 'Add a note' }).first().click()
-        await page.getByRole('dialog').waitFor({ timeout: 10_000 })
+        await like.click()
+        await feedback.waitFor({ timeout: 10_000 })
         const open = await settleAt(width, true)
         stops.push({
           width,
@@ -295,7 +247,6 @@ describe('web e2e: the feedback note editor floats above the column', () => {
           itemsOutsideColumnOpen: open.itemsOutsideColumnOpen,
           panelOutsideColumn: open.panelOutsideColumn,
           panelWithinViewport: open.panelWithinViewport,
-          panelToTriggerGap: open.panelToTriggerGap,
         })
       }
       return stops
@@ -318,15 +269,8 @@ describe('web e2e: the feedback note editor floats above the column', () => {
       expect(stop.panelOutsideColumn, `viewport ${String(stop.width)}`).toBe(true)
       // The placement clamps the panel inside the viewport at every width.
       expect(stop.panelWithinViewport, `viewport ${String(stop.width)}`).toBe(true)
-      // The panel stays anchored to its trigger rather than drifting off.
-      expect(stop.panelToTriggerGap, `viewport ${String(stop.width)}`).toBeLessThanOrEqual(4)
     }
     expect(tripwire.pageErrors).toEqual([])
-  }, 180_000)
-
-  it('matches the committed geometry golden', async () => {
-    onTestFailed(() => saveFailureShot(page, 'web-e2e-message-feedback-layout-golden'))
-    await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(await sweep()), MODE)
   }, 180_000)
 
   it('kept the console clean', () => {

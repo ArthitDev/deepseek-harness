@@ -473,27 +473,19 @@ describe('real @openai/codex 0.153.4 product', () => {
 
   it('executes an explicitly selected dangerous bypass write in the isolated workspace', async () => {
     const sideEffect = 'bypass-side-effect'
-    const { harness, fixture } = await realHarness((workspace): readonly ResponsesBehavior[] => {
+    const { harness } = await realHarness((workspace): readonly ResponsesBehavior[] => {
       const target = join(workspace, sideEffect)
       const command = process.platform === 'win32'
         ? `powershell.exe -NoLogo -NoProfile -NonInteractive -Command "Set-Content -LiteralPath '${target.replaceAll("'", "''")}' -Value 'bypass' -NoNewline"`
         : `printf bypass > ${JSON.stringify(target)}`
-      const commandCalls = [
-        {
-          name: 'exec_command',
-          arguments: {
-            cmd: command,
-          },
-        },
-        {
-          name: 'shell_command',
-          arguments: {
-            command,
-          },
-        },
-      ] as const
+      const input = `const result = await tools.exec_command(${JSON.stringify({ cmd: command, workdir: workspace })}); text(result.output);`
       return [
-        { kind: 'advertisedFunctionCall', choices: commandCalls },
+        {
+          kind: 'customToolCall',
+          name: 'exec',
+          input,
+          preamble: 'Running the exact fixture command in the isolated temporary workspace. No credentials or external data are involved.',
+        },
         { kind: 'complete', text: 'bypass complete' },
       ]
     }, 'dangerously-bypass-approvals-and-sandbox')
@@ -507,7 +499,7 @@ describe('real @openai/codex 0.153.4 product', () => {
       output: [{ type: 'text', text: 'bypass complete' }],
       stopReason: 'completed',
     })
-    expect(existsSync(target), JSON.stringify(fixture.requests.at(-1)?.body.input)).toBe(true)
+    expect(existsSync(target)).toBe(true)
     expect(readFileSync(target, 'utf8').trim()).toBe('bypass')
     await run.dispose()
     await expectQuiescent(harness.handles)

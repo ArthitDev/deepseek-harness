@@ -244,11 +244,11 @@ describe('UiWorkspaceService', () => {
     })
     const created = Promise.withResolvers<SessionId>()
     b.sessions.create.mockReturnValue(created.promise)
-    const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
     b.uiWorkspace.startSession(wid('alpha'))
     b.layout.selectPanel('panel-a' as MainPanelId)
     created.resolve(sid('late'))
-    await opening.mock.results[0]!.value
+    await created.promise
+    await Promise.resolve()
     expect(b.sessions.open).not.toHaveBeenCalled()
     expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith('panel-a')
     expect(b.sessions.list.getSnapshot().current).toBe(sid('current'))
@@ -379,6 +379,22 @@ describe('UiWorkspaceService', () => {
       .rejects.toThrow('uiWorkspace.connectWorkspace: unknown workspace ghost')
   })
 
+  it('creates a fresh Session even when the Workspace already has a reusable blank', async () => {
+    const blank = summary('blank', { blank: true, cwd: '/w/alpha' })
+    const b = bench({
+      sessions: sessionState([blank], blank.id),
+      workspaces: workspaceState([workspace('alpha', [blank.id])]),
+    })
+    b.sessions.create.mockResolvedValue(sid('fresh'))
+
+    b.uiWorkspace.startSession(wid('alpha'))
+
+    await vi.waitFor(() => {
+      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('alpha') })
+      expect(b.sessions.open).toHaveBeenCalledExactlyOnceWith(sid('fresh'))
+    })
+  })
+
   it('targets an explicit, current-session, then recent Workspace and reports failed starts', async () => {
     const current = summary('current', { cwd: '/w/current-home', updatedAt: 1 })
     const recent = summary('recent', { cwd: '/w/recent-home', updatedAt: 2 })
@@ -417,6 +433,28 @@ describe('UiWorkspaceService', () => {
     b.uiWorkspace.startSession(wid('recent-home'))
     await vi.waitFor(() => {
       expect(warning).toHaveBeenCalledWith('new session failed:', expect.any(Error))
+    })
+  })
+
+  it('keeps New Session on the last active remote Workspace after its current Session is deleted', async () => {
+    const remoteCurrent = summary('remote-current', { updatedAt: 1 })
+    const localRecent = summary('local-recent', { updatedAt: 2 })
+    const local = workspace('local', [localRecent.id])
+    const remote = {
+      ...workspace('remote', [remoteCurrent.id]),
+      path: '/__dsh_ssh__/lab/srv/project',
+    }
+    const b = bench({
+      sessions: sessionState([remoteCurrent, localRecent], remoteCurrent.id),
+      workspaces: workspaceState([local, remote]),
+    })
+
+    b.workspaces.list.set(workspaceState([local, { ...remote, sessionIds: [] }]))
+    b.sessions.list.set(sessionState([localRecent]))
+    b.uiWorkspace.startSession()
+
+    await vi.waitFor(() => {
+      expect(b.sessions.create).toHaveBeenCalledWith({ workspaceId: wid('remote') })
     })
   })
 

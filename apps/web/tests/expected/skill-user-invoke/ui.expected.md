@@ -1,23 +1,27 @@
 - banner:
   - navigation "Session hierarchy":
-    - button "/user-invoke-demo and confirm the fixtur" [disabled]
+    - button "/user-invoke-demo @\"meeting notes.md\" an" [disabled]
   - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - button "System prompt":
   - img
   - img
   - text: System prompt
-- text: /user-invoke-demo and confirm the fixture wiring {{clock}}
+- button "/user-invoke-demo"
+- button "meeting notes.md":
+  - img
+  - text: meeting notes.md
+- text: and confirm the fixture wiring {{clock}}
 - button "Copy":
   - img
 - button "Thought for a while":
@@ -36,19 +40,25 @@
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- 'button "Agent mode: Red Team"':
   - img
-  - text: Web Search
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "0% of context used"
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 0% Input 256 tok · Output 16 tok
+- button "1 turns 1 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 1 steps{{throughput}} tok/s
+- button "272 tok · Cache hit 0%":
+  - img
+  - text: 272 tokCache hit 0%

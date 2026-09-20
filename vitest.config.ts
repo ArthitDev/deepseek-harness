@@ -1,23 +1,20 @@
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { resolvePwshPath } from './packages/shell/pwsh-local/src/resolve.ts'
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
+import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
 import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/coverage-exempt.ts'
 import { COVERAGE_PARTITION_MODE_ENV } from './scripts/coverage-partitions.ts'
-
-// Prints exact `path:line:col` records for every uncovered statement, branch
-// path, and function when a file misses the per-file 100% gate — the built-in
-// threshold ERRORs name only the file. Absolute path because istanbul-reports
-// require()s custom reporters (which is also why the reporter is CJS).
-const uncoveredLocationsReporter = fileURLToPath(new URL('./scripts/coverage-uncovered-locations.cjs', import.meta.url))
 
 // Resolution facade shared by every plugin instance below: tsconfig.base.json
 // has no include, which vite-tsconfig-paths treats as match-all, so its paths
 // map applies to every test file. paths must win over package exports so built
 // lib/ never loads a second module-singleton copy.
-const pathsPlugin = (): ReturnType<typeof tsconfigPaths> => tsconfigPaths({ projects: ['./tsconfig.base.json'] })
+// Prints exact `path:line:col` records for every uncovered statement, branch
+// path, and function when a file misses the per-file 100% gate — the built-in
+// threshold ERRORs name only the file. Absolute path because istanbul-reports
+// require()s custom reporters (which is also why the reporter is CJS).
+const uncoveredLocationsReporter = fileURLToPath(new URL('./scripts/coverage-uncovered-locations.cjs', import.meta.url))
 
 const windowsUnsupportedPackages = process.platform === 'win32'
   ? [
@@ -157,7 +154,7 @@ const processBoundTests = [
 ]
 
 export default defineConfig({
-  plugins: [pathsPlugin(), standardDecoratorPlugin()],
+  plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
   test: {
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
@@ -167,7 +164,7 @@ export default defineConfig({
     // Node stability; process-bound suites stay separate for inventory control.
     projects: [
       {
-        plugins: [pathsPlugin(), standardDecoratorPlugin()],
+        plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
         test: {
           name: 'thread-safe',
           execArgv: vitestExecArgv,
@@ -175,6 +172,9 @@ export default defineConfig({
           // MaybeLocal in cjs_lexer::Parse) from worker threads on macOS,
           // Linux, and Windows. Forked workers avoid that shared thread path.
           pool: 'forks',
+          // Windows process and filesystem startup becomes unstable with more
+          // concurrent forks during the full suite.
+          maxWorkers: process.platform === 'win32' ? 2 : undefined,
           setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
           include: testIncludes,
           exclude: [
@@ -185,7 +185,7 @@ export default defineConfig({
         },
       },
       {
-        plugins: [pathsPlugin(), standardDecoratorPlugin()],
+        plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
         test: {
           name: 'process-bound',
           execArgv: vitestExecArgv,

@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { RemoteError, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
@@ -13,6 +13,7 @@ import { apply as hostApply } from '../src/index.ts'
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
+  ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const create = vi.fn(async (input: { name: string } | { path: string }) => ({
     workspaceId: 'ws-new' as never,
     path: 'name' in input ? `/projects/${input.name}` : input.path,
@@ -22,6 +23,7 @@ async function bench() {
   const insertSessionBefore = vi.fn(async () => ({}))
   const open = vi.fn()
   const clear = vi.fn()
+  const selectPanel = vi.fn()
   const search = vi.fn(async () => ({
     ok: true as const,
     value: { items: [{ sessionId: 'session' as never, snippet: 'match' }], hasMore: false },
@@ -60,6 +62,14 @@ async function bench() {
     binding,
     fork,
   } as never)
+  ctx.provide('layout', {
+    selectPanel,
+    beginNavigation: () => new AbortController().signal,
+  } as never)
+  ctx.provide('theme', {
+    setTheme: vi.fn(),
+    overrideTokens: vi.fn(() => () => {}),
+  } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
   const remoteMachines = {
@@ -69,7 +79,13 @@ async function bench() {
     })),
     save: vi.fn(), remove: vi.fn(), probe: vi.fn(), trust: vi.fn(),
   }
-  new TestRemote(ctx, { directoryPicker, remoteMachines })
+  const pentestRuns = {
+    list: vi.fn(), snapshot: vi.fn(), control: vi.fn(), controlTask: vi.fn(), replaceScope: vi.fn(),
+  }
+  const pentestLoop = {
+    create: vi.fn(), start: vi.fn(), stop: vi.fn(), running: vi.fn(),
+  }
+  new TestRemote(ctx, { directoryPicker, remoteMachines, pentestRuns, pentestLoop })
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -78,7 +94,7 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename,
-    insertSessionBefore, open, clear, search, renameSession, binding, fork, pickDirectory,
+    insertSessionBefore, open, clear, selectPanel, search, renameSession, binding, fork, pickDirectory,
   }
 }
 
@@ -97,8 +113,17 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines',
+      'slots', 'sessions', 'workspaces', 'layout', 'theme', 'locale', 'settingsScope', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'remote.pentestRuns', 'remote.pentestLoop',
     ])
+  })
+
+  it('declares layout before the shared New Session action uses it', async () => {
+    const b = await bench()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+
+    expect(() => { b.ctx.uiWorkspace.startSession() }).not.toThrow()
+    expect(b.clear).toHaveBeenCalledOnce()
+    expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith(null)
   })
 
   it('registers browser and pickers for declarations arriving before or after apply', async () => {

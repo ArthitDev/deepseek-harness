@@ -60,6 +60,9 @@
       "path": "../ui-settings"
     },
     {
+      "path": "../ui-theme"
+    },
+    {
       "path": "../../remote/remote-machines"
     },
     {

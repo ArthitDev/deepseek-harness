@@ -131,6 +131,10 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.slot svg[data-state='ongoing'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;

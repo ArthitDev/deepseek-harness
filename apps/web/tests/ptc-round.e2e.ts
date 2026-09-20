@@ -43,7 +43,7 @@ describe('web e2e: PTC mode round renders nested sub-calls', () => {
     let replayFixture = FIXTURE
     if (process.platform === 'win32' && MODE !== 'record') {
       sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
-      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      replayFixture = join(sidecarDir, 'session.v3.jsonl')
       await writeFile(replayFixture, (await readFile(FIXTURE, 'utf8')).replaceAll('tools.bash', 'tools.pwsh'))
     }
     scaffold = await launchWebScaffold({

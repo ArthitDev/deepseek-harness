@@ -77,8 +77,9 @@ describe('apply', () => {
     // the erased registration widens it past a direct cast, so hop unknown.
     const injectEntry = entries[0]!.inject as unknown as (sessionId: SessionId) => MenuViewInjected
     const injected = injectEntry(sid('a'))
+    const sessions = ctx.sessions
     const controller = inputTriggers.sessionOf(
-      ctx.sessions.scope(sid('a'))!,
+      sessions.scope(sid('a'))!,
     )
     expect(injected.menu).toBe(controller.menu)
     expect(injected.headers).toBe(controller.headers)

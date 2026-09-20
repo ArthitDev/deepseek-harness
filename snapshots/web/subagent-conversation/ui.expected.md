@@ -8,16 +8,16 @@
       - img
   - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
@@ -43,7 +43,12 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}} Now give the same explanation to a human reader. {{clock}}
+- text: {{clock}}
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: Now give the same explanation to a human reader. {{clock}}
 - button "Copy":
   - img
 - button "Thought for a while":
@@ -62,16 +67,22 @@
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment" [disabled]:
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Custom"': Custom
-- button "Web search automatic, press to search on every request":
+- 'button "Agent mode: Red Team"':
   - img
-  - text: Web Search
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "6% of context used"
 - button "Send message" [disabled]
-- text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok
+- button "2 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 2 turns 2 steps{{throughput}} tok/s
+- button "15.7K tok · Cache hit 99%":
+  - img
+  - text: 15.7K tokCache hit 99%

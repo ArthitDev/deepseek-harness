@@ -50,6 +50,8 @@
   - button "Compact":
     - text: Compact
     - img
+  - text: Always use web search Require one search before every answer. Turn off to let the model search only when current information is needed.
+  - switch "Always use web search"
   - text: Send behavior while busy What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior
   - button "Queue":
     - text: Queue

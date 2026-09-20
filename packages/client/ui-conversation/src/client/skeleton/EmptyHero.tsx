@@ -15,7 +15,7 @@ type HeroTranslate = ConversationSlotProps['t']
 
 const HERO_ALTERNATE_HEADLINES = [
   'Break All Shield',
-  'Red Team Agent',
+  'Security Team Agent',
   'Your Guard Still Broken',
 ] as const
 const HERO_HEADLINE_CYCLE_MS = 6_300
@@ -80,7 +80,7 @@ export interface HeroShellProps {
 
 /** Render the local hero brand mark. */
 function LocalHeroMark() {
-  return <img className={css.fish} src="/new-logo.png" alt="" width={48} height={48} />
+  return <span className={`${css.fish} ${css.localLogo}`} data-dsh-agent-logo="" aria-hidden="true" />
 }
 
 /**
@@ -111,7 +111,12 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
               fallback: <LocalHeroMark />,
             })}
           </span>
-          <span key={headline} className={css.headlineText} data-text={headline}>
+          <span
+            key={headline}
+            className={css.headlineText}
+            data-text={headline}
+            data-agent-mode-headline={headlineIndex === 2 ? '' : undefined}
+          >
             {headline}
           </span>
         </div>

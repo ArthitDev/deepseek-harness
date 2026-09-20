@@ -33,6 +33,7 @@ import {
   connectFreshWorkspace,
   conversationContextKey,
   saveFailureShot,
+  setDarkTheme,
 } from './support.ts'
 
 const MODE = webSnapshotMode()
@@ -632,7 +633,7 @@ describe.skipIf(MODE === 'record')('web e2e: active Schedule catalog', () => {
     tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-    await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme') })
+    await setDarkTheme(page, false)
     const openSidebar = page.getByRole('button', { name: 'Open sidebar' })
     if (await openSidebar.isVisible()) {
       await openSidebar.click()
@@ -791,8 +792,12 @@ describe.skipIf(MODE === 'record')('web e2e: active Schedule catalog', () => {
       fullPage: true,
     })
 
-    await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
-    const darkBackground = await catalog.evaluate(element => getComputedStyle(element).backgroundColor)
+    await setDarkTheme(page, true)
+    await page.getByRole('button', { name: '3 reminders' }).click()
+    const darkCatalog = page.getByRole('list', { name: 'Active reminders' })
+    await darkCatalog.waitFor({ timeout: 10_000 })
+    const darkBackground = await darkCatalog
+      .evaluate(element => getComputedStyle(element).backgroundColor)
     expect(darkBackground).not.toBe('rgba(0, 0, 0, 0)')
     expect(darkBackground).not.toBe(lightLayout.background)
     await compareOrRefreshGolden(

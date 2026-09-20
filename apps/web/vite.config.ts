@@ -153,6 +153,9 @@ export default defineConfig({
     // `modules` target (es2020-era) rejects that syntax.
     target: 'es2022',
     sourcemap: true,
+    // The largest intentional chunks are the cached vendor bundle and the
+    // independently lazy C++ grammar. Warn if either grows beyond this budget.
+    chunkSizeWarningLimit: 750,
     rollupOptions: {
       input: {
         index: src('./index.html'),

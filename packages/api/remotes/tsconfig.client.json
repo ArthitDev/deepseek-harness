@@ -85,6 +85,12 @@
     },
     {
       "path": "../../feedback/command-feedback"
+    },
+    {
+      "path": "../../pentest/pentest-run"
+    },
+    {
+      "path": "../../pentest/pentest-executor"
     }
   ]
 }

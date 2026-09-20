@@ -7,25 +7,15 @@
 // consumes the images — serialized through the real draft-image chain into
 // the commands/execute payload — and clears the composer on success, including
 // when the image is the whole `/plan` task.
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, waitFor } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, startFreshFixtureSession } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
 /** Open a fresh fixture session and return its composer surface. */
 async function freshComposer(): Promise<HTMLElement> {
-  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
-  const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
-  if (start === null) throw new Error('fixture Workspace new-session action missing')
-  fireEvent.click(start)
-  return await waitFor(() => {
-    const surface = document.querySelector<HTMLElement>(
-      '[data-composer-input][data-placeholder="Describe what you want to build, / commands, @ files or sessions"]',
-    )
-    if (surface === null) throw new Error('composer surface missing')
-    return surface
-  }, { timeout: 10_000 })
+  return await startFreshFixtureSession()
 }
 
 /** Type through the clipboard: jsdom carries no editable beforeinput; the

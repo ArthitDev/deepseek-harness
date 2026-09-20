@@ -42,7 +42,6 @@ describe('tsdown client artifact', () => {
     ;(window as Win).__ModuleLoader__ = { load: (h) => { handoff = h } }
     // The implied-eval ban targets accidental string execution, not this
     // deliberate built-bundle fixture running in the window scope.
-    // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-call
     new Function(code!)()
     expect(handoff).toBeDefined()
     const modules = new Map<string, unknown>([
@@ -94,7 +93,7 @@ describe('tsdown client artifact', () => {
     ctx.plugin({ inject: [...locale.inject], apply: locale.apply })
     const fiber = ctx.plugin(exports as { apply: (ctx: Context) => void })
     await fiber.await()
-    expect(slots.entries('conversation.view').map(e => e.options.id)).toEqual(['trajectory'])
+    expect(slots.entries('conversation.view').map(e => e.options.id)).toEqual(['trajectory', 'graph'])
     expect(events.entries().length).toBeGreaterThan(0)
     expect(views.entries()).toHaveLength(1)
     await fiber.dispose()

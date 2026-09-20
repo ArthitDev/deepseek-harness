@@ -40,6 +40,17 @@ function spec(command: string, overrides: Partial<SubprocessSpawnSpec> = {}): Su
 }
 
 describe('LocalSubprocessRuntime', () => {
+  it('shares one host-exit listener across runtime instances', async () => {
+    const before = process.listenerCount('exit')
+    const first = await new Context().plugin(LocalSubprocessRuntime)
+    const second = await new Context().plugin(LocalSubprocessRuntime)
+    expect(process.listenerCount('exit')).toBe(before + 1)
+    await first.dispose()
+    expect(process.listenerCount('exit')).toBe(before + 1)
+    await second.dispose()
+    expect(process.listenerCount('exit')).toBe(before)
+  })
+
   it('places the host-exit finalizer before listeners that predate the service', async () => {
     const baseline = new Set(process.listeners('exit'))
     const prior = vi.fn()

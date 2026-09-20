@@ -551,14 +551,10 @@ function environmentWithoutCommandGitConfig() {
   return env
 }
 
-function runLefthook(root, lefthook) {
+function runLefthook(root, lefthook, entry) {
   const args = ['install', '--force']
   const env = environmentWithoutCommandGitConfig()
-  // Node refuses to spawn Windows `.cmd` shims directly; the quoted path is
-  // re-parsed by cmd.exe, while POSIX can execute its extensionless shim.
-  const result = process.platform === 'win32'
-    ? spawnSync(`"${lefthook}"`, args, { cwd: root, env, stdio: 'inherit', shell: true })
-    : spawnSync(lefthook, args, { cwd: root, env, stdio: 'inherit' })
+  const result = spawnSync(process.execPath, [entry, ...args], { cwd: root, env, stdio: 'inherit' })
   if (result.status !== 0) throw commandFailure(lefthook, args, result)
 }
 
@@ -696,7 +692,8 @@ async function main() {
   const root = stripGitLineTerminator(probe.stdout)
   const isWindows = process.platform === 'win32'
   const lefthook = join(root, 'node_modules', '.bin', isWindows ? 'lefthook.cmd' : 'lefthook')
-  if (!existsSync(lefthook)) return
+  const lefthookEntry = join(root, 'node_modules', 'lefthook', lefthookPackage.bin.lefthook)
+  if (!existsSync(lefthook) || !existsSync(lefthookEntry)) return
 
   assertSupportedGit(root)
   const gitDirectory = stripGitLineTerminator(git(['rev-parse', '--absolute-git-dir'], root).stdout)
@@ -790,7 +787,7 @@ async function main() {
       ) {
         throw new Error('new worktree-local core.hooksPath did not become the effective direct worktree value')
       }
-      runLefthook(root, lefthook)
+      runLefthook(root, lefthook, lefthookEntry)
       updateOwnershipMarker(ownedHooksDirectory.markerPath, hooksPath)
     } catch (error) {
       const rollbackErrors = []

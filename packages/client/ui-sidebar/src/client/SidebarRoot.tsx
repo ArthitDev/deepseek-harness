@@ -190,7 +190,7 @@ export function SidebarRoot({
             <span className={css.brandIdentity} aria-hidden="true">
               <span className={css.brandMark}>
                 {renderSlot('sidebar.brand.mark', { size: 24 }, {
-                  fallback: <img src="/new-logo.png" alt="" width={24} height={24} />,
+                  fallback: <span className={css.localBrandLogo} data-dsh-agent-logo="" aria-hidden="true" />,
                 })}
               </span>
               <span className={css.brandName}>
@@ -220,7 +220,7 @@ export function SidebarRoot({
             {!wide && (
               <span className={css.railMark} aria-hidden="true">
                 {renderSlot('sidebar.brand.mark', { size: 24 }, {
-                  fallback: <img src="/new-logo.png" alt="" width={24} height={24} />,
+                  fallback: <span className={css.localBrandLogo} data-dsh-agent-logo="" aria-hidden="true" />,
                 })}
               </span>
             )}

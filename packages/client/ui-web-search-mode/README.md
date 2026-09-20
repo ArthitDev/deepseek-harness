@@ -1,5 +1,5 @@
 ---
-description: "Per-session always-search control beside the Web composer access selector."
+description: "Global always-search toggle in General Settings."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package places a `Web Search` toggle beside the composer access selector. It reads the host-projected `webSearchMode` state and dispatches `/web-search always` or `/web-search auto`; the host owns persistence and prompt injection.
+This package places an `Always use web search` toggle in General Settings. It writes the host-owned `web-search-policy` setting; `dsh-tool-web` reads that setting before each request and owns prompt injection.
 
 ## Table of Contents
 
@@ -24,21 +24,21 @@ This package places a `Web Search` toggle beside the composer access selector. I
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount it with `ui-conversation`, `dsh-tool-web`, the session projection runtime, and command remotes. The control appears only when the host exposes `webSearchMode`. Its active state is host-confirmed and survives reload, resume, and context compaction because it is folded from the Session log.
+Mount it with `ui-settings`, `dsh-tool-web`, settings remotes, and a host `@deepseek-ai/dsh-tool-web/settings` entry. The row appears only when the host exposes the `web-search-policy` namespace. The setting defaults off and persists in the user settings document.
 
 -----
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-The browser plugin occupies the `conversation.input.webSearch` single session seat. It sends the same command a user can type and shows command or transport failures inline. It never changes permission, sandbox, or approval settings.
+The browser plugin contributes one `settings.general.item` row and uses the shared `Switch` control. It disables the switch while loading or saving, hides the row when the host does not expose the namespace, and shows write failures inline. It does not register a chat control.
 
 -----
 
 <a id="dev-note"></a>
 ## Dev Note
 
-The node half is intentionally empty. Tests cover slot registration, command dispatch, failure display, projection persistence, and conditional system-prompt assembly.
+The node half is intentionally empty. Tests cover settings slot registration, persistence writes, failure display, Host policy precedence, and conditional system-prompt assembly.
 
 No runtime invariant companion is published because this browser control owns no divergent runtime observations.
 
@@ -47,15 +47,15 @@ No runtime invariant companion is published because this browser control owns no
 <a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through the `/web-search` command; `dsh-tool-web` owns the model-visible system-prompt policy.
+Indirectly, through `dsh-tool-web`, which requires one structured `web_search` call before each answer when enabled, otherwise searches only for current or missing information while preferring other relevant tools, and uses the user's language for search queries by default.
 
 #### KV Cache effect
 
-Changing the mode alters the next assembled system prompt and invalidates reuse from that changed policy section; a stable mode remains prefix-stable.
+Changing the setting alters the next assembled system prompt for every session. A stable setting remains prefix-stable.
 
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- The toggle is available only when `web_search` is composed.
+- The toggle is available only when the host exposes `web-search-policy`.
 - Provider availability remains independent; a missing provider still produces the normal web-tool error.

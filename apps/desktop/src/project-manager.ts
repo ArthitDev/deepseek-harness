@@ -438,8 +438,17 @@ export class DesktopProjectManager {
     const npmrc = join(this.paths.pnpm.config, 'npmrc')
     if (!existsSync(npmrc)) writeFileSync(npmrc, '', { mode: 0o600 })
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => (
-      name !== 'NODE_OPTIONS' && name !== 'NODE_PATH' && !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
+      name !== 'NODE_OPTIONS' && name !== 'NODE_PATH' && !/^PATH$/iu.test(name)
+      && !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
     )))
+    const seenPaths = new Set<string>()
+    const path = [dirname(this.runtime.node), ...(process.env.PATH ?? '').split(delimiter)]
+      .filter((entry) => {
+        const key = process.platform === 'win32' ? entry.toLowerCase() : entry
+        if (entry === '' || seenPaths.has(key)) return false
+        seenPaths.add(key)
+        return true
+      }).join(delimiter)
     writeFileSync(this.pendingPackages, '')
     await new Promise<void>((settle, reject) => {
       const child = spawn(this.runtime.node, [
@@ -458,7 +467,7 @@ export class DesktopProjectManager {
           NPM_CONFIG_REGISTRY: DESKTOP_REGISTRY,
           NPM_CONFIG_STORE_DIR: this.paths.pnpm.store,
           NPM_CONFIG_USERCONFIG: npmrc,
-          PATH: `${dirname(this.runtime.node)}${delimiter}${process.env.PATH ?? ''}`,
+          PATH: path,
           PNPM_HOME: this.paths.pnpm.home,
           XDG_CACHE_HOME: this.paths.pnpm.cache,
           XDG_CONFIG_HOME: this.paths.pnpm.config,

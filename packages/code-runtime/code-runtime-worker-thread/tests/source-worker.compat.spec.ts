@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
@@ -14,6 +14,7 @@ it('boots the source worker without workspace package outputs', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-code-source-worker-'))
   let worker: Worker | undefined
   try {
+    await writeFile(join(directory, 'package.json'), '{"type":"module"}\n')
     const files = ['worker.ts', 'bootstrap.ts', 'protocol.ts', 'worker-json.ts', 'output-json.ts']
     await Promise.all(files.map(async (file) => {
       await copyFile(new URL(`../src/${file}`, import.meta.url), join(directory, file))

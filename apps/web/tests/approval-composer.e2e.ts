@@ -43,7 +43,7 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
     let replayFixture = FIXTURE
     if (process.platform === 'win32' && MODE !== 'record') {
       sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
-      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      replayFixture = join(sidecarDir, 'session.v3.jsonl')
       await writeFile(replayFixture, (await readFile(FIXTURE, 'utf8')).replaceAll('"name":"bash"', '"name":"pwsh"'))
     }
     scaffold = await launchWebScaffold(MODE === 'record'

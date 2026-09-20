@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { delimiter, dirname, resolve } from 'node:path'
 
 /** Prefix reserved for build-time values that may be embedded in browser artifacts. */
 const CLIENT_BUILD_ENV_PREFIX = 'DSH_CLIENT_'
@@ -87,6 +87,7 @@ export function repositoryVersion(root: string): string {
  * @returns true or false inside a Git worktree; undefined without Git metadata.
  */
 export function repositoryGitDirty(root: string): boolean | undefined {
+  if (!existsSync(resolve(root, '.git'))) return undefined
   const probe = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], {
     cwd: root,
     encoding: 'utf8',
@@ -209,17 +210,33 @@ export function resolveClientBuildEnvironment(
  * Construct a subprocess environment containing exactly the selected public values.
  * @param environment - parent process environment.
  * @param clientEnvironment - complete public environment selected for the build.
+ * @param executablePath - runtime executable whose directory must remain available to package scripts.
  * @returns the parent environment with selectors and inherited public values replaced.
  */
 export function clientBuildProcessEnvironment(
   environment: NodeJS.ProcessEnv,
   clientEnvironment: ClientBuildEnvironment,
+  executablePath: string = process.execPath,
 ): NodeJS.ProcessEnv {
   const child: NodeJS.ProcessEnv = {}
+  const inheritedPaths: string[] = []
   for (const [name, value] of Object.entries(environment)) {
     if (name === CLIENT_BUILD_PROFILE_SELECTOR || name.startsWith(CLIENT_BUILD_ENV_PREFIX)) continue
+    if (name.toLowerCase() === 'path') {
+      if (value !== undefined && value !== '') inheritedPaths.push(value)
+      continue
+    }
     child[name] = value
   }
+  const pathEntries = [dirname(executablePath), ...inheritedPaths.flatMap(path => path.split(delimiter))]
+  const seen = new Set<string>()
+  const normalizedPath = pathEntries.filter((entry) => {
+    const key = process.platform === 'win32' ? entry.toLowerCase() : entry
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).join(delimiter)
+  child.PATH = normalizedPath
   return { ...child, ...clientEnvironment }
 }
 

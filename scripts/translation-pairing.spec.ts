@@ -143,7 +143,7 @@ describe('translation pairing snapshots', () => {
       mkdirSync(join(root, 'docs'), { recursive: true })
       writeFileSync(join(root, 'docs/reference.md'), '# Reference\n')
       writeFileSync(join(root, 'docs/reference.zh.md'), '# 参考\n')
-      execFileSync('git', ['-C', root, 'add', 'docs'])
+      execFileSync('git', ['-C', root, '-c', 'core.autocrlf=false', 'add', 'docs'])
 
       expect(gitIndexPaths(root)).toEqual(new Set([
         'docs/reference.md',

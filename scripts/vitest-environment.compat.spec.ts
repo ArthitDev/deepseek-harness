@@ -6,6 +6,9 @@ describe('Vitest jsdom compatibility', () => {
     if (process.allowedNodeEnvironmentFlags.has('--webstorage')) {
       expect(process.execArgv.filter(argument => argument === '--no-webstorage')).toHaveLength(1)
     }
+    if (process.allowedNodeEnvironmentFlags.has('--disable-warning=ExperimentalWarning')) {
+      expect(process.execArgv.filter(argument => argument === '--disable-warning=ExperimentalWarning')).toHaveLength(1)
+    }
     localStorage.setItem('dsh-vitest-storage-probe', 'available')
 
     expect(localStorage.getItem('dsh-vitest-storage-probe')).toBe('available')

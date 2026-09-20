@@ -6,6 +6,12 @@ export const NS = 'trajectory'
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'view.trajectory': '轨迹',
+  'view.graph': '图谱',
+  'graph.aria': '智能体工作图谱',
+  'graph.empty': '此会话还没有活动。',
+  'graph.completed': '已完成',
+  'graph.failed': '失败',
+  'graph.running': '运行中',
   'toolbar.aria': '轨迹工具栏',
   'toolbar.duration': '时长',
   'toolbar.useActualDuration': '使用实际时长',
@@ -199,6 +205,12 @@ export type TrajectoryTranslate =
 /** English dictionary, checked complete against the Chinese source of truth. */
 export const en: Record<TrajectoryKey, string> = {
   'view.trajectory': 'Trajectory',
+  'view.graph': 'Graph',
+  'graph.aria': 'Agent activity graph',
+  'graph.empty': 'No activity in this session yet.',
+  'graph.completed': 'Completed',
+  'graph.failed': 'Failed',
+  'graph.running': 'Running',
   'toolbar.aria': 'Trajectory toolbar',
   'toolbar.duration': 'Duration',
   'toolbar.useActualDuration': 'Use actual duration',

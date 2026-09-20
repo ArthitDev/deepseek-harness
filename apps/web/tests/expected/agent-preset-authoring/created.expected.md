@@ -25,6 +25,9 @@
     - text: 关闭
   - heading "Agent 预设" [level=2]
   - paragraph: 预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。填写系统提示词直接新建、复制既有预设，或用「创造模式」让 Agent 帮你创建。
+  - text: 允许切换 Agent 模式 Beta
+  - paragraph: 开启后，新任务可以选择可用模式。关闭后，所有新任务使用配置的默认模式。仅影响新任务。
+  - switch "允许切换 Agent 模式" [checked]
   - heading "内置" [level=3]
   - list:
     - listitem:
@@ -51,7 +54,7 @@
         - text: 复制
     - listitem:
       - 'button "设为默认: 极简模式"':
-        - text: 极简模式 内置 仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。
+        - text: 极简模式 内置 仅提供持久 shell 的单工具编码 Agent。
         - code: minimal
       - group: 模型 (2)
       - 'button "查看: 极简模式"':
@@ -75,7 +78,7 @@
   - list:
     - listitem:
       - 'button "设为默认: 我的模式"':
-        - text: 我的模式 自定义 仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。
+        - text: 我的模式 自定义 仅提供持久 shell 的单工具编码 Agent。
         - code: my-agent
       - group: 模型 (2)
       - 'button "编辑: 我的模式"':

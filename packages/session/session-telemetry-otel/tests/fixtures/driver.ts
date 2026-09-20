@@ -11,7 +11,7 @@ import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { gunzipSync } from 'node:zlib'
 import { resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
-import { recordFeedback } from '@deepseek-ai/dsh-command-feedback'
+import { recordFeedback } from '@deepseek-ai/dsh-command-feedback/record'
 import { runFixtureTurn } from '@deepseek-ai/dsh-loader-smoke'
 import { bootProductionProfile } from '../../../../test-support/loader-smoke/tests/fixtures/production-profile.ts'
 
