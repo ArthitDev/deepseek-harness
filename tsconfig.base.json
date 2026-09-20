@@ -1,7 +1,6 @@
 {
-  // Doubles as the resolution facade for vite-tsconfig-paths (vitest configs
-  // point here). NEVER add include/files to this file: it would leak into
-  // every extending package project and narrow the facade's match-all scope.
+  // Supplies source paths to TypeScript and Vite's native tsconfig resolver.
+  // NEVER add include/files: they would leak into every extending project.
   "compilerOptions": {
     "target": "es2024",
     "module": "esnext",
@@ -139,6 +138,7 @@
       "@deepseek-ai/dsh-cordis-host-runner": ["./packages/extensions/cordis-host-runner/src/index.ts"],
       "@deepseek-ai/dsh-cordis-host-runner/types": ["./packages/extensions/cordis-host-runner/src/types.ts"],
       "@deepseek-ai/dsh-command-feedback/types": ["./packages/feedback/command-feedback/src/types.ts"],
+      "@deepseek-ai/dsh-command-feedback/record": ["./packages/feedback/command-feedback/src/record.ts"],
       "@deepseek-ai/dsh-goal/types": ["./packages/goal/goal/src/types.ts"],
       "@deepseek-ai/dsh-goal/client": ["./packages/goal/goal/src/client.ts"],
       "@deepseek-ai/dsh-llm/types": ["./packages/llm/llm/src/types.ts"],
@@ -309,7 +309,10 @@
       "@deepseek-ai/dsh-sdk-protocol": ["./packages/sdk/protocol/src"],
       "@deepseek-ai/dsh-sdk-jsonrpc-server": ["./packages/sdk/server/src"],
       "@deepseek-ai/dsh-experimental-agent-team": ["./packages/experimental/agent-team/src"],
-      "@deepseek-ai/dsh-experimental-auto-review": ["./packages/experimental/auto-review/src"],
+      "@deepseek-ai/dsh-pentest-executor": ["./packages/pentest/pentest-executor/src"],
+      "@deepseek-ai/dsh-pentest-executor/types": ["./packages/pentest/pentest-executor/src/types.ts"],
+      "@deepseek-ai/dsh-pentest-run": ["./packages/pentest/pentest-run/src"],
+      "@deepseek-ai/dsh-pentest-run/types": ["./packages/pentest/pentest-run/src/types.ts"],
       "@deepseek-ai/dsh-experimental-agent-team-profile": ["./packages/experimental/agent-team-profile/src"],
       "@deepseek-ai/dsh-experimental-tool-agent-team": ["./packages/experimental/tool-agent-team/src"],
       "@deepseek-ai/dsh-experimental-webworker-runtime": ["./packages/experimental/webworker-runtime/src"],

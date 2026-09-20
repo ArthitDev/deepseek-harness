@@ -67,7 +67,7 @@ describe('minimal agent preset', () => {
     let replayFixture = FIXTURE
     if (process.platform === 'win32') {
       sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
-      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      replayFixture = join(sidecarDir, 'session.v3.jsonl')
       const records = (await readFile(FIXTURE, 'utf8')).trimEnd().split(/\r?\n/)
         .map(line => JSON.stringify(rewriteWindowsShellCalls(JSON.parse(line))))
       await writeFile(replayFixture, `${records.join('\n')}\n`)
@@ -123,13 +123,14 @@ describe('minimal agent preset', () => {
     if (failures.length > 1) throw new AggregateError(failures, 'minimal preset smoke teardown failed')
   })
 
-  it('sends the exact RL prompt and shell schema, then executes the persistent shell', async () => {
+  it('sends the exact RL prompt and schema, then executes the persistent shell', async () => {
     const requestHeader = agentHandle.agent.session.requestHeader()
     if (requestHeader === undefined) throw new Error('the minimal agent issued no model request')
     const systemPrompt = systemPromptText(agentHandle.agent.session)
     if (systemPrompt === undefined) throw new Error('the minimal agent issued no system prompt')
     expect(agentHandle.agent.session.snapshotEvents().some(event => event.type === 'user/message'
-      && event.data.source.kind === 'runtime-context')).toBe(false)
+      && event.data.source.kind === 'plugin'
+      && event.data.source.plugin === '@deepseek-ai/dsh-system-prompt')).toBe(false)
     expect(scaffold.ctx.agentPresets.serviceFor(agentHandle.agent, 'fs')).toBeUndefined()
     expect(scaffold.ctx.agentPresets.serviceFor(agentHandle.agent, 'compaction')).toBeUndefined()
 
@@ -175,11 +176,9 @@ describe('minimal agent preset', () => {
       tools: requestHeader.tools?.map(tool => process.platform === 'win32' && tool.name === 'pwsh' ? 'bash' : tool.name),
       goalCommand: scaffold.ctx.commands.find(agentHandle.agent, 'goal') !== undefined,
       bash: shellText,
-      editor: text(editor),
     }).toMatchInlineSnapshot(`
       {
-        "bash": "PERSISTED:{{cwd}}/persistent-state
-      [Command finished with exit code 0]",
+        "bash": "PERSISTED:{{cwd}}/persistent-state",
         "goalCommand": false,
         "prompt": "You are a helpful software engineer assistant.",
         "tools": [

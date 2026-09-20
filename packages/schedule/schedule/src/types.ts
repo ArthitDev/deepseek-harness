@@ -4,9 +4,7 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type {} from '@deepseek-ai/dsh-session/types'
-// Type-only: the Workspace registry's archive-admission family map this plugin merges `schedule` into.
-import type {} from '@deepseek-ai/dsh-workspace/types'
+import type {} from '@deepseek-ai/dsh-session'
 
 /** Stable reminder identity that is unique and never reused within one session. */
 export type ScheduleId = Branded<'ScheduleId'>

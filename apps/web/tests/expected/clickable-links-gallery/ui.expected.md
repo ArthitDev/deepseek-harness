@@ -1,16 +1,16 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Clickable links gallery" [disabled]
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - text: "Assemble the link gallery: write the report and styles, inspect the sources, and summarize. {{clock}}"
 - button "Copy"
 - status: Worked
@@ -153,21 +153,43 @@
 - list:
   - listitem:
     - paragraph: Footnote references stay inert superscripts. ↩
-- button "Copy"
-- button "Good response"
-- button "Bad response"
-- button "Branch into a new conversation"
-- text: {{clock}}
-- button "Back to bottom"
-- textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- text: Files changed
+- button "Open site/report.html": report.html
+- button "Open a/style.css": style.css
+- button "Open b/style.css": style.css
+- button "Open site/index.html": index.html
+- button "Open site/app.js": app.js
+- button "Open src/tokens.css": tokens.css
+- text: + 1 file
+- button "Copy":
   - img
-  - text: Web Search
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation":
+  - img
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: {{clock}}
+- button "Back to bottom":
+  - img
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
+  - img
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- button "1 turns 2 steps"
+- button "1 turns 2 steps":
+  - img
+  - text: 1 turns 2 steps

@@ -451,11 +451,9 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
 
   it.skipIf(MODE === 'record')('cascades the dark theme from the body attribute to painted surfaces', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-dark'))
-    // This scenario pins the ThemeRuntime's DOM contract directly (the
-    // body[data-ds-dark-theme] attribute -> stylesheet cascade); the REAL
-    // user gesture above it (Settings -> Appearance cubes) is owned by
-    // settings-chrome.e2e.ts. Driving the attribute here keeps the cascade
-    // pinned independently of the settings surface's own lifecycle.
+    // Drive the public theme action so ThemeRuntime recomposes every active
+    // token override (including the selected agent mode) before the presenter
+    // updates the body attribute and painted surfaces.
     const sample = async (): Promise<{ token: string; sidebarBg: string; bodyBg: string }> =>
       await page.evaluate(() => {
         const sidebar = document.querySelector('[class*="sidebar"], [class*="rail"]') ?? document.body
@@ -466,16 +464,17 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
         }
       })
     const light = await sample()
-    await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click()
+    await expect.poll(() => page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))).toBe(true)
     const dark = await sample()
     // The alias token itself must flip — the cascade's root fact.
     expect(dark.token).not.toBe(light.token)
     // And a real painted surface must consume it (not just variables in a
     // void): at least one of the sampled backgrounds repaints.
     expect(dark.sidebarBg !== light.sidebarBg || dark.bodyBg !== light.bodyBg).toBe(true)
-    // Removing the attribute restores the light values exactly (the palettes
-    // live in one stylesheet; activation is attribute-only by design).
-    await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme') })
+    // The inverse public action restores the light values exactly.
+    await page.getByRole('button', { name: 'Switch to light mode' }).click()
+    await expect.poll(() => page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))).toBe(false)
     const restored = await sample()
     expect(restored).toEqual(light)
     expect(tripwire.pageErrors).toEqual([])

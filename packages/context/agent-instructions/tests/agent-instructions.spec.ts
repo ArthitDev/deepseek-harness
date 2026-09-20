@@ -353,7 +353,7 @@ describe('workspace context instruction discovery', () => {
     try {
       await writeFile(homeFile, 'file')
 
-      const files = await discoverBaselineInstructionFiles({ cwd: root, dshHome: homeFile })
+      const files = await discoverBaselineInstructionFiles({ cwd: root, dshHome: homeFile, projectRoot: root })
 
       expect(files).toEqual([])
     } finally {
@@ -646,7 +646,10 @@ describe('workspace context instruction discovery', () => {
       await write(join(root, 'AGENTS.md'), 'parent without marker')
       await write(join(cwd, 'AGENTS.md'), 'cwd without marker')
 
-      const files = await discoverBaselineInstructionFiles({ cwd })
+      const files = await discoverBaselineInstructionFiles({
+        cwd,
+        projectRootMarkers: ['.dsh-test-no-project-marker'],
+      })
 
       expect(files.map(file => file.displayPath)).toEqual(['AGENTS.md'])
       expect(files.map(file => file.absolutePath)).toEqual([join(cwd, 'AGENTS.md')])
@@ -664,7 +667,7 @@ describe('workspace context instruction discovery', () => {
       await write(join(envHome, 'AGENTS.md'), 'env global rule')
       vi.stubEnv('DSH_HOME', envHome)
 
-      const files = await discoverBaselineInstructionFiles({ cwd: root })
+      const files = await discoverBaselineInstructionFiles({ cwd: root, projectRoot: root })
 
       expect(files).toEqual([{ absolutePath: join(envHome, 'AGENTS.md'), displayPath: '$DSH_HOME/AGENTS.md' }])
     } finally {
@@ -685,7 +688,7 @@ describe('workspace context instruction discovery', () => {
       vi.resetModules()
       vi.doMock('node:os', () => ({ homedir: () => home }))
       const isolated = await import('@deepseek-ai/dsh-agent-instructions')
-      const files = await isolated.discoverBaselineInstructionFiles({ cwd: root })
+      const files = await isolated.discoverBaselineInstructionFiles({ cwd: root, projectRoot: root })
 
       expect(files.map(file => file.displayPath)).toEqual(['~/.dsh/AGENTS.md'])
     } finally {
@@ -706,7 +709,7 @@ describe('workspace context instruction discovery', () => {
       vi.resetModules()
       vi.doMock('node:os', () => ({ homedir: () => home }))
       const isolated = await import('@deepseek-ai/dsh-agent-instructions')
-      const files = await isolated.discoverBaselineInstructionFiles({ cwd: root, dshHome: '~/.dsh' })
+      const files = await isolated.discoverBaselineInstructionFiles({ cwd: root, dshHome: '~/.dsh', projectRoot: root })
 
       expect(files).toEqual([{ absolutePath: join(home, '.dsh/AGENTS.md'), displayPath: '~/.dsh/AGENTS.md' }])
     } finally {
@@ -738,7 +741,7 @@ describe('workspace context instruction discovery', () => {
       await mkdir(join(root, '.git'), { recursive: true })
       await mkdir(join(root, 'AGENTS.md'), { recursive: true })
 
-      const files = await discoverBaselineInstructionFiles({ cwd: root, dshHome: home })
+      const files = await discoverBaselineInstructionFiles({ cwd: root, dshHome: home, projectRoot: root })
 
       expect(files).toEqual([])
     } finally {
@@ -2513,7 +2516,7 @@ describe('workspace context request injection', () => {
     const home = await tempRepo()
     try {
       await write(join(home, 'AGENTS.md'), 'global custom rule')
-      const files = await discoverBaselineInstructionFiles({ cwd: root, dshHome: home })
+      const files = await discoverBaselineInstructionFiles({ cwd: root, dshHome: home, projectRoot: root })
 
       expect(files.map(file => file.displayPath)).toEqual(['$DSH_HOME/AGENTS.md'])
     } finally {

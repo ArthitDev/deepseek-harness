@@ -393,7 +393,7 @@ describe('Hero chrome', () => {
     expect(brandMarkOwner.size).toBe(48)
     expect(brandMarkOwner.className).toBeTypeOf('string')
     expect(renderSlot.mock.calls[0]?.[2]?.fallback).toBeTruthy()
-    expect(view.container.querySelector('img[src="/new-logo.png"]')).not.toBeNull()
+    expect(view.container.querySelector('[data-dsh-agent-logo]')).not.toBeNull()
   })
 
   it('cycles the hero headline', () => {
@@ -403,6 +403,8 @@ describe('Hero chrome', () => {
     try {
       act(() => { vi.advanceTimersByTime(6_300) })
       expect(view.getByText('Break All Shield').getAttribute('data-text')).toBe('Break All Shield')
+      act(() => { vi.advanceTimersByTime(6_300) })
+      expect(view.getByText('Security Team Agent').hasAttribute('data-agent-mode-headline')).toBe(true)
     } finally {
       view.unmount()
       vi.useRealTimers()

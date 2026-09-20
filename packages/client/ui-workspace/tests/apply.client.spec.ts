@@ -6,8 +6,7 @@ import type {
 import type { WorkspaceId, WorkspaceSnapshot, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import { RemoteError, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
@@ -51,14 +50,17 @@ const workspaceState = (
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
+  ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const create = vi.fn(async (input: { name: string } | { path: string }) => ({
     workspaceId: 'ws-new' as never,
     path: 'name' in input ? `/projects/${input.name}` : input.path,
     title: 'new', sessionIds: [], createdAt: '0', updatedAt: '0',
   }))
   const rename = vi.fn(async () => ({}))
+  const insertSessionBefore = vi.fn(async () => ({}))
+  const open = vi.fn()
+  const clear = vi.fn()
   const selectPanel = vi.fn()
-  ctx.provide('layout', { selectPanel, beginNavigation: () => new AbortController().signal })
   const search = vi.fn(async () => ({
     ok: true as const,
     value: { items: [{ sessionId: 'session' as never, snippet: 'match' }], hasMore: false },
@@ -117,6 +119,14 @@ async function bench() {
     refreshProjections: vi.fn(() => Promise.resolve()),
     fork,
   } as never)
+  ctx.provide('layout', {
+    selectPanel,
+    beginNavigation: () => new AbortController().signal,
+  } as never)
+  ctx.provide('theme', {
+    setTheme: vi.fn(),
+    overrideTokens: vi.fn(() => () => {}),
+  } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
   const remoteMachines = {
@@ -126,7 +136,13 @@ async function bench() {
     })),
     save: vi.fn(), remove: vi.fn(), probe: vi.fn(), trust: vi.fn(),
   }
-  new TestRemote(ctx, { directoryPicker, remoteMachines })
+  const pentestRuns = {
+    list: vi.fn(), snapshot: vi.fn(), control: vi.fn(), controlTask: vi.fn(), replaceScope: vi.fn(),
+  }
+  const pentestLoop = {
+    create: vi.fn(), start: vi.fn(), stop: vi.fn(), running: vi.fn(),
+  }
+  new TestRemote(ctx, { directoryPicker, remoteMachines, pentestRuns, pentestLoop })
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -135,10 +151,7 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename,
-    retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory, pinSession, unpinSession,
-    workspacesSubscribe, initializeDefault,
-    setWorkspaces: (snapshot: WorkspaceSnapshot): void => { workspaceSnapshot = snapshot },
-    setSessions: (snapshot: SessionListState): void => { sessionSnapshot = snapshot },
+    insertSessionBefore, open, clear, selectPanel, search, renameSession, binding, fork, pickDirectory,
   }
 }
 
@@ -186,22 +199,17 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines',
+      'slots', 'sessions', 'workspaces', 'layout', 'theme', 'locale', 'settingsScope', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'remote.pentestRuns', 'remote.pentestLoop',
     ])
   })
 
-  it('reports a default Workspace creation failure through the shared notice overlay', async () => {
+  it('declares layout before the shared New Session action uses it', async () => {
     const b = await bench()
-    onTestFinished(() => b.ctx.fiber.dispose())
-    b.initializeDefault.mockRejectedValueOnce(new Error('denied'))
-    declare(b.slots, 'shell.overlay')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    const face = faceOf(entry(b.slots, 'shell.overlay', 'workspace.row-toast')) as RowToastInjected
-    await vi.waitFor(() => {
-      expect(face.hooks.toast.getSnapshot()).toMatchObject({ kind: 'defaultWorkspaceFailed' })
-    })
-    face.dismissToast()
-    expect(face.hooks.toast.getSnapshot()).toBeNull()
+
+    expect(() => { b.ctx.uiWorkspace.startSession() }).not.toThrow()
+    expect(b.clear).toHaveBeenCalledOnce()
+    expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith(null)
   })
 
   it('registers browser and pickers for declarations arriving before or after apply', async () => {

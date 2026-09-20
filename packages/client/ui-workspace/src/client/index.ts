@@ -32,6 +32,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
@@ -47,6 +48,7 @@ import {
   RemoteMachineControl, RemoteMachinesSection, type RemoteMachineInjected,
 } from './RemoteMachines.tsx'
 import { RemoteMachineController } from './remote-machine-store.ts'
+import { AgentModeController, type AgentModeSettings } from './agent-mode.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type { UiWorkspace } from './navigation.ts'
@@ -90,7 +92,8 @@ const NS = 'workspace'
  * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = [
-  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines',
+  'slots', 'sessions', 'workspaces', 'layout', 'theme', 'locale', 'settingsScope', 'remote',
+  'remote.directoryPicker', 'remote.remoteMachines', 'remote.pentestRuns', 'remote.pentestLoop',
 ]
 
 /**
@@ -114,6 +117,9 @@ export function apply(ctx: Context): void {
   const uiWorkspace = new UiWorkspaceService(
     ctx, ctx.remote.directoryPicker, workspaces, sessions)
   const remoteMachines = new RemoteMachineController(ctx)
+  const modeSettings = ctx.settingsScope.bind<AgentModeSettings>({ namespace: 'pentest-mode' })
+  const agentMode = new AgentModeController(ctx.theme, modeSettings)
+  ctx.effect(() => () => { agentMode.dispose() }, 'ui-workspace: agent mode theme')
   ctx.slots.provideRoot({ hooks: { workspaces: workspaces.list } })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
 
@@ -224,7 +230,7 @@ export function apply(ctx: Context): void {
   })
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
-    // the current Session Workspace before the recent-Workspace fallback.
+    // the current or just-deleted Session Workspace before the recent fallback.
     startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
     open: openSession,
     searchSessions,
@@ -256,13 +262,56 @@ export function apply(ctx: Context): void {
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource, remoteMachines: remoteMachines.store },
+    hooks: { directoryFlow: pickerFlowSource, hostInfo, remoteMachines: remoteMachines.store },
   })
   const remoteMachineInjected = (): RemoteMachineInjected => ({
     controller: remoteMachines,
+    agentMode,
     hooks: { hostInfo, remoteMachines: remoteMachines.store },
     createWorkspace: async path => await workspaces.create({ path }),
     startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
+    listPentestRuns: async () => {
+      const result = await ctx.remote.pentestRuns.list()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    loadPentestRun: async (runId) => {
+      const result = await ctx.remote.pentestRuns.snapshot(runId)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    controlPentestRun: async (runId, action) => {
+      const result = await ctx.remote.pentestRuns.control(runId, { action })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    controlPentestTask: async (taskId, request) => {
+      const result = await ctx.remote.pentestRuns.controlTask(taskId, request)
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    replacePentestScope: async (runId, authorizedTargets, excludedTargets) => {
+      const result = await ctx.remote.pentestRuns.replaceScope(runId, { authorizedTargets, excludedTargets })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    createPentestRun: async (request) => {
+      const result = await ctx.remote.pentestLoop.create(request)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    startPentestLoop: async (runId, request) => {
+      const result = await ctx.remote.pentestLoop.start(runId, request)
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    stopPentestLoop: async (runId) => {
+      const result = await ctx.remote.pentestLoop.stop(runId)
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    listRunningPentestLoops: async () => {
+      const result = await ctx.remote.pentestLoop.running()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
   })
   ctx.effect(() => {
     const refresh = (): void => { void remoteMachines.load() }

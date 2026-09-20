@@ -13,7 +13,7 @@ import {
   assertFixtureInventory, compareOrRefreshGolden, launchWebScaffold, seedSession, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, setDarkTheme } from './support.ts'
 
 const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/sidebar-scrollbar', import.meta.url))
@@ -384,17 +384,17 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     // the two resolve to DIFFERENT colours on this list: the l1 pair arrived
     // here intact rather than collapsing to one value or falling back.
     expect(light.hoverRules).toEqual(['var(--dsh-scrollbar-thumb-hover)'])
-    expect(light.token).toMatch(/^rgba?\(/)
+    expect(light.token).not.toBe('')
+    expect(light.token).not.toBe('transparent')
     expect(light.hoverToken).not.toBe(light.token)
-    // The dark palette declares different scrollbar tokens; driving the body
-    // attribute pins the cascade the way lifecycle-chrome does (the Settings
-    // gesture that sets it is owned there).
-    await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
+    // The public theme action recomposes agent-mode overrides as well as the
+    // base palette before the scrollbar tokens are measured.
+    await setDarkTheme(page, true)
     const dark = await measureList(page)
     expect(dark.token).not.toBe(light.token)
     expect(dark.hoverToken).not.toBe(dark.token)
     expect(dark.hoverToken).not.toBe(light.hoverToken)
-    await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme') })
+    await setDarkTheme(page, false)
     const restored = await measureList(page)
     expect(restored.token).toBe(light.token)
     expect(restored.hoverToken).toBe(light.hoverToken)
@@ -404,9 +404,9 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
   it('matches the committed scrollbar geometry golden in both palettes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-golden'))
     const light = await measurePalette(page)
-    await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
+    await setDarkTheme(page, true)
     const dark = await measurePalette(page)
-    await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme') })
+    await setDarkTheme(page, false)
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(light, dark), MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)

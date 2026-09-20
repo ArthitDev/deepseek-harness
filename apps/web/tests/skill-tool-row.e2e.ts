@@ -69,7 +69,7 @@ describe.skipIf(MODE === 'record')('web e2e: dedicated Skill tool row', () => {
     expect(await output.textContent()).toContain('Agent presets are ordinary `@deepseek-ai/dsh-agent-preset` declarations carried by bundle patches.')
     expect(await output.evaluate(element => getComputedStyle(element.parentElement!).maxHeight)).toBe('260px')
 
-    await page.getByRole('button', { name: /^Web search automatic/ }).waitFor({ timeout: 15_000 })
+    await page.getByRole('button', { name: /^Agent mode:/ }).waitFor({ timeout: 15_000 })
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .replace(/\b\d{1,2}\/\d{1,2}(?= \{\{clock\}\})/g, '{{date}}')
       .replace(/\{\{date\}\} (?=\{\{clock\}\} Ran for)/g, '')

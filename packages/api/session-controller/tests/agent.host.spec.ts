@@ -453,6 +453,7 @@ describe('ApiSession create or adoption', () => {
       inspect: () => Promise.resolve({ meta: childMeta, events: [] }),
     })
     child.ctx.provide('agentPresets', {
+      presetIdForModel: () => 'standard',
       resolve: () => {
         child.ctx.sessions.create(childMeta.id, {
           meta: { ...childMeta, parentSession: SessionId('parent'), origin: 'subagent' },

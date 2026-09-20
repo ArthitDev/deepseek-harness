@@ -400,7 +400,6 @@ class SkillWatchManager {
       const current = await resolveRootWatchMode(state.root.path, this.config.followSymlinks)
       // A child unlink can publish an empty catalog before root unlinkDir arrives.
       // Discovery therefore revalidates the retained handle independently.
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- watcher callbacks can mark unhealthy while the probe awaits
       if (!state.unhealthy && sameWatchMode(watcher.mode, current)) return
     }
     await this.replaceWatcher(state)
@@ -417,7 +416,6 @@ class SkillWatchManager {
       /* v8 ignore next -- The loop returns no handle only when teardown wins between awaited probes. */
       if (watcher === undefined) return
       /* v8 ignore start -- Post-open teardown is timing-dependent; the disposal race has an explicit integration test. */
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown can race awaited watcher startup
       if (this.closing || state.owners.size === 0) {
         await this.closeWatcher(watcher)
         return
@@ -426,7 +424,6 @@ class SkillWatchManager {
       state.watcher = watcher
       state.unhealthy = false
     } catch (error) {
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown can race awaited watcher startup
       if (!this.closing) {
         state.unhealthy = true
         this.ctx.logger.warn(`skill-filesystem: failed to watch ${state.root.path}: ${errorMessage(error)}`)
@@ -943,13 +940,16 @@ function findClosingFrontmatter(raw: string, start: number): { start: number; bo
 }
 
 async function findProjectRoot(cwd: string, fs: FileSystem | undefined): Promise<string> {
-  let current = cwd
+  const start = resolve(cwd)
+  const home = fs === undefined ? resolve(homedir()) : undefined
+  let current = start
   while (true) {
+    if (current === home && current !== start) return start
     if (await pathExists(join(current, '.git'), fs)) {
       return current
     }
     const parent = dirname(current)
-    if (parent === current) return cwd
+    if (parent === current) return start
     current = parent
   }
 }

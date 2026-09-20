@@ -1,16 +1,20 @@
 - banner:
   - navigation "Session hierarchy": Reply with a one-sentence description
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy"
 - status: Deep diving...
@@ -20,15 +24,22 @@
   - listitem:
     - text: Queue item to remove
     - status: Sending…
-    - button "Edit queued message" [disabled]
-    - button "Remove queued message" [disabled]
-    - button "Steer queued message" [disabled]
+    - button "Edit queued message" [disabled]:
+      - img
+    - button "Remove queued message" [disabled]:
+      - img
+    - button "Steer queued message" [disabled]:
+      - img
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- button "Add files or run commands":
   - img
-  - text: Web Search
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash

@@ -38,8 +38,21 @@ export function requireBuilt(name: string): unknown {
  */
 export const ZH_BROWSER_LOCALE = 'zh-CN'
 
-/** Same-day anchor for seeded event times and the Asia/Shanghai browser clock. */
-export const WEB_FIXTURE_TIME = Date.parse('2026-01-15T12:00:00+08:00')
+/** Switch through the shipped theme action only when the page is not already in the requested scheme. */
+export async function setDarkTheme(page: Page, dark: boolean): Promise<void> {
+  if (await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme')) === dark) return
+  const action = page.getByRole('button', { name: dark ? 'Switch to dark mode' : 'Switch to light mode' })
+  if (await action.isVisible()) {
+    await action.click()
+  } else {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Settings' })
+    await dialog.getByRole('button', { name: dark ? 'Dark' : 'Light', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await dialog.waitFor({ state: 'hidden' })
+  }
+  await page.waitForFunction(expected => document.body.hasAttribute('data-ds-dark-theme') === expected, dark)
+}
 
 /**
  * Open the standard browser-test page advertising English before client boot.
@@ -145,6 +158,8 @@ export function probeFreePort(): Promise<number> {
 export async function connectFreshWorkspace(page: Page, root: string, name = 'workspace'): Promise<void> {
   mkdirSync(join(root, name, '.git'), { recursive: true })
   await page.getByRole('textbox', { name: 'Choose workspace' }).click()
+  await page.getByRole('menuitem').first().click()
+  await page.getByRole('menuitem', { name: /Add workspace/ }).click()
   const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: 'Edit path' }).click()
@@ -170,6 +185,8 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
 export async function connectFreshWorkspaceZh(page: Page, root: string, name = 'workspace'): Promise<void> {
   mkdirSync(join(root, name, '.git'), { recursive: true })
   await page.getByRole('textbox', { name: '选择工作区' }).click()
+  await page.getByRole('menuitem').first().click()
+  await page.getByRole('menuitem', { name: '添加工作区…' }).click()
   const dialog = page.getByRole('dialog', { name: '选择工作区目录' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: '编辑路径' }).click()

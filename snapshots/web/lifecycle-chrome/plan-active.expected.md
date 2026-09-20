@@ -35,9 +35,12 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- 'button "Agent mode: Red Team"':
   - img
-  - text: Web Search
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Plan mode on, press to turn off": Plan
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":

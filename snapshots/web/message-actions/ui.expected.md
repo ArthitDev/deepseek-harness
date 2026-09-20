@@ -1,61 +1,92 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the read tool twice" [disabled]
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
-  - button "Jump to turn 3"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
-- button "Copy"
+- button "Copy":
+  - img
 - tooltip "Copy"
 - status: Stopped
 - button "Stopped" [disabled] [expanded]
 - button "Analysis completed"
 - paragraph: I will read both files before answering.
-- button "Read files"
-- button "Copy"
-- button "Good response"
-- button "Bad response"
-- button "Branch into a new conversation" [disabled]
-- text: Available only on the last message of a completed turn {{clock}} Now give the final answer. {{clock}}
-- button "Copy"
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- button "Copy":
+  - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation" [disabled]:
+  - img
+- text: Available only on the last message of a completed turn
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: {{clock}}
+- button "Read a.txt":
+  - img
+  - img
+  - text: Read
+  - button "a.txt"
+- button "Read b.txt":
+  - img
+  - img
+  - text: Read
+  - button "b.txt"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: Now give the final answer. {{clock}}
+- button "Copy":
+  - img
 - paragraph: DONE
-- button "Copy"
-- button "Good response"
-- button "Bad response"
-- button "Branch into a new conversation"
-- text: {{clock}} Keep this later input in the original conversation. {{clock}}
-- button "Copy"
-- status: Worked
-- button "Took {{duration}}" [disabled]
-- paragraph: ORIGINAL ONLY
-- button "Copy"
-- button "Good response"
-- button "Bad response"
-- button "Branch into a new conversation"
+- button "Copy":
+  - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation":
+  - img
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- button "Add files or run commands":
   - img
-  - text: Web Search
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- button "3 turns 4 steps · {{throughput}} tok/s": 3 turns 4 steps{{throughput}} tok/s
-- button "7.9K tok · Cache hit 98%": 7.9K tokCache hit 98%
+- button "2 turns 3 steps · {{throughput}} tok/s":
+  - img
+  - text: 2 turns 3 steps{{throughput}} tok/s
+- button "7.9K tok · Cache hit 98%":
+  - img
+  - text: 7.9K tokCache hit 98%

@@ -2,6 +2,8 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 const SNAPSHOT_REF_PREFIX = 'refs/dsh/translation-pairing/snapshots'
 
@@ -27,6 +29,7 @@ export function gitBlobHash(content: Buffer): string {
  * @throws Error when Git cannot start or exits unsuccessfully.
  */
 export function runGit(root: string, args: string[], operation: string, input?: Buffer): Buffer {
+  if (!existsSync(resolve(root, '.git'))) throw new Error(`${operation} failed: ${root} is not a repository root`)
   const result = spawnSync('git', ['-C', root, ...args], {
     input,
     maxBuffer: GIT_COMMAND_MAX_BUFFER,

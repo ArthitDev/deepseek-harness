@@ -18,8 +18,9 @@ import { ChatGroupSeat } from './ChatGroupSeat.tsx'
 import { chatRenderKey } from './render-entry.ts'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { TurnNavigator } from './TurnNavigator.tsx'
-import { mergeTurnRailItems } from './turn-rail-items.ts'
-import { useChatScroll } from './use-chat-scroll.ts'
+import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
+import { formatRunDuration } from './message-chrome.ts'
+import a11yCss from './accessibility.module.css'
 import css from './ChatView.module.css'
 
 /** Host/OS refusal text for the file-open dialog; empty throws keep a locale fallback. */
@@ -72,13 +73,33 @@ const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pending
       default:
         return assertNever(entry)
     }
-  })
-  const pendingRows = pendingInputs.map(item => 'requestId' in item ? (
-    <PendingSubmissionBubble key={item.requestId} submission={item}
-      renderMessageImages={seatProps.renderMessageImages} t={seatProps.t} />
-  ) : (
-    <PendingSteeringBubble key={item.id} content={item.content}
-      renderMessageImages={seatProps.renderMessageImages} t={seatProps.t} />
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => { clearInterval(id) }
+  }, [anchor])
+  // Short turns keep the plain label; the clock only appears once the turn
+  // has clearly been running for a while.
+  const showClock = elapsedMs >= 15_000
+  return (
+    <div className={css.turnStatus} role="status" aria-live="polite">
+      <span className={css.turnStatusLogo} aria-hidden="true" />
+      <span className={a11yCss.visuallyHidden}>{t('chat.deepDiving')}</span>
+      {showClock && (
+        <span className={css.turnStatusClock} aria-hidden>
+          {formatRunDuration(elapsedMs, t)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+type ChatNodeListProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey'> & {
+  readonly order: readonly string[]
+}
+
+const ChatNodeList = memo(function ChatNodeList({ order, ...seatProps }: ChatNodeListProps) {
+  return order.map(nodeKey => (
+    <ChatNodeSeat key={nodeKey} nodeKey={nodeKey} {...seatProps} />
   ))
   const tail = entries.at(-1)
   const node = tail?.kind === 'node' ? seatProps.nodeStore.get(tail.key) : undefined

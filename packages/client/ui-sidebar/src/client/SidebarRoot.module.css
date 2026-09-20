@@ -281,8 +281,15 @@
 .brandMark,
 .railMark {
   filter: drop-shadow(
-    0 0 5px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 55%, transparent)
+    0 0 5px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
   );
+}
+
+.localBrandLogo {
+  display: block;
+  width: 24px;
+  height: 24px;
+  background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
 }
 
 .brandName {

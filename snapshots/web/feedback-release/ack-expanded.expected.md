@@ -1,16 +1,20 @@
 - banner:
   - navigation "Session hierarchy": Reply with the single word
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - text: Reply with the single word LIGHTHOUSE and stop. {{clock}}
 - button "Copy"
 - status: Worked
@@ -23,19 +27,29 @@
 - button "Bad response"
 - button "Branch into a new conversation"
 - text: {{clock}}
-- 'button "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}."'
-- textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- 'button "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}."':
   - img
-  - text: Web Search
+  - img
+  - text: "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}."
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
+  - img
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "6% of context used"
 - button "Send message" [disabled]
-- button "1 turns 1 steps · {{throughput}} tok/s": 1 turns 1 steps{{throughput}} tok/s
-- button "7.8K tok · Cache hit 99%": 7.8K tokCache hit 99%
-- button "6% of context used": 6%
+- button "1 turns 1 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 1 steps{{throughput}} tok/s
+- button "7.8K tok · Cache hit 99%":
+  - img
+  - text: 7.8K tokCache hit 99%

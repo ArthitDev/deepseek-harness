@@ -190,9 +190,10 @@ export type WorkspaceBrowserInjected = {
     remoteMachines: HostObservable<RemoteMachineSnapshot>
   }
   /**
-   * Start a New Session in a Workspace: reuse-or-create its blank session and
-   * open it; without an explicit workspace, inherit the current Session
-   * Workspace, then the recent Workspace, or clear into the New Session view.
+   * Start a fresh Session in a Workspace and open it; without an explicit
+   * workspace, inherit the current Session
+   * Workspace, the just-deleted Session's Workspace, then the recent Workspace,
+   * or clear into the New Session view.
    */
   startSession: (workspaceId?: WorkspaceId) => void
   /** Open a real Session. */
@@ -423,6 +424,8 @@ export type WorkspacePickerInjected = DirectoryPickingInjected & {
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
   hooks: DirectoryPickingInjected['hooks'] & {
+    /** Host facts used to label the local machine. */
+    hostInfo: HostObservable<RemoteHostFacts>
     /** Redacted saved-machine names used to group the picker. */
     remoteMachines: HostObservable<RemoteMachineSnapshot>
   }
@@ -438,5 +441,5 @@ export type WorkspacePickerProps =
   & PropsRenderSlots<'conversation.hero.workspace.directoryFlow'>
   & Omit<WorkspacePickerInjected, 'hooks'>
   & DirectoryPickingHooks
-  & Partial<PropsHooks<Pick<WorkspacePickerInjected['hooks'], 'remoteMachines'>>>
+  & Partial<PropsHooks<Pick<WorkspacePickerInjected['hooks'], 'hostInfo' | 'remoteMachines'>>>
   & PropsLocale<'workspace'>

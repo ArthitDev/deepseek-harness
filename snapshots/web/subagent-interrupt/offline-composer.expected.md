@@ -4,16 +4,20 @@
     - text: /
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - text: "Explain event sourcing in one sentence.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
 - button "Copy"
 - status: Deep diving...
@@ -26,11 +30,15 @@
     - button "Remove queued message"
     - button "Steer queued message"
 - textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
-- button "Add files or run commands" [disabled]
-- 'button "Access mode, current: Custom" [disabled]': Custom
-- button "Web search automatic, press to search on every request" [disabled]:
+- button "Add files or run commands" [disabled]:
   - img
-  - text: Web Search
+- 'button "Access mode, current: Custom" [disabled]': Custom
+- 'button "Agent mode: Red Team" [disabled]':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB" [disabled]': MSI-Cyborg-15-NB
 - button "Stop generating"
 - button "Send message" [disabled]

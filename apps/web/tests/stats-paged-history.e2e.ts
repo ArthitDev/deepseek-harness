@@ -138,7 +138,7 @@ describe('web e2e: whole-session stats survive history paging', () => {
 
   it('matches the paged-stats aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-stats-paged-aria'))
-    await page.getByRole('button', { name: /^Web search automatic/ }).waitFor({ timeout: 15_000 })
+    await page.getByRole('button', { name: /^Agent mode:/ }).waitFor({ timeout: 15_000 })
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)

@@ -51,10 +51,10 @@ describe.skipIf(MODE === 'record')('web e2e: Open In under SSH', () => {
       page.waitForResponse(response => new URL(response.url()).pathname === '/open-in-app/apps'),
       (async () => {
         await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
-        const group = page.getByRole('treeitem').first()
+        const group = page.locator('[data-workspace-group] > [role="treeitem"]').first()
         await group.waitFor()
         if (await group.getAttribute('aria-expanded') !== 'true') await group.click()
-        await page.getByRole('treeitem').nth(1).click()
+        await page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first().click()
         await page.getByText('DONE', { exact: true }).waitFor()
       })(),
     ])

@@ -1,20 +1,32 @@
 - banner:
   - navigation "Session hierarchy": "Plan a small change: add"
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
-- text: "plan Plan mode on. Use /plan off to leave. Plan a small change: add a --greeting flag to a CLI. Do not read or write any files. Call exit_plan_mode with a short plan of at most five bullet points. Once the plan is approved, reply with the single word DONE and stop. {{clock}}"
-- button "Copy"
-- status: Worked
-- button "Took {{duration}}"
+    - tab "Graph"
+- img
+- text: plan Plan mode on. Use /plan off to leave.
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: "Plan a small change: add a --greeting flag to a CLI. Do not read or write any files. Call exit_plan_mode with a short plan of at most five bullet points. Once the plan is approved, reply with the single word DONE and stop. {{clock}}"
+- button "Copy":
+  - img
+- button "1 tool call · 1 message":
+  - text: 1 tool call · 1 message
+  - img
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - paragraph: DONE
 - 'button "Open plan: Add `--greeting` flag to CLI"': "Add `--greeting` flag to CLI Plan · Markdown Open"
 - button "Copy"
@@ -23,17 +35,24 @@
 - button "Branch into a new conversation"
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- button "Add files or run commands":
   - img
-  - text: Web Search
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "4% of context used"
 - button "Send message" [disabled]
-- button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s
-- button "10.6K tok · Cache hit 51%": 10.6K tokCache hit 51%
-- button "4% of context used": 4%
+- button "1 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 2 steps{{throughput}} tok/s
+- button "10.6K tok · Cache hit 51%":
+  - img
+  - text: 10.6K tokCache hit 51%

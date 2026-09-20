@@ -43,7 +43,8 @@ describe('web e2e: startup auto-selection', () => {
     await page.locator(`${ROOT_PHASE}[data-phase="hero"]`).waitFor({ timeout: 15_000 })
     const headline = page.locator('[data-text="Shield Break Agent"]')
     const fishHitbox = headline.locator('xpath=preceding-sibling::span[1]')
-    expect(await fishHitbox.locator('img, svg').first().isVisible()).toBe(true)
+    const logo = fishHitbox.locator('[data-dsh-agent-logo]')
+    expect(await logo.isVisible()).toBe(true)
     expect(await fishHitbox.evaluate(node => getComputedStyle(node).animationName)).not.toBe('none')
     await page.evaluate(() => {
       const refs = {

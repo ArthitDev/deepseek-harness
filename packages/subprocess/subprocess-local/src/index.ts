@@ -57,6 +57,11 @@ const requireNodePty = createLazyRequire<typeof NodePty>('node-pty', import.meta
  * JavaScript-observable host exit also performs synchronous final termination.
  */
 export class LocalSubprocessRuntime extends SubprocessRuntime {
+  private static readonly instances = new Set<LocalSubprocessRuntime>()
+  private static readonly onHostExit = (): void => {
+    for (const instance of LocalSubprocessRuntime.instances) instance.terminateForHostExit()
+  }
+
   /** Live handles retained for normal disposal and synchronous host-exit finalization. */
   private live = new Set<LocalSubprocessHandle>()
   /** Live terminals retained through normal quiescence or host-exit finalization. */
@@ -75,11 +80,16 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
   constructor(ctx: Context) {
     super(ctx)
     ctx.effect(() => {
-      const onHostExit = (): void => { this.terminateForHostExit() }
-      process.prependListener('exit', onHostExit)
+      if (LocalSubprocessRuntime.instances.size === 0) {
+        process.prependListener('exit', LocalSubprocessRuntime.onHostExit)
+      }
+      LocalSubprocessRuntime.instances.add(this)
       return async () => {
         await this.disposeManagedProcesses()
-        process.off('exit', onHostExit)
+        LocalSubprocessRuntime.instances.delete(this)
+        if (LocalSubprocessRuntime.instances.size === 0) {
+          process.off('exit', LocalSubprocessRuntime.onHostExit)
+        }
       }
     }, 'local subprocess teardown')
   }
@@ -260,7 +270,6 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
   }
 
   // Local PTY allocation is synchronous, but the provider contract permits remote asynchronous allocation.
-  // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   async spawnTerminal(spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle> {
     const file = spec.argv[0]
     if (file === undefined || file.length === 0) {

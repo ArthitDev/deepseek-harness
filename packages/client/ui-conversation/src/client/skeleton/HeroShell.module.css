@@ -54,15 +54,19 @@
   box-sizing: content-box;
   width: 0;
   overflow: hidden;
-  border-right: 4px solid var(--dsw-alias-state-error-secondary);
+  border-right: 4px solid var(--dsh-agent-accent, #ff5263);
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
   filter: drop-shadow(
-    0 0 5px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 55%, transparent)
+    0 0 5px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
   );
   animation:
     hero-title-type 6s steps(24, end) 300ms forwards,
     hero-title-caret 650ms step-end 300ms infinite;
+}
+
+.headlineText[data-agent-mode-headline]::before {
+  content: var(--dsh-agent-headline, "Red Team Agent");
 }
 
 @keyframes hero-title-type {
@@ -86,13 +90,13 @@
 @keyframes hero-logo-pulse {
   0%, 100% {
     filter: drop-shadow(
-      0 0 7px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 35%, transparent)
+      0 0 7px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 35%, transparent)
     );
   }
 
   50% {
     filter: drop-shadow(
-      0 0 14px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 72%, transparent)
+      0 0 14px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 72%, transparent)
     );
   }
 }
@@ -100,6 +104,12 @@
 /* The class also passes through the brand-mark slot for custom occupants. */
 .fish {
   display: block;
+}
+
+.localLogo {
+  width: 48px;
+  height: 48px;
+  background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
 }
 
 /* Workspace row sits 12px above the input card (figma y80 → y112). */
@@ -218,7 +228,7 @@
   .fishHitbox {
     animation: none;
     filter: drop-shadow(
-      0 0 10px color-mix(in srgb, var(--dsw-alias-state-error-secondary) 55%, transparent)
+      0 0 10px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
     );
   }
 

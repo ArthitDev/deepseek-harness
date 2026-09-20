@@ -23,6 +23,8 @@ import { ComputerIcon } from './RemoteMachines.tsx'
 import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
+const LOCAL_MACHINE = '::machine-local'
+const REMOTE_MACHINE_PREFIX = '::machine-remote:'
 
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
@@ -52,6 +54,10 @@ export interface WorkspacePickFlowProps {
   selectedId?: WorkspaceId | undefined
   /** Redacted saved-machine names used for remote group headings. */
   machines?: readonly { readonly id: string; readonly name: string }[] | undefined
+  /** Hostname shown for the local machine. */
+  localMachineLabel?: string | undefined
+  /** Require a machine choice before showing that machine's Workspaces. */
+  machineFirst?: boolean
 }
 
 /**
@@ -73,6 +79,8 @@ export function WorkspacePickFlow({
   side = 'bottom',
   selectedId,
   machines = [],
+  localMachineLabel = t('remote.local'),
+  machineFirst = false,
 }: WorkspacePickFlowProps) {
   const workspaceSnapshot = useWorkspaces(state => state)
   const workspaces = workspaceSnapshot.items
@@ -109,7 +117,7 @@ export function WorkspacePickFlow({
     : []
   // With workspaces listed, the add action pins below the scroll region
   // (divider + always visible); otherwise it IS the menu.
-  const pinAdd = !addOnly && workspaces.length > 0
+  const pinAdd = !machineFirst && !addOnly && workspaces.length > 0
   const workspaceEntries: MenuEntry[] = []
   if (!addOnly) {
     const local = workspaces.filter(workspace => parseRemoteExecutionPath(workspace.path) === undefined)
@@ -136,11 +144,48 @@ export function WorkspacePickFlow({
       }))
     }
   }
-  const items: MenuEntry[] = pinAdd ? workspaceEntries : addEntries
+  const remoteIds = [...new Set([
+    ...machines.map(machine => machine.id),
+    ...workspaces.flatMap((workspace) => {
+      const remote = parseRemoteExecutionPath(workspace.path)
+      return remote === undefined ? [] : [remote.machineId]
+    }),
+  ])]
+  const localSubmenu = [
+    ...workspaces
+      .filter(workspace => parseRemoteExecutionPath(workspace.path) === undefined)
+      .map(workspace => ({ id: workspace.workspaceId, label: workspace.title, disabled: flowBusy })),
+    ...addEntries.filter((entry): entry is Extract<MenuEntry, { label: unknown }> => 'label' in entry),
+  ]
+  const machineEntries: MenuEntry[] = [
+    {
+      id: LOCAL_MACHINE,
+      label: localMachineLabel,
+      icon: <ComputerIcon />,
+      submenu: localSubmenu,
+      disabled: localSubmenu.length === 0,
+    },
+    ...remoteIds.map((machineId): MenuEntry => {
+      const submenu = workspaces.flatMap((workspace) => {
+        const remote = parseRemoteExecutionPath(workspace.path)
+        return remote?.machineId === machineId
+          ? [{ id: workspace.workspaceId, label: workspace.title, disabled: flowBusy }]
+          : []
+      })
+      return {
+        id: `${REMOTE_MACHINE_PREFIX}${machineId}`,
+        label: machineNames.get(machineId) ?? machineId,
+        icon: <ComputerIcon remote />,
+        submenu,
+        disabled: submenu.length === 0,
+      }
+    }),
+  ]
+  const items: MenuEntry[] = machineFirst ? machineEntries : pinAdd ? workspaceEntries : addEntries
   // Nothing listed and nothing to add with (a composition that mounts this
   // package without any directory-picker): an empty popover would claim a
   // choice that does not exist, so the anchor gesture shows nothing at all.
-  const menuIsEmpty = items.length === 0
+  const menuIsEmpty = items.length === 0 || (machineFirst && machineEntries.every(entry => 'disabled' in entry && entry.disabled))
 
   const closeModal = (): void => {
     setErrorOpen(false)
@@ -174,7 +219,7 @@ export function WorkspacePickFlow({
   // loading status instead of jumping into a flow the arriving list would have
   // made unnecessary; the add-only surface lists nothing and never waits.
   const listSettled = addOnly || workspaceSnapshot.phase === 'ready'
-  const addIsTheOnlyEntry = !pinAdd && listSettled && addEntries.length === 1
+  const addIsTheOnlyEntry = !machineFirst && !pinAdd && listSettled && addEntries.length === 1
   // `flowBusy` gates this exactly as it disables the equivalent menu entry: a
   // pick still being adopted owns the surface until it settles.
   useEffect(() => {
@@ -257,10 +302,15 @@ export function WorkspacePicker({
   createWorkspace,
   useDirectoryFlow,
   useRemoteMachines,
+  useHostInfo,
   renderSlot,
   t,
 }: WorkspacePickerProps) {
   const machines = useRemoteMachines?.(state => state.machines) ?? []
+  const hostname = useHostInfo?.(info => info.hostname)
+  const localMachineLabel = hostname === undefined || hostname.length === 0
+    ? t('remote.local')
+    : hostname
   return (
     <WorkspacePickFlow
       t={t}
@@ -270,6 +320,8 @@ export function WorkspacePicker({
       createWorkspace={createWorkspace}
       useDirectoryFlow={useDirectoryFlow}
       machines={machines}
+      localMachineLabel={localMachineLabel}
+      machineFirst
       renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}
       selectedId={selectedId}
       onPick={onPick}

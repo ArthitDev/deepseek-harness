@@ -5,16 +5,16 @@
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
     - button "1 subagent"
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
@@ -23,14 +23,28 @@
 - status: Worked
 - button "Took {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
-- button "Copy"
-- button "Good response"
-- button "Bad response"
-- button "Branch into a new conversation"
-- text: {{clock}} Now give the same explanation to a human reader. {{clock}}
-- button "Copy"
-- status: Worked
-- button "Took {{duration}}"
+- button "Copy":
+  - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation":
+  - img
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: {{clock}}
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: Now give the same explanation to a human reader. {{clock}}
+- button "Copy":
+  - img
+- button "Thought for a while":
+  - text: Thought for a while
+  - img
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy"
 - button "Good response"
@@ -38,14 +52,21 @@
 - button "Branch into a new conversation"
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Custom"': Custom
-- button "Web search automatic, press to search on every request":
+- button "Add files or run commands":
   - img
-  - text: Web Search
+- 'button "Access mode, current: Custom"': Custom
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "6% of context used"
 - button "Send message" [disabled]
-- button "2 turns 2 steps · {{throughput}} tok/s": 2 turns 2 steps{{throughput}} tok/s
-- button "15.7K tok · Cache hit 99%": 15.7K tokCache hit 99%
-- button "6% of context used": 6%
+- button "2 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 2 turns 2 steps{{throughput}} tok/s
+- button "15.7K tok · Cache hit 99%":
+  - img
+  - text: 15.7K tokCache hit 99%

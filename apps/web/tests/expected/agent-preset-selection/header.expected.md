@@ -1,9 +1,8 @@
 - navigation "Session hierarchy": Seeded turn
 - text: Minimal mode
-- button "Session log":
-  - text: Session log
+- button "More actions":
   - img
 - button "Switch to dark mode":
   - img
-- button "Open the sidebar":
+- button "Open right sidebar":
   - img

@@ -50,7 +50,10 @@ allowBuilds:
   electron-winstaller: false
   # Store-index rewriting only needs msgpackr's portable JavaScript codec.
   msgpackr-extract: false
-
+  # Remote SSH works through ssh2's portable JavaScript implementation. Its
+  # lifecycle script and cpu-features only build optional native accelerators.
+  cpu-features: false
+  ssh2: false
 minimumReleaseAgeExclude:
   # Office engines and their API are qualified and released together by the kit repository.
   - '@deepseek-ai/libreoffice-kit@0.0.1'

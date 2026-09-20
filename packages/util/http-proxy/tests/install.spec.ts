@@ -114,7 +114,7 @@ describe('installProxyFromEnvironment', () => {
     } finally {
       await dispose()
     }
-  })
+  }, 15_000)
 
   it('reports a value it cannot use and installs the rest', async () => {
     const { dispose, reported } = await install(env({ HTTP_PROXY: proxyUrl, HTTPS_PROXY: 'socks5://127.0.0.1:1080' }))

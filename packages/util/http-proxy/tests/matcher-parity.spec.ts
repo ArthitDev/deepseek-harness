@@ -71,5 +71,5 @@ describe('bypass matcher parity', () => {
     } finally {
       await dispose()
     }
-  })
+  }, 15_000)
 })

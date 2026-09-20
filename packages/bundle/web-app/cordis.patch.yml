@@ -55,6 +55,27 @@
     - id: subagent-model-selection-settings
       name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
 
+    # Host-owned live preference behind General Settings' always-search toggle.
+    - id: tool-web-settings
+      name: '@deepseek-ai/dsh-tool-web/settings'
+
+    # Host-owned mode selected by the composer; ordinary sessions read its
+    # live policy while durable Supervisor/Executor runs shadow it per run.
+    - id: pentest-runs
+      name: '@deepseek-ai/dsh-pentest-run'
+
+    - id: pentest-mode-policy
+      name: '@deepseek-ai/dsh-pentest-executor'
+
+    # Host-owned background control loops behind the pentestLoop Remote
+    # namespace: the Runs dashboard creates a run, starts its bounded loop,
+    # and stops it without leaving the browser surface.
+    - id: pentest-loop
+      name: '@deepseek-ai/dsh-pentest-executor/loop'
+
+    - id: code-runtime
+      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
+
     - id: message-feedback
       name: '@deepseek-ai/dsh-message-feedback'
       config:

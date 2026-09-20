@@ -16,21 +16,23 @@
 - banner:
   - navigation "Session hierarchy": Review deepseek-ai/deepseek-harness#314
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
-- button "GitHub event received {{clock}}":
-  - text: GitHub event received
-  - time: {{clock}}
-- status: Worked
-- button "Took {{duration}}" [disabled]
+    - tab "Graph"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- button "Thought for a while":
+  - text: Thought for a while
+  - img
 - paragraph: "Review complete: no actionable findings."
 - button "Copy"
 - button "Good response"
@@ -38,14 +40,20 @@
 - button "Branch into a new conversation"
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Read Only"': Read Only
-- button "Web search automatic, press to search on every request":
+- button "Add files or run commands":
   - img
-  - text: Web Search
+- 'button "Access mode, current: Read Only"': Read Only
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current github-webhook-review-test · reply":
   - text: github-webhook-review-test · reply
   - img
 - button "Send message" [disabled]
-- button "1 turns 1 steps"
+- button "1 turns 1 steps":
+  - img
+  - text: 1 turns 1 steps

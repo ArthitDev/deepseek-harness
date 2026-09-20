@@ -144,7 +144,7 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     let replayOverride = OVERRIDE
     if (process.platform === 'win32' && MODE !== 'record') {
       sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
-      replayFixture = join(sidecarDir, 'session.v2.jsonl')
+      replayFixture = join(sidecarDir, 'session.v3.jsonl')
       replayOverride = join(sidecarDir, 'replay.override.json')
       await Promise.all([
         writeFile(replayFixture, (await readFile(FIXTURE, 'utf8')).replaceAll('"name":"bash"', '"name":"pwsh"')),

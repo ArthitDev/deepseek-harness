@@ -274,6 +274,13 @@ flowchart LR
   pkg_cordis_host_runner["cordis-host-runner"]
   svc_dynamicCordisRunner["ctx.dynamicCordisRunner<br/>Dynamic Cordis package host runner"]
   svc_cordisInspect["ctx.cordisInspect<br/>Dynamic Cordis inspect registry"]
+  pkg_pentest_run["pentest-run"]
+  svc_pentestRuns["ctx.pentestRuns<br/>Durable penetration-test run state"]
+  pkg_pentest_executor["pentest-executor"]
+  svc_pentestRunController["ctx.pentestRunController<br/>Penetration-test run Remote controller"]
+  svc_pentestModePolicy["ctx.pentestModePolicy<br/>Team-mode execution policy"]
+  svc_pentestLoop["ctx.pentestLoop<br/>Penetration-test control loop"]
+  svc_webSearchPolicy["ctx.webSearchPolicy<br/>Global web-search policy"]
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
   pkg_agent_loop --> svc_agentLoop
@@ -351,6 +358,10 @@ flowchart LR
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
+  pkg_pentest_executor --> svc_pentestLoop
+  pkg_pentest_executor --> svc_pentestModePolicy
+  pkg_pentest_run --> svc_pentestRunController
+  pkg_pentest_run --> svc_pentestRuns
   pkg_permission_presets --> svc_permissionPresets
   pkg_plan_mode --> svc_planMode
   pkg_plugin_manager --> svc_pluginManager
@@ -406,6 +417,7 @@ flowchart LR
   pkg_terminal_bash --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
+  pkg_tool_web --> svc_webSearchPolicy
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
@@ -476,6 +488,7 @@ flowchart LR
   svc_lsp --> pkg_tool_lsp
   svc_mcpResources --> pkg_mcp_resources
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
+  svc_pentestRuns --> pkg_pentest_executor
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
   svc_pluginRegistryProbe --> pkg_client_ui_plugin_manager
@@ -662,5 +675,10 @@ flowchart LR
 | `ctx.lsp` | `seam` | [`lsp`](../packages/lsp/lsp) | [`lsp-stdio`](../packages/lsp/lsp-stdio) | [`tool-lsp`](../packages/lsp/tool-lsp) | - | 提供方注册与选择，加上恰好四种操作的标准化查询执行；该 seam 不提供协议逃生口，后端必须转换为标准化请求和结果。 |
 | `ctx.dynamicCordisRunner` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 拥有内存定义注册表、Host 半的 vm 沙箱和 request-run 往返流程；浏览器页面通过其 Remote 命名空间在线访问同一服务。 |
 | `ctx.cordisInspect` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 注册 Host inspect 提供方、镜像 Client 提供方 manifest，并通过动态 Cordis 传输路由 Client 查询。 |
+| `ctx.pentestRuns` | `core` | [`pentest-run`](../packages/pentest/pentest-run) | - | [`pentest-executor`](../packages/pentest/pentest-executor) | - | 在串行化 storage domain 中维护规范运行、任务 lease、episode、evidence、finding、attack graph 状态和重启恢复。 |
+| `ctx.pentestRunController` | `core` | [`pentest-run`](../packages/pentest/pentest-run) | - | - | - | 将规范运行快照和 operator mutation 投影到生成的 `pentestRuns` Remote 命名空间。 |
+| `ctx.pentestModePolicy` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 保存持久化的红队、蓝队或黑队模式，并把对应模式的操作提示词贡献给普通 Session。 |
+| `ctx.pentestLoop` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 每个运行最多拥有一个 Host 进程内控制循环；重启后持久进度仍保留在 `pentestRuns` 服务中。 |
+| `ctx.webSearchPolicy` | `core` | [`tool-web`](../packages/web/tool-web) | - | - | - | 保存持久化的“始终使用 Web 搜索”设置，供 preset 作用域的 Web 工具读取，同时不会在默认模式下强制搜索。 |
 
 维护模式：混合模式。服务从 Cordis 声明中发现；接口、实现和消费方角色在 `scripts/gen-doc-graphs.ts` 中分类，并设有完整性守卫。

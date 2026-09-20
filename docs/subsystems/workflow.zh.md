@@ -135,6 +135,227 @@ interface WorkflowRun {
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxpentestloop--pentestloopservice"></a>
+
+### `ctx.pentestLoop` — `PentestLoopService`
+
+Owns at most one live background control loop per run and backs the generated `ctx.remote.pentestLoop` namespace. The loop is host-process state: after a process restart the operator restarts it, and canonical state resumes from the database.
+
+```ts cordis-catalog
+/**
+ * Create one authorized penetration-test run.
+ * @param request - Objective, mode, and scope strings captured from the operator.
+ * @returns the durable run record.
+ */
+@Remote create(request: CreatePentestRunRequest): Promise<PentestRunRecord>
+
+/**
+ * Start one run's background control loop.
+ * @param runId - Run to advance toward completion.
+ * @param request - Optional tool restriction and bounded loop limits.
+ */
+@Remote async start(runId: string, request: PentestLoopStartRequest): Promise<void>
+
+/**
+ * Abort one run's live background control loop.
+ * @param runId - Run whose loop should stop after the current cycle unwinds.
+ */
+@Remote async stop(runId: string): Promise<void>
+
+/**
+ * List runs whose background control loop is live in this process.
+ * @returns run identities with a running loop, most recent start first.
+ */
+@Remote running(): Promise<readonly string[]>
+```
+
+Types: [CreatePentestRunRequest](../../packages/pentest/pentest-run/README.zh.md) · [PentestLoopStartRequest](../../packages/pentest/pentest-executor/README.zh.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.zh.md)
+
+Source: [`packages/pentest/pentest-executor/src/loop.ts`](../../packages/pentest/pentest-executor/src/loop.ts)
+
+<a id="ctxpentestmodepolicy--pentestmodepolicy"></a>
+
+### `ctx.pentestModePolicy` — `PentestModePolicy`
+
+Host-owned global mode setting and ordinary-session prompt policy.
+
+```ts cordis-catalog
+/**
+ * Read the selected mode at prompt assembly time.
+ * @returns the current global mode setting.
+ */
+current(): PentestModeSettings
+```
+
+Types: [PentestModeSettings](../../packages/pentest/pentest-executor/README.zh.md)
+
+Source: [`packages/pentest/pentest-executor/src/index.ts`](../../packages/pentest/pentest-executor/src/index.ts)
+
+<a id="ctxpentestruncontroller--pentestruncontroller"></a>
+
+### `ctx.pentestRunController` — `PentestRunController`
+
+Host service backing the generated `ctx.remote.pentestRuns` namespace.
+
+```ts cordis-catalog
+/**
+ * List the durable penetration-test runs for the operator surface.
+ * @returns every canonical penetration-test run visible to this host.
+ */
+@Remote list(): Promise<readonly PentestRunRecord[]>
+
+/**
+ * Project one durable run for the operator surface.
+ * @param runId - run identity from the Remote caller.
+ * @returns the complete canonical run projection.
+ */
+@Remote snapshot(runId: string): Promise<PentestRunSnapshot>
+
+/**
+ * Apply an operator-owned run lifecycle transition.
+ * @param runId - run identity from the Remote caller.
+ * @param request - requested run lifecycle transition.
+ * @returns the updated canonical run record.
+ */
+@Remote control(runId: string, request: ControlPentestRunRequest): Promise<PentestRunRecord>
+
+/**
+ * Apply an operator-owned task action.
+ * @param taskId - task identity from the Remote caller.
+ * @param request - requested operator task action.
+ * @returns the updated canonical task record.
+ */
+@Remote controlTask(taskId: string, request: ControlPentestTaskRequest): Promise<PentestTaskRecord>
+
+/**
+ * Replace a run's operator-approved target scope.
+ * @param runId - run identity from the Remote caller.
+ * @param request - complete replacement authorization scope.
+ * @returns the updated canonical run record.
+ */
+@Remote replaceScope(runId: string, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>
+```
+
+Types: [ControlPentestRunRequest](../../packages/pentest/pentest-run/README.zh.md) · [ControlPentestTaskRequest](../../packages/pentest/pentest-run/README.zh.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.zh.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.zh.md) · [PentestTaskRecord](../../packages/pentest/pentest-run/README.zh.md) · [ReplacePentestScopeRequest](../../packages/pentest/pentest-run/README.zh.md)
+
+Source: [`packages/pentest/pentest-run/src/remote.ts`](../../packages/pentest/pentest-run/src/remote.ts)
+
+<a id="ctxpentestruns--pentestrunmanager"></a>
+
+### `ctx.pentestRuns` — `PentestRunManager`
+
+Owns canonical penetration-test run state outside Session history.
+
+```ts cordis-catalog
+/**
+ * Create one active run with an explicit authorized target set.
+ * @param request - Objective and scope strings captured from the operator.
+ * @returns the durable run record.
+ */
+createRun(request: CreatePentestRunRequest): Promise<PentestRunRecord>
+
+/**
+ * Add one bounded task to an existing active run.
+ * @param runId - Owning run identity.
+ * @param request - Objective, scheduling values, and prerequisite tasks.
+ * @returns the durable task record.
+ */
+createTask(runId: PentestRunId, request: CreatePentestTaskRequest): Promise<PentestTaskRecord>
+
+/**
+ * Lease one runnable task while no other task is active in its run.
+ * @param taskId - Task selected by the supervisor.
+ * @param request - Explicit deadline for this attempt.
+ * @returns The bounded packet for a fresh executor.
+ */
+leaseTask(taskId: PentestTaskId, request: LeasePentestTaskRequest): Promise<PentestTaskLease>
+
+/**
+ * Mark a leased attempt as running.
+ * @param leaseId - Current lease identity.
+ * @returns The updated task.
+ */
+startTask(leaseId: PentestLeaseId): Promise<PentestTaskRecord>
+
+/**
+ * Complete a running task attempt.
+ * @param leaseId - Current lease identity.
+ * @returns The terminal task record.
+ */
+completeTask(leaseId: PentestLeaseId): Promise<PentestTaskRecord>
+
+/**
+ * Fail one leased or running attempt and apply its retry limit.
+ * @param leaseId - Current lease identity.
+ * @param error - Failure diagnostic retained for the supervisor.
+ * @returns A ready retry or terminal failed task.
+ */
+failTask(leaseId: PentestLeaseId, error: string): Promise<PentestTaskRecord>
+
+/**
+ * Recover expired active attempts so a restarted controller can continue.
+ * @param now - timestamp used as the recovery cutoff.
+ * @returns the number of task leases recovered.
+ */
+recoverExpiredLeases(now: string = new Date().toISOString()): Promise<number>
+
+/**
+ * Mark a run complete only after every task is terminal and canonical evidence exists.
+ * @param runId - run to complete.
+ * @returns the completed canonical run record.
+ */
+completeRun(runId: PentestRunId): Promise<PentestRunRecord>
+
+/**
+ * Apply an operator-owned run lifecycle transition.
+ * @param runId - run to control.
+ * @param request - requested lifecycle transition.
+ * @returns the updated canonical run record.
+ */
+controlRun(runId: PentestRunId, request: ControlPentestRunRequest): Promise<PentestRunRecord>
+
+/**
+ * Resolve a blocked task or change one task before it starts.
+ * @param taskId - task to control.
+ * @param request - requested operator action.
+ * @returns the updated canonical task record.
+ */
+controlTask(taskId: PentestTaskId, request: ControlPentestTaskRequest): Promise<PentestTaskRecord>
+
+/**
+ * Replace operator scope while preserving every still-open task target.
+ * @param runId - run whose authorization scope changes.
+ * @param request - replacement authorized and excluded targets.
+ * @returns the updated canonical run record.
+ */
+replaceScope(runId: PentestRunId, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>
+
+/**
+ * Compile one fresh executor episode into canonical records and release its task lease.
+ * @param leaseId - Running lease that produced the episode.
+ * @param request - Structured result and secret-free tool traces.
+ * @returns every record written by the commit.
+ */
+commitEpisode( leaseId: PentestLeaseId, request: CommitPentestEpisodeRequest, ): Promise<CommittedPentestEpisode>
+
+/**
+ * Build a complete point-in-time run projection after preceding writes settle.
+ * @param runId - Run to project.
+ * @returns canonical records belonging to the run.
+ */
+snapshot(runId: PentestRunId): Promise<PentestRunSnapshot>
+
+/**
+ * List canonical runs with the most recently changed run first.
+ * @returns every canonical run ordered by most recent update.
+ */
+listRuns(): Promise<readonly PentestRunRecord[]>
+```
+
+Types: [CommitPentestEpisodeRequest](../../packages/pentest/pentest-run/README.zh.md) · [CommittedPentestEpisode](../../packages/pentest/pentest-run/README.zh.md) · [ControlPentestRunRequest](../../packages/pentest/pentest-run/README.zh.md) · [ControlPentestTaskRequest](../../packages/pentest/pentest-run/README.zh.md) · [CreatePentestRunRequest](../../packages/pentest/pentest-run/README.zh.md) · [CreatePentestTaskRequest](../../packages/pentest/pentest-run/README.zh.md) · [LeasePentestTaskRequest](../../packages/pentest/pentest-run/README.zh.md) · [PentestLeaseId](../../packages/pentest/pentest-run/README.zh.md) · [PentestRunId](../../packages/pentest/pentest-run/README.zh.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.zh.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.zh.md) · [PentestTaskId](../../packages/pentest/pentest-run/README.zh.md) · [PentestTaskLease](../../packages/pentest/pentest-run/README.zh.md) · [PentestTaskRecord](../../packages/pentest/pentest-run/README.zh.md) · [ReplacePentestScopeRequest](../../packages/pentest/pentest-run/README.zh.md)
+
+Source: [`packages/pentest/pentest-run/src/index.ts`](../../packages/pentest/pentest-run/src/index.ts)
+
 <a id="ctxworkflowengine--workflowengine-abstract-seam"></a>
 
 ### `ctx.workflowEngine` — `WorkflowEngine` (abstract seam)

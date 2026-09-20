@@ -109,7 +109,7 @@ export function parseGrepArgs(args: { pattern: string; path?: string; include?: 
  * @returns the complete ripgrep argument vector (excluding the binary itself).
  */
 export function buildGrepCommand(input: GrepInput): string[] {
-  const parts = ['--json', `--regexp=${input.pattern}`]
+  const parts = ['--json', '--no-ignore-parent', `--regexp=${input.pattern}`]
   if (input.include !== undefined) parts.push(`--glob=${input.include}`)
   if (input.path !== undefined) parts.push('--', input.path)
   return parts

@@ -6,6 +6,7 @@ import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { foldSurface, Session, SessionId } from '@deepseek-ai/dsh-session'
 import * as commandFeedback from '@deepseek-ai/dsh-command-feedback'
+import { recordFeedback } from '@deepseek-ai/dsh-command-feedback/record'
 import type { FeedbackRecord } from '@deepseek-ai/dsh-command-feedback/types'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -164,9 +165,9 @@ describe('/feedback human command', () => {
 
   it('exports a command-independent feedback producer', async () => {
     const test = await harness()
-    commandFeedback.recordFeedback(test.session, { text: '  recorded outside a command  ' })
-    commandFeedback.recordFeedback(test.session, { text: ' \n\t ', category: 'service-stability' })
-    commandFeedback.recordFeedback(test.session, {})
+    recordFeedback(test.session, { text: '  recorded outside a command  ' })
+    recordFeedback(test.session, { text: ' \n\t ', category: 'service-stability' })
+    recordFeedback(test.session, {})
     expect(test.session.snapshotEvents().map(event => event.type))
       .toEqual(['feedback/record', 'feedback/record', 'feedback/record'])
     // Blank text is recorded as absent; an entry with neither member still records.

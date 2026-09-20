@@ -117,9 +117,8 @@ export function apply(ctx: ClientContext): void {
       void controller.load()
       // The section reads the same roster and marks the same default, so a
       // change made from either surface converges both.
-      if (section.store.getSnapshot().status !== 'idle') void section.load()
-      void unboundSeat.load()
-      for (const seat of seats.values) void seat.load()
+      const sectionState = section.store.getSnapshot()
+      if (sectionState.status !== 'idle' && !sectionState.policySaving) void section.load()
     }
     const disposers = [
       ctx.remote.$on('settings/document-updated', (ns) => {

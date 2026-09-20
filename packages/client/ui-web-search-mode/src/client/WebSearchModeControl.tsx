@@ -1,58 +1,61 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconGlobeOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import type { WebSearchModeInjected } from './index.ts'
 import css from './WebSearchModeControl.module.css'
 
-export type WebSearchModeControlProps =
-  PropsRuntime<'conversation.input.webSearch'>
-  & InjectFace<WebSearchModeInjected>
-  & PropsLocale<'webSearchMode'>
+export interface WebSearchModeHooks {
+  webSearchMode: ObservableSnapshot<SettingsScopeSnapshot<WebSearchPolicySettings>>
+}
 
-/** Toggle automatic or required web search using host-projected state. */
-export function WebSearchModeControl({ useProjection, locked, setAlways, t }: WebSearchModeControlProps) {
-  const mode = useProjection('webSearchMode')
-  const [switching, setSwitching] = useState(false)
+export type WebSearchModeControlProps =
+  PropsRuntime<'settings.general.item'>
+  & PropsLocale<'webSearchMode'>
+  & InjectFace<WebSearchModeInjected>
+
+/** Global always-search toggle in General Settings. */
+export function WebSearchModeControl({ useWebSearchMode, setAlways, t }: WebSearchModeControlProps) {
+  const settings = useWebSearchMode(value => value)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const aliveRef = useRef(true)
+  const alive = useRef(true)
 
   useEffect(() => {
-    aliveRef.current = true
-    return () => { aliveRef.current = false }
+    alive.current = true
+    return () => { alive.current = false }
   }, [])
+  if (settings.status === 'unavailable') return null
 
-  if (mode === undefined) return null
-  const always = mode.always
-  const toggle = (): void => {
-    setSwitching(true)
+  const always = settings.value?.always ?? false
+  const change = (next: boolean): void => {
+    setSaving(true)
     setError(null)
-    void setAlways(!always).then((failure) => {
-      if (!aliveRef.current) return
-      setSwitching(false)
-      setError(failure)
+    void setAlways(next).then(() => {
+      if (alive.current) setSaving(false)
     }, (reason: unknown) => {
-      if (!aliveRef.current) return
-      setSwitching(false)
+      if (!alive.current) return
+      setSaving(false)
       setError(reason instanceof Error ? reason.message : String(reason))
     })
   }
 
   return (
-    <span className={css.wrap}>
-      <button
-        type="button"
-        className={`${css.chip} ${always ? css.active : ''}`}
-        aria-pressed={always}
-        aria-label={t(always ? 'chip.always.aria' : 'chip.auto.aria')}
-        title={t(always ? 'chip.always.title' : 'chip.auto.title')}
-        disabled={locked || switching}
-        onClick={toggle}
-      >
-        <IconGlobeOutline14 size={13} />
-        {t('chip.label')}
-      </button>
-      {error !== null && <span className={css.error} role="status" title={error}>{t('chip.failed')}</span>}
-    </span>
+    <div className={css.row}>
+      <div className={css.rowText}>
+        <div className={css.title}>{t('title')}</div>
+        <div className={css.desc} role={error === null ? undefined : 'alert'}>
+          {error ?? t('description')}
+        </div>
+      </div>
+      <Switch
+        checked={always}
+        onChange={change}
+        label={t('toggle.aria')}
+        disabled={saving || settings.status === 'loading' || !settings.writable}
+      />
+    </div>
   )
 }

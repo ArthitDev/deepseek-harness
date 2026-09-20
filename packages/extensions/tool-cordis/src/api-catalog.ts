@@ -1546,9 +1546,179 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
-    key: 'officeToPdf',
-    summary: 'A provider lifetime owns all converters, queued calls, and temporary files.',
-    description: 'A provider lifetime owns all converters, queued calls, and temporary files.',
+    key: 'pentestLoop',
+    summary: 'Owns at most one live background control loop per run and backs the generated `ctx.remote.pentestLoop` namespace.',
+    description: 'Owns at most one live background control loop per run and backs the generated `ctx.remote.pentestLoop` namespace. The loop is host-process state: after a process restart the operator restarts it, and canonical state resumes from the database.',
+    methods: [
+      {
+        signature: '@Remote create(request: CreatePentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Create one authorized penetration-test run.',
+        parameters: [{ name: 'request', description: 'Objective, mode, and scope strings captured from the operator.' }],
+        returns: 'the durable run record.',
+      },
+      {
+        signature: '@Remote async start(runId: string, request: PentestLoopStartRequest): Promise<void>',
+        description: 'Start one run\'s background control loop.',
+        parameters: [{ name: 'runId', description: 'Run to advance toward completion.' }, { name: 'request', description: 'Optional tool restriction and bounded loop limits.' }],
+      },
+      {
+        signature: '@Remote async stop(runId: string): Promise<void>',
+        description: 'Abort one run\'s live background control loop.',
+        parameters: [{ name: 'runId', description: 'Run whose loop should stop after the current cycle unwinds.' }],
+      },
+      {
+        signature: '@Remote running(): Promise<readonly string[]>',
+        description: 'List runs whose background control loop is live in this process.',
+        parameters: [],
+        returns: 'run identities with a running loop, most recent start first.',
+      },
+    ],
+  },
+  {
+    key: 'pentestModePolicy',
+    summary: 'Host-owned global mode setting and ordinary-session prompt policy.',
+    description: 'Host-owned global mode setting and ordinary-session prompt policy.',
+    methods: [
+      {
+        signature: 'current(): PentestModeSettings',
+        description: 'Read the selected mode at prompt assembly time.',
+        parameters: [],
+        returns: 'the current global mode setting.',
+      },
+    ],
+  },
+  {
+    key: 'pentestRunController',
+    summary: 'Host service backing the generated `ctx.remote.pentestRuns` namespace.',
+    description: 'Host service backing the generated `ctx.remote.pentestRuns` namespace.',
+    methods: [
+      {
+        signature: '@Remote list(): Promise<readonly PentestRunRecord[]>',
+        description: 'List the durable penetration-test runs for the operator surface.',
+        parameters: [],
+        returns: 'every canonical penetration-test run visible to this host.',
+      },
+      {
+        signature: '@Remote snapshot(runId: string): Promise<PentestRunSnapshot>',
+        description: 'Project one durable run for the operator surface.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }],
+        returns: 'the complete canonical run projection.',
+      },
+      {
+        signature: '@Remote control(runId: string, request: ControlPentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Apply an operator-owned run lifecycle transition.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }, { name: 'request', description: 'requested run lifecycle transition.' }],
+        returns: 'the updated canonical run record.',
+      },
+      {
+        signature: '@Remote controlTask(taskId: string, request: ControlPentestTaskRequest): Promise<PentestTaskRecord>',
+        description: 'Apply an operator-owned task action.',
+        parameters: [{ name: 'taskId', description: 'task identity from the Remote caller.' }, { name: 'request', description: 'requested operator task action.' }],
+        returns: 'the updated canonical task record.',
+      },
+      {
+        signature: '@Remote replaceScope(runId: string, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>',
+        description: 'Replace a run\'s operator-approved target scope.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }, { name: 'request', description: 'complete replacement authorization scope.' }],
+        returns: 'the updated canonical run record.',
+      },
+    ],
+  },
+  {
+    key: 'pentestRuns',
+    summary: 'Owns canonical penetration-test run state outside Session history.',
+    description: 'Owns canonical penetration-test run state outside Session history.',
+    methods: [
+      {
+        signature: 'createRun(request: CreatePentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Create one active run with an explicit authorized target set.',
+        parameters: [{ name: 'request', description: 'Objective and scope strings captured from the operator.' }],
+        returns: 'the durable run record.',
+      },
+      {
+        signature: 'createTask(runId: PentestRunId, request: CreatePentestTaskRequest): Promise<PentestTaskRecord>',
+        description: 'Add one bounded task to an existing active run.',
+        parameters: [{ name: 'runId', description: 'Owning run identity.' }, { name: 'request', description: 'Objective, scheduling values, and prerequisite tasks.' }],
+        returns: 'the durable task record.',
+      },
+      {
+        signature: 'leaseTask(taskId: PentestTaskId, request: LeasePentestTaskRequest): Promise<PentestTaskLease>',
+        description: 'Lease one runnable task while no other task is active in its run.',
+        parameters: [{ name: 'taskId', description: 'Task selected by the supervisor.' }, { name: 'request', description: 'Explicit deadline for this attempt.' }],
+        returns: 'The bounded packet for a fresh executor.',
+      },
+      {
+        signature: 'startTask(leaseId: PentestLeaseId): Promise<PentestTaskRecord>',
+        description: 'Mark a leased attempt as running.',
+        parameters: [{ name: 'leaseId', description: 'Current lease identity.' }],
+        returns: 'The updated task.',
+      },
+      {
+        signature: 'completeTask(leaseId: PentestLeaseId): Promise<PentestTaskRecord>',
+        description: 'Complete a running task attempt.',
+        parameters: [{ name: 'leaseId', description: 'Current lease identity.' }],
+        returns: 'The terminal task record.',
+      },
+      {
+        signature: 'failTask(leaseId: PentestLeaseId, error: string): Promise<PentestTaskRecord>',
+        description: 'Fail one leased or running attempt and apply its retry limit.',
+        parameters: [{ name: 'leaseId', description: 'Current lease identity.' }, { name: 'error', description: 'Failure diagnostic retained for the supervisor.' }],
+        returns: 'A ready retry or terminal failed task.',
+      },
+      {
+        signature: 'recoverExpiredLeases(now: string = new Date().toISOString()): Promise<number>',
+        description: 'Recover expired active attempts so a restarted controller can continue.',
+        parameters: [{ name: 'now', description: 'timestamp used as the recovery cutoff.' }],
+        returns: 'the number of task leases recovered.',
+      },
+      {
+        signature: 'completeRun(runId: PentestRunId): Promise<PentestRunRecord>',
+        description: 'Mark a run complete only after every task is terminal and canonical evidence exists.',
+        parameters: [{ name: 'runId', description: 'run to complete.' }],
+        returns: 'the completed canonical run record.',
+      },
+      {
+        signature: 'controlRun(runId: PentestRunId, request: ControlPentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Apply an operator-owned run lifecycle transition.',
+        parameters: [{ name: 'runId', description: 'run to control.' }, { name: 'request', description: 'requested lifecycle transition.' }],
+        returns: 'the updated canonical run record.',
+      },
+      {
+        signature: 'controlTask(taskId: PentestTaskId, request: ControlPentestTaskRequest): Promise<PentestTaskRecord>',
+        description: 'Resolve a blocked task or change one task before it starts.',
+        parameters: [{ name: 'taskId', description: 'task to control.' }, { name: 'request', description: 'requested operator action.' }],
+        returns: 'the updated canonical task record.',
+      },
+      {
+        signature: 'replaceScope(runId: PentestRunId, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>',
+        description: 'Replace operator scope while preserving every still-open task target.',
+        parameters: [{ name: 'runId', description: 'run whose authorization scope changes.' }, { name: 'request', description: 'replacement authorized and excluded targets.' }],
+        returns: 'the updated canonical run record.',
+      },
+      {
+        signature: 'commitEpisode( leaseId: PentestLeaseId, request: CommitPentestEpisodeRequest, ): Promise<CommittedPentestEpisode>',
+        description: 'Compile one fresh executor episode into canonical records and release its task lease.',
+        parameters: [{ name: 'leaseId', description: 'Running lease that produced the episode.' }, { name: 'request', description: 'Structured result and secret-free tool traces.' }],
+        returns: 'every record written by the commit.',
+      },
+      {
+        signature: 'snapshot(runId: PentestRunId): Promise<PentestRunSnapshot>',
+        description: 'Build a complete point-in-time run projection after preceding writes settle.',
+        parameters: [{ name: 'runId', description: 'Run to project.' }],
+        returns: 'canonical records belonging to the run.',
+      },
+      {
+        signature: 'listRuns(): Promise<readonly PentestRunRecord[]>',
+        description: 'List canonical runs with the most recently changed run first.',
+        parameters: [],
+        returns: 'every canonical run ordered by most recent update.',
+      },
+    ],
+  },
+  {
+    key: 'permissionPresets',
+    summary: 'Owns the deployment\'s permission presets and their write path.',
+    description: 'Owns the deployment\'s permission presets and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
     methods: [
       {
         signature: 'readonly generation: OfficeToPdfGeneration = OfficeToPdfGeneration(randomUUID())',
@@ -3346,6 +3516,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Start every currently matching rule and return before any callback settles.',
         parameters: [{ name: 'delivery', description: 'authenticated provider data; snapshotted before dispatch.' }],
         throws: ['synchronously when the runtime is closing or the delivery is malformed.'],
+      },
+    ],
+  },
+  {
+    key: 'webSearchPolicy',
+    summary: 'Own the global setting read by every preset-scoped tool-web instance.',
+    description: 'Own the global setting read by every preset-scoped tool-web instance.',
+    methods: [
+      {
+        signature: 'current(): WebSearchPolicySettings',
+        description: 'Read the setting at request time so changes apply without a restart.',
+        parameters: [],
+        returns: 'the current global web-search policy.',
       },
     ],
   },
@@ -5637,84 +5820,40 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type OptionalSessionSeq = SessionSeq | null;',
   },
   {
-    name: 'PackageResult',
-    declaration: 'export interface PackageResult {\n    exitCode: number;\n    output: string;\n    truncated: boolean;\n    logPath: string;\n    kind?: PluginInstallFailureKind;\n}',
+    name: 'PentestLeaseId',
+    declaration: 'export type PentestLeaseId = Branded<\'PentestLeaseId\'>;',
   },
   {
-    name: 'PeerAdmission',
-    declaration: 'export type PeerAdmission = {\n    readonly peer: PeerScope;\n} | {\n    readonly rejection: 401 | 403;\n};',
+    name: 'PentestLoopStartRequest',
+    declaration: 'export interface PentestLoopStartRequest {\n    readonly allowedTools?: readonly string[];\n    readonly leaseMs?: number;\n    readonly maxCycles?: number;\n}',
   },
   {
-    name: 'PeerId',
-    declaration: 'export type PeerId = Branded<\'PeerId\'>;',
+    name: 'PentestMode',
+    declaration: 'export type PentestMode = typeof PENTEST_MODES[number];',
   },
   {
-    name: 'PeerScope',
-    declaration: 'export interface PeerScope {\n    readonly id: PeerId;\n    readonly ctx: Context;\n    dispose(): Promise<void>;\n}',
+    name: 'PentestModeSettings',
+    declaration: 'export interface PentestModeSettings {\n    readonly mode: PentestMode;\n}',
   },
   {
-    name: 'PermissionCatalog',
-    declaration: 'export interface PermissionCatalog {\n    options: PresetOption[];\n    defaultOptions: PresetOption[];\n    defaultPreset: string;\n}',
+    name: 'PentestRunId',
+    declaration: 'export type PentestRunId = Branded<\'PentestRunId\'>;',
   },
   {
-    name: 'PlatformSession',
-    declaration: 'export interface PlatformSession {\n    readonly origin: string;\n    readonly token: string;\n    readonly embeddedPageDist?: string;\n    readonly requestHeaders?: Readonly<Record<string, string>>;\n}',
+    name: 'PentestRunRecord',
+    declaration: 'export type PentestRunRecord = z.infer<typeof pentestRunRecordSchema>;',
   },
   {
-    name: 'PluginChange',
-    declaration: 'export interface PluginChange {\n    readonly reason: \'plugin\' | \'bundle\' | \'install\' | \'remove\';\n}',
+    name: 'PentestTaskId',
+    declaration: 'export type PentestTaskId = Branded<\'PentestTaskId\'>;',
   },
   {
-    name: 'PluginEntryId',
-    declaration: 'export type PluginEntryId = Branded<\'PluginEntryId\'>;',
+    name: 'PentestTaskRecord',
+    declaration: 'export type PentestTaskRecord = z.infer<typeof pentestTaskRecordSchema>;',
   },
   {
-    name: 'PluginFiberPhase',
-    declaration: 'export type PluginFiberPhase = \'pending\' | \'loading\' | \'active\' | \'failed\' | \'unloading\' | null;',
-  },
-  {
-    name: 'PluginInfo',
-    declaration: 'export type PluginInfo = PluginInventoryEntry & ({\n    patchId: string;\n    readOnlyReason?: never;\n} | {\n    patchId?: never;\n    readOnlyReason: ReadOnlyReason;\n});',
-  },
-  {
-    name: 'PluginInspectProblem',
-    declaration: 'export type PluginInspectProblem = \'invalid-spec\' | \'already-installed\' | \'not-found\' | \'not-a-package\' | \'not-a-bundle\' | \'network\' | \'unknown\';',
-  },
-  {
-    name: 'PluginInstallCancellation',
-    declaration: 'export interface PluginInstallCancellation {\n    readonly status: \'cancelled\' | \'too-late\' | \'not-running\';\n}',
-  },
-  {
-    name: 'PluginInstallFailureKind',
-    declaration: 'export type PluginInstallFailureKind = \'pnpm-missing\' | \'timeout\' | \'not-found\' | \'no-matching-version\' | \'network\' | \'disk-full\' | \'permission\' | \'build-blocked\' | \'integrity\' | \'unknown\';',
-  },
-  {
-    name: 'PluginInstallLogChunk',
-    declaration: 'export interface PluginInstallLogChunk {\n    readonly requestId?: PluginInstallRequestId;\n    readonly jobId: string;\n    readonly argv: readonly string[];\n    readonly cwd: string;\n    readonly stream: \'stdout\' | \'stderr\';\n    readonly text: string;\n    readonly exitCode?: number | null;\n}',
-  },
-  {
-    name: 'PluginInstallProgress',
-    declaration: 'export interface PluginInstallProgress {\n    readonly requestId: PluginInstallRequestId;\n    readonly phase: \'installing\' | \'cancelling\' | \'applying\';\n    readonly attempt?: {\n        readonly registry: Registry;\n        readonly index: number;\n        readonly total: number;\n    };\n}',
-  },
-  {
-    name: 'PluginInstallRequestId',
-    declaration: 'export type PluginInstallRequestId = Branded<\'PluginInstallRequestId\'>;',
-  },
-  {
-    name: 'PluginInventoryEntry',
-    declaration: 'export interface PluginInventoryEntry {\n    readonly entryId: PluginEntryId;\n    readonly moduleName: string;\n    readonly meta?: PluginLocalizedMeta;\n    readonly enabled: boolean;\n    readonly fiberPhase: PluginFiberPhase;\n}',
-  },
-  {
-    name: 'PluginLocalizedMeta',
-    declaration: 'export interface PluginLocalizedMeta {\n    readonly title?: LocalizedText;\n    readonly description?: LocalizedText;\n    readonly icon?: string;\n    readonly error?: string;\n}',
-  },
-  {
-    name: 'PluginRegistries',
-    declaration: 'export interface PluginRegistries {\n    readonly registry: Registry;\n    readonly fallbackRegistries: readonly string[];\n    readonly resolved: string | null;\n}',
-  },
-  {
-    name: 'PluginSpecInspection',
-    declaration: 'export type PluginSpecInspection = {\n    readonly status: \'accepted\';\n    readonly kind: InstallSpecKind;\n    readonly name?: string;\n    readonly version?: string;\n    readonly description?: string;\n    readonly bundle: boolean | null;\n    readonly registry: Registry;\n    readonly host?: string;\n} | {\n    readonly status: \'refused\';\n    readonly problem: PluginInspectProblem;\n    readonly reason: string;\n    readonly registries?: Registry[];\n};',
+    name: 'PermissionSelect',
+    declaration: 'export interface PermissionSelect {\n    options: PresetOption[];\n    currentValue: string;\n}',
   },
   {
     name: 'PostToolDecision',
@@ -7683,6 +7822,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebRouteKind',
     declaration: 'export type WebRouteKind = \'exact\' | \'prefix\';',
+  },
+  {
+    name: 'WebSearchPolicySettings',
+    declaration: 'export interface WebSearchPolicySettings {\n    always: boolean;\n}',
   },
   {
     name: 'WebSearchProvider',

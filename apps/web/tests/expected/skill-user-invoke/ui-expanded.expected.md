@@ -1,22 +1,40 @@
 - banner:
-  - navigation "Session hierarchy": /user-invoke-demo @"meeting notes-this-i
+  - navigation "Session hierarchy":
+    - button "/user-invoke-demo @\"meeting notes.md\" an" [disabled]
+  - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - button "/user-invoke-demo"
-- button "meeting notes-this-is-a-very-long-filename-for-testing-user-message-file-references-and-preview-layout.md"
+- button "meeting notes.md":
+  - img
+  - text: meeting notes.md
 - text: and confirm the fixture wiring {{clock}}
-- button "Copy"
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- button "Copy":
+  - img
+- button "Thought for a while" [expanded]:
+  - text: Thought for a while
+  - img
+- button "Context injection @deepseek-ai/dsh-system-prompt":
+  - img
+  - img
+  - text: Context injection @deepseek-ai/dsh-system-prompt
+- button "Context injection user-invoke-demo":
+  - img
+  - img
+  - text: Context injection user-invoke-demo
 - paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.
 - button "Copy"
 - button "Good response"
@@ -24,17 +42,24 @@
 - button "Branch into a new conversation"
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- button "Add files or run commands":
   - img
-  - text: Web Search
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "0% of context used"
 - button "Send message" [disabled]
-- button "1 turns 1 steps · {{throughput}} tok/s": 1 turns 1 steps{{throughput}} tok/s
-- button "272 tok · Cache hit 0%": 272 tokCache hit 0%
-- button "0% of context used": 0%
+- button "1 turns 1 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 1 steps{{throughput}} tok/s
+- button "272 tok · Cache hit 0%":
+  - img
+  - text: 272 tokCache hit 0%

@@ -93,16 +93,10 @@
       "path": "../../feedback/command-feedback"
     },
     {
-      "path": "../terminal-controller/tsconfig.client.json"
+      "path": "../../pentest/pentest-run"
     },
     {
-      "path": "../../boot/plugin-manager"
-    },
-    {
-      "path": "../../document/office-to-pdf"
-    },
-    {
-      "path": "../account-controller"
+      "path": "../../pentest/pentest-executor"
     }
   ]
 }

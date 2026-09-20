@@ -25,7 +25,7 @@ This package lets users browse grouped or flat Session lists, choose a Workspace
 <a id="use-this-package"></a>
 ## Use this package
 
-Use the sidebar to browse Workspaces and their Sessions, reorder them, and start new ones; use the picker in the Session Intent hero to choose a Workspace for a new session. An open Workspace shows five idle, non-blank Sessions by default. Running Sessions, including parents with running children, remain visible in their ordered positions without using that quota; the selected blank **New Session** is also an extra row until its first prompt. Each **Show more** click reveals up to five more idle Sessions; after the final batch, **Show less** restores the initial rows while keeping running Sessions visible. Closing and reopening the Workspace also restores this folded projection.
+Use the sidebar to browse Workspaces and their Sessions, reorder them, and start new ones; use the picker in the Session Intent hero to choose the local Host or a saved remote machine before choosing one of that machine's Workspaces for a new session. The local machine uses the Host hostname when available. An open Workspace shows five non-blank Sessions by default and keeps the selected blank **New Session** as one provisional extra row until its first prompt. **Show more** reveals the hidden remainder; closing and reopening the Workspace restores this folded projection.
 
 ### Reordering and view options
 
@@ -48,6 +48,10 @@ Collapsed search is one header action beside the view and add actions: activatin
 ### Managing sessions
 
 The Session row's Rename action opens a dialog prefilled with the row's display title; confirming an unchanged title is deliberately allowed — it pins the current automatic title against regeneration. Archive commits without a confirmation dialog and the row disappears from every grouping surface when the archive-set echo lands. Delete opens a destructive confirmation; success stops a Web-owned running task, permanently removes the stored Session history, detaches the id from Workspace accounting, and keeps project files. Fork forks at the source's last completed turn, increments the inherited persisted title on the client, and then opens the child. Workspace Delete opens a separate confirmation that states its retention boundary; success removes only the group while its Sessions remain under Ungrouped.
+
+### Pentest runs
+
+The composer's machine control opens the Runs dashboard over the `pentestRuns` and `pentestLoop` Remotes. The dashboard lists runs and projects each selected run's snapshot — coverage, task counts, verified findings, evidence, graph size, episodes, artifacts, tokens, cost, convergence warnings, scope-denial diagnostics, and the operator decision journal. The Pentest Task Tree renders as a nested list with per-task reprioritize plus block, approve, and reject actions for their matching statuses. The Report view presents scope, coverage, findings, observations, evidence, and diagnostics, then downloads a raw-artifact-free JSON or localized Markdown report. **New run** creates a run from an objective, a mode, and scope text; an active run starts or stops its host-side background control loop; pause, resume, and terminate keep their confirmations. The scope editor rewrites authorized and excluded targets while every open task target stays authorized. The run manager redacts common credential forms from canonical run, task, result, evidence, finding, graph, and diagnostic text; scope values that embed credentials are rejected instead of rewritten. Raw tool artifacts remain in the configured private spill backend and never enter report exports.
 
 ### Pending interactions
 
@@ -81,7 +85,7 @@ The package is one composition: both target slots are declared by other plugins,
 
 ### The directory-flow hole
 
-Each registration declares a **directory-flow child hole** (`single` kind: `conversation.hero.workspace.directoryFlow` / `sidebar.workspaces.directoryFlow`) that the composed picker package's client half fills with its picking interaction — the `-native` backend's renderless OS-chooser driver, an in-app browsing dialog under a `-browse` composition. The flat **Add workspace...** action renders only while the surface's hole is occupied; an empty hole means the composition has no picking affordance. This package owns the trigger and the adoption: the occupant reports one picked path per open through the hole's owner conversation (`open`/`busy`/`onPicked`/`onCancel`/`onError`), and the owner adopts it through the object layer, selecting the committed Workspace only after its list projection has refreshed.
+Each registration declares a **directory-flow child hole** (`single` kind: `conversation.hero.workspace.directoryFlow` / `sidebar.workspaces.directoryFlow`) that the composed picker package's client half fills with its picking interaction — the `-native` backend's renderless OS-chooser driver, an in-app browsing dialog under a `-browse` composition. The sidebar shows **Add workspace...** as a flat action; the hero nests it under the local machine. Either action renders only while its surface's hole is occupied; an empty hole means the composition has no picking affordance. This package owns the trigger and the adoption: the occupant reports one picked path per open through the hole's owner conversation (`open`/`busy`/`onPicked`/`onCancel`/`onError`), and the owner adopts it through the object layer, selecting the committed Workspace only after its list projection has refreshed.
 
 ### Session row actions
 

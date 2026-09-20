@@ -12,10 +12,8 @@ const worker: UserConfig = {
   fixedExtension: false,
   dts: false,
   clean: false,
-  outputOptions: { inlineDynamicImports: true },
-  deps: { neverBundle: specifier => (
-    specifier === 'ws' || specifier === '@deepseek-ai/dsh-app-boot/worker/profile-resolution-bootstrap'
-  ) },
+  codeSplitting: false,
+  deps: { neverBundle: specifier => specifier === 'ws' },
 }
 
 /** Build the Host plugin and Worker during the Host pass, and the dynamic Client plugin during the Client pass. */

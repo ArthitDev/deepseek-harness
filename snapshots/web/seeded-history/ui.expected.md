@@ -1,42 +1,65 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the read tool twice" [disabled]
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
     - img
   - button "Switch to dark mode":
     - img
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
-- button "Copy"
-- status: Worked
-- button "Took {{duration}}"
+- button "Copy":
+  - img
+- button "2 tool calls":
+  - text: 2 tool calls
+  - img
 - paragraph: DONE
-- button "Copy"
-- button "Good response"
-- button "Bad response"
-- button "Branch into a new conversation"
+- button "Copy":
+  - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation":
+  - img
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
 - text: {{clock}}
 - button "compact Compacted 5 history items (~{{tokens}} tokens)"
-- status: Worked
-- button "Took {{duration}}" [disabled]
-- textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Web search automatic, press to search on every request":
+- button "Context injection AGENTS.md":
   - img
-  - text: Web Search
+  - img
+  - text: Context injection AGENTS.md
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
+  - img
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Agent mode: Red Team"':
+  - img
+  - text: Red Team
+- button "Pentest runs":
+  - img
+  - text: Runs
 - 'button "Execution machine: MSI-Cyborg-15-NB"': MSI-Cyborg-15-NB
 - button "Select model, current DeepSeek · DeepSeek-V4-Flash":
   - text: DeepSeek · DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s
-- button "16K tok · Cache hit 98%": 16K tokCache hit 98%
+- button "1 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 2 steps{{throughput}} tok/s
+- button "16K tok · Cache hit 98%":
+  - img
+  - text: 16K tokCache hit 98%

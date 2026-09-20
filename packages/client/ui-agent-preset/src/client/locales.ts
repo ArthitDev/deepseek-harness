@@ -48,7 +48,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'Includes all Standard mode capabilities. Better suited to tasks that call tools in batches and then filter, organize, deduplicate, count, or summarize the results.',
   presetMinimalName: 'Minimal mode',
   presetMinimalDescription:
-    'The agent works using only a terminal tool. Useful for testing and comparing its basic performance.',
+    'Single-tool coding agent with a persistent shell.',
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode.',
@@ -110,7 +110,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetPtcName: 'PTC 模式',
   presetPtcDescription: '包含标准模式的所有能力，更适合批量调用工具，并对结果进行筛选、整理、去重、统计或汇总的任务。',
   presetMinimalName: '极简模式',
-  presetMinimalDescription: 'Agent 仅使用终端工具完成任务，适合测试和对比其基础表现。',
+  presetMinimalDescription: '仅提供持久 shell 的单工具编码 Agent。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用对话定制 DSH：让 Agent 编写插件，添加新功能或界面；也能组合工具和提示词，创建自己的模式。',
 

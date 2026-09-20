@@ -95,6 +95,44 @@
 /* Selection still sets data-selected for details linkage; no outline —
    tool rows match Think chrome (no selected ring). */
 
+/* Turn activity keeps the former loader's one-line footprint. A pale
+   brand-blue band sweeps from left to right; reduced-motion keeps it static. */
+.turnStatus {
+  align-self: flex-start;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: calc(26px + var(--dsh-content-font-delta, 0px));
+  white-space: nowrap;
+}
+
+.turnStatusLogo {
+  width: 22px;
+  height: 22px;
+  background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
+  filter: drop-shadow(0 0 5px var(--dsh-agent-glow, rgb(255 51 71 / 70%)));
+  animation: dsh-turn-status-pulse 1.6s ease-in-out infinite;
+}
+
+.turnStatusClock {
+  margin-left: 8px;
+  font: var(--dsw-font-xs-13);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+  -webkit-text-fill-color: var(--dsw-alias-label-caption);
+}
+
+@keyframes dsh-turn-status-pulse {
+  50% { opacity: 0.55; transform: scale(0.92); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turnStatusLogo { animation: none; }
+}
+
 .hint {
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsh-content-font-size-secondary, 13px);

@@ -69,10 +69,16 @@ const tConversation: ConversationSessionHeaderProps['t'] =
   key => (conversationZh as Record<string, string>)[key] ?? key
 
 const runtimes: SlotTestRuntime[] = []
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 afterEach(async () => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo')
   for (const runtime of runtimes.splice(0)) await runtime.dispose()
 })
@@ -80,6 +86,7 @@ afterEach(async () => {
 // view cannot rehydrate into the next.
 beforeEach(() => {
   localStorage.clear()
+  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
 })
 
 /** Node fixture: user prologue, two turns, one tool result inside turn 1. */
@@ -389,10 +396,12 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
       })()
       : injected
     const viewProps: ConvViewProps = { ...owner, ...standardProps }
+    const localeProps = entry.options.id === 'graph' ? { t: tZh } : {}
     return (
       <View
         {...viewProps}
         {...injectedProps}
+        {...localeProps}
         key={key}
       />
     )
@@ -425,11 +434,12 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
 }
 
 describe('plugin registration', () => {
-  it('registers trajectory after chat on the ring', async () => {
+  it('registers trajectory and graph after chat on the ring', async () => {
     const b = await bench()
     expect(tabsOf(b.slots)).toEqual([
       { id: 'chat', label: 'Chat' },
       { id: 'trajectory', label: 'Trajectory' },
+      { id: 'graph', label: 'Graph' },
     ])
   })
 
@@ -508,15 +518,16 @@ describe('plugin registration', () => {
 })
 
 describe('tab switching in ConversationRoot', () => {
-  it('renders two tabs, defaults to chat, and switches to the trajectory ledger', async () => {
+  it('renders three tabs and switches between the trajectory ledger and graph', async () => {
     const b = await bench()
     const view = mount(b)
     expect(screen.getByTestId('chat-body')).toBeTruthy()
-    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Chat', 'Trajectory'])
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Chat', 'Trajectory', 'Graph'])
 
     fireEvent.click(screen.getByRole('tab', { name: 'Trajectory' }))
     expect(screen.queryByText(/turns ·/)).toBeNull()
     expect(view.container.querySelectorAll('tr[data-turn-start="true"]')).toHaveLength(2)
+
     expect(screen.queryByRole('columnheader')).toBeNull()
     expect(screen.getByRole('toolbar', { name: '轨迹工具栏' })).toBeTruthy()
     expect(screen.getByRole('region', { name: '轨迹时间线' })).toBeTruthy()
@@ -527,6 +538,13 @@ describe('tab switching in ConversationRoot', () => {
     expect(screen.getByRole('row', { name: /用户/ })).toBeTruthy()
     expect(screen.queryByTestId('chat-body')).toBeNull()
     expect(b.loadOlder).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Graph' }))
+    const graph = screen.getByLabelText('智能体工作图谱')
+    expect(graph.textContent).toContain('第 1 轮')
+    expect(graph.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0)
+    expect(graph.querySelector('.react-flow__attribution')).toBeNull()
+
     fireEvent.click(screen.getByRole('tab', { name: 'Chat' }))
     expect(b.loadOlder).not.toHaveBeenCalled()
   })

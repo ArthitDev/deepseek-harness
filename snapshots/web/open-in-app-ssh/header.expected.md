@@ -1,7 +1,13 @@
 - banner:
-  - navigation "Session hierarchy": Use the read tool twice
-  - button "More actions"
-  - button "Open right sidebar"
+  - navigation "Session hierarchy":
+    - button "Use the read tool twice" [disabled]
+  - button "More actions":
+    - img
+  - button "Switch to dark mode":
+    - img
+  - button "Open right sidebar":
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Graph"
