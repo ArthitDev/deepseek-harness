@@ -18,6 +18,9 @@
       "path": "../ui-conversation/tsconfig.client.json"
     },
     {
+      "path": "../ui-model-selection"
+    },
+    {
       "path": "../ui-plugin-manager/tsconfig.client.json"
     },
     {

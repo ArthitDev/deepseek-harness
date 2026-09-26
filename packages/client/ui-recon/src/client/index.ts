@@ -8,11 +8,14 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the 'conversation.view' SlotMap row must be in the program for
 // the register call to type, and the renderer declares the `slots` service.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: the ModelDirectoryResolver Context merge types the optional
+// `modelDirectories` read that routes AI jobs by the Session's selection.
+import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { DynamicReconResult, ReconQueueEntry, ReconReport } from '@deepseek-ai/dsh-recon-engine/types'
+import type { DynamicReconResult, ReconAiSelection, ReconQueueEntry, ReconReport } from '@deepseek-ai/dsh-recon-engine/types'
 import { en, NS, zh } from './locales.ts'
 import { ReconView, reconChatPrompt } from './ReconView.tsx'
 import { ReconTargetControl } from './ReconTargetControl.tsx'
@@ -52,14 +55,30 @@ export function apply(ctx: Context): void {
       inject: () => settings.inject(),
     }, ReconSettingsCard)),
   ), 'ui-recon: settings page')
+  const sessionAiSelection = (sessionId: SessionId): ReconAiSelection | undefined => {
+    const directories = ctx.get('modelDirectories')
+    if (directories === undefined) return undefined
+    try {
+      const current = directories.directoryFor(sessionId).store.getSnapshot().current
+      return current === null ? undefined : {
+        provider: current.provider,
+        model: current.model,
+        ...(current.reasoningEffort === undefined ? {} : { reasoningEffort: String(current.reasoningEffort) }),
+      }
+    } catch { /* The session can disappear mid-enqueue; the host then uses its default Main selection. */ }
+    return undefined
+  }
   const enqueueForSession = async (
     sessionId: SessionId,
     target: string,
     aiAssisted: boolean,
   ): Promise<ReconQueueEntry> => {
     const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+    const aiSelection = sessionAiSelection(sessionId)
     const result = await ctx.remote.reconRuns.enqueue({
-      target, aiAssisted, ...(cwd === undefined ? {} : { cwd }),
+      target, aiAssisted,
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(aiSelection === undefined ? {} : { aiSelection }),
     })
     if (!result.ok) throw new Error(result.error.message)
     ctx.uiConversation.markActivity(sessionId, 'recon')
@@ -130,7 +149,10 @@ export function apply(ctx: Context): void {
           return result.value
         },
         enqueueDynamic: async (runId: string) => {
-          const result = await ctx.remote.reconRuns.enqueueDynamic(runId)
+          const aiSelection = sessionAiSelection(sessionId)
+          const result = await ctx.remote.reconRuns.enqueueDynamic(runId, {
+            ...(aiSelection === undefined ? {} : { aiSelection }),
+          })
           if (!result.ok) throw new Error(result.error.message)
           return result.value
         },

@@ -19,7 +19,7 @@
 - แยก Permission mode เป็น Read Only, Workspace Write และ Full access พร้อมสถานะที่เห็นชัดใน UI
 - จัดการ Agent preset และ system prompt แยกตาม provider/model ได้
 - กำหนดโมเดลและ preset ของ Sub-agent ได้อย่างอิสระ ไม่ต้องใช้ provider, model หรือ prompt เดียวกับ Main agent
-- Dynamic Recon ใช้เส้นทาง provider/model ของ Sub-agent ที่เลือกและ preset ที่ผูกกับเส้นทางนั้น ไม่อิง Main agent โดยอัตโนมัติ
+- Dynamic Recon เลือก Sub-agent route จาก provider เดียวกับโมเดลที่เลือกใน Session (ถ้าไม่ระบุจะใช้ default model ของระบบ) พร้อม preset ที่ผูกกับ route นั้น ไม่หยิบรายการแรกจาก allow-list; ถ้าไม่มี route ที่อนุญาตภายใต้ provider นั้น งานจะจบด้วยข้อผิดพลาดทันที
 - ปรับ workflow ของ session, New Session, การลบ session และ sidebar แบบโครงสร้าง workspace/folder
 
 Team mode ช่วยสื่อบทบาทและบริบทการทำงาน แต่ขอบเขตจริงยังขึ้นกับ Permission mode,
