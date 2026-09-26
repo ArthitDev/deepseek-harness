@@ -17,4 +17,6 @@ export interface Config {
   selectedDefault: Volatile<string | undefined>
   /** Whether new-session surfaces expose preset selection and the saved default applies. */
   modeSelectionEnabled: Volatile<boolean>
+  /** Preset overrides by provider and model. */
+  models?: Volatile<Record<string, Record<string, string>> | undefined>
 }

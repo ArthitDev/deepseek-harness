@@ -3,6 +3,7 @@ import type { ComponentType } from 'react'
 import type { InputTriggerCandidate } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   IconCompactOutlineRegular, IconDownloadOutlineRegular, IconGoalOutlineRegular, IconPaperPlaneOutlineRegular, IconPlanOutlineRegular,
+  IconSearchOutlineRegular,
   PermissionIconFullAccessRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -26,14 +27,20 @@ interface HostFace {
   readonly label: CommandKey
   readonly description: CommandKey
   readonly icon: ComponentType<IconProps>
+  readonly hideNameAlias?: boolean
 }
 
 /** One built-in Host command's face, keyed by its dictionary entries. */
-function hostFace(name: BuiltinCommandName, icon: ComponentType<IconProps>): readonly [BuiltinCommandName, HostFace] {
+function hostFace(
+  name: BuiltinCommandName,
+  icon: ComponentType<IconProps>,
+  hideNameAlias = false,
+): readonly [BuiltinCommandName, HostFace] {
   return [name, {
     label: `label.${name}`,
     description: `description.${name}`,
     icon,
+    ...(hideNameAlias ? { hideNameAlias: true } : {}),
   }]
 }
 
@@ -45,6 +52,7 @@ const HOST_FACES: ReadonlyMap<BuiltinCommandName, HostFace> = new Map([
   hostFace('compact', IconCompactOutlineRegular),
   hostFace('permission', PermissionIconFullAccessRegular),
   hostFace('export', IconDownloadOutlineRegular),
+  hostFace('webSearch', IconSearchOutlineRegular, true),
 ])
 
 /**
@@ -57,10 +65,13 @@ const HOST_FACES: ReadonlyMap<BuiltinCommandName, HostFace> = new Map([
 export function builtinRowFace(
   descriptor: CommandDescriptor,
   t: TranslateNS<'command'>,
-): Pick<InputTriggerCandidate, 'label' | 'description' | 'icon'> | undefined {
+): Pick<InputTriggerCandidate, 'label' | 'description' | 'icon' | 'hideNameAlias'> | undefined {
   const name = builtinCommandName(descriptor)
   const face = name === undefined ? undefined : HOST_FACES.get(name)
-  return face === undefined ? undefined : { label: t(face.label), description: t(face.description), icon: face.icon }
+  return face === undefined ? undefined : {
+    label: t(face.label), description: t(face.description), icon: face.icon,
+    ...(face.hideNameAlias ? { hideNameAlias: true } : {}),
+  }
 }
 
 /**

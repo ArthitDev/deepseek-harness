@@ -43,6 +43,12 @@ export class MemoryMediaPool {
    * untouched after a durability failure.
    */
   failNextWrites = 0
+  /**
+   * When true, units expose an atomic `putRecords` batch (all records apply
+   * or none), modeling a medium with transactional batches; when false units
+   * omit the member and domain batches fall back to sequential puts.
+   */
+  batchAtomic = false
 
   /** Consume one injected failure, throwing in a rejected write's place. */
   consumeInjectedFailure(): void {
@@ -57,12 +63,30 @@ export class MemoryMediaPool {
 class MemoryKvUnit implements KvUnit {
   private closed = false
 
+  readonly putRecords?: (entries: readonly { table: string; key: string; value: unknown }[]) => Promise<void>
+
   constructor(
     private readonly pool: MemoryMediaPool,
     private readonly medium: MemoryMedium,
     private readonly descriptor: KvUnitDescriptor,
     private readonly onClose: () => void,
-  ) {}
+  ) {
+    if (pool.batchAtomic) {
+      this.putRecords = async (entries) => {
+        this.assertOpen()
+        // Fail before applying anything, so the batch stays all-or-nothing.
+        for (let index = 0; index < entries.length; index += 1) this.pool.consumeInjectedFailure()
+        for (const entry of entries) {
+          let records = this.medium.tables.get(entry.table)
+          if (records === undefined) {
+            records = new Map()
+            this.medium.tables.set(entry.table, records)
+          }
+          records.set(entry.key, entry.value)
+        }
+      }
+    }
+  }
 
   private assertOpen(): void {
     if (this.closed) {

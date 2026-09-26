@@ -76,6 +76,12 @@ async function bench(list: ListFn, addressed?: SessionId, opening: Pick<SessionF
     await sessions.disposeScopes()
     await ctx.fiber.dispose()
   })
+  for (const id of ['s1', 's2', 'preview', 'first', 'second', 'child']) {
+    await sessions.add({ id, ...opening })
+    sessions.retainFor(ctx, id === addressed
+      ? { parentSessionId: sid('parent'), childSessionId: addressed, mode: 'continuable' }
+      : sid(id))
+  }
   const remote = new TestRemote(ctx, {
     skills: {
       list,

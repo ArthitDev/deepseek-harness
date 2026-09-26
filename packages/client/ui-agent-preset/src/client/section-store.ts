@@ -1,9 +1,10 @@
 /**
- * Agent-preset management controller: the roster as a list, a copy dialog,
+ * Agent-preset management controller: the roster as a list, create and copy dialogs,
  * a read-only viewer over shipped compositions, and a custom-preset editor.
  *
- * A new preset is a host-side copy of an existing one. Composition writes name
- * only that copied preset's id; the Host resolves its user-root path.
+ * Direct creation keeps the default preset's tools and replaces its persona
+ * prompt in one Host operation. Composition writes name only a preset id; the
+ * Host resolves its user-root path.
  *
  * The host stays the single fact source. Every mutation writes through the
  * wire and the page re-reads the roster afterwards, because a copy changes
@@ -14,10 +15,14 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { beginRosterRead, writeDefaultPreset, writeModelPreset } from './settings-store.ts'
+import {
+  beginRosterRead, writeDefaultPreset, writeModeSelectionEnabled, writeModelPreset,
+} from './settings-store.ts'
 
 /** Ids a preset directory may be named, mirroring the host's own rule. */
 const PRESET_ID = /^[a-z0-9][a-z0-9-]*$/
+
+const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
 /** One preset row the page renders. */
 export interface PresetRow {
@@ -68,6 +73,20 @@ export interface CopyDraft {
   error: string | null
 }
 
+/** A preset created directly from an id, display name, and system prompt. */
+export interface CreateDraft {
+  /** New preset id being typed; the directory name, so it is required. */
+  id: string
+  /** Display name being typed; empty falls back to the id. */
+  name: string
+  /** Persona prompt stored in the new preset. */
+  prompt: string
+  /** Whether creation is in flight. */
+  saving: boolean
+  /** Last creation failure, cleared by the next edit. */
+  error: string | null
+}
+
 /** The composition viewer or editor over one preset. */
 export interface PresetView {
   /** The preset whose composition is shown. */
@@ -104,10 +123,10 @@ function personaTextField(content: string): PersonaTextField {
   const rowEnd = lines.findIndex((line, index) => index > persona && /^-\s/.test(line))
   const limit = rowEnd < 0 ? lines.length : rowEnd
   const startLine = lines.findIndex((line, index) =>
-    index > persona && index < limit && /^ {4}text:/.test(line))
-  if (startLine < 0) throw new Error('The "persona" row has no config.text system prompt.')
+    index > persona && index < limit && /^ {4}(?:prefix|text):/.test(line))
+  if (startLine < 0) throw new Error('The "persona" row has no config.prefix system prompt.')
 
-  const value = lines[startLine]?.replace(/^ {4}text:\s*/, '') ?? ''
+  const value = lines[startLine]?.replace(/^ {4}(?:prefix|text):\s*/, '') ?? ''
   if (!/^[>|][+-]?(?:\s+#.*)?$/.test(value)) {
     const trimmed = value.trim()
     const prompt = trimmed.startsWith("'") && trimmed.endsWith("'")
@@ -139,19 +158,24 @@ function personaTextField(content: string): PersonaTextField {
 export function replacePersonaPrompt(content: string, prompt: string): string {
   const field = personaTextField(content)
   const lines = content.split(/\r?\n/)
-  const replacement = ['    text: |-', ...prompt.replace(/\r\n?/g, '\n').split('\n').map(line => `      ${line}`)]
+  const replacement = ['    prefix: |-', ...prompt.replace(/\r\n?/g, '\n').split('\n').map(line => `      ${line}`)]
   lines.splice(field.startLine, field.endLine - field.startLine, ...replacement)
   return lines.join(field.newline)
 }
 
 /** Page snapshot. */
 export interface AgentPresetSectionState {
-  status: 'idle' | 'loading' | 'ready' | 'error'
+  status: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
+  /** Whole-load failure text; a copy failure stays on the dialog. */
   error: string | null
   /** Whether the deployment configures a root new presets can be written to. */
   authorable: boolean
   /** Whether the host can open a preset directory on a native desktop. */
   hasDocument: boolean
+  /** Whether new-session surfaces expose preset selection. */
+  showPicker: boolean
+  /** Whether a mode-selection policy write is in flight. */
+  policySaving: boolean
   /** Every preset the deployment currently supplies. */
   rows: readonly PresetRow[]
   /** Every model the Host currently offers. */
@@ -162,6 +186,8 @@ export interface AgentPresetSectionState {
   binding: boolean
   /** The open copy dialog, or null. */
   copy: CopyDraft | null
+  /** The open direct-create dialog, or null. */
+  create: CreateDraft | null
   /** The open composition viewer or editor, or null. */
   view: PresetView | null
   /** The preset awaiting delete confirmation. */
@@ -174,14 +200,14 @@ export interface AgentPresetSectionState {
    */
   revealedPaths: Readonly<Record<string, string>>
 }
-const INITIAL: AgentPresetSectionState = { status: 'idle', error: null, showPicker: true, policySaving: false, rows: [] }
-const message = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
 const INITIAL: AgentPresetSectionState = {
   status: 'idle',
   error: null,
   authorable: false,
   hasDocument: false,
+  showPicker: false,
+  policySaving: false,
   rows: [],
   models: [],
   modelPresets: {},
@@ -216,21 +242,77 @@ export function draftBlocker(
 
 /** Reads the roster and drives the copy dialog, viewer, and location reveals. */
 export class AgentPresetSectionController {
-  /** Observable roster and selection state. */
+  /** Page snapshot the renderer subscribes to. */
   readonly store: SnapshotStore<AgentPresetSectionState> = createSnapshotStore(INITIAL)
-  private loading: Promise<void> | undefined
-  constructor(private readonly ctx: Context) {}
 
-  private set(patch: Partial<AgentPresetSectionState>): void { this.store.set({ ...this.store.getSnapshot(), ...patch }) }
+  constructor(
+    private readonly ctx: ClientContext,
+    /**
+     * Called after this page changes the roster DIRECTORY, so the other
+     * surfaces reading the same roster re-read it. A settings field moving is
+     * already announced by the host through the forwarded
+     * `settings/document-updated`; a directory copied or deleted here is not,
+     * and the new-session chip has no other way to learn a preset it should
+     * offer now exists.
+     */
+    private readonly rosterChanged: () => void = () => {},
+  ) {}
 
   private set(patch: Partial<AgentPresetSectionState>): void {
     this.store.set({ ...this.store.getSnapshot(), ...patch })
+  }
+
+  /** Read back and reflect the Host-effective default after a policy write. */
+  private async confirmEffectiveDefault(showPicker: boolean): Promise<string | undefined> {
+    await this.load()
+    if (this.store.getSnapshot().status === 'error') await this.load()
+    const state = this.store.getSnapshot()
+    if (state.status !== 'ready' || state.showPicker !== showPicker) return undefined
+    return state.rows.find(row => row.isDefault)?.id
+  }
+
+  /**
+   * Show or hide new-session preset selection without changing the saved default.
+   * @param showPicker - whether new-session surfaces expose preset selection.
+   * @param syncBlankSession - optional callback that applies the effective default to a blank session.
+   * @returns once the policy write and optional blank-session sync settle.
+   */
+  async setPickerVisible(
+    showPicker: boolean,
+    syncBlankSession?: (id: string) => Promise<string | undefined>,
+  ): Promise<void> {
+    const state = this.store.getSnapshot()
+    if (state.status !== 'ready' || state.policySaving || state.showPicker === showPicker) return
+    this.set({ policySaving: true, error: null })
+    try {
+      const failure = await writeModeSelectionEnabled(this.ctx, showPicker)
+      if (failure !== undefined) {
+        await this.load()
+        this.set({ error: failure })
+        return
+      }
+      const effectiveDefault = await this.confirmEffectiveDefault(showPicker)
+      if (effectiveDefault === undefined) return
+      const syncFailure = await syncBlankSession?.(effectiveDefault)
+      if (syncFailure !== undefined) this.set({ error: syncFailure })
+    } catch (error: unknown) {
+      await this.load()
+      this.set({ error: errorMessage(error) })
+    } finally {
+      this.set({ policySaving: false })
+    }
   }
 
   private patchCopy(patch: Partial<CopyDraft>): void {
     const { copy } = this.store.getSnapshot()
     if (copy === null) return
     this.set({ copy: { ...copy, ...patch } })
+  }
+
+  private patchCreate(patch: Partial<CreateDraft>): void {
+    const { create } = this.store.getSnapshot()
+    if (create === null) return
+    this.set({ create: { ...create, ...patch } })
   }
 
   private patchView(patch: Partial<PresetView>): void {
@@ -248,12 +330,12 @@ export class AgentPresetSectionController {
   async load(): Promise<void> {
     const roster = await beginRosterRead(this.ctx, this.store)
     if (roster === undefined) return
-    const { presets, authorable, models, modelPresets } = roster
+    const { presets, authorable, modeSelectionEnabled: showPicker, models, modelPresets } = roster
     const { hasDocument } = this.store.getSnapshot()
     if (presets.length === 0) {
       // Nothing to manage leaves nothing to keep a dialog open over.
       this.set({
-        status: 'unavailable', rows: [], models, modelPresets,
+        status: 'unavailable', rows: [], models, modelPresets, showPicker,
         authorable, hasDocument, copy: null, create: null, view: null,
       })
       return
@@ -268,6 +350,7 @@ export class AgentPresetSectionController {
       error: null,
       authorable,
       hasDocument,
+      showPicker,
       rows: presets.map(preset => ({ ...preset })),
       models,
       modelPresets,
@@ -357,12 +440,81 @@ export class AgentPresetSectionController {
     this.rosterChanged()
   }
 
+  /** Open the direct-create dialog. */
+  beginCreate(): void {
+    this.set({
+      error: null,
+      create: { id: '', name: '', prompt: '', saving: false, error: null },
+    })
+  }
+
+  /** Close the direct-create dialog, discarding its draft. */
+  cancelCreate(): void {
+    if (this.store.getSnapshot().create?.saving === true) return
+    this.set({ create: null })
+  }
+
+  /** Update the new preset id.
+   * @param id - new preset id typed into the dialog. */
+  setCreateId(id: string): void {
+    this.patchCreate({ id, error: null })
+  }
+
+  /** Update the new preset display name.
+   * @param name - display name typed into the dialog. */
+  setCreateName(name: string): void {
+    this.patchCreate({ name, error: null })
+  }
+
+  /** Update the new preset persona prompt.
+   * @param prompt - persona prompt typed into the dialog. */
+  setCreatePrompt(prompt: string): void {
+    this.patchCreate({ prompt, error: null })
+  }
+
+  /** Create a preset from the current default's capabilities and the drafted prompt. */
+  async confirmCreate(): Promise<void> {
+    const draft = this.store.getSnapshot().create
+    if (draft === null || draft.saving) return
+    const state = this.store.getSnapshot()
+    if (draftBlocker(draft, state.rows) !== undefined) return
+    const source = state.rows.find(row => row.isDefault && row.broken === undefined)
+    if (source === undefined) return
+    this.patchCreate({ saving: true, error: null })
+    const document = await this.ctx.remote.agentPresets.read(source.id)
+    if (!document.ok) {
+      this.patchCreate({ saving: false, error: document.error.message })
+      return
+    }
+    let content: string
+    try {
+      content = replacePersonaPrompt(document.value.content, draft.prompt)
+    } catch (error: unknown) {
+      this.patchCreate({ saving: false, error: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    const name = draft.name.trim()
+    const result = await this.ctx.remote.agentPresets.create(
+      source.id, draft.id, name === '' ? undefined : name, content)
+    if (!result.ok) {
+      this.patchCreate({ saving: false, error: result.error.message })
+      return
+    }
+    this.set({ create: null })
+    await this.load()
+    this.rosterChanged()
+  }
+
   /**
    * Open the copy dialog over one preset.
    * @param from - the preset the copy will start from.
    */
-  async setPickerVisible(visible: boolean, sync?: (id: string) => Promise<string | undefined>): Promise<void> {
-    await this.policy(() => writeModeSelectionEnabled(this.ctx, visible), sync)
+  beginCopy(from: string): void {
+    const row = this.store.getSnapshot().rows.find(candidate => candidate.id === from)
+    this.set({
+      error: null,
+      copy: { from, fromTitle: row?.name ?? from, id: '', name: '', saving: false, error: null },
+    })
   }
 
   /** Close the copy dialog, discarding whatever was typed. */
@@ -465,14 +617,30 @@ export class AgentPresetSectionController {
    * Make one preset the default for sessions created later. Running sessions
    * keep the composition they began with, so this never disturbs work.
    * @param id - the preset to make default.
+   * @param syncBlankSession - optional callback that applies the default to a blank session.
    * @returns once the write settled and the roster was re-read.
    */
-  async makeDefault(id: string): Promise<void> {
-    const failure = await writeDefaultPreset(this.ctx, id)
-    if (failure !== undefined) {
-      this.set({ error: failure })
-      return
+  async makeDefault(
+    id: string,
+    syncBlankSession?: (id: string) => Promise<string | undefined>,
+  ): Promise<void> {
+    const state = this.store.getSnapshot()
+    if (!state.showPicker || state.policySaving) return
+    this.set({ policySaving: true, error: null })
+    try {
+      const failure = await writeDefaultPreset(this.ctx, id)
+      if (failure !== undefined) {
+        this.set({ error: failure })
+        return
+      }
+      const effectiveDefault = await this.confirmEffectiveDefault(true)
+      if (effectiveDefault === undefined) return
+      const syncFailure = await syncBlankSession?.(effectiveDefault)
+      if (syncFailure !== undefined) this.set({ error: syncFailure })
+    } catch (error: unknown) {
+      this.set({ error: errorMessage(error) })
+    } finally {
+      this.set({ policySaving: false })
     }
-    await this.load()
   }
 }

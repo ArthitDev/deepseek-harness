@@ -1,6 +1,6 @@
 import { availableParallelism } from 'node:os'
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
+import { standardDecoratorPlugin, vitestExecArgv, vitestPathsPlugin } from './vitest.shared.ts'
 
 const DEFAULT_SNAPSHOT_MAX_CONCURRENCY = 5
 
@@ -40,7 +40,7 @@ if (process.env.DSH_SNAPSHOT === 'record') {
 }
 
 export default defineConfig({
-  plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
+  plugins: [vitestPathsPlugin(), standardDecoratorPlugin()],
   test: {
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],

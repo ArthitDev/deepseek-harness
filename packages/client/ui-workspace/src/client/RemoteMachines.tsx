@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react'
 import type {
-  ControlPentestTaskRequest, CreatePentestRunRequest, PentestLoopStartRequest, PentestRunRecord,
-  PentestRunSnapshot, RemoteMachineAuth, RemoteMachineSaveRequest, RemoteMachineView,
+  ControlPentestTaskRequest, CreatePentestRunRequest, PentestArtifactContent, PentestLoopStartRequest,
+  PentestRunRecord, PentestRunSnapshot, RemoteMachineAuth, RemoteMachineSaveRequest, RemoteMachineView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import {
-  Button, IconDownloadOutline16, IconGlobeOutline14, IconGoalOutline16, IconListPenOutline16,
-  IconPlusOutline16, IconShieldOutline16, Menu, Modal, type MenuEntry,
+  Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconDownloadOutlineRegular,
+  IconGlobeOutlineRegular, IconGoalOutlineRegular, IconListPenOutlineRegular,
+  IconPlusOutlineRegular, IconShieldOutlineRegular, Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   InjectFace, PropsHooks, PropsLocale, PropsRuntime,
@@ -32,6 +33,7 @@ export interface RemoteMachineInjected {
   startSession: (workspaceId: WorkspaceView['workspaceId']) => void
   listPentestRuns: () => Promise<readonly PentestRunRecord[]>
   loadPentestRun: (runId: string) => Promise<PentestRunSnapshot>
+  loadPentestArtifact: (runId: string, artifactId: string) => Promise<PentestArtifactContent>
   controlPentestRun: (runId: string, action: 'pause' | 'resume' | 'terminate') => Promise<PentestRunRecord>
   controlPentestTask: (taskId: string, request: ControlPentestTaskRequest) => Promise<void>
   replacePentestScope: (
@@ -64,10 +66,10 @@ const BlackTeamIcon = ({ size = 16, className }: {
 )
 
 const AGENT_MODE_ICONS = {
-  blue: IconShieldOutline16,
-  red: IconGoalOutline16,
+  blue: IconShieldOutlineRegular,
+  red: IconGoalOutlineRegular,
   black: BlackTeamIcon,
-} satisfies Record<AgentMode, typeof IconShieldOutline16>
+} satisfies Record<AgentMode, typeof IconShieldOutlineRegular>
 
 function AgentModeControl({ controller, locked, t }: {
   controller: AgentModeController
@@ -90,9 +92,14 @@ function AgentModeControl({ controller, locked, t }: {
     <>
       <Menu
         open={open}
+        side="top"
         items={AGENT_MODES.map((value) => {
           const Icon = AGENT_MODE_ICONS[value]
-          return { id: value, label: t(`agentMode.${value}`), icon: <Icon size={14} /> }
+          return {
+            id: value,
+            label: t(`agentMode.${value}`),
+            icon: <span className={css.modeMenuIcon} data-agent-mode={value}><Icon size={14} /></span>,
+          }
         })}
         selectedId={mode}
         onSelect={(id) => {
@@ -117,6 +124,7 @@ function AgentModeControl({ controller, locked, t }: {
           >
             <ActiveIcon size={14} />
             <span>{label}</span>
+            {open ? <IconChevronUpOutlineRegular size={14} /> : <IconChevronDownOutlineRegular size={14} />}
           </button>
         )}
       />
@@ -176,6 +184,7 @@ function pentestReportLabels(t: RemoteMachineControlProps['t']): PentestReportLa
     noFindings: t('runs.report.noFindings'), noObservations: t('runs.report.noObservations'),
     noDiagnostics: t('runs.report.noDiagnostics'),
     noEvidence: t('runs.report.noEvidence'),
+    artifacts: t('runs.report.artifacts'), noArtifacts: t('runs.report.noArtifacts'),
   }
 }
 
@@ -194,7 +203,7 @@ function PentestReportView({ snapshot, t }: {
             `${baseName}.md`, formatPentestReportMarkdown(report, labels), 'text/markdown;charset=utf-8',
           )
         }}>
-          <IconDownloadOutline16 size={14} />
+          <IconDownloadOutlineRegular size={14} />
           {t('runs.report.export.markdown')}
         </Button>
         <Button size="sm" variant="outline" onClick={() => {
@@ -202,7 +211,7 @@ function PentestReportView({ snapshot, t }: {
             `${baseName}.json`, `${JSON.stringify(report, null, 2)}\n`, 'application/json;charset=utf-8',
           )
         }}>
-          <IconDownloadOutline16 size={14} />
+          <IconDownloadOutlineRegular size={14} />
           {t('runs.report.export.json')}
         </Button>
       </div>
@@ -300,10 +309,12 @@ function PentestReportView({ snapshot, t }: {
 }
 
 function PentestRunsControl({
-  listRuns, loadRun, controlRun, controlTask, replaceScope, createRun, startLoop, stopLoop, listRunning, execution, t,
+  listRuns, loadRun, loadArtifact, controlRun, controlTask, replaceScope, createRun, startLoop, stopLoop, listRunning,
+  execution, t,
 }: {
   listRuns: RemoteMachineInjected['listPentestRuns']
   loadRun: RemoteMachineInjected['loadPentestRun']
+  loadArtifact: RemoteMachineInjected['loadPentestArtifact']
   controlRun: RemoteMachineInjected['controlPentestRun']
   controlTask: RemoteMachineInjected['controlPentestTask']
   replaceScope: RemoteMachineInjected['replacePentestScope']
@@ -328,6 +339,7 @@ function PentestRunsControl({
   const [detailView, setDetailView] = useState<'operations' | 'report'>('operations')
   const [draft, setDraft] = useState<PentestRunDraft>(emptyRunDraft)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [artifactError, setArtifactError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -416,6 +428,20 @@ function PentestRunsControl({
         setError(reason instanceof Error ? reason.message : String(reason))
       } finally {
         setBusy(false)
+      }
+    })()
+  }
+  const downloadArtifact = (artifactId: string): void => {
+    if (snapshot === null) return
+    setArtifactError(null)
+    void (async () => {
+      try {
+        const artifact = await loadArtifact(snapshot.run.id, artifactId)
+        downloadPentestReport(
+          `pentest-artifact-${artifact.artifactId}`, artifact.content, `${artifact.mediaType};charset=utf-8`,
+        )
+      } catch (reason: unknown) {
+        setArtifactError(reason instanceof Error ? reason.message : String(reason))
       }
     })()
   }
@@ -575,8 +601,15 @@ function PentestRunsControl({
 
   return (
     <>
-      <button type="button" className={css.control} aria-label={t('runs.aria')} onClick={() => { setOpen(true) }}>
-        <IconListPenOutline16 size={14} />
+      <button
+        type="button"
+        className={css.control}
+        aria-label={t('runs.aria')}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => { setOpen(true) }}
+      >
+        <IconListPenOutlineRegular size={14} />
         <span>{t('runs.label')}</span>
       </button>
       <Modal
@@ -722,9 +755,44 @@ function PentestRunsControl({
                       <div className={css.runWarnings}>
                         <strong>{t('runs.report.diagnostics')}</strong>
                         {scopeDiagnostics.map((diagnostic, index) => (
-                          <span key={`${diagnostic.code}:${index}`}>{diagnostic.message}</span>
+                          <span key={`${diagnostic.code}:${index}`}>
+                            {diagnostic.rule === undefined ? '' : `${diagnostic.rule} · `}
+                            {diagnostic.target === undefined ? '' : `${diagnostic.target} — `}
+                            {diagnostic.message}
+                          </span>
                         ))}
                       </div>
+                    )}
+                    {artifactError !== null && (
+                      <p className={css.error} role="alert">
+                        {t('runs.artifacts.unavailable', { message: artifactError })}
+                      </p>
+                    )}
+                    {snapshot.artifacts.length > 0 && (
+                      <>
+                        <h4 className={css.decisionsHeading}>{t('runs.artifacts')}</h4>
+                        <ol className={css.decisions}>
+                          {[...snapshot.artifacts].slice(-8).map(artifact => (
+                            <li key={artifact.id}>
+                              <strong>{artifact.toolCallId}</strong>
+                              <span>
+                                {artifact.bytes.toLocaleString()} / {artifact.originalBytes.toLocaleString()} B
+                                {' · '}{artifact.mediaType ?? 'application/json'}
+                                {artifact.truncated ? ` · ${t('runs.artifacts.truncated')}` : ''}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() => { downloadArtifact(artifact.id) }}
+                              >
+                                <IconDownloadOutlineRegular size={12} />
+                                {t('runs.artifacts.download')}
+                              </Button>
+                            </li>
+                          ))}
+                        </ol>
+                      </>
                     )}
                     {pausedBranches.length > 0 && (
                       <div className={css.runWarnings}>
@@ -924,7 +992,7 @@ function draftOf(machine?: RemoteMachineView): MachineDraft {
 
 export function ComputerIcon({ remote = false }: { remote?: boolean }) {
   return remote
-    ? <IconGlobeOutline14 size={14} />
+    ? <IconGlobeOutlineRegular size={14} />
     : (
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
         <rect x="2" y="2.5" width="12" height="8.5" rx="1.5" stroke="currentColor" />
@@ -1157,7 +1225,7 @@ export function RemoteMachinesSection({ controller, useRemoteMachines, useWorksp
           size="sm"
           variant="outline"
           className={css.addButton}
-          icon={<IconPlusOutline16 />}
+          icon={<IconPlusOutlineRegular />}
           onClick={() => { setEditor('new') }}
         >
           {t('remote.add')}
@@ -1225,7 +1293,7 @@ export function RemoteMachinesSection({ controller, useRemoteMachines, useWorksp
 
 export function RemoteMachineControl({
   locked, useSession, useWorkspaces, useHostInfo, useRemoteMachines, controller, agentMode, createWorkspace, startSession,
-  listPentestRuns, loadPentestRun, controlPentestRun, controlPentestTask, createPentestRun,
+  listPentestRuns, loadPentestRun, loadPentestArtifact, controlPentestRun, controlPentestTask, createPentestRun,
   startPentestLoop, stopPentestLoop, listRunningPentestLoops, t, replacePentestScope,
 }: RemoteMachineControlProps) {
   const sessionId = useSession(session => session.sessionId)
@@ -1260,7 +1328,7 @@ export function RemoteMachineControl({
         ...state.machines.map(machine => ({ id: machine.id, label: machine.name, icon: <ComputerIcon remote /> })),
       ]),
     { type: 'separator' as const, id: 'add-separator' },
-    { id: 'add', label: t('remote.add'), icon: <IconPlusOutline16 /> },
+    { id: 'add', label: t('remote.add'), icon: <IconPlusOutlineRegular /> },
   ]
 
   const select = (id: string): void => {
@@ -1325,9 +1393,38 @@ export function RemoteMachineControl({
   return (
     <>
       <AgentModeControl controller={agentMode} locked={locked} t={t} />
+      <span className={css.controlWrap}>
+        <Menu
+          open={menuOpen}
+          side="top"
+          items={entries}
+          selectedId={currentMachine?.id ?? 'local'}
+          onSelect={select}
+          onClose={() => { setMenuOpen(false) }}
+          portal
+          anchor={(
+            <button
+              type="button"
+              className={css.control}
+              data-active="true"
+              aria-label={t('remote.target.aria', { name: label })}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={locked}
+              onClick={() => { setMenuOpen(value => !value) }}
+            >
+              <ComputerIcon remote={currentMachine !== undefined} />
+              <span>{label}</span>
+              {menuOpen ? <IconChevronUpOutlineRegular size={14} /> : <IconChevronDownOutlineRegular size={14} />}
+            </button>
+          )}
+        />
+        {error !== null && <span className={css.controlError} role="status" title={error}>!</span>}
+      </span>
       <PentestRunsControl
         listRuns={listPentestRuns}
         loadRun={loadPentestRun}
+        loadArtifact={loadPentestArtifact}
         controlRun={controlPentestRun}
         controlTask={controlPentestTask}
         replaceScope={replacePentestScope}
@@ -1341,31 +1438,6 @@ export function RemoteMachineControl({
         } }}
         t={t}
       />
-      <span className={css.controlWrap}>
-        <Menu
-          open={menuOpen}
-          items={entries}
-          selectedId={currentMachine?.id ?? 'local'}
-          onSelect={select}
-          onClose={() => { setMenuOpen(false) }}
-          portal
-          anchor={(
-            <button
-              type="button"
-              className={css.control}
-              aria-label={t('remote.target.aria', { name: label })}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              disabled={locked}
-              onClick={() => { setMenuOpen(value => !value) }}
-            >
-              <ComputerIcon remote={currentMachine !== undefined} />
-              <span>{label}</span>
-            </button>
-          )}
-        />
-        {error !== null && <span className={css.controlError} role="status" title={error}>!</span>}
-      </span>
       <MachineEditor
         open={editorOpen}
         controller={controller}

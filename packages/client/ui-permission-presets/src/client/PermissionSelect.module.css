@@ -4,26 +4,30 @@
   gap: 4px;
   min-width: 0;
   max-width: 220px;
-  height: 28px;
+  height: 24px;
   padding: 0 4px 0 8px;
   border: none;
   /* Rounded chip chrome, matching the sibling model trigger. */
   border-radius: 24px;
   outline: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
+  color: var(--dsw-alias-state-business-primary);
   font-size: 13px;
   line-height: 20px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .trigger:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
+}
+
+.trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
 }
 
 .trigger:focus-visible {
-  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+  box-shadow: 0 0 0 2px var(--dsw-alias-state-business-primary);
 }
 
 .trigger:disabled {
@@ -34,6 +38,19 @@
 .triggerIcon {
   display: inline-flex;
   flex: 0 0 auto;
+  line-height: 0;
+}
+
+.readOnlyIcon {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.workspaceWriteIcon {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.fullAccessIcon {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 /* The shared 16px glyphs render one step smaller on the exposed trigger;

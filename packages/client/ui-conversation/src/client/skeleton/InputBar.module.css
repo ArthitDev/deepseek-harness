@@ -286,6 +286,12 @@
   gap: 12px;
 }
 
+.tools button[data-active='true'],
+.tools button[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .modes {
   gap: 12px;
 }

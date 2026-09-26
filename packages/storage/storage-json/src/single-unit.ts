@@ -12,7 +12,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { StorageError } from '@deepseek-ai/dsh-storage'
-import type { KvUnit, KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
+import type { KvRecordWrite, KvUnit, KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
 import { writeAtomic } from './atomic.ts'
 import { parse, serialize } from './format.ts'
 import type { UnitState } from './format.ts'
@@ -82,6 +82,28 @@ class SingleJsonUnit implements KvUnit {
     await this.publish().catch((error: unknown) => {
       if (hadKey) records.set(key, previous)
       else records.delete(key)
+      throw error
+    })
+  }
+
+  async putRecords(entries: readonly KvRecordWrite[]): Promise<void> {
+    this.assertOpen()
+    if (entries.length === 0) return
+    const rollback: (() => void)[] = []
+    for (const entry of entries) {
+      const records = this.records(entry.table)
+      const hadKey = records.has(entry.key)
+      const previous = records.get(entry.key)
+      rollback.push(() => {
+        if (hadKey) records.set(entry.key, previous)
+        else records.delete(entry.key)
+      })
+      records.set(entry.key, entry.value)
+    }
+    // One publish carries the whole batch, so the file never holds a partial
+    // batch; a failed publish rolls every record back to its prior value.
+    await this.publish().catch((error: unknown) => {
+      for (const undo of [...rollback].reverse()) undo()
       throw error
     })
   }

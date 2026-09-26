@@ -9,8 +9,8 @@ import z from '@deepseek-ai/schemastery'
 import { CompactionEngine, ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed, LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
@@ -34,6 +34,12 @@ import type {
   ModelCompactPolicyConfig,
   ResolvedConfig,
 } from './types.ts'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'output-limit-continuation': { kind: 'output-limit-continuation' } & ContextFormed
+  }
+}
 
 export type {
   BasicCompactionConfig,
@@ -150,12 +156,15 @@ export class BasicCompactionEngine extends CompactionEngine {
     const { ctx } = this
     ctx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
       const limit = this.config.maxOutputContinuations
-      if (limit === 0 || signal.aborted || agent.inbox.hasPending) return
+      if (limit === 0 || signal.aborted
+        || agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) return
+      // oxlint-disable-next-line typescript/no-deprecated -- Turn-stopping needs the attached live Session's synchronous durable view.
       const events = agent.session.snapshotEvents()
-      const finish = events.findLast(event => event.type === 'assistant/chunk'
-        && event.data.turn === turn && event.data.chunk.type === 'finish')
-      if (finish?.type !== 'assistant/chunk' || finish.data.chunk.type !== 'finish'
-        || finish.data.chunk.reason.kind !== 'max-tokens') return
+      const assistant = events.findLast(event =>
+        (event.type === 'assistant/message' || event.type === 'assistant/attempt') && event.data.turn === turn)
+      if (assistant?.type !== 'assistant/message' && assistant?.type !== 'assistant/attempt') return
+      const finish = lastAssistantStreamChunk(assistant.data.stream, 'finish')
+      if (finish?.reason.kind !== 'max-tokens') return
 
       // Read the durable log, including shadowed input, so compaction and resume
       // cannot replenish the continuation budget without a new user message.
@@ -164,8 +173,7 @@ export class BasicCompactionEngine extends CompactionEngine {
         const event = events[index]
         if (event?.type !== 'user/message') continue
         if (event.data.source.kind === 'user') break
-        if (event.data.source.kind === 'plugin'
-          && event.data.source.plugin === 'output-limit-continuation') continuations += 1
+        if (event.data.source.kind === 'output-limit-continuation') continuations += 1
       }
       if (continuations >= limit) return
       agent.followup(createUserMessage({
@@ -176,7 +184,7 @@ export class BasicCompactionEngine extends CompactionEngine {
             + 'If the task is already complete, give a brief final answer and stop.',
         }],
         source: {
-          kind: 'plugin', plugin: 'output-limit-continuation', form: 'notice',
+          kind: 'output-limit-continuation', form: 'notice',
           summary: `Output limit reached; auto-continue ${continuations + 1}/${limit}`,
         },
       }))

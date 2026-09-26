@@ -112,6 +112,19 @@ interface Domain<S extends DomainSpec> {
   table<N extends keyof S['tables'] & string>(name: N): KvTable<TableKeyOf<S, N>, TableValueOf<S, N>>
 
   /**
+   * Upsert every write as one batch, queued on the domain's single write
+   * chain. When the backend unit supports an atomic batch
+   * ({@link KvUnit.putRecords}) the medium either holds every record or none;
+   * otherwise each record falls back to one sequential durable put, exactly
+   * as repeated `put` calls would. Change events emit after durability, one
+   * per record, in batch order. Overwrite semantics per record match `put`;
+   * callers keep idempotency (deterministic keys, conflict pre-checks).
+   * @param writes - Fully formed records to upsert; an empty batch is a no-op.
+   * @returns resolution after the batch's durability and event emission.
+   */
+  commit(writes: readonly DomainWriteOf<S>[]): Promise<void>
+
+  /**
    * Close this domain: reject new writes immediately, drain already-queued
    * writes (their events still emit), release the backend unit, then free
    * the domain name for a later open. Idempotent — repeated calls share one

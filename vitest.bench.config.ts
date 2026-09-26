@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
+import { standardDecoratorPlugin, vitestExecArgv, vitestPathsPlugin } from './vitest.shared.ts'
 
 /**
  * CI performance gate. Node CPU cases use compiled plain-Node workers under
@@ -9,7 +9,7 @@ import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } fr
  * benchmark.
  */
 export default defineConfig({
-  plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
+  plugins: [vitestPathsPlugin(), standardDecoratorPlugin()],
   test: {
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-proxy-environment.ts'],

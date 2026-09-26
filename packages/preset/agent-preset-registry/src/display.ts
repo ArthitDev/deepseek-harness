@@ -46,12 +46,11 @@ const BUILT_IN_PRESET_KEYS: Readonly<Partial<Record<string, PresetLocaleKeys>>> 
 
 /**
  * Whether a roster row is one of the shipped presets whose copy the dictionaries carry.
- * A shipped preset publishes no `name`; a declaration that names itself owns its copy.
  * @param preset - roster row.
  * @returns true for a shipped preset id without a published name.
  */
 export function isBuiltInPreset(preset: PresetDisplaySource): boolean {
-  return preset.name === undefined && BUILT_IN_PRESET_KEYS[preset.id] !== undefined
+  return BUILT_IN_PRESET_KEYS[preset.id] !== undefined
 }
 
 /**

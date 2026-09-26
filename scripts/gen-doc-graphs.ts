@@ -267,6 +267,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Streams one background job\'s observation record over the generated Remote namespace; the roster stays on the session control stream.',
   },
   {
+    key: 'reconEngineOptions',
+    pkg: 'recon-engine',
+    title: 'Recon engine runtime options',
+    mode: 'core',
+    consumers: ['recon-engine'],
+    note: 'Carries the resolved evidence directory and execution scope from the plugin into its Remote controller.',
+  },
+  {
     key: 'credentialsController',
     pkg: 'api-settings-controller',
     title: 'Host credential-surface Remote controller',

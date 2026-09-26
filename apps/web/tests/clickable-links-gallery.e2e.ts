@@ -335,10 +335,10 @@ describe('web e2e: clickable links gallery', () => {
 
   it.skipIf(MODE === 'record')('renders every clickable link and artifact form of the settled turn', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-clickable-links-gallery'))
-    const groupRow = page.locator('[data-workspace-group] > [role="treeitem"]').first()
+    const groupRow = page.locator('[role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
-    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
-    const sessionRow = page.locator('[data-workspace-group] [role="treeitem"][aria-selected]').first()
+    await groupRow.click()
+    const sessionRow = page.locator('[role="treeitem"]').nth(1)
     await sessionRow.waitFor({ timeout: 10_000 })
     await sessionRow.click()
     await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
@@ -411,16 +411,11 @@ describe('web e2e: clickable links gallery', () => {
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
 
-    // ARIA records none of the link styling, so pin it to the active mode's
-    // semantic link token rather than one palette's concrete colour.
-    const linkColor = await page.evaluate(() => {
-      const probe = document.createElement('span')
-      probe.style.color = 'var(--dsw-alias-link)'
-      document.body.append(probe)
-      const color = getComputedStyle(probe).color
-      probe.remove()
-      return color
-    })
+    // The link language itself — ARIA records none of it, so pin the computed
+    // styles: link-blue 500-weight text, no underline at rest, dotted underline
+    // on hover, and a leading currentColor glyph. Light theme, so the link
+    // alias resolves to deepseek-500.
+    const LINK_BLUE = 'rgb(65, 118, 230)'
     const styleOf = async (target: ReturnType<Page['locator']>, property: string): Promise<string> =>
       target.evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), property)
     const guideLink = markdown.locator(`a[href="${GUIDE_URL}"]`).first()
@@ -430,7 +425,7 @@ describe('web e2e: clickable links gallery', () => {
       ['search source', sourceLink.first()],
       ['fetch url', page.locator(`a[href="${FETCH_URL}"]`).first()],
     ] as const) {
-      expect.soft(await styleOf(link, 'color'), `${name} color`).toBe(linkColor)
+      expect.soft(await styleOf(link, 'color'), `${name} color`).toBe(LINK_BLUE)
       expect.soft(await styleOf(link, 'font-weight'), `${name} weight`).toBe('500')
       expect.soft(await styleOf(link, 'text-decoration-line'), `${name} at rest`).toBe('none')
       expect.soft(await link.locator('svg').count(), `${name} glyph`).toBe(1)
@@ -449,6 +444,39 @@ describe('web e2e: clickable links gallery', () => {
     await mentions.first().hover()
     expect(await styleOf(mentions.first(), 'text-decoration-style')).toBe('dotted')
     // The excluded grey affordance: tool-row file links keep their own color.
-    expect(await styleOf(page.locator('button[class*="fileLink"]').first(), 'color')).not.toBe(linkColor)
+    expect(await styleOf(page.locator('button[class*="fileLink"]').first(), 'color')).not.toBe(LINK_BLUE)
+
+    // Ordinary message HTTP(S) links delegate to the right Sidebar Browser.
+    await guideLink.click()
+    const browserAddress = page.locator('[data-rightbar-col]').getByRole('textbox', { name: 'Enter an HTTP(S) address' })
+    await expect.poll(() => browserAddress.inputValue()).toBe(GUIDE_URL)
+    await markdown.locator(`a[href="${HTTP_URL}"]`).click()
+    await expect.poll(() => browserAddress.inputValue()).toBe(HTTP_URL)
+
+    await openSettings(page, 'en')
+    await page.getByRole('button', { name: 'In-App Sidebar', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Default Browser', exact: true }).click()
+    await expect.poll(() => scaffold.ctx.settings.describe().find(row => row.ns === 'ui-chat')?.value).toMatchObject({ linkOpening: 'new-tab' })
+    await page.keyboard.press('Escape')
+    const popupPromise = page.waitForEvent('popup')
+    await guideLink.click()
+    const popup = await popupPromise
+    try {
+      await popup.waitForURL(GUIDE_URL)
+      expect(await popup.evaluate(() => window.opener === null)).toBe(true)
+      expect(await browserAddress.inputValue()).toBe(HTTP_URL)
+    } finally {
+      await popup.close()
+    }
+
+    await page.reload()
+    await openSettings(page, 'en')
+    await page.getByRole('button', { name: 'Default Browser', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'In-App Sidebar', exact: true }).click()
+    await expect.poll(() => scaffold.ctx.settings.describe().find(row => row.ns === 'ui-chat')?.value).toMatchObject({ linkOpening: 'sidebar' })
+    await page.keyboard.press('Escape')
+    await guideLink.click()
+    await expect.poll(() => browserAddress.inputValue()).toBe(GUIDE_URL)
+    expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 })

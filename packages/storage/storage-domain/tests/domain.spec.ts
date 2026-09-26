@@ -296,6 +296,66 @@ describe('KvTable writes', () => {
   })
 })
 
+describe('Domain.commit batches', () => {
+  it('lands every record through the atomic batch path and emits events in order', async () => {
+    const pool = new MemoryMediaPool()
+    pool.batchAtomic = true
+    const { facility, changes } = await harness({ pool })
+    const domain = await facility.open(spec)
+    await domain.commit([
+      { table: 'items', key: 'a', value: { label: 'x', count: 1 } },
+      { table: 'items', key: 'b', value: { label: 'y', count: 2 } },
+    ])
+    expect(domain.table('items').get('a')).toEqual({ label: 'x', count: 1 })
+    expect(changes.slice(-2)).toEqual([
+      { domain: 'demo', table: 'items', key: 'a', operation: 'put', value: { label: 'x', count: 1 } },
+      { domain: 'demo', table: 'items', key: 'b', operation: 'put', value: { label: 'y', count: 2 } },
+    ])
+  })
+
+  it('applies nothing when the atomic batch rejects durability', async () => {
+    const pool = new MemoryMediaPool()
+    pool.batchAtomic = true
+    const { facility, changes } = await harness({ pool })
+    const domain = await facility.open(spec)
+    await domain.commit([{ table: 'items', key: 'a', value: { label: 'x', count: 1 } }])
+    const seen = changes.length
+    pool.failNextWrites = 1
+    await expect(domain.commit([
+      { table: 'items', key: 'b', value: { label: 'y', count: 2 } },
+      { table: 'items', key: 'c', value: { label: 'z', count: 3 } },
+    ])).rejects.toThrow(/injected/)
+    expect(domain.table('items').get('b')).toBeUndefined()
+    expect(domain.table('items').get('c')).toBeUndefined()
+    expect(pool.media.get('demo')!.tables.get('items')!.has('b')).toBe(false)
+    expect(changes).toHaveLength(seen)
+  })
+
+  it('falls back to sequential durable puts when the unit has no batch', async () => {
+    const pool = new MemoryMediaPool()
+    const { facility, changes } = await harness({ pool })
+    const domain = await facility.open(spec)
+    await domain.commit([
+      { table: 'items', key: 'a', value: { label: 'x', count: 1 } },
+      { table: 'items', key: 'b', value: { label: 'y', count: 2 } },
+    ])
+    expect(domain.table('items').get('a')).toEqual({ label: 'x', count: 1 })
+    expect(changes.slice(-2).map(change => change.key)).toEqual(['a', 'b'])
+  })
+
+  it('fails loud on an undeclared table before writing anything', async () => {
+    const { facility, changes } = await harness()
+    const domain = await facility.open(spec)
+    const seen = changes.length
+    await expect(domain.commit([
+      { table: 'items', key: 'a', value: { label: 'x', count: 1 } },
+      // @ts-expect-error -- the typed surface rejects unknown tables; this proves the runtime guard too
+      { table: 'ghost', key: 'g', value: { label: 'g', count: 0 } },
+    ])).rejects.toThrow("declares no table 'ghost'")
+    expect(changes).toHaveLength(seen)
+  })
+})
+
 describe('durability failure', () => {
   it('leaves memory untouched and emits nothing when the backend rejects a write', async () => {
     const pool = new MemoryMediaPool()

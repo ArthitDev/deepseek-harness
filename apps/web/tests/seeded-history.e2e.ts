@@ -481,42 +481,13 @@ describe('web e2e: seeded history renders through cold resume', () => {
     expect(await page.locator('[data-chat-flow-kind="context"], [data-context-injection-body]').count()).toBe(0)
   })
 
-    const style = await body.evaluate((element) => {
-      const computed = getComputedStyle(element)
-      return {
-        backgroundColor: computed.backgroundColor,
-        borderRadius: computed.borderRadius,
-        color: computed.color,
-        fontSize: computed.fontSize,
-        lineHeight: computed.lineHeight,
-        padding: [
-          computed.paddingTop,
-          computed.paddingRight,
-          computed.paddingBottom,
-          computed.paddingLeft,
-        ],
-        scrolls: element.scrollHeight > element.clientHeight,
-      }
-    })
-    const palette = await page.evaluate(() => {
-      const probe = document.createElement('span')
-      probe.style.backgroundColor = 'var(--dsw-alias-markdown-code-block)'
-      probe.style.color = 'var(--dsw-alias-label-tertiary)'
-      document.body.append(probe)
-      const computed = getComputedStyle(probe)
-      const result = { backgroundColor: computed.backgroundColor, color: computed.color }
-      probe.remove()
-      return result
-    })
-    expect(style).toEqual({
-      backgroundColor: palette.backgroundColor,
-      borderRadius: '8px',
-      color: palette.color,
-      fontSize: '11px',
-      lineHeight: '16px',
-      padding: ['10px', '16px', '12px', '12px'],
-      scrolls: true,
-    })
+  it.skipIf(MODE === 'record')('restores the active turn rail mark across Chat and Trajectory', async () => {
+    const rail = page.getByRole('navigation', { name: 'Turn navigation' })
+    const current = rail.locator('[aria-current="true"]')
+    await current.waitFor({ state: 'visible' })
+    const active = await current.getAttribute('aria-label')
+    const scroller = page.locator('[data-conversation-scroll]')
+    const top = await scroller.evaluate(element => element.scrollTop)
 
     await page.getByRole('tab', { name: 'Trajectory', exact: true }).click()
     await page.getByLabel('Trajectory timeline', { exact: true }).waitFor({ state: 'visible' })

@@ -26,7 +26,7 @@
  * row of a Session's "..." menu is an entry of
  * `sidebar.workspaces.session.menu.item`, and every hover button at the row's
  * end is an entry of `sidebar.workspaces.session.row.action`. The shipped
- * actions — pin, rename, fork, archive — are ordinary entries this package
+ * actions — pin, rename, fork, archive, delete — are ordinary entries this package
  * registers from `apply`, each carrying its own behavior in its own inject
  * face and reading its own Host state through hooks that face injects, so a
  * client plugin's action lands beside them by `order` and needs nothing from
@@ -208,12 +208,10 @@ export type WorkspaceBrowserInjected = {
   ) => Promise<{ items: readonly SessionSearchResultItem[]; hasMore: boolean }>
   /** Maximum number of merged rows rendered for one search. */
   searchResultLimit: number
-  /** Rename a Session (explicit user title; resolves on host acceptance). */
-  renameSession: (sessionId: SessionId, title: string) => Promise<void>
-  /** Fork a Session at its last completed turn and open the child. */
-  forkSession: (sessionId: SessionId) => void
-  /** Permanently delete a Session while retaining its project files. */
-  deleteSession: (sessionId: SessionId) => Promise<void>
+  /** Open the Session rename dialog (a row title double-click); the rename action entry raises the same request. */
+  requestSessionRename: (sessionId: SessionId, currentTitle: string) => void
+  /** Tell the user an archived row cannot be opened (a click on it). */
+  notifyArchivedNotOpenable: () => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
@@ -368,6 +366,30 @@ export interface SessionRenameDialogInjected {
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
 }
 
+/** Delete action share: the row raises a request; the confirmation dialog owns the destructive call. */
+export interface DeleteSessionInjected {
+  /** Ask for confirmation before permanently deleting a Session. */
+  requestSessionDelete: (sessionId: SessionId, displayTitle: string) => void
+}
+
+/** A Session deletion awaiting operator confirmation. */
+export interface SessionDeleteTarget {
+  sessionId: SessionId
+  displayTitle: string
+}
+
+/** Delete confirmation share: pending request, settlement, and Host mutation. */
+export interface SessionDeleteDialogInjected {
+  hooks: {
+    /** The deletion awaiting confirmation, or none. */
+    deleteRequest: HostObservable<SessionDeleteTarget | null>
+  }
+  /** Consume or cancel the pending request. */
+  settleSessionDelete: () => void
+  /** Permanently delete the Session; project files remain. */
+  deleteSession: (sessionId: SessionId) => Promise<void>
+}
+
 /** Row toast share: the notice on display, its dismissal, and the two actions the archived notice offers. */
 export interface RowToastInjected {
   hooks: {
@@ -388,6 +410,13 @@ export type SessionRenameDialogProps =
   & PropsLocale<'workspace'>
   & Omit<SessionRenameDialogInjected, 'hooks'>
   & PropsHooks<SessionRenameDialogInjected['hooks']>
+
+/** Props of the delete confirmation entry in `shell.overlay`. */
+export type SessionDeleteDialogProps =
+  PropsRuntime<'shell.overlay'>
+  & PropsLocale<'workspace'>
+  & Omit<SessionDeleteDialogInjected, 'hooks'>
+  & PropsHooks<SessionDeleteDialogInjected['hooks']>
 
 /** Props of the stop-and-archive dialog entry in `shell.overlay`. */
 export type SessionArchiveConfirmProps =

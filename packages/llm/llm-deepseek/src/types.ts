@@ -99,6 +99,91 @@ export interface WireAssistantMessage {
 /** A completed tool call replayed on an assistant history message; `arguments` is the raw JSON string. */
 export interface WireToolCall {
   id: string
+  type: 'function'
+  function: { name: string; arguments: string }
+}
+
+/** One entry of the request `tools` array; `parameters` is a JSON Schema object. */
+export interface WireTool {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
+
+/** One parsed SSE `data:` payload (a chat.completion.chunk). */
+export interface WireChunk {
+  choices?: WireChoice[]
+  /** Arrives attached to the finish chunk and/or as a trailing usage-only chunk. */
+  usage?: WireUsage | null
+}
+
+/** One streamed choice (requests always ask for a single one); `finish_reason` is non-null only on its terminal chunk. */
+export interface WireChoice {
+  delta?: WireDelta
+  finish_reason?: string | null
+}
+
+/** The incremental content of one streamed choice; any subset of fields may be present per chunk. */
+export interface WireDelta {
+  role?: string
+  /** Visible text. Null/empty on reasoning/tool-call chunks. */
+  content?: string | null
+  /**
+   * Thinking-mode CoT. The FIRST chunk carries an empty string (must not
+   * open a reasoning block); absent entirely in non-thinking mode.
+   */
+  reasoning_content?: string | null
+  tool_calls?: WireToolCallDelta[]
+}
+
+/** A streamed fragment of one tool call; fragments sharing an `index` concatenate into one call. */
+export interface WireToolCallDelta {
+  /** Disambiguates parallel tool calls; stable across a call's deltas. */
+  index: number
+  /**
+   * Carried by the first delta of each call. Gateways observed in the wild
+   * repeat it on continuation deltas as `''` or `null`; both mean "unchanged".
+   */
+  id?: string | null
+  type?: 'function'
+  function?: {
+    /** Carried by the first delta of each call, with the same `''`/`null` repetition as {@link WireToolCallDelta.id}. */
+    name?: string | null
+    /** Argument JSON fragment (concatenate across deltas). */
+    arguments?: string | null
+  }
+}
+
+/**
+ * Wire token accounting. `prompt_tokens` INCLUDES cache hits (it equals
+ * `prompt_cache_hit_tokens + prompt_cache_miss_tokens`); `mapUsage` subtracts
+ * them to keep the harness convention of disjoint counts.
+ * `prompt_tokens_details.cached_tokens` is the OpenAI-compat spelling of the
+ * hit count.
+ */
+export interface WireUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  /** Provider-reported aggregate across prompt and completion tokens. */
+  total_tokens?: number
+  prompt_cache_hit_tokens?: number
+  prompt_cache_miss_tokens?: number
+  prompt_tokens_details?: { cached_tokens?: number }
+  completion_tokens_details?: { reasoning_tokens?: number }
+}
+
+/** Non-2xx error body. */
+export interface WireError {
+  error?: { message?: string; type?: string; code?: string }
+}
+
+/** One optional model entry advertised by the direct-fetch adapter. */
+export interface DeepSeekCatalogModel {
+  /** Wire model id accepted by the configured endpoint. */
+  id: string
   /** Selector label; defaults to {@link id}. */
   name?: string
   /** Optional selector detail for deployments with similar model variants. */

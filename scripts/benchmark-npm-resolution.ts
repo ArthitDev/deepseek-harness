@@ -269,7 +269,7 @@ function close(server: Server): Promise<void> {
   })
 }
 
-function npmInvocation(): { command: string; args: readonly string[] } {
+export function npmInvocation(): { command: string; args: readonly string[] } {
   return process.platform === 'win32'
     ? { command: process.execPath, args: [join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')] }
     : { command: 'npm', args: [] }

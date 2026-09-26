@@ -323,6 +323,8 @@ export interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Accepted request modalities, when disclosed. */
+  inputModalities?: readonly ModelModality[]
   /** Selectable reasoning levels and their endpoint-facing spellings, when disclosed. */
   reasoningEfforts?: Readonly<Record<string, string | null>>
 }

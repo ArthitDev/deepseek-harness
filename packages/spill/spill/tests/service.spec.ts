@@ -10,7 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
-import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
+import type { ReadTextSpill, SaveTextSpill, SpillRef, SpillText } from '@deepseek-ai/dsh-spill'
 
 /** Minimal concrete backend: records the last request, returns a fixed ref. */
 class StubStore extends SpillStore {
@@ -23,6 +23,10 @@ class StubStore extends SpillStore {
       bytes: Buffer.byteLength(input.content, 'utf8'),
       retrievalHint: 'Use the stub reader.',
     }
+  }
+
+  readText(_input: ReadTextSpill): Promise<SpillText> {
+    return Promise.reject(new Error('spill artifact is no longer available'))
   }
 }
 

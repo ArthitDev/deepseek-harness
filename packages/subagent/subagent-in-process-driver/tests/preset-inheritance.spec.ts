@@ -7,7 +7,7 @@
  * child's own request — rather than the join that produces it.
  */
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -69,7 +69,27 @@ function spawnRequest(parent: Agent) {
 }
 
 describe('a child agent composed in-process', () => {
-  it('reaches the model with its parent\'s preset tools', async () => {
+  it('uses the preset mapped to its own model route', async () => {
+    const { ctx, adapter, parent } = await setupPresetHost()
+    const presetForModel = vi.spyOn(ctx.agentPresets, 'presetIdForModel').mockReturnValue('reviewing')
+
+    const run = await startInProcessRun({
+      ...spawnRequest(parent),
+      agentOptions: { provider: 'mock', model: 'flash' },
+    }, {})
+    await run.result
+
+    const childRequest = adapter.requests.at(-1)
+    expect(presetForModel).toHaveBeenCalledWith('mock', 'flash')
+    expect(childRequest?.tools?.map(tool => tool.name)).toEqual(['reviewing_only'])
+    expect(run.localAgent?.session.snapshotEvents().some(event =>
+      event.type === 'system/message'
+      && JSON.stringify(event.data.message.content).includes('section for reviewing_only'))).toBe(true)
+    expect(run.localAgent?.session.header.agentPreset).toBe('reviewing')
+    await run.dispose()
+  })
+
+  it('uses the default model preset when its route has no binding', async () => {
     const { ctx, adapter, parent } = await setupPresetHost()
 
     const run = await startInProcessRun(spawnRequest(parent), {})
@@ -120,14 +140,14 @@ describe('a child agent composed in-process', () => {
     await run.dispose()
   })
 
-  it('follows a parent that switched preset while blank', async () => {
+  it('keeps a seeded fork on the parent\'s live preset generation', async () => {
     const { ctx, parent } = await setupPresetHost()
     // A DIFFERENT preset, so the assertion below distinguishes reading the
     // parent's live scope chain from reading its creation header — re-linking
     // to the same id would pass either way.
     await ctx.agentPresets.recompose(parent.ctx, 'reviewing')
 
-    const run = await startInProcessRun(spawnRequest(parent), {})
+    const run = await startInProcessRun(spawnRequest(parent), { seed: [] })
     await run.result
 
     expect(ctx.tools.schemas(run.localAgent).map(schema => schema.name)).toEqual(['reviewing_only'])

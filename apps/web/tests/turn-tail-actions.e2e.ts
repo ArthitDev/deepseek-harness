@@ -37,13 +37,6 @@ const MODE = webSnapshotMode()
 // the scenario would pass against either implementation.
 const NARRATION = 'Reading the workspace now.'
 const PROMPT = `Begin your reply with the plain sentence "${NARRATION}" as text, and in that same message call the bash tool with the command "echo alpha". After the tool result, reply with the single word DONE and stop.`
-const SHELL_TOOL_TITLE = process.platform === 'win32' ? 'Pwsh' : 'Bash'
-
-function normalizeShellTitle(snapshot: string): string {
-  return process.platform === 'win32'
-    ? snapshot.replaceAll('Pwsh', 'Bash').replaceAll('pwsh', 'bash')
-    : snapshot
-}
 
 describe('web e2e: assistant IconActions wait for the turn to end', () => {
   let scaffold: WebScaffold | undefined
@@ -86,29 +79,19 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
       vi.spyOn(Date, 'now').mockImplementation(() => now + Math.floor(performance.now() - startedAt))
     }
     let overridePath: string | undefined
-    let replayFixture = FIXTURE
-    if (process.platform === 'win32' || buildOverride !== undefined) {
-      sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
-    }
-    if (process.platform === 'win32') {
-      replayFixture = join(sidecarDir!, 'session.v2.jsonl')
-      await writeFile(
-        replayFixture,
-        (await readFile(FIXTURE, 'utf8')).replaceAll('"name":"bash"', '"name":"pwsh"'),
-      )
-    }
     if (buildOverride !== undefined) {
-      overridePath = join(sidecarDir!, 'replay.override.json')
-      await writeFile(overridePath, JSON.stringify(buildOverride(sidecarDir!)))
+      sidecarDir = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sidecar-'))
+      overridePath = join(sidecarDir, 'replay.override.json')
+      await writeFile(overridePath, JSON.stringify(buildOverride(sidecarDir)))
     }
     scaffold = await launchWebScaffold(
       MODE === 'record'
         ? {}
         : {
-          replayFixture,
+          replayFixture: FIXTURE,
           ...(overridePath === undefined ? {} : { replayOverride: overridePath }),
-          compareReplaySession: process.platform !== 'win32' && overridePath === undefined,
-          ...(paceMs === undefined ? {} : { paceMs }),
+          compareReplaySession: overridePath === undefined,
+          paceMs,
         },
     )
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
@@ -140,10 +123,6 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await launch()
     const { settled } = await sendPrompt(30_000)
     await settled
-    if (process.platform === 'win32') {
-      expect(sessionEvents.find(event => event.type === 'tool/call')?.data.name).toBe('pwsh')
-      expect(sessionEvents.find(event => event.type === 'tool/result')?.data.message.content[0]?.isError).toBe(false)
-    }
   })
 
   it.skipIf(MODE === 'record')('withholds the footer while the turn runs and grants it at turn/end', async () => {
@@ -181,7 +160,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await expect.poll(() => copyButtons.count(), { timeout: 10_000 }).toBe(1)
     expect(await page.getByRole('button', { name: 'Branch into a new conversation' }).count()).toBe(0)
     await copyButtons.first().focus()
-    const running = normalizeShellTitle(await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd))
+    const running = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(RUNNING_EXPECTED, running, MODE)
 
     // Closing the turn from the park is the state change under test: an
@@ -194,7 +173,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await expect.poll(() => copyButtons.count(), { timeout: 10_000 }).toBe(2)
     await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: 10_000 }).toBe(0)
     await copyButtons.last().focus()
-    const settledAria = normalizeShellTitle(await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd))
+    const settledAria = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(SETTLED_EXPECTED, settledAria, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
@@ -230,7 +209,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
 
     await trigger.click()
 
-    const expanded = normalizeShellTitle(await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd))
+    const expanded = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(USAGE_EXPANDED_EXPECTED, expanded, MODE)
 
     const warningStart = tripwire.warnings.length
@@ -258,7 +237,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
       element.closest<HTMLElement>('[data-chat-flow-kind="assistant-step"]')?.getBoundingClientRect().top)
     expect(answerTop).toBe((processBottom ?? 0) + 8)
     await process.focus()
-    const completed = normalizeShellTitle(await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd))
+    const completed = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(COMPLETED_EXPECTED, completed, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
@@ -272,7 +251,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     const { settled } = await sendPrompt()
     await settled
     const process = page.locator('[data-turn-process]')
-    const tool = page.getByRole('button', { name: `${SHELL_TOOL_TITLE} Print alpha to stdout` })
+    const tool = page.getByRole('button', { name: 'Bash Print alpha to stdout' })
     await process.waitFor({ timeout: 10_000 })
     expect(await process.getAttribute('aria-expanded')).toBe('false')
     expect(await tool.isVisible()).toBe(false)
@@ -317,7 +296,8 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await launch(undefined, 200)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-turn-tail-actions-focused'))
     const { settled } = await sendPrompt()
-    const tool = page.getByRole('button', { name: `${SHELL_TOOL_TITLE} Print alpha to stdout` })
+    const tool = page.getByRole('button', { name: 'Bash Print alpha to stdout' })
+    await expandOwningTurnProcess(page, page.locator('[data-sample="bash"]').first())
     await tool.waitFor({ timeout: 30_000 })
     await tool.focus()
     expect(await tool.evaluate(element => element.ownerDocument.activeElement === element)).toBe(true)
@@ -327,7 +307,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await expect.poll(() => process.count(), { timeout: 10_000 }).toBe(1)
     expect(await process.getAttribute('aria-expanded')).toBe('true')
     expect(await tool.evaluate(element => element.ownerDocument.activeElement === element)).toBe(true)
-    const focused = normalizeShellTitle(await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd))
+    const focused = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(FOCUSED_EXPECTED, focused, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])

@@ -48,6 +48,8 @@ export { domSnapshotSerializer, registerDomSnapshotSerializer } from './snapshot
 export { FixtureSession, TestSessions } from './sessions.ts'
 export { stubConfigForm } from './config-form.ts'
 export type { StubConfigForm } from './config-form.ts'
+export { stubSettingsScope } from './settings-scope.ts'
+export type { StubSettingsScope } from './settings-scope.ts'
 export { TestWorkspaces } from './workspaces.ts'
 export { RemoteError, TestRemote } from './remote.ts'
 export {

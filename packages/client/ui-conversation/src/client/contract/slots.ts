@@ -213,6 +213,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Plan control inside the composer tool row. */
     'conversation.input.plan': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
+    /** Current-session permission control inside the composer tool row. */
+    'conversation.input.permission': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
     /** Per-session always-search control inside the composer tool row. */
     'conversation.input.webSearch': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
     /** Local or saved remote machine target inside the composer tool row. */
@@ -329,6 +331,8 @@ export interface ConversationInjected {
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /** Session-addressed composer block source, or the stable absent source. */
   hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  /** Raw selected conversation-view id of the current session (null = default chat). */
+  viewSelection: ObservableSnapshot<string | null>
 }
 
 /** Business callbacks injected into the strict Session body. */
@@ -419,7 +423,8 @@ export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
     | 'conversation.input.attachments' | 'conversation.input.overlay'
-    | 'conversation.input.left' | 'conversation.input.plan' | 'conversation.input.webSearch'
+    | 'conversation.input.left' | 'conversation.input.permission' | 'conversation.input.plan'
+    | 'conversation.input.webSearch' | 'conversation.input.activity'
     | 'conversation.input.machine' | 'conversation.input.right' | 'conversation.input.model'
     | 'conversation.composer.dock'
   >

@@ -8,6 +8,8 @@
     "src"
   ],
   "references": [
+    { "path": "../../../vendor/include" },
+    { "path": "../../util/atomic-write" },
     {
       "path": "../../boot/app-boot"
     },
@@ -21,7 +23,7 @@
       "path": "../../../vendor/loader"
     },
     {
-      "path": "../../preset/agent-preset-registry"
+      "path": "../../preset/agent-presets"
     },
     {
       "path": "../../util/brand"

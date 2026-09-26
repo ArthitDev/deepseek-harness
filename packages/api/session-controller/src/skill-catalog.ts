@@ -5,9 +5,8 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
+import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { SessionId } from '@deepseek-ai/dsh-session'
 import { SessionQueryError } from '@deepseek-ai/dsh-session-query'
 import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
@@ -120,7 +119,7 @@ export class SessionSkillCatalog extends TypertRemoteService {
     try {
       const shell = await subprocess.resolveExecutable(declaredShell, undefined, signal)
       const handle = await subprocess.spawnTerminal({
-        argv: [shell], cwd: homedir(), rows, cols, graceMs: 2_000, signal,
+        argv: [shell], cwd: homedir(), rows, cols, terminalType: 'xterm-256color', graceMs: 2_000, signal,
         env: { NO_COLOR: '1', DISABLE_TELEMETRY: '1', DO_NOT_TRACK: '1' },
       })
       const id = randomUUID()

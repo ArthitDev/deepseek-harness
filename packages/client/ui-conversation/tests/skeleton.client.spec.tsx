@@ -177,6 +177,7 @@ function mount(
   )
   const store = createConversationStore().create()
   store.actions.setDraft('ordinary draft')
+  const viewSelection = createSnapshotStore<string | null>('chat')
   const { wiring, sink } = fakeWiring()
   const useInput = bindSnapshotSelector(wiring.state)
   const inputActions = wiring.actions
@@ -229,7 +230,7 @@ function mount(
           actions={store.actions}
           renderSlot={renderSlot as never}
           open={open}
-          selectView={(view) => { store.actions.setView(view) }}
+          selectView={(view) => { viewSelection.set(view); store.actions.setView(view) }}
           t={t}
         />
       )
@@ -343,6 +344,7 @@ function mount(
       renderSlotChain,
       renderFactorySlot,
       selectWorkspace: retargetWorkspace,
+      viewSelection,
       t,
     }
     const useFactorySlot = ((name: string, fallback: (props: never) => ReactNode) => (
@@ -557,7 +559,9 @@ describe('ConversationRoot resident composer', () => {
     const host = b.view.container.querySelector('[data-conversation-scroll]')
     const header = b.view.container.querySelector('header')
     expect(host).not.toBeNull()
-    expect(header?.getAttribute('aria-hidden')).toBe('true')
+    expect(header).not.toBeNull()
+    expect(header?.getAttribute('aria-hidden')).toBeNull()
+    expect(b.view.queryByRole('tab')).toBeNull()
     expect(b.view.getByText('Shield Break Agent')).toBeTruthy()
     expect(b.view.queryByText('Preview')).toBeNull()
     expect(b.view.queryByTestId('view-chat')).toBeNull()

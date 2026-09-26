@@ -32,3 +32,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export interface SettingsDocumentOpenValue {
   readonly opened: true
 }
+
+/** Result of opening or revealing one locally authored Agent preset directory. */
+export type AgentPresetDirectoryOpenValue =
+  | { readonly opened: true }
+  | { readonly opened: false; readonly path: string }

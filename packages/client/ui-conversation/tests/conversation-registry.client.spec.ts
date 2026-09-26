@@ -11,7 +11,8 @@ import type {
   ISessions, SessionBinding, SessionEventLike, SessionFace, SessionListState, SessionSnapshot,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
-  ConversationEventRegistry, ConversationNodeAssembler, ConversationViewRegistry, UiConversation,
+  conversationPhase, ConversationEventRegistry, ConversationNodeAssembler, ConversationViewRegistry,
+  UiConversation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   ConversationNodeDefinition, ConversationViewDefinition, ConversationViewNode,
@@ -73,20 +74,14 @@ function fakeSessions(ctx: Context): { sessions: ISessions; binding: SessionBind
     phase: 'ready',
     projectionsBySession: {},
   })
-  const reference = {
-    sessionId: SESSION_ID,
-    binding,
-    ready: Promise.resolve(binding),
-    release: () => {},
-    [Symbol.dispose]() {},
-  }
   const sessions: ISessions = {
     list,
     searchResultLimit: 50,
     create: () => Promise.reject(new Error('unused fake Sessions operation')),
     delete: () => Promise.reject(new Error('unused fake Sessions operation')),
-    open: () => {},
-    openSubagent: () => {},
+    retain: () => { throw new Error('unused fake Sessions operation') },
+    using: () => { throw new Error('unused fake Sessions operation') },
+    retainInfo: () => { throw new Error('unused fake Sessions operation') },
     subagentAddress: () => undefined,
     refreshProjections: () => Promise.reject(new Error('unused fake Sessions operation')),
     refresh: () => Promise.reject(new Error('unused fake Sessions operation')),
@@ -143,6 +138,22 @@ async function bootRegistries(): Promise<{
 }
 
 describe('Conversation registries', () => {
+  it('records external feature activity once for the Session binding lifetime', async () => {
+    const { uiConversation, binding } = await bootRegistries()
+    const conversation = uiConversation.binding(binding)
+    const listener = vi.fn()
+    conversation.snapshot.subscribe(listener)
+
+    expect([...conversation.snapshot.getSnapshot().activeTargets]).toEqual([])
+    uiConversation.markActivity(SESSION_ID, 'recon')
+    expect([...conversation.snapshot.getSnapshot().activeTargets]).toEqual(['recon'])
+    expect(conversationPhase(binding.session.getSnapshot(), conversation.snapshot.getSnapshot())).toBe('active')
+    expect(listener).toHaveBeenCalledOnce()
+
+    uiConversation.markActivity(SESSION_ID, 'recon')
+    expect(listener).toHaveBeenCalledOnce()
+  })
+
   it('publishes frame-paced updates after three animation frames and lets immediate updates preempt them', async () => {
     let nextFrame = 0
     const frames = new Map<number, FrameRequestCallback>()

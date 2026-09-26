@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, screen } from '@testing-library/react'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotTestRuntime, TestRemote, stubSettingsScope, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
+import { SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 
@@ -34,12 +34,13 @@ async function bench() {
   runtime.releaseWorkspaceSource()
   const directoryPicker = {}
   const remoteMachines = { list: async () => ({ ok: true as const, value: { machines: [] } }) }
-  const remote = new TestRemote(runtime.ctx, {
+  runtime.remote.provideNamespaces({
     directoryPicker,
     remoteMachines,
     pentestRuns: { list: vi.fn(), snapshot: vi.fn(), control: vi.fn(), controlTask: vi.fn(), replaceScope: vi.fn() },
     pentestLoop: { create: vi.fn(), start: vi.fn(), stop: vi.fn(), running: vi.fn() },
   })
+  const remote = runtime.remote
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

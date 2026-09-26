@@ -18,8 +18,7 @@ import { LayoutController } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { RowToast } from '../src/client/contract/slots.ts'
 import { DirectoryBrowseError, UiWorkspaceService } from '../src/client/navigation.ts'
-import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
-import { UNGROUPED_KEY } from '../src/client/tree.ts'
+import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
 const sid = (id: string): SessionId => SessionId(id)
 const wid = (id: string): WorkspaceId => id as WorkspaceId
@@ -135,6 +134,7 @@ interface RetainedSession {
 class FakeSessions implements ISessions {
   readonly list: MutableSource<SessionListState>
   readonly create: ReturnType<typeof vi.fn<ISessions['create']>>
+  readonly delete = vi.fn<ISessions['delete']>(async () => undefined)
   readonly fork = vi.fn<ISessions['fork']>(async () => sid('forked'))
   readonly retained: RetainedSession[] = []
   readonly refreshProjections = vi.fn<ISessions['refreshProjections']>(() => Promise.resolve())
@@ -433,48 +433,6 @@ describe('UiWorkspaceService', () => {
       workspaces: workspaceState([workspace('a')]),
       sessions: sessionState([], 'pending'),
     })
-    const created = Promise.withResolvers<SessionId>()
-    b.sessions.create.mockReturnValue(created.promise)
-    b.uiWorkspace.startSession(wid('alpha'))
-    b.layout.selectPanel('panel-a' as MainPanelId)
-    created.resolve(sid('late'))
-    await created.promise
-    await Promise.resolve()
-    expect(b.sessions.open).not.toHaveBeenCalled()
-    expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith('panel-a')
-    expect(b.sessions.list.getSnapshot().current).toBe(sid('current'))
-  })
-
-  it('opens only the latest Workspace request when creation completes out of order', async () => {
-    const b = bench({
-      sessions: sessionState([summary('current')], sid('current')),
-      workspaces: workspaceState([workspace('alpha'), workspace('beta')]),
-    })
-    const older = Promise.withResolvers<SessionId>()
-    const newer = Promise.withResolvers<SessionId>()
-    b.sessions.create.mockImplementation(options => options?.workspaceId === wid('alpha') ? older.promise : newer.promise)
-    const oldDraft = vi.fn()
-    const newDraft = vi.fn()
-    const first = b.uiWorkspace.openWorkspace(wid('alpha'), oldDraft)
-    const second = b.uiWorkspace.openWorkspace(wid('beta'), newDraft)
-    newer.resolve(sid('newer'))
-    await second
-    older.resolve(sid('older'))
-    await first
-    expect(oldDraft).not.toHaveBeenCalled()
-    expect(newDraft).toHaveBeenCalledExactlyOnceWith(sid('newer'))
-    expect(b.sessions.open).toHaveBeenCalledExactlyOnceWith(sid('newer'))
-  })
-
-  it('does not move drafts or reopen a Workspace after reselecting the current Session', async () => {
-    const b = bench({
-      sessions: sessionState([summary('current')], sid('current')),
-      workspaces: workspaceState([workspace('alpha')]),
-    })
-    const created = Promise.withResolvers<SessionId>()
-    b.sessions.create.mockReturnValue(created.promise)
-    const moveDraft = vi.fn()
-    const pending = b.uiWorkspace.openWorkspace(wid('alpha'), moveDraft)
     b.uiWorkspace.openSession(sid('current'))
     const failure = new Error('preparation failed')
 
@@ -534,7 +492,7 @@ describe('UiWorkspaceService', () => {
   it('creates a fresh Session even when the Workspace already has a reusable blank', async () => {
     const blank = summary('blank', { blank: true, cwd: '/w/alpha' })
     const b = bench({
-      sessions: sessionState([blank], blank.id),
+      sessions: sessionState([blank]),
       workspaces: workspaceState([workspace('alpha', [blank.id])]),
     })
     b.sessions.create.mockResolvedValue(sid('fresh'))
@@ -542,8 +500,8 @@ describe('UiWorkspaceService', () => {
     b.uiWorkspace.startSession(wid('alpha'))
 
     await vi.waitFor(() => {
-      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('alpha') })
-      expect(b.sessions.open).toHaveBeenCalledExactlyOnceWith(sid('fresh'))
+      expect(b.sessions.create).toHaveBeenLastCalledWith({ workspaceId: wid('alpha') })
+      expect(b.sessions.retain).toHaveBeenCalledWith(sid('fresh'), { source: 'mainView' })
     })
   })
 
@@ -579,9 +537,10 @@ describe('UiWorkspaceService', () => {
       expect(recentOnly.sessions.retain).toHaveBeenLastCalledWith(sid('created-recent-home'), { source: 'mainView' })
     })
     b.sessions.create.mockRejectedValueOnce(new Error('create failed'))
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     b.uiWorkspace.startSession(wid('recent-home'))
-    await vi.waitFor(() => { expect(warning).toHaveBeenCalledWith('new session failed:', expect.any(Error)) })
+    await vi.waitFor(() => {
+      expect(b.notify).toHaveBeenCalledWith({ kind: 'createFailed', message: 'create failed' })
+    })
     const empty = bench()
     empty.uiWorkspace.startSession()
     expect(empty.selectPanel).toHaveBeenCalledWith(null)
@@ -608,9 +567,11 @@ describe('UiWorkspaceService', () => {
       path: '/__dsh_ssh__/lab/srv/project',
     }
     const b = bench({
-      sessions: sessionState([remoteCurrent, localRecent], remoteCurrent.id),
+      sessions: sessionState([remoteCurrent, localRecent]),
       workspaces: workspaceState([local, remote]),
     })
+    b.uiWorkspace.openSession(remoteCurrent.id)
+    b.sessions.create.mockClear()
 
     b.workspaces.list.set(workspaceState([local, { ...remote, sessionIds: [] }]))
     b.sessions.list.set(sessionState([localRecent]))
@@ -621,9 +582,8 @@ describe('UiWorkspaceService', () => {
     })
   })
 
-  it('opens the recent Workspace after both baselines arrive', async () => {
-    const b = bench()
-    b.sessions.create.mockResolvedValue(sid('initial'))
+  it('releases a prepared Workspace target when synchronous preparation supersedes it', async () => {
+    const b = bench({ workspaces: workspaceState([workspace('a')]) })
 
     await b.uiWorkspace.openWorkspace(wid('a'), () => {
       b.uiWorkspace.openSession(sid('override'))

@@ -71,6 +71,36 @@ export function runKvBackendContract(label: string, create: () => Promise<KvBack
       await backend.close()
     })
 
+    it('putRecords lands every record atomically or nothing', async () => {
+      const harness = await create()
+      const unit = await harness.backend.kv!.open(DESCRIPTOR)
+      if (unit.putRecords === undefined) {
+        // A medium without batch-atomic writes omits the member; the caller
+        // falls back to sequential putRecord calls.
+        await harness.backend.close()
+        return
+      }
+      await unit.putRecord('alpha', 'existing', { v: 'before' })
+      await unit.putRecords([
+        { table: 'alpha', key: 'a', value: { n: 1 } },
+        { table: 'beta', key: 'b', value: { n: 2 } },
+        { table: 'alpha', key: 'existing', value: { v: 'after' } },
+      ])
+      // An unknown table rejects the whole batch and leaves prior state intact.
+      await expect(unit.putRecords([{ table: 'unknown', key: 'x', value: {} }])).rejects.toThrow()
+      const snapshot = await unit.loadAll()
+      expect(snapshot.tables['alpha']).toEqual({ existing: { v: 'after' }, a: { n: 1 } })
+      expect(snapshot.tables['beta']).toEqual({ b: { n: 2 } })
+      await harness.backend.close()
+
+      const reopened = await harness.reopen()
+      const unit2 = await reopened.kv!.open(DESCRIPTOR)
+      const durable = await unit2.loadAll()
+      expect(durable.tables['alpha']).toEqual({ existing: { v: 'after' }, a: { n: 1 } })
+      expect(durable.tables['beta']).toEqual({ b: { n: 2 } })
+      await reopened.close()
+    })
+
     it('rejects a version mismatch on reopen without touching the data', async () => {
       const harness = await create()
       const unit = await harness.backend.kv!.open(DESCRIPTOR)

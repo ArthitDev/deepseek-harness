@@ -350,6 +350,24 @@ describe('candidates', () => {
     ])
   })
 
+  it('hides the canonical Web Search name alias while keeping its command identity', async () => {
+    const commands: CommandDescriptor[] = [{
+      definitionId: CommandDefinitionId('@deepseek-ai/dsh-tool-web/web-search'),
+      name: 'web-search',
+      description: 'Search the web',
+    }]
+    const { source } = await bench({
+      commands: () => Promise.resolve({ commands }),
+      translate: (_namespace, key) => `command:${key}`,
+    })
+    const [row] = await source.candidates(proj('s1'), req(''))
+    expect(row).toMatchObject({
+      name: 'web-search',
+      label: 'command:label.webSearch',
+      hideNameAlias: true,
+    })
+  })
+
   it('a contribution/host name collision fails loud', async () => {
     const { command, source } = await bench()
     command.register(themeContribution({ name: 'plan' }))

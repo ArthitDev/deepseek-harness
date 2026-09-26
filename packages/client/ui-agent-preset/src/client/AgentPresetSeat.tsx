@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   IconAgentPresetOutlineRegular, IconChevronDownOutlineRegular, IconWarningOutlineRegular, Menu, Toast,
@@ -27,8 +27,6 @@ import css from './AgentPresetSeat.module.css'
 /** Registration-side business face for the hero chip. */
 export interface AgentPresetSeatInjected {
   hooks: {
-    /** Whether this entry offers preset selection. */
-    showPresetPicker: ObservableSnapshot<boolean>
     /** Seat snapshot bound by the renderer as useAgentPresetSeat. */
     agentPresetSeat: SnapshotStore<AgentPresetSeatState>
   }
@@ -51,7 +49,16 @@ const INTRO_CHAR_STAGGER_MS = 40
 const INTRO_TEXT_REVEAL_MS = 200
 const INTRO_CHAR_FADE_MS = 400
 
-/** Duration of a selection-refusal banner, including a revision becoming unavailable during a pick. */
+/**
+ * How long a refused switch holds before fading.
+ *
+ * Longer than the primitive's default because this banner is the only place
+ * the refusal appears. The chip's label has already snapped back to the
+ * preset the session still runs, and a preset the host refuses to MOUNT is
+ * one discovery reported healthy — its row on the settings page carries no
+ * reason to go back and read, because there was nothing to see until the
+ * rows actually ran.
+ */
 const REFUSAL_HOLD_MS = 8000
 
 /**
@@ -75,21 +82,15 @@ export type AgentPresetSeatProps =
  * @param props - composed slot props.
  * @returns the chip, or null when the deployment composes no presets.
  */
-export function AgentPresetSeat({
-  sessionId, useSessionRetainInfo, load, select, introduced, useAgentPresetSeat, useShowPresetPicker, t,
-}: AgentPresetSeatProps) {
-  const showPresetPicker = useShowPresetPicker(value => value)
+export function AgentPresetSeat({ load, select, introduced, useAgentPresetSeat, t }: AgentPresetSeatProps) {
   const state = useAgentPresetSeat(snapshot => snapshot)
-  const main = useSessionRetainInfo(info => sessionId === undefined
-    || (info?.retainedBy.mainView ?? 0) > 0)
   const [open, setOpen] = useState(false)
   // The seq keys the banner, so picking the same broken preset twice replays
   // it rather than leaving the first one silently in place.
   const toastSeq = useRef(0)
   const [toast, setToast] = useState<{ seq: number; text: string } | null>(null)
-  const visible = showPresetPicker && state.showPicker
-  const pickerVisible = useRef(visible)
-  pickerVisible.current = visible
+  const pickerVisible = useRef(state.showPicker)
+  pickerVisible.current = state.showPicker
 
   useEffect(() => {
     void load()
@@ -99,10 +100,10 @@ export function AgentPresetSeat({
   // state explicitly; otherwise an external off/on edit can revive an old
   // menu or refusal banner.
   useEffect(() => {
-    if (visible) return
+    if (state.showPicker) return
     setOpen(false)
     setToast(null)
-  }, [visible])
+  }, [state.showPicker])
 
   const chosen = state.options.find(option => option.id === state.current)
   const chosenText = chosen === undefined ? undefined : presetDisplayText(chosen, t)
@@ -131,7 +132,7 @@ export function AgentPresetSeat({
 
   // Nothing to choose between: the deployment composes no presets and every
   // session shares the host composition.
-  if (!main || !visible || !ready) return null
+  if (!state.showPicker || !ready) return null
 
   // One wrapper span: the chip is a flex row with a gap, so loose character
   // spans would each pick up the gap between them.
@@ -204,7 +205,7 @@ export function AgentPresetSeat({
           >
             <IconAgentPresetOutlineRegular className={introducing ? `${css.seatIcon} ${css.introIcon}` : css.seatIcon} />
             <span className={css.seatLabel}>{shownLabel}</span>
-            <IconChevronDownOutlineRegular className={css.chevron} />
+            <IconChevronDownOutlineRegular size={14} className={css.chevron} />
           </button>
         )}
       />

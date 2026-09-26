@@ -14,12 +14,9 @@ export const vitestExecArgv = [
     : [],
 ]
 
-/** Resolve the root paths facade without Vite's inapplicable native-option warning. */
-export function vitestTsconfigPathsPlugin() {
-  const plugin = tsconfigPaths({ projects: ['./tsconfig.base.json'] })
-  plugin.name = 'dsh-tsconfig-paths'
-  return plugin
-}
+/** Resolve every workspace package from the root source-path facade. */
+export const vitestPathsPlugin = (): ReturnType<typeof tsconfigPaths> =>
+  ({ ...tsconfigPaths({ projects: ['./tsconfig.base.json'] }), name: 'dsh-root-tsconfig-paths' })
 
 /**
  * Transform standard TypeScript decorators before Vite's default parser sees source files.

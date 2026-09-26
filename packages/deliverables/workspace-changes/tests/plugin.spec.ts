@@ -330,6 +330,8 @@ describe('workspace-changes in a repository', () => {
 describe('workspace-changes without a repository', () => {
   it('summarizes file-tool edits only for a working directory outside any git repository', async () => {
     const cwd = await scratchDir('dsh-workspace-changes-plain-', cleanups)
+    vi.stubEnv('GIT_CEILING_DIRECTORIES', join(cwd, '..'))
+    cleanups.push(async () => { vi.unstubAllEnvs() })
     await writeFile(join(cwd, 'existing.txt'), 'before\n')
     await writeFile(join(cwd, 'shell.txt'), 'shell\n')
     const outside = await mkdtemp(join(homedir(), '.dsh-workspace-changes-plain-'))

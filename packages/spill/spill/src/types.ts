@@ -78,3 +78,21 @@ export interface SpillRef {
   bytes: number
   retrievalHint: string
 }
+
+/** One request to read back a spill artifact the owner already saved. */
+export interface ReadTextSpill {
+  /**
+   * The session that saved the artifact. A backend must resolve `locator`
+   * only inside this owner's storage scope and reject anything else, so one
+   * session cannot read another session's artifacts.
+   */
+  owner: SpillOwner
+  /** The locator the backend returned from {@link SpillStore.saveText}. */
+  locator: SpillLocator
+}
+
+/** Read-back content of one spill artifact: verbatim UTF-8 text and its byte length. */
+export interface SpillText {
+  content: string
+  bytes: number
+}

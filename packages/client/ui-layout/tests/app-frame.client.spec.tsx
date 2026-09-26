@@ -94,10 +94,12 @@ function mountFrame(windowWidth = frameWidth) {
       actions={instance.actions}
       renderSlot={renderSlot}
       useSessions={useSessions}
-      useSessionPendingInteraction={useSessionPendingInteraction}
-      useWorkspaces={((sel: (s: WorkspaceSnapshot) => unknown) => sel(workspaceState)) as never}
-      SessionProvider={SessionProviderStub}
-      t={key => key === 'brand.localBuild' ? 'Shield Break Agent' : key}
+      usePanelInfo={usePanelInfo}
+      useSessionStatus={useSessionStatus}
+      useSessionRetainInfo={() => undefined}
+      useResource={useResource}
+      useWorkspaces={sel => sel(workspaceState)}
+      t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
     />
   )
   const utils = render(element())
@@ -183,7 +185,7 @@ afterEach(() => {
 describe('AppFrame', () => {
   it('localizes the product title without a configured build title', () => {
     mountFrame()
-    expect(document.title).toBe('Shield Break Agent')
+    expect(document.title).toBe('DSH Local Build')
   })
 
   it('follows the selected durable Session title', () => {

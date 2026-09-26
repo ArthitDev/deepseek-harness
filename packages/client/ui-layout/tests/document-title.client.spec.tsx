@@ -51,13 +51,13 @@ describe('DocumentTitle', () => {
     expect(document.title).toBe('DeepSeek Harness')
   })
 
-  it('uses the generic title when the build provides no title', () => {
-    vi.stubEnv('DSH_CLIENT_TITLE', '')
-    delete process.env.DSH_CLIENT_TITLE
-    const mounted = render(<DocumentTitle title="First title" productTitle="Shield Break Agent" />)
-    expect(document.title).toBe('First title — Shield Break Agent')
+  it('uses the localized product title supplied by the frame', () => {
+    const { sessionId, sessions, props } = titleSources()
+    sessions.update((state) => { state.byId[sessionId]!.title = 'First title' })
+    const mounted = render(<DocumentTitle {...props} productTitle="DSH Local Build" />)
+    expect(document.title).toBe('First title — DSH Local Build')
     mounted.unmount()
-    expect(document.title).toBe('Shield Break Agent')
+    expect(document.title).toBe('DSH Local Build')
   })
 
   it('keeps the product title across global panels and restores the latest Session title on return', () => {

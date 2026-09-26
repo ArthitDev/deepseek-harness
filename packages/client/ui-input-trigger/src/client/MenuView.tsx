@@ -183,7 +183,8 @@ export function MenuView({ menu, headers, onPick, onCrumb, onHover, onDismiss, t
                           </span>
                         )}
                         <span className={css.itemName}>{item.label ?? item.name}</span>
-                        {item.label !== undefined && item.label.toLowerCase() !== item.name.toLowerCase() && (
+                        {item.hideNameAlias !== true && item.label !== undefined
+                          && item.label.toLowerCase() !== item.name.toLowerCase() && (
                           <span className={css.itemAlias}>{item.name}</span>
                         )}
                         {item.description !== undefined && <span className={css.itemDescription}>{item.description}</span>}

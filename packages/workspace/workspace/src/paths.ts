@@ -5,7 +5,7 @@
 
 import { realpath } from 'node:fs/promises'
 import { posix, win32 } from 'node:path'
-import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
+import { parseRemoteExecutionPath } from './remote-path.ts'
 
 /**
  * Check whether a path names one fixed Host location without process cwd or

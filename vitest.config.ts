@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { resolvePwshPath } from './packages/shell/pwsh-local/src/resolve.ts'
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
+import { standardDecoratorPlugin, vitestExecArgv, vitestPathsPlugin } from './vitest.shared.ts'
 import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/coverage-exempt.ts'
 import { COVERAGE_PARTITION_MODE_ENV } from './scripts/coverage-partitions.ts'
 
@@ -157,7 +157,7 @@ const processBoundTests = [
 ]
 
 export default defineConfig({
-  plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
+  plugins: [vitestPathsPlugin(), standardDecoratorPlugin()],
   test: {
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts', './scripts/test-dom-environment.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
@@ -167,7 +167,7 @@ export default defineConfig({
     // Node stability; process-bound suites stay separate for inventory control.
     projects: [
       {
-        plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
+        plugins: [vitestPathsPlugin(), standardDecoratorPlugin()],
         test: {
           name: 'thread-safe',
           execArgv: vitestExecArgv,
@@ -178,7 +178,7 @@ export default defineConfig({
           // Windows process and filesystem startup becomes unstable with more
           // concurrent forks during the full suite.
           maxWorkers: process.platform === 'win32' ? 2 : undefined,
-          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
+          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts', './scripts/test-dom-environment.ts'],
           include: testIncludes,
           exclude: [
             ...platformUnsupportedTests,
@@ -188,13 +188,13 @@ export default defineConfig({
         },
       },
       {
-        plugins: [vitestTsconfigPathsPlugin(), standardDecoratorPlugin()],
+        plugins: [vitestPathsPlugin(), standardDecoratorPlugin()],
         test: {
           name: 'process-bound',
           execArgv: vitestExecArgv,
           pool: 'forks',
           fileParallelism: false,
-          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
+          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts', './scripts/test-dom-environment.ts'],
           include: processBoundTests,
           exclude: [
             ...platformUnsupportedTests,

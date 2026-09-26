@@ -130,6 +130,13 @@
   border-color: var(--dsw-alias-state-error-primary);
 }
 
+.textarea {
+  height: auto;
+  min-height: 76px;
+  padding-block: 8px;
+  resize: vertical;
+}
+
 .invalid {
   margin: 0;
   font-size: 12px;

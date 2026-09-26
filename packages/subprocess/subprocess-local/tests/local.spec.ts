@@ -58,15 +58,55 @@ function spec(command: string, overrides: Partial<SubprocessSpawnSpec> = {}): Su
 }
 
 describe('LocalSubprocessRuntime', () => {
-  it('shares one host-exit listener across runtime instances', async () => {
-    const before = process.listenerCount('exit')
-    const first = await new Context().plugin(LocalSubprocessRuntime)
-    const second = await new Context().plugin(LocalSubprocessRuntime)
-    expect(process.listenerCount('exit')).toBe(before + 1)
-    await first.dispose()
-    expect(process.listenerCount('exit')).toBe(before + 1)
-    await second.dispose()
-    expect(process.listenerCount('exit')).toBe(before)
+  it('discovers the platform shell without inventing a missing default and honors cancellation', async () => {
+    let loginShell: string | null = '/account/shell'
+    const userInfo = vi.spyOn(os, 'userInfo').mockImplementation(() => ({
+      uid: 1, gid: 1, username: 'terminal-user', homedir: '/home/terminal-user', shell: loginShell,
+    }))
+    let fiber: Awaited<ReturnType<Context['plugin']>> | undefined
+    let restorePlatform: (() => void) | undefined
+    try {
+      syncBuiltinESMExports()
+      const ctx = new Context()
+      fiber = await ctx.plugin(LocalSubprocessRuntime)
+      const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+      restorePlatform = () => { platform.mockRestore() }
+      vi.stubEnv('SHELL', '/environment/shell')
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({
+        platform: 'posix', defaultShell: '/environment/shell',
+      })
+      expect(userInfo).not.toHaveBeenCalled()
+      vi.stubEnv('SHELL', undefined)
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({
+        platform: 'posix', defaultShell: '/account/shell',
+      })
+      vi.stubEnv('SHELL', '')
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({ platform: 'posix', defaultShell: '/account/shell' })
+      loginShell = ''
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({ platform: 'posix' })
+      loginShell = null
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({ platform: 'posix' })
+      platform.mockReturnValue('win32')
+      vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({
+        platform: 'windows', defaultShell: 'C:\\Windows\\System32\\cmd.exe',
+      })
+      vi.stubEnv('ComSpec', undefined)
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({ platform: 'windows' })
+      vi.stubEnv('ComSpec', '')
+      await expect(ctx.subprocess.terminalEnvironment()).resolves.toEqual({ platform: 'windows' })
+      platform.mockReturnValue('linux')
+      userInfo.mockClear()
+      const reason = new Error('terminal inspection cancelled')
+      await expect(ctx.subprocess.terminalEnvironment(AbortSignal.abort(reason))).rejects.toBe(reason)
+      expect(userInfo).not.toHaveBeenCalled()
+    } finally {
+      restorePlatform?.()
+      vi.unstubAllEnvs()
+      userInfo.mockRestore()
+      syncBuiltinESMExports()
+      await fiber?.dispose()
+    }
   })
 
   it('places the host-exit finalizer before listeners that predate the service', async () => {

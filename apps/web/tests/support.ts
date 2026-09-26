@@ -31,6 +31,9 @@ export function requireBuilt(name: string): unknown {
   return installationRequire(name)
 }
 
+/** Same-day anchor for seeded event times and the Asia/Shanghai browser clock. */
+export const WEB_FIXTURE_TIME = Date.parse('2026-01-15T12:00:00+08:00')
+
 /**
  * Browser language a page must advertise to boot into the product's Chinese
  * surface: with no stored preference the client derives its initial locale

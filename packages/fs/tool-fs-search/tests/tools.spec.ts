@@ -23,7 +23,7 @@ import type { SubprocessCollectedOutputs, SubprocessHandle, SubprocessOutcome, S
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { rgPath } from '@vscode/ripgrep'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
-import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
+import type { ReadTextSpill, SaveTextSpill, SpillRef, SpillText } from '@deepseek-ai/dsh-spill'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import {
   buildGlobCommand,
@@ -186,6 +186,10 @@ class FakeSpill extends SpillStore {
       bytes: Buffer.byteLength(input.content, 'utf8'),
       retrievalHint: 'Use the fake retrieval hint.',
     })
+  }
+
+  override readText(_input: ReadTextSpill): Promise<SpillText> {
+    return Promise.reject(new Error('spill artifact is no longer available'))
   }
 }
 

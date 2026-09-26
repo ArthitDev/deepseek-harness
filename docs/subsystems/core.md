@@ -491,14 +491,19 @@ Registry of YAML-declared presets and the revisions live Agents retain.
 /**
  * Resolve the preset configured for one model route.
  * @param provider - model provider route.
- * @param model - provider-owned model id.
+ * @param model - model identifier within the provider.
  * @returns the route override, or the current default preset when unbound.
  */
 presetIdForModel(provider: string, model: string): string
 
-/**
- * Every preset the configured roots currently supply.
- * @returns the presets, first-root-wins per id.
+/** Register and eagerly load a definition; activation failure remains visible in the roster.
+ * @param definition Parsed configuration supplied by the declaring plugin.
+ * @returns Definition disposer after activation or its diagnostic settles; the declaring plugin owns it.
+ */
+async register(definition: PresetDefinition): Promise<() => Promise<void>>
+
+/** Read every declared preset, including activation failures.
+ * @returns Display metadata and loading diagnostics.
  */
 async list(): Promise<AgentPreset[]>
 
@@ -533,98 +538,10 @@ composeFrom(ctx: Context, parent: Context): string | undefined
  */
 composedPreset(ctx: Context): string | undefined
 
-/**
- * Read one preset's composition text.
- * @param id - the preset id.
- * @returns the composition exactly as stored.
- * @throws when no configured root supplies that id.
- */
-async read(id: string): Promise<string>
-
-/**
- * One preset's composition text with the roster row it belongs to.
- * @param agentPreset - the preset id.
- * @returns the composition beside its trust and published metadata.
- * @throws {RemoteError} `gateway/bad-request` for an empty id, or
- * `agent-preset/not-found` when no configured root supplies it.
- */
-@Remote('read') async readDocument(agentPreset: string): Promise<AgentPresetDocument>
-
-/**
- * Replace one locally authored preset's composition.
- * @param id - preset id resolved against the Host's configured roots.
- * @param content - complete `agent.cordis.yml` text to store.
- * @returns once the atomic write commits.
- * @throws when the preset is unknown, ships with the deployment, or lies
- * outside the writable user root.
- */
-async write(id: string, content: string): Promise<void>
-
-/**
- * Replace one locally authored preset's composition through the Remote API.
- * @param agentPreset - preset id resolved by the Host.
- * @param content - complete `agent.cordis.yml` text to store.
- * @returns once the atomic write commits.
- */
-@Remote('write') async remoteExportWrite(agentPreset: string, content: string): Promise<void>
-
-/**
- * Create a locally authored preset by copying an existing one whole.
- *
- * The source is named by id and its directory is copied as it stands. The
- * copy is NOT mounted to validate: a source that mounts today yields a copy
- * that mounts today.
- * @param from - the preset the copy starts from; shipped presets are the
- * primary source, so any trust is accepted.
- * @param id - the new preset's id, which becomes its directory name.
- * @param name - display name for the copy; absent falls back to the id.
- * @throws when the source is unknown, the id is unusable or already taken,
- * or the deployment configures no writable root.
- */
-async copy(from: string, id: string, name?: string): Promise<void>
-
-/**
- * Copy one preset through the Remote API.
- * @param from - the source preset id.
- * @param id - the new preset id.
- * @param name - the copy's optional display name.
- * @returns once the copy is stored.
- * @throws {RemoteError} with the corresponding stable preset code and
- * details when the copy is refused.
- */
-@Remote('copy') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>
-
-/**
- * Delete a locally authored preset.
- *
- * @param id - the preset id.
- * @throws when the preset is unknown or ships with the deployment.
- */
-async remove(id: string): Promise<void>
-
-/**
- * Delete one preset through the Remote API.
- * @param id - the preset id.
- * @returns once the preset is deleted.
- * @throws {RemoteError} with the corresponding stable preset code and
- * details when deletion is refused.
- */
-@Remote('deletePreset') async remoteExportDelete(id: string): Promise<void>
-
-/**
- * One agent's instance of a service its preset mounted.
- *
- * A preset publishes services behind `isolate` realms, which are invisible
- * outside the group that declares them — including to the host. This is how a
- * caller holding the agent reads one anyway: a request that is ABOUT a
- * session but arrives from outside it, which is every browser RPC.
- *
- * Read addressing only. A host row that `inject`s a service cannot use this,
- * because injection resolves before any session exists and has no agent to
- * key by; such a service belongs on the host plane instead.
- * @param agent - the agent whose composition to look inside.
- * @param name - the service name as the preset's rows resolve it.
- * @returns the agent's instance, or undefined when its preset mounts none.
+/** Read a service supplied inside an Agent's isolated preset group.
+ * @param agent Agent whose composition is queried.
+ * @param name Cordis service name.
+ * @returns The service, or undefined.
  */
 serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): Context[K] | undefined
 
@@ -1211,4 +1128,23 @@ One session committed a different agent preset to its durable log. Consumers inv
 ```
 
 Source: [`packages/preset/agent-preset-registry/src/types.ts`](../../packages/preset/agent-preset-registry/src/types.ts)
+
+<a id="agent-presetselected--emit"></a>
+
+#### `agent-preset/selected` — emit
+
+One session committed a different agent preset to its durable log. Consumers invalidate only state derived from that session's composition.
+
+```ts cordis-catalog
+/**
+ * One session committed a different agent preset to its durable log.
+ * Consumers invalidate only state derived from that session's composition.
+ * @mode emit
+ * @param sessionId - the session whose composition changed.
+ * @param agentPreset - the preset recorded by the committed selection.
+ */
+'agent-preset/selected'(sessionId: SessionId, agentPreset: string): void
+```
+
+Source: [`packages/preset/agent-presets/src/types.ts`](../../packages/preset/agent-presets/src/types.ts)
 <!-- END GENERATED cordis-surface -->

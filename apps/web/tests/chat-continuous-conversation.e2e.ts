@@ -1,6 +1,6 @@
 // Web e2e contract for a conversation grown through the real composer rather
 // than pre-seeded history. Twelve deterministic replay turns exercise repeated
-// send/settle/render cycles, including two real shell executions and one long,
+// send/settle/render cycles, including two real bash executions and one long,
 // multi-chunk final turn. Assertions stay semantic: no host timing, heap, or
 // mounted-row cardinality is treated as a correctness contract.
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -26,7 +26,6 @@ const MODE = webSnapshotMode()
 const TURN_COUNT = 12
 const TOOL_TURNS = [4, 9] as const
 const STREAM_PACE_MS = 10
-const LIVE_SHELL_NAME = process.platform === 'win32' ? 'pwsh' : 'bash'
 
 interface TurnSpec {
   readonly index: number
@@ -111,9 +110,7 @@ function toolStream(spec: TurnSpec): StreamChunk[] {
     throw new Error(`turn ${String(spec.index)} has no tool identity`)
   }
   const args = JSON.stringify({
-    command: process.platform === 'win32'
-      ? `Write-Output '${spec.toolResultMarker}'`
-      : `printf '${spec.toolResultMarker}\\n'`,
+    command: `printf '${spec.toolResultMarker}\\n'`,
     description: spec.toolResultMarker,
   })
   return [
@@ -122,13 +119,13 @@ function toolStream(spec: TurnSpec): StreamChunk[] {
       type: 'tool-call-delta',
       index: 0,
       id: spec.callId,
-      name: LIVE_SHELL_NAME,
+      name: 'bash',
       argumentsDelta: args,
     },
     {
       type: 'block-end',
       index: 0,
-      block: { type: 'tool-call', id: spec.callId, name: LIVE_SHELL_NAME, arguments: args },
+      block: { type: 'tool-call', id: spec.callId, name: 'bash', arguments: args },
     },
     { type: 'usage', usage: { inputTokens: 256, outputTokens: 24 } },
     { type: 'finish', reason: { kind: 'tool-calls' } },
@@ -315,20 +312,18 @@ describe('web e2e: continuous conversation grown through the composer', () => {
       expect(calls[0]?.data).toMatchObject({
         turn: spec.index,
         callId: spec.callId,
-        name: LIVE_SHELL_NAME,
+        name: 'bash',
       })
       expect(results[0]?.data.turn).toBe(spec.index)
       expect(results[0]?.data.message.source.callId).toBe(spec.callId)
-      expect(results[0]?.data.message.content[0].isError).toBe(false)
-      expect(toolResultText(results[0]!).replaceAll('\r\n', '\n')).toBe(`${spec.toolResultMarker}\n`)
+      expect(results[0]?.data.message.isError).toBe(false)
+      expect(toolResultText(results[0]!)).toBe(`${spec.toolResultMarker}\n`)
 
       const toolRow = page.locator(`[data-chat-call-id="${spec.callId}"]`)
       await expect.poll(() => toolRow.count(), { timeout: 10_000 }).toBe(1)
       expect(await toolRow.textContent()).toContain(spec.toolResultMarker)
       await expandOwningTurnProcess(page, toolRow)
-      const disclosure = process.platform === 'win32'
-        ? toolRow.locator('[data-tool="pwsh"] [aria-expanded]')
-        : toolRow.locator('[data-sample="bash"]')
+      const disclosure = toolRow.locator('[data-sample="bash"]')
       expect(await disclosure.getAttribute('aria-expanded')).toBe('false')
       await disclosure.click()
       await expect.poll(() => disclosure.getAttribute('aria-expanded'), { timeout: 10_000 }).toBe('true')

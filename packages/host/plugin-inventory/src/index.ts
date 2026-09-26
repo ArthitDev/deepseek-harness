@@ -1,20 +1,27 @@
-/** Read-only projection of the current Cordis Loader plugin entries. */
+/** Loader inventory with revision-checked plugin enablement editing. */
 
 import type { Context, FiberState } from '@deepseek-ai/cordis'
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import { writeFileAtomic, withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 // Type-only: the optional agent-preset roster resolved through `ctx.get`.
-import type {} from '@deepseek-ai/dsh-agent-preset-registry'
+import type {} from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import type {
   AgentPresetPluginGroup,
+  PluginEnablementDocument,
   PluginEntryId,
   PluginFiberPhase,
   PluginInventoryEntry,
   PluginInventorySnapshot,
 } from './types.ts'
+import {
+  findRow, globalEnablement, globalToggleAllowed, presetEnablement, readRows, revision,
+} from './enablement.ts'
 
 export type * from './types.ts'
 
@@ -53,6 +60,68 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
+  }
+
+  /** Resolve only a Host-owned config path; browser input never supplies a filename. */
+  private async target(entryId: string, moduleName: string, preset?: string) {
+    if (!entryId || !moduleName) throw new Error('Plugin id and module are required')
+    if (preset !== undefined) {
+      const roster = this.ctx.get('agentPresets')
+      if (!roster) throw new Error('Agent presets are unavailable')
+      const resolved = await roster.resolve(preset)
+      if (resolved.trust !== 'user') throw new Error('Copy this built-in preset before changing its plugins')
+      const content = await roster.read(preset)
+      const row = findRow(readRows(content), entryId, moduleName)
+      return { path: resolved.path, content, enabled: row.disabled !== true, roster, localId: entryId }
+    }
+    if (!globalToggleAllowed(entryId, moduleName)) throw new Error('This infrastructure plugin must be managed in the profile configuration')
+    const entries = [...this.ctx.loader.entries()].filter(entry =>
+      entry.id === entryId && entry.options.name === moduleName && !entry.options.group)
+    const [entry] = entries
+    if (entries.length !== 1 || !entry) throw new Error('Plugin entry is missing or ambiguous; refresh the list')
+    const localId = entry.options.id
+    const owner = entry.parent.tree.ctx.fiber.entry
+    if (owner && owner.options.id !== 'include') throw new Error('Nested include plugins must be edited in their composition')
+    if (entry.disabled && !entry.options.disabled) throw new Error('This plugin is disabled by its group')
+    if (entry.options.disabled !== undefined && typeof entry.options.disabled !== 'boolean') throw new Error('This plugin is controlled by an expression')
+    const baseUrl = this.ctx.loader.ctx.baseUrl
+    if (!baseUrl?.startsWith('file:')) throw new Error('This host has no writable profile')
+    const path = fileURLToPath(new URL('cordis.patch.yml', baseUrl))
+    const content = await readFile(path, 'utf8')
+    const patches = readRows(content)
+    const overrides = patches.filter(row => row.id === localId && !row.insert && (row.name === undefined || row.name === moduleName) && typeof row.disabled === 'boolean')
+    const last = overrides.at(-1)
+    return { path, content, enabled: last ? !last.disabled : !entry.disabled, roster: undefined, localId }
+  }
+
+  /** Read one switch's stored state and revision without exposing config contents. */
+  @Remote('edit')
+  async edit(entryId: string, moduleName: string, preset?: string): Promise<PluginEnablementDocument> {
+    try {
+      const target = await this.target(entryId, moduleName, preset)
+      return { revision: revision(target.content), enabled: target.enabled }
+    } catch (error) {
+      return { revision: '', enabled: false, reason: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /** Persist a confirmed enablement change against the exact revision the browser read. */
+  @Remote('setEnabled')
+  async setEnabled(
+    entryId: string, moduleName: string, enabled: boolean, expectedRevision: string, preset?: string,
+  ): Promise<PluginEnablementDocument> {
+    const initial = await this.target(entryId, moduleName, preset)
+    return await withFileLock(initial.path, async () => {
+      const target = await this.target(entryId, moduleName, preset)
+      if (revision(target.content) !== expectedRevision) throw new Error('Configuration changed; refresh and try again')
+      const content = preset === undefined
+        ? globalEnablement(target.content, target.localId, moduleName, enabled)
+        : presetEnablement(target.content, entryId, moduleName, enabled)
+      await writeFileAtomic(`${target.path}.bak`, target.content, { mode: 0o600, dirMode: 0o700 })
+      if (target.roster && preset !== undefined) await target.roster.write(preset, content)
+      else await writeFileAtomic(target.path, content, { mode: 0o600, dirMode: 0o700 })
+      return { revision: revision(content), enabled }
+    })
   }
 
   /**

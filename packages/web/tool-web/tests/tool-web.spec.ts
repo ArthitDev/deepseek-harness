@@ -10,12 +10,10 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 import type { WebSearchProvider, WebSearchResult } from '@deepseek-ai/dsh-web'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
-import WebSearchPolicyConfig, {
-  WEB_SEARCH_POLICY_SETTINGS_NAMESPACE,
-} from '../src/settings.ts'
+import WebSearchPolicyConfig from '../src/settings.ts'
 import {
   formatSearchOutput,
   formatFetchOutput,
@@ -39,24 +37,12 @@ const testToolSignal = new AbortController().signal
 
 const available = true
 
-class MemorySettings extends SettingsProvider {
-  readonly writable = true
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve({})
-  }
-
-  protected persist(_ns: SettingsNamespace, _section: Record<string, unknown>): Promise<void> {
-    return Promise.resolve()
-  }
-}
-
 async function mountAlwaysSearchMode(globalAlways?: boolean) {
   const ctx = new Context()
+  let live: Awaited<ReturnType<typeof liveConfig>> | undefined
   if (globalAlways !== undefined) {
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(WebSearchPolicyConfig)
-    await ctx.settings.update(WEB_SEARCH_POLICY_SETTINGS_NAMESPACE, { always: globalAlways })
+    live = await liveConfig(ctx, WebSearchPolicyConfig)
+    await live.update({ always: globalAlways })
   }
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
@@ -70,7 +56,7 @@ async function mountAlwaysSearchMode(globalAlways?: boolean) {
   const session = Session.create(SessionId('always-search'))
   const agent = { id: session.id, session, options: {} } as Agent
   if (presetKey !== undefined) bindScopeParent(agent, presetKey)
-  return { ctx, session, agent }
+  return { ctx, session, agent, live }
 }
 
 describe('always-search session mode', () => {
@@ -116,7 +102,7 @@ describe('always-search session mode', () => {
   })
 
   it('uses the live global setting instead of legacy per-session state when installed', async () => {
-    const { ctx, agent } = await mountAlwaysSearchMode(false)
+    const { ctx, agent, live } = await mountAlwaysSearchMode(false)
     const text = async () => (await ctx.systemPrompt.assemble({ agent, scope: agent }))
       .sections.map(section => section.text).join('\n')
     const choice = () => agentEvents(ctx, agent).waterfall(
@@ -127,7 +113,7 @@ describe('always-search session mode', () => {
     expect(await text()).not.toContain(ToolWeb.ALWAYS_SEARCH_POLICY)
     await expect(choice()).resolves.toBeUndefined()
 
-    await ctx.settings.update(WEB_SEARCH_POLICY_SETTINGS_NAMESPACE, { always: true })
+    await live!.update({ always: true })
     expect(await text()).toContain(ToolWeb.ALWAYS_SEARCH_POLICY)
     await expect(choice()).resolves.toBe('required')
   })

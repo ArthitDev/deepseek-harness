@@ -31,9 +31,16 @@ const permissionGlyphs = new Map<string, ReactNode>([
   [FULL_ACCESS, <PermissionIconFullAccessRegular />],
 ])
 
+const permissionGlyphClasses = new Map<string, string | undefined>([
+  ['read-only', css.readOnlyIcon],
+  ['workspace-write', css.workspaceWriteIcon],
+  [FULL_ACCESS, css.fullAccessIcon],
+])
+
 /** Glyph for a permission option value; host-configured names outside the design set get none. */
 function permissionGlyph(value: string): ReactNode | undefined {
-  return permissionGlyphs.get(value)
+  const glyph = permissionGlyphs.get(value)
+  return glyph === undefined ? undefined : <span className={permissionGlyphClasses.get(value)}>{glyph}</span>
 }
 
 function permissionLabel(
@@ -177,6 +184,8 @@ export function PermissionSelect({
             type="button"
             className={css.trigger}
             aria-label={t('mode', { name: currentAccessibleLabel })}
+            aria-haspopup="menu"
+            aria-expanded={open}
             title={current === undefined ? undefined : optionDescription(current, t)}
             disabled={locked || busy}
             onClick={() => { setOpen(!open) }}

@@ -10,5 +10,5 @@ export default defineConfig(['index', 'worker'].map(entry => ({
   fixedExtension: false,
   dts: false,
   clean: false,
-  outputOptions: { inlineDynamicImports: true },
+  codeSplitting: false,
 })))

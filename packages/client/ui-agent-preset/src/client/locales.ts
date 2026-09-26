@@ -1,7 +1,5 @@
 /** Locale bundles for the agent-preset hero chip, header label, and management section. */
 
-import { guideEn, guideZh, type PresetGuideKey } from './guide-locales.ts'
-
 /** Locale keys these surfaces render. */
 export type AgentPresetSettingsKey =
   | 'error' | 'userTrust' | 'seatHint' | 'headerHint'
@@ -12,27 +10,28 @@ export type AgentPresetSettingsKey =
   | 'presetCordisName' | 'presetCordisDescription'
   | 'duplicate' | 'duplicateUnavailable' | 'delete' | 'presetId' | 'presetIdPlaceholder' | 'copyOf'
   | 'displayName' | 'displayNamePlaceholder'
-  | 'inUse' | 'noDescription' | 'builtInGroup' | 'customGroup'
+  | 'inUse' | 'selectionOffDefault' | 'noDescription' | 'builtInGroup' | 'customGroup'
   | 'brokenBadge' | 'brokenNoCopy' | 'switchRefused'
   | 'composition' | 'systemPrompt' | 'systemPromptHelp' | 'cancel' | 'close' | 'retry'
   | 'copyTitle' | 'copyIntro' | 'create' | 'creating' | 'creatorDraft'
+  | 'addPreset' | 'createIntro' | 'createUnavailable' | 'systemPromptPlaceholder'
   | 'openLocation' | 'showLocation' | 'revealedPathLabel'
   | 'idRequired' | 'idInvalid' | 'idTaken'
   | 'deleteTitle' | 'deleteDescription' | 'deleteConfirm' | 'deleting'
   | 'modelBindings'
+  | 'showPicker' | 'showPickerBeta' | 'showPickerDescription'
+  | 'enablePickerToSetDefault' | 'enablePickerToCreate'
 
 /** English copy. */
 export const en: Record<AgentPresetSettingsKey, string> = {
-  ...guideEn,
-  builtInGroup: 'Built-in', customGroup: 'Custom',
-  sectionIntro: 'Choose the agent’s tools and how it works. Use Standard mode for everyday tasks, or Creator mode to add capabilities to DSH.',
-
-  seatHint: 'Choose the agent preset for your new task',
-  headerHint: 'The agent preset chosen when this task started',
+  error: 'Could not load agent presets.',
+  userTrust: 'Custom',
+  seatHint: 'Agent preset for the session you are about to start',
+  headerHint: 'The agent preset this session runs, fixed when it started',
   nav: 'Agent presets',
   sectionIntro:
     'A preset is the plugin composition one session\'s agent runs — its tools, prompt, and capabilities. '
-    + 'Duplicate an existing one and make it yours, or let the agent draft one for you in Creator mode.',
+    + 'Create one with a system prompt, duplicate an existing one, or let Creator mode draft one for you.',
   builtIn: 'Built-in',
   setDefault: 'Set as default',
   view: 'View',
@@ -42,23 +41,30 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   saving: 'Saving…',
   presetStandardName: 'Standard mode',
   presetStandardDescription:
-    'Work with code, files, and information. Suitable for most tasks, with search, editing, terminal commands, and other tools available as needed.',
+    'Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.',
   presetPtcName: 'PTC mode',
   presetPtcDescription:
-    'Includes all Standard mode capabilities. Better suited to tasks that call tools in batches and then filter, organize, deduplicate, count, or summarize the results.',
+    'Full coding agent without the workflow tool; other tools are exposed through the PTC mode SDK so the model can combine multi-step operations in one TypeScript program.',
   presetMinimalName: 'Minimal mode',
   presetMinimalDescription:
     'Single-tool coding agent with a persistent shell.',
   presetCordisName: 'Creator mode',
   presetCordisDescription:
-    'Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode.',
-
-  inUse: 'New task default',
-  selectionOffDefault: 'Application default',
-
+    'Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.',
+  duplicate: 'Duplicate',
+  duplicateUnavailable: 'This deployment has no writable preset directory',
+  delete: 'Delete',
+  presetId: 'Identifier',
+  presetIdPlaceholder: 'my-agent',
+  displayName: 'Name',
+  displayNamePlaceholder: 'Shown in the picker; defaults to the identifier',
+  inUse: 'In use',
+  selectionOffDefault: 'Default',
+  builtInGroup: 'Built-in',
+  customGroup: 'Custom',
   noDescription: 'No description.',
   brokenBadge: 'Failed to load',
-
+  brokenNoCopy: 'A preset that failed to load cannot be duplicated',
   switchRefused: 'Could not switch to {name}: {reason}',
   copyOf: 'Copied from',
   composition: 'Composition (agent.cordis.yml)',
@@ -74,6 +80,10 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   create: 'Create',
   creating: 'Creating…',
   creatorDraft: 'Draft a custom preset with Creator mode',
+  addPreset: 'Add preset',
+  createIntro: 'Enter a system prompt. The new preset keeps the current default preset\'s tools, skills, and assets.',
+  createUnavailable: 'The current default preset cannot be used as a template',
+  systemPromptPlaceholder: 'Instructions for this agent',
   openLocation: 'Open folder',
   showLocation: 'Show location',
   revealedPathLabel: 'Preset files:',
@@ -86,18 +96,21 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   deleteConfirm: 'Delete',
   deleting: 'Deleting…',
   modelBindings: 'Models',
+  showPicker: 'Allow switching Agent modes',
+  showPickerBeta: 'Beta',
+  showPickerDescription: 'When enabled, new tasks can choose any available mode. When disabled, all new tasks use the configured default. Only affects new tasks.',
+  enablePickerToSetDefault: 'Turn on Agent mode selection to choose a default',
+  enablePickerToCreate: 'Turn on Agent mode selection to start Creator mode',
 }
 
 /** Simplified Chinese copy. */
 export const zh: Record<AgentPresetSettingsKey, string> = {
-  ...guideZh,
-  builtInGroup: '内置', customGroup: '自定义',
-  sectionIntro: '选择 Agent 的工具和工作方式。日常任务用「标准模式」，扩展 DSH 的能力用「创造模式」。',
-
-  seatHint: '选择新任务使用的 Agent 预设',
-  headerHint: '本任务的 Agent 预设，在任务开始时确定',
+  error: '无法加载 Agent 预设。',
+  userTrust: '自定义',
+  seatHint: '即将开始的这个会话所用的 Agent 预设',
+  headerHint: '本会话运行的 Agent 预设，开始时即固定',
   nav: 'Agent 预设',
-  sectionIntro: '预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。复制一份既有预设改成自己的，或用「创造模式」让 Agent 帮你创建。',
+  sectionIntro: '预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。填写系统提示词直接新建、复制既有预设，或用「创造模式」让 Agent 帮你创建。',
   builtIn: '内置',
   setDefault: '设为默认',
   view: '查看',
@@ -106,20 +119,27 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   save: '保存',
   saving: '正在保存…',
   presetStandardName: '标准模式',
-  presetStandardDescription: '处理代码、文件和资料，适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。',
+  presetStandardDescription: '功能完整的编码 Agent，支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。',
   presetPtcName: 'PTC 模式',
-  presetPtcDescription: '包含标准模式的所有能力，更适合批量调用工具，并对结果进行筛选、整理、去重、统计或汇总的任务。',
+  presetPtcDescription: '功能完整的编码 Agent，但默认不提供 workflow 工具；其他工具通过 PTC 模式 SDK 呈现，让模型用一个 TypeScript 程序组合多步操作。',
   presetMinimalName: '极简模式',
   presetMinimalDescription: '仅提供持久 shell 的单工具编码 Agent。',
   presetCordisName: '创造模式',
-  presetCordisDescription: '用对话定制 DSH：让 Agent 编写插件，添加新功能或界面；也能组合工具和提示词，创建自己的模式。',
-
-  inUse: '新任务默认',
-  selectionOffDefault: '应用默认',
-
+  presetCordisDescription: '用于创建自定义 Agent preset：具备标准模式的全部能力，并提供运行时检查、插件实验和 preset 创作指导。',
+  duplicate: '复制',
+  duplicateUnavailable: '此部署未配置可写的预设目录',
+  delete: '删除',
+  presetId: '标识符',
+  presetIdPlaceholder: 'my-agent',
+  displayName: '名称',
+  displayNamePlaceholder: '选择器中显示的名字，缺省用标识符',
+  inUse: '当前使用',
+  selectionOffDefault: '默认',
+  builtInGroup: '内置',
+  customGroup: '自定义',
   noDescription: '暂无描述。',
   brokenBadge: '加载失败',
-
+  brokenNoCopy: '预设加载失败，不能复制',
   switchRefused: '无法切换到「{name}」：{reason}',
   copyOf: '复制自',
   composition: '组装（agent.cordis.yml）',
@@ -133,6 +153,10 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   create: '创建',
   creating: '正在创建…',
   creatorDraft: '用「创造模式」创作自定义预设',
+  addPreset: '新建预设',
+  createIntro: '填写系统提示词。新预设会保留当前默认预设的工具、Skills 和资源。',
+  createUnavailable: '当前默认预设无法作为模板',
+  systemPromptPlaceholder: '该 Agent 的指令',
   openLocation: '打开目录',
   showLocation: '查看路径',
   revealedPathLabel: '预设文件：',
@@ -144,10 +168,15 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   deleteConfirm: '删除',
   deleting: '正在删除…',
   modelBindings: '模型',
+  showPicker: '允许切换 Agent 模式',
+  showPickerBeta: 'Beta',
+  showPickerDescription: '开启后，新任务可以选择可用模式。关闭后，所有新任务使用配置的默认模式。仅影响新任务。',
+  enablePickerToSetDefault: '开启 Agent 模式选择后才能设置默认模式',
+  enablePickerToCreate: '开启 Agent 模式选择后才能启动创造者模式',
 }
 
-// The resolution itself is the shared fold in `dsh-agent-preset-registry/display`,
+// The resolution itself is the shared fold in `dsh-agent-presets/display`,
 // re-exported here so every surface in this plugin reads one path; the
 // Settings plugin list inlines the same fold over this plugin's dictionaries.
-export { isBuiltInPreset, presetDisplayText } from '@deepseek-ai/dsh-agent-preset-registry/display'
-export type { PresetDisplaySource, PresetDisplayText } from '@deepseek-ai/dsh-agent-preset-registry/display'
+export { presetDisplayText } from '@deepseek-ai/dsh-agent-presets/display'
+export type { PresetDisplaySource, PresetDisplayText } from '@deepseek-ai/dsh-agent-presets/display'

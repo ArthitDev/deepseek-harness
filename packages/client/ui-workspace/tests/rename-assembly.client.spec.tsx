@@ -18,9 +18,9 @@ import { act, cleanup, fireEvent, waitFor, within } from '@testing-library/react
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
-import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  RemoteError, SlotTestRuntime, TestRemote, stubSettingsScope, usePinnedBrowserLanguages,
+  RemoteError, SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -46,7 +46,7 @@ async function createRuntime(): Promise<SlotTestRuntime> {
   // for ui-workspace's inject to settle.
   const directoryPicker = {}
   const remoteMachines = { list: async () => ({ ok: true as const, value: { machines: [] } }) }
-  new TestRemote(runtime.ctx, {
+  runtime.remote.provideNamespaces({
     directoryPicker,
     remoteMachines,
     pentestRuns: { list: vi.fn(), snapshot: vi.fn(), control: vi.fn(), controlTask: vi.fn(), replaceScope: vi.fn() },

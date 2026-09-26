@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
-import { AgentPresetSectionController } from '../src/client/section-store.ts'
+/**
+ * The agent-preset management controller: a copy dialog is the only way a
+ * preset is created, the shipped compositions open in a read-only viewer, and
+ * the way into a custom preset's files is the location action — opened on a
+ * desktop, revealed as a path where the host has none. Every mutation
+ * re-reads the roster because a copy changes more than the row it targeted.
+ */
 
 import { describe, expect, it, vi } from 'vitest'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -19,6 +24,8 @@ interface FakeOptions {
   failRead?: string
   /** Reject `copy` with this message. */
   failCopy?: string
+  /** Reject `create` with this message. */
+  failCreate?: string
   /** Reject `write` with this message. */
   failWrite?: string
   /** Reject `openDocument` with this message. */
@@ -78,6 +85,7 @@ function fakeCtx(
               ...preset.name === undefined ? {} : { name: preset.name },
             })),
             authorable: options.authorable ?? true,
+            modeSelectionEnabled: true,
             models: (options.modelGroups ?? []).flatMap(group => group.models.map(model => ({
               provider: group.id,
               providerName: group.name,
@@ -129,6 +137,16 @@ function fakeCtx(
           })
           return remoteOk(undefined)
         },
+        create: (...args: [from: string, id: string, name: string | undefined, content: string]) => {
+          if (args.length !== 4) {
+            return Promise.reject(new Error(`client api: agentPresets/create expected 4 argument(s), got ${String(args.length)}`))
+          }
+          const [from, id, name, content] = args
+          record('create', { from, id, ...name === undefined ? {} : { name }, content })
+          if (options.failCreate !== undefined) return remoteFail(options.failCreate)
+          presets.set(id, { trust: 'user', content, ...name === undefined ? {} : { name } })
+          return remoteOk(undefined)
+        },
         deletePreset: async (id: string) => {
           record('deletePreset', { id })
           await options.holdRemove
@@ -145,11 +163,11 @@ function fakeCtx(
             ? remoteOk(options.hasDocument ?? true)
             : remoteFail(options.failCapability))
         },
-        update: (ns: string, patch: { default?: string }) => {
+        update: (ns: string, patch: { selectedDefault?: string }) => {
           record('settings.update', { ns, patch })
           if (options.failSettings !== undefined) return remoteFail(options.failSettings)
-          /* v8 ignore next -- the controller only ever sets `default` */
-          defaultId.id = patch.default ?? defaultId.id
+          /* v8 ignore next -- the controller only ever sets `selectedDefault` */
+          defaultId.id = patch.selectedDefault ?? defaultId.id
           return remoteOk({})
         },
         mutate: (ns: string, ops: readonly {
@@ -281,30 +299,18 @@ describe('loading the roster', () => {
     const { controller, calls } = harness()
 
     await Promise.all([controller.load(), controller.load()])
-    expect(remote.agentPresets.list).toHaveBeenCalledOnce()
-    expect(state()).toMatchObject({ status: 'ready', rows: [{ id: 'standard', isDefault: true }], showPicker: true })
-    remote.agentPresets.list.mockRejectedValueOnce(new Error('offline'))
-    await controller.load()
-    expect(state()).toMatchObject({ status: 'error', error: 'offline' })
-    remote.agentPresets.list.mockResolvedValueOnce({ ok: false, error: { message: 'refused' } } as never)
-    await controller.load()
-    expect(state().error).toBe('refused')
-    remote.agentPresets.list.mockRejectedValueOnce('gone')
-    await controller.load()
-    expect(state().error).toBe('gone')
+
+    expect(calls.filter(call => call.method === 'list')).toHaveLength(1)
   })
 
-  it('keeps default selection and blank-session synchronization on their existing settings path', async () => {
-    const { controller, remote, state } = fixture()
-    const sync = vi.fn(async () => undefined)
-    await controller.makeDefault('standard', sync)
-    expect(remote.settings.update).toHaveBeenCalledWith('agent-preset-registry', { selectedDefault: 'standard' }, undefined)
-    expect(sync).toHaveBeenCalledWith('standard')
-    await controller.setPickerVisible(false)
-    expect(remote.settings.update).toHaveBeenLastCalledWith('agent-preset-registry', { modeSelectionEnabled: false }, undefined)
-    remote.settings.update.mockRejectedValueOnce(new Error('read only'))
-    await controller.setPickerVisible(true)
-    expect(state()).toMatchObject({ policySaving: false, error: 'read only' })
+  it('surfaces a refusal as the page error', async () => {
+    const { controller } = harness({ failList: 'not for you' })
+
+    await controller.load()
+
+    const state = controller.store.getSnapshot()
+    expect(state.status).toBe('error')
+    expect(state.error).toBe('not for you')
   })
 
 })
@@ -361,7 +367,7 @@ describe('the read-only viewer', () => {
     await success.controller.saveView()
 
     const written = success.calls.find(call => call.method === 'write')?.payload as { content: string }
-    expect(written.content).toContain('    text: |-\n      Changed: # stays text\n      Second line\n')
+    expect(written.content).toContain('    prefix: |-\n      Changed: # stays text\n      Second line\n')
     expect(written.content).toContain("- id: tool-read\n  name: '@deepseek-ai/dsh-tool-read'")
     expect(success.controller.store.getSnapshot().view).toMatchObject({
       draft: 'Changed: # stays text\nSecond line',
@@ -437,6 +443,46 @@ describe('the copy dialog', () => {
     controller.setCopyName('renamed')
 
     expect(copyOf(controller).error).toBeNull()
+  })
+})
+
+describe('direct creation', () => {
+  it.each(['text', 'prefix'])('creates from a %s persona while preserving its suffix and tools', async (field) => {
+    const { controller, calls, presets, rosterChanges } = harness()
+    const source = presets.get('standard')!
+    source.content = source.content.replace('    text: >-', `    suffix: Keep the workspace context.\n    ${field}: >-`)
+    await controller.load()
+    controller.beginCreate()
+    controller.setCreateId('red-team')
+    controller.setCreateName('Red Team')
+    controller.setCreatePrompt('Work only within the authorized scope.\nKeep evidence.')
+
+    await controller.confirmCreate()
+
+    const created = presets.get('red-team')
+    expect(created?.content).toContain(
+      '    prefix: |-\n      Work only within the authorized scope.\n      Keep evidence.\n')
+    expect(created?.content).toContain('    suffix: Keep the workspace context.')
+    expect(created?.content).not.toContain('    text:')
+    expect(created?.content).toContain("- id: tool-bash\n  name: '@deepseek-ai/dsh-tool-bash'")
+    expect(calls.find(call => call.method === 'create')?.payload).toMatchObject({
+      from: 'standard', id: 'red-team', name: 'Red Team',
+    })
+    expect(controller.store.getSnapshot().create).toBeNull()
+    expect(rosterChanges()).toBe(1)
+  })
+
+  it('keeps the draft open when creation is refused', async () => {
+    const { controller } = harness({ failCreate: 'disk full' })
+    await controller.load()
+    controller.beginCreate()
+    controller.setCreateId('red-team')
+
+    await controller.confirmCreate()
+
+    expect(controller.store.getSnapshot().create).toMatchObject({
+      id: 'red-team', saving: false, error: 'disk full',
+    })
   })
 })
 
@@ -604,13 +650,61 @@ describe('deleting', () => {
     controller.confirmDelete('standard')
     await controller.remove()
     release()
-    await pending
-    expect(state().error).toBe('Session already started')
-    remote.agentPresets.list.mockResolvedValueOnce({ ok: true, value: { presets: [], modeSelectionEnabled: false } })
-    await controller.setPickerVisible(false)
-    const writes = remote.settings.update.mock.calls.length
-    await controller.makeDefault('standard')
-    expect(remote.settings.update).toHaveBeenCalledTimes(writes)
+    await removal
+
+    expect(calls.filter(call => call.method === 'deletePreset')).toHaveLength(1)
+  })
+
+  it('surfaces a refusal and clears the confirmation', async () => {
+    const { controller } = harness({ failRemove: 'shipped preset' })
+    await controller.load()
+    controller.confirmDelete('mine')
+
+    await controller.remove()
+
+    const state = controller.store.getSnapshot()
+    expect(state.error).toBe('shipped preset')
+    expect(state.pendingDelete).toBeNull()
+    expect(state.deleting).toBe(false)
+  })
+
+})
+
+describe('a controller with no roster listener', () => {
+  it('completes a delete without anyone to notify', async () => {
+    // The rosterChanged callback is optional wiring, not a requirement: a
+    // page composed without sibling surfaces still deletes cleanly.
+    const presets = seed()
+    const defaultId = { id: 'standard' }
+    const alone = new AgentPresetSectionController(
+      fakeCtx(presets, defaultId))
+    await alone.load()
+    alone.confirmDelete('mine')
+
+    await alone.remove()
+
+    expect(alone.store.getSnapshot().rows.map(row => row.id)).not.toContain('mine')
+  })
+})
+
+describe('the default preset', () => {
+  it('writes the setting and re-reads the roster', async () => {
+    const { controller, defaultId } = harness()
+    await controller.load()
+
+    await controller.makeDefault('mine')
+
+    expect(defaultId.id).toBe('mine')
+    expect(controller.store.getSnapshot().rows.find(row => row.id === 'mine')?.isDefault).toBe(true)
+  })
+
+  it('surfaces a settings refusal as the page error', async () => {
+    const { controller } = harness({ failSettings: 'read-only settings' })
+    await controller.load()
+
+    await controller.makeDefault('mine')
+
+    expect(controller.store.getSnapshot().error).toContain('read-only settings')
   })
 })
 

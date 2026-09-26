@@ -1,7 +1,7 @@
 /** Shared profile package operations used by dsh plugin and the running manager. */
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, open } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { execa } from 'execa'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import {
@@ -115,8 +115,20 @@ export async function runProfilePnpm(
   let output = Buffer.alloc(0)
   let truncated = false
   const cancellation = new AbortController()
+  const parentEnv = options.execution === 'cli' ? process.env : scrubbedParentEnv()
+  if (options.execution === 'service') {
+    const path = Object.entries(parentEnv).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? ''
+    for (const key of Object.keys(parentEnv)) if (key.toUpperCase() === 'PATH') Reflect.deleteProperty(parentEnv, key)
+    const seen = new Set<string>()
+    parentEnv.PATH = [dirname(process.execPath), ...path.split(delimiter)].filter((entry) => {
+      const key = process.platform === 'win32' ? entry.toLowerCase() : entry
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    }).join(delimiter)
+  }
   const child = execa(options.command ?? 'pnpm', [...options.args ?? [], ...args.map(arg => anchorPathSpec(arg, context.cwd))], {
-    cwd: dir, env: { ...(options.execution === 'cli' ? process.env : scrubbedParentEnv()), ...options.env }, extendEnv: false, reject: false,
+    cwd: dir, env: { ...parentEnv, ...options.env }, extendEnv: false, reject: false,
     stdout: options.execution === 'cli' ? 'inherit' : 'pipe',
     stderr: options.execution === 'cli' ? 'inherit' : 'pipe',
     buffer: false, stdin: options.execution === 'cli' ? 'inherit' : 'ignore', cancelSignal: options.signal === undefined

@@ -281,6 +281,10 @@ describe('Conversation inject API', () => {
       viewRequest: { view: 'trajectory', focus: 'call-1' },
     })
 
+    b.runtime.ctx.uiConversation.openView(ROOT, 'chat')
+    expect(activate).toHaveBeenLastCalledWith('chat')
+    expect(body.instance.store.getSnapshot().view).toBe('chat')
+
     const header = b.headerApi(ROOT)
     header.injected.selectView('chat')
     expect(activate).toHaveBeenLastCalledWith('chat')

@@ -388,6 +388,11 @@ export class ReactLoopAgent implements Agent {
     let firstAttempt = true
     while (true) {
       const { config, preparedCall } = await this.prepareRequest(turn, step, signal)
+      const toolChoice = await this.dispatch.waterfall(
+        'agent/tool-choice', { turn, step, signal },
+        (): Promise<GenerateOptions['toolChoice']> => Promise.resolve(undefined),
+      )
+      signal.throwIfAborted()
       const startsRequestSeries = firstAttempt && decision.startsRequestSeries === true
       const commits = this.systemPrompt.project(renderedPrompt, {
         inHistory: preparedCall?.systemPromptUpdate === 'in-history',
@@ -404,7 +409,7 @@ export class ReactLoopAgent implements Agent {
         }
       }
       firstAttempt = false
-      const request = this.buildRequest(config, preparedCall, assembly.tools, startsRequestSeries, signal)
+      const request = this.buildRequest(config, preparedCall, assembly.tools, toolChoice, startsRequestSeries, signal)
       const live = new AssistantStreamAttempt(
         this.session.id,
         ++this.assistantAttemptCounter,
@@ -577,12 +582,17 @@ export class ReactLoopAgent implements Agent {
     return { config, ...preparedCall === undefined ? {} : { preparedCall } }
   }
 
-    const toolChoice = await this.dispatch.waterfall(
-      'agent/tool-choice', { turn, step, signal },
-      (): Promise<GenerateOptions['toolChoice']> => Promise.resolve(undefined),
-    )
-    signal.throwIfAborted()
-
+  /** Log the resolved envelope and derive a frozen request from the admitted surface. */
+  private buildRequest(
+    config: LlmCallConfig,
+    preparedCall: PreparedLlmCall | undefined,
+    tools: GenerateOptions['tools'] & object,
+    toolChoice: GenerateOptions['toolChoice'],
+    startsRequestSeries: boolean,
+    signal: AbortSignal,
+  ): GenerateOptions {
+    const { session } = this
+    const surfaceGeneration = session.surface.contentGeneration
     const header = canonicalHeader({
       config,
       ...preparedCall === undefined ? {} : { adapterDefaults: preparedCall.adapterDefaults },

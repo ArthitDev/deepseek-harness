@@ -16,7 +16,8 @@ describe('settings Remote', () => {
     const { ctx, controller } = await boot()
     expect(controller.typertRemote.namespace).toBe('settings')
     expect(remoteMethods(controller).map(method => method.method)).toEqual([
-      'describe', 'update', 'replace', 'mutate', 'openSettingsDocument',
+      'describe', 'canOpenAgentPresetDirectory', 'update', 'replace', 'mutate',
+      'openSettingsDocument', 'openAgentPresetDirectory',
     ])
     expect(ctx.get('credentialsController')).toBeDefined()
   })

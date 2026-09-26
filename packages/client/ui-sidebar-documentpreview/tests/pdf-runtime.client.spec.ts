@@ -75,6 +75,7 @@ describe('PDF Worker lifecycle', () => {
     const options = await h.entered.promise as { data: Uint8Array<ArrayBuffer>; BinaryDataFactory: unknown }
     expect(api.createWorker).toHaveBeenCalledWith({ port: workers[0] })
     expect(options).toMatchObject({
+      cMapUrl: 'dsh-inline:///', standardFontDataUrl: 'dsh-inline:///', wasmUrl: 'dsh-inline:///',
       useWorkerFetch: false, enableXfa: false, cMapPacked: true, isEvalSupported: false,
     })
     expect(typeof options.BinaryDataFactory).toBe('function')

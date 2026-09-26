@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
+/**
+ * The management section's rendering rules: which actions a row offers depends
+ * on its trust, a shipped composition opens in a read-only viewer, creation is
+ * a copy dialog that collects an id and an optional name, and the location
+ * action follows the host's desktop capability.
+ */
+
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { AgentPresetSection, type AgentPresetSectionProps } from '../src/client/AgentPresetSection.tsx'
-import type { AgentPresetSectionState } from '../src/client/section-store.ts'
+import { AgentPresetSection } from '../src/client/AgentPresetSection.tsx'
+import type { AgentPresetSectionProps } from '../src/client/AgentPresetSection.tsx'
+import type { AgentPresetSectionState, CopyDraft, CreateDraft } from '../src/client/section-store.ts'
 import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -14,6 +22,8 @@ const READY: AgentPresetSectionState = {
   error: null,
   authorable: true,
   hasDocument: true,
+  showPicker: true,
+  policySaving: false,
   rows: [
     { id: 'standard', trust: 'system', isDefault: true, name: '标准模式', description: '完整的编码 agent。' },
     { id: 'mine', trust: 'user', isDefault: false },
@@ -58,22 +68,33 @@ function renderSection(
     setCopyId: vi.fn(),
     setCopyName: vi.fn(),
     confirmCopy: vi.fn(() => Promise.resolve()),
+    beginCreate: vi.fn(),
+    cancelCreate: vi.fn(),
+    setCreateId: vi.fn(),
+    setCreateName: vi.fn(),
+    setCreatePrompt: vi.fn(),
+    confirmCreate: vi.fn(() => Promise.resolve()),
     openLocation: vi.fn(() => Promise.resolve()),
     confirmDelete: vi.fn(),
     remove: vi.fn(() => Promise.resolve()),
     makeDefault: vi.fn(() => Promise.resolve()),
+    setPickerVisible: vi.fn(() => Promise.resolve()),
     bindModel: vi.fn(() => Promise.resolve()),
   }
   const props = {
     ...actions,
     useAgentPresetSection: bindSnapshotSelector(store),
-    useDeveloperTools: bindSnapshotSelector(createSnapshotStore(developerTools)),
-    t: key => translations.get(key) ?? key }
+    t: (key: keyof typeof en) => en[key],
+  } as unknown as AgentPresetSectionProps
   render(<AgentPresetSection {...props} />)
   return actions
 }
+
+/** Locate a card by the id it prints, not by its display name. */
 function rowFor(id: string): HTMLElement {
-  const row = document.querySelector<HTMLElement>(`[data-agent-preset-id="${id}"]`)
+  const key = screen.getAllByText(id).find(node => node.tagName === 'CODE')
+  const row = key?.closest('li') ?? null
+  /* v8 ignore next -- every rendered card prints its id */
   if (row === null) throw new Error(`no card for ${id}`)
   return row
 }
@@ -165,18 +186,17 @@ describe('the preset list', () => {
     expect(screen.getByRole('heading', { name: en.customGroup })).toBeTruthy()
   })
 
-  it('shows no group heading for a set nobody has', () => {
+  it('keeps the custom group available when it has no presets yet', () => {
     renderSection({ rows: [{ id: 'standard', trust: 'system', isDefault: true }] })
 
-    expect(screen.queryByRole('heading', { name: en.customGroup })).toBeNull()
+    expect(screen.getByRole('heading', { name: en.customGroup })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.addPreset })).toBeTruthy()
   })
 
-  it('leads with the two ways a preset is created', () => {
+  it('leads with direct creation, duplication, and Creator mode', () => {
     renderSection()
 
-    // The page has no create button: the intro is what tells a first-time
-    // reader that copying an existing preset — or drafting one in Creator
-    // mode — IS the way to make one.
+    expect(screen.getByRole('button', { name: en.addPreset })).toBeTruthy()
     expect(screen.getByText(new RegExp('Creator mode'))).toBeTruthy()
   })
 
@@ -377,158 +397,107 @@ describe('the preset list', () => {
     expect(actions.load).toHaveBeenCalledTimes(2)
   })
 })
-it('reads the roster once and sets a default from the card body', async () => {
-  const actions = view()
-  fireEvent.click(screen.getByRole('button', { name: `${en.setDefault}: Mine` }))
-  expect(actions.makeDefault).toHaveBeenCalledWith('mine')
-  await waitFor(() =>{  expect(actions.load).toHaveBeenCalledOnce() })
-  expect(screen.queryByRole('button', { name: /^Edit plugins/ })).toBeNull()
-})
-it('replaces the default preset group tag with its new-task default status', () => {
-  view()
-  const standard = rowFor('standard')
-  expect(within(standard).queryByText(en.builtInGroup)).toBeNull()
-  expect(within(standard).getByText(en.inUse)).toBeTruthy()
-  expect(within(standard).queryByText(en.setDefault)).toBeNull()
-  expect(within(rowFor('mine')).getByText(en.customGroup)).toBeTruthy()
-})
-it('omits an empty group instead of leaving a heading behind', () => {
-  view({ rows: [{ id: 'standard', isDefault: true }] })
-  expect(screen.getByRole('heading', { name: en.builtInGroup })).toBeTruthy()
-  expect(screen.queryByRole('heading', { name: en.customGroup })).toBeNull()
-})
-it('keeps the custom group and its Creator entry while the roster has none', () => {
-  view({ rows: [{ id: 'cordis', isDefault: true }] }, vi.fn())
-  const group = screen.getByRole('heading', { name: en.customGroup }).closest('section')
-  expect(group).not.toBeNull()
-  expect(within(group!).queryByRole('list')).toBeNull()
-  expect(within(group!).getByRole('button', { name: en.creatorDraft })).toBeTruthy()
-})
-it('launches a Creator-mode task from the entry and closes the settings dialog', () => {
-  const launch = vi.fn()
-  const actions = view({ rows: [{ id: 'cordis', isDefault: true }] }, launch)
-  fireEvent.click(screen.getByRole('button', { name: en.creatorDraft }))
-  expect(launch).toHaveBeenCalledOnce()
-  expect(actions.close).toHaveBeenCalledOnce()
-})
-it('offers no Creator entry without the conversation flow or the cordis preset', () => {
-  view({ rows: [{ id: 'cordis', isDefault: true }] })
-  expect(screen.queryByRole('button', { name: en.creatorDraft })).toBeNull()
-  cleanup()
-  view({}, vi.fn())
-  expect(screen.queryByRole('button', { name: en.creatorDraft })).toBeNull()
-})
-it('disables the Creator entry when mode selection is hidden', () => {
-  const launch = vi.fn()
-  view({ showPicker: false, rows: [{ id: 'cordis', isDefault: true }] }, launch)
-  const button = screen.getByRole<HTMLButtonElement>('button', { name: en.creatorDraft })
-  expect(button.disabled).toBe(true)
-  expect(button.title).toBe(en.enablePickerToCreate)
-  fireEvent.click(button)
-  expect(launch).not.toHaveBeenCalled()
-})
-it('shows roster errors while the policy switch stays usable', () => {
-  const actions = view({ error: 'Roster stale', rows: [{ id: 'broken', isDefault: false, broken: 'Missing plugin' }] })
-  expect(screen.getAllByRole('alert').map(node => node.textContent)).toEqual(['Roster stale', 'Missing plugin'])
-  fireEvent.click(screen.getByRole('switch'))
-  expect(actions.setPickerVisible).toHaveBeenCalledWith(false)
-})
-it('identifies the effective default when the picker is hidden', () => {
-  view({ showPicker: false })
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: `${en.selectionOffDefault}: ${en.presetStandardName}` }).disabled).toBe(true)
-})
-it('keeps a broken card focusable for diagnostics and refuses to select it', () => {
-  const actions = view({ rows: [{ id: 'broken', isDefault: false, broken: 'Missing plugin' }] })
-  const card = screen.getByRole<HTMLButtonElement>('button', { name: 'Failed to load: broken' })
-  expect(card.disabled).toBe(false)
-  expect(card.getAttribute('aria-disabled')).toBe('true')
-  fireEvent.click(card)
-  expect(actions.makeDefault).not.toHaveBeenCalled()
-})
-it.each([
-  ['standard', en.presetStandardName, 'How it works', 'Fix a bug'],
-  ['ptc', en.presetPtcName, 'How tools are called', 'Check a set of configuration files'],
-  ['minimal', en.presetMinimalName, 'What is included', 'Compare performance on a small bug fix'],
-  ['cordis', en.presetCordisName, 'What you can create', 'Add a UI'],
-])('opens both help sections for %s without changing the default', (id, name, heading, exampleTitle) => {
-  const actions = view({ rows: [{ id, isDefault: false }] })
-  const trigger = within(rowFor(id)).getByRole('button', { name: `${en.modeExplanation}: ${name}` })
-  trigger.focus()
-  fireEvent.click(trigger)
-  const dialog = screen.getByRole('dialog', { name })
-  expect(within(dialog).getByRole('heading', { name: heading })).toBeTruthy()
-  const usage = within(dialog).getByRole('tab', { name: en.howToUse })
-  fireEvent.click(usage)
-  expect(usage.getAttribute('aria-selected')).toBe('true')
-  expect(within(dialog).getByRole('heading', { name: exampleTitle })).toBeTruthy()
-  expect(within(dialog).getAllByText(en.guideExampleTask).length).toBeGreaterThan(0)
-  fireEvent.click(within(dialog).getByRole('tab', { name: en.modeExplanation }))
-  expect(within(dialog).getByRole('heading', { name: heading })).toBeTruthy()
-  fireEvent.click(within(dialog).getByRole('button', { name: en.close }))
-  expect(document.activeElement).toBe(trigger)
-  fireEvent.click(within(rowFor(id)).getByRole('button', { name: `${en.howToUse}: ${name}` }))
-  expect(within(screen.getByRole('dialog')).getByRole('tab', { name: en.howToUse }).getAttribute('aria-selected')).toBe('true')
-  expect(actions.makeDefault).not.toHaveBeenCalled()
-})
-it('keeps keyboard focus in help and dismisses only the reader on Escape', () => {
-  const actions = view()
-  const trigger = within(rowFor('standard')).getByRole('button', { name: `${en.modeExplanation}: ${en.presetStandardName}` })
-  trigger.focus()
-  fireEvent.click(trigger)
-  const dialog = screen.getByRole('dialog')
-  const details = within(dialog).getByRole('tab', { name: en.modeExplanation })
-  const panel = within(dialog).getByRole('tabpanel', { name: en.modeExplanation })
-  const close = within(dialog).getByRole('button', { name: en.close })
-  expect(document.activeElement).toBe(details)
-  expect(fireEvent.keyDown(details, { key: 'Tab' })).toBe(true)
-  panel.focus()
-  fireEvent.keyDown(panel, { key: 'Tab' })
-  expect(document.activeElement).toBe(close)
-  fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
-  expect(document.activeElement).toBe(panel)
-  fireEvent.keyDown(panel, { key: 'Escape' })
-  expect(screen.queryByRole('dialog')).toBeNull()
-  expect(document.activeElement).toBe(trigger)
-  expect(actions.close).not.toHaveBeenCalled()
-})
-it('connects keyboard selection to the visible guide panel', () => {
-  view()
-  fireEvent.click(within(rowFor('standard')).getByRole('button', { name: `${en.modeExplanation}: ${en.presetStandardName}` }))
-  const dialog = screen.getByRole('dialog')
-  const details = within(dialog).getByRole('tab', { name: en.modeExplanation })
-  const usage = within(dialog).getByRole('tab', { name: en.howToUse })
-  expect(details.tabIndex).toBe(0)
-  expect(usage.tabIndex).toBe(-1)
-  fireEvent.keyDown(details, { key: 'ArrowRight' })
-  const panel = within(dialog).getByRole('tabpanel', { name: en.howToUse })
-  expect(panel.id).toBe(usage.getAttribute('aria-controls'))
-  expect(document.activeElement).toBe(usage)
-  expect(usage.getAttribute('aria-selected')).toBe('true')
-  expect(details.tabIndex).toBe(-1)
-  expect(usage.tabIndex).toBe(0)
-  expect(within(dialog).queryByRole('tabpanel', { name: en.modeExplanation })).toBeNull()
-})
-it('does not attach built-in claims to named or unknown presets', () => {
-  view({ rows: [{ id: 'ptc', name: 'My PTC', isDefault: false }, { id: 'third-party', isDefault: false }] })
-  expect(screen.queryByRole('button', { name: new RegExp(en.modeExplanation) })).toBeNull()
-  expect(screen.queryByRole('button', { name: new RegExp(en.howToUse) })).toBeNull()
-})
-it('leaves help usable when mode selection is disabled', () => {
-  const actions = view({ showPicker: false })
-  fireEvent.click(within(rowFor('standard')).getByRole('button', { name: `${en.howToUse}: ${en.presetStandardName}` }))
-  expect(screen.getByRole('dialog', { name: en.presetStandardName })).toBeTruthy()
-  expect(actions.setPickerVisible).not.toHaveBeenCalled()
-})
-it('closes help even when the browser reports no previously focused element', () => {
-  const activeElement = vi.spyOn(document, 'activeElement', 'get').mockReturnValue(null)
-  try {
-    view()
-    fireEvent.click(within(rowFor('standard')).getByRole('button', { name: `${en.modeExplanation}: ${en.presetStandardName}` }))
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en.close }))
-    expect(screen.queryByRole('dialog')).toBeNull()
-  } finally {
-    activeElement.mockRestore()
+
+describe('the copy dialog', () => {
+  const draft: CopyDraft = {
+    from: 'standard', fromTitle: '标准模式', id: '', name: '', saving: false, error: null,
   }
+
+  it('names its source and collects only an id and a display name', () => {
+    const actions = renderSection({ copy: draft })
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe(`${en.copyTitle} · ${en.copyOf} ${en.presetStandardName}`)
+    expect(within(dialog).getByText(en.copyIntro)).toBeTruthy()
+    fireEvent.change(within(dialog).getByPlaceholderText(en.presetIdPlaceholder), { target: { value: 'my-agent' } })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.displayNamePlaceholder), { target: { value: '我的模式' } })
+
+    expect(actions.setCopyId).toHaveBeenCalledWith('my-agent')
+    expect(actions.setCopyName).toHaveBeenCalledWith('我的模式')
+    // Nothing else is collected: the description and the composition are
+    // edited in the preset's own files.
+    expect(within(dialog).queryByRole('textbox', { name: /description/i })).toBeNull()
+  })
+
+  it('creates and cancels through the controller', () => {
+    const actions = renderSection({ copy: { ...draft, id: 'my-agent' } })
+
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByText(en.create))
+    fireEvent.click(within(dialog).getByText(en.cancel))
+
+    expect(actions.confirmCopy).toHaveBeenCalledTimes(1)
+    expect(actions.cancelCopy).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks a copy the host would refuse, and says why', () => {
+    const actions = renderSection({ copy: { ...draft, id: 'Upper Case' } })
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('alert').textContent).toBe(en.idInvalid)
+    fireEvent.click(within(dialog).getByText(en.create))
+
+    // Disabled rather than round-tripping: the id is a directory name and the
+    // rule is the host's own.
+    expect(actions.confirmCopy).not.toHaveBeenCalled()
+  })
+
+  it('shows the host\'s refusal instead of the local blocker', () => {
+    renderSection({ copy: { ...draft, id: 'my-agent', error: 'already exists' } })
+
+    expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe('already exists')
+  })
+
+  it('reports a copy in flight and blocks a second click', () => {
+    const actions = renderSection({ copy: { ...draft, id: 'my-agent', saving: true } })
+
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.creating))
+
+    expect(actions.confirmCopy).not.toHaveBeenCalled()
+  })
+
+  it('dismisses on Escape', () => {
+    const actions = renderSection({ copy: draft })
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(actions.cancelCopy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the direct-create dialog', () => {
+  const draft: CreateDraft = {
+    id: '', name: '', prompt: '', saving: false, error: null,
+  }
+
+  it('opens from Add preset and collects the identity and system prompt', () => {
+    const actions = renderSection()
+    fireEvent.click(screen.getByRole('button', { name: en.addPreset }))
+    expect(actions.beginCreate).toHaveBeenCalledTimes(1)
+
+    cleanup()
+    const open = renderSection({ create: draft })
+    const dialog = screen.getByRole('dialog', { name: en.addPreset })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.presetIdPlaceholder), { target: { value: 'red-team' } })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.displayNamePlaceholder), { target: { value: 'Red Team' } })
+    fireEvent.change(within(dialog).getByPlaceholderText(en.systemPromptPlaceholder), { target: { value: 'Stay in scope.' } })
+
+    expect(open.setCreateId).toHaveBeenCalledWith('red-team')
+    expect(open.setCreateName).toHaveBeenCalledWith('Red Team')
+    expect(open.setCreatePrompt).toHaveBeenCalledWith('Stay in scope.')
+  })
+
+  it('submits a valid draft and blocks an invalid id', () => {
+    const valid = renderSection({ create: { ...draft, id: 'red-team' } })
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.create))
+    expect(valid.confirmCreate).toHaveBeenCalledTimes(1)
+
+    cleanup()
+    const invalid = renderSection({ create: { ...draft, id: '../escape' } })
+    expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe(en.idInvalid)
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(en.create))
+    expect(invalid.confirmCreate).not.toHaveBeenCalled()
+  })
 })
 
 describe('the read-only viewer', () => {
@@ -627,7 +596,14 @@ describe('deleting a preset', () => {
 describe('a long card description', () => {
   /** jsdom has no ResizeObserver; the description watches its own box through one. */
   class ResizeObserverStub {
-    observe(): void {}
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element): void {
+      const size = { inlineSize: 240, blockSize: 80 }
+      this.callback([{
+        target, borderBoxSize: [size], contentBoxSize: [size], devicePixelContentBoxSize: [size],
+        contentRect: new DOMRect(0, 0, size.inlineSize, size.blockSize),
+      }], this)
+    }
     unobserve(): void {}
     disconnect(): void {}
   }

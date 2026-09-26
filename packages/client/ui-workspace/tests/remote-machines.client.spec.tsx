@@ -147,12 +147,17 @@ describe('RemoteMachineControl', () => {
 
     const modeButton = screen.getByRole('button', { name: 'Agent mode: Red Team' })
     const machineButton = screen.getByRole('button', { name: 'Execution machine: TEST-HOST' })
+    const runsButton = screen.getByRole('button', { name: 'Pentest runs' })
     expect(modeButton.compareDocumentPosition(machineButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(machineButton.compareDocumentPosition(runsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     fireEvent.click(modeButton)
     const modeIcons = ['Blue Team', 'Red Team', 'Black Team'].map(name =>
       screen.getByRole('menuitem', { name }).querySelector('svg')?.innerHTML)
     expect(modeIcons.every(Boolean)).toBe(true)
     expect(new Set(modeIcons).size).toBe(3)
+    expect(['Blue Team', 'Red Team', 'Black Team'].map(name =>
+      screen.getByRole('menuitem', { name }).querySelector('[data-agent-mode]')?.getAttribute('data-agent-mode')))
+      .toEqual(['blue', 'red', 'black'])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Blue Team' }))
     expect(agentMode.set).toHaveBeenCalledWith('blue')
     expect(screen.getByRole('status').textContent).toContain('Switching to Blue Team…')
@@ -230,6 +235,80 @@ describe('RemoteMachineControl', () => {
     await waitFor(() => { expect(startSession).toHaveBeenCalledWith('workspace-remote') })
     expect(probe).toHaveBeenCalledWith('machine-server', undefined)
     expect(createWorkspace).toHaveBeenCalledWith(path)
+  })
+
+  it('lists run artifacts and downloads one through the operator action', async () => {
+    const localWorkspace = {
+      workspaceId: 'workspace-local', path: 'C:\lab', title: 'Lab', sessionIds: ['session-local'],
+      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    const run = {
+      id: 'run-lab', objective: 'Assess the lab', mode: 'red', status: 'active',
+      authorizedTargets: ['lab.example'], excludedTargets: [],
+      testWindow: { startsAt: '2026-09-20T00:00:00.000Z', endsAt: '2026-09-21T00:00:00.000Z' },
+      createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:30:00.000Z',
+    }
+    const artifact = {
+      id: 'episode-map:artifact:probe', runId: 'run-lab', taskId: 'task-map', episodeId: 'episode-map',
+      toolCallId: 'episode-map:tool:probe', locator: 'file:///private/spill/probe.json',
+      bytes: 24, originalBytes: 96, truncated: true, sha256: 'c'.repeat(64),
+      mediaType: 'application/json', createdAt: '2026-09-20T00:10:01.000Z',
+    }
+    const listPentestRuns = vi.fn(async () => [run])
+    const loadPentestRun = vi.fn(async () => ({
+      run, tasks: [], ptt: [], hypotheses: [], attempts: [], events: [], branches: [],
+      coverage: { complete: true, phases: [] },
+      convergence: { stagnant: false, recentEpisodeWindow: 3, warnings: [] },
+      observations: [], evidence: [], artifacts: [artifact], findings: [], graphNodes: [],
+      graphEdges: [], episodes: [], toolCalls: [],
+      usage: {
+        meteredEpisodes: 0, pricedEpisodes: 0, inputTokens: 0, outputTokens: 0,
+        cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, totalTokens: 0, costUsd: 0,
+      },
+      operatorDecisions: [],
+    }))
+    const loadPentestArtifact = vi.fn(async () => ({
+      artifactId: artifact.id, toolCallId: artifact.toolCallId, content: '{"raw":"tool output"}',
+      bytes: 24, originalBytes: 96, truncated: true, sha256: 'c'.repeat(64), mediaType: 'application/json',
+    }))
+    const createObjectURL = vi.fn(() => 'blob:pentest-artifact')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperties(URL, {
+      createObjectURL: { configurable: true, value: createObjectURL },
+      revokeObjectURL: { configurable: true, value: revokeObjectURL },
+    })
+
+    render(<RemoteMachineControl {...({
+      locked: false,
+      useSession: hook({ sessionId: 'session-local' }),
+      useWorkspaces: hook({ items: [localWorkspace] }),
+      useHostInfo: hook({ home: undefined, hostname: 'TEST-HOST', isLoopback: true }),
+      useRemoteMachines: hook({ status: 'ready', error: null, machines: [] }),
+      controller: { load: vi.fn(), probe: vi.fn(), trust: vi.fn() },
+      agentMode,
+      createWorkspace: vi.fn(),
+      startSession: vi.fn(),
+      listPentestRuns,
+      loadPentestRun,
+      loadPentestArtifact,
+      controlPentestRun: vi.fn(),
+      controlPentestTask: vi.fn(),
+      replacePentestScope: vi.fn(),
+      createPentestRun: vi.fn(),
+      startPentestLoop: vi.fn(),
+      stopPentestLoop: vi.fn(),
+      listRunningPentestLoops: vi.fn(async () => []),
+      t,
+    } as unknown as RemoteMachineControlProps)} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pentest runs' }))
+    await waitFor(() => { expect(loadPentestRun).toHaveBeenCalledWith('run-lab') })
+    expect(screen.getByText('episode-map:tool:probe')).toBeTruthy()
+    expect(screen.getByText(/24 \/ 96 B/).textContent).toContain('truncated')
+    fireEvent.click(screen.getByRole('button', { name: 'Download artifact' }))
+    await waitFor(() => { expect(loadPentestArtifact).toHaveBeenCalledWith('run-lab', artifact.id) })
+    await waitFor(() => { expect(createObjectURL).toHaveBeenCalled() })
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:pentest-artifact')
   })
 
   it('verifies and trusts a saved host before opening an existing remote workspace', async () => {

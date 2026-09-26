@@ -139,6 +139,32 @@ describe('privateRoot', () => {
 describe('LocalSpillStore service', () => {
   // These tests exercise save/root resolution, not cleanup; disabling the sweep
   // (cleanupPeriodDays: 0) keeps them from scanning/sweeping the real tmpdir.
+  it('reads back a saved artifact for its owning session', async () => {
+    const store = new LocalSpillStore(new Context(), { root, cleanupPeriodDays: 0 })
+    const ref = await store.saveText(request({ content: 'the full body' }))
+    await expect(store.readText({ owner: request().owner, locator: ref.locator })).resolves.toEqual({
+      content: 'the full body',
+      bytes: 13,
+    })
+  })
+
+  it('rejects a read whose locator belongs to another owner scope', async () => {
+    const store = new LocalSpillStore(new Context(), { root, cleanupPeriodDays: 0 })
+    const ref = await store.saveText(request({ owner: { sessionId: SessionId('sess-1') } }))
+    await expect(store.readText({
+      owner: { sessionId: SessionId('sess-other') },
+      locator: ref.locator,
+    })).rejects.toThrow('outside the owning session scope')
+  })
+
+  it('rejects a read when the artifact file is gone', async () => {
+    const store = new LocalSpillStore(new Context(), { root, cleanupPeriodDays: 0 })
+    const ref = await store.saveText(request())
+    rmSync(ref.locator)
+    await expect(store.readText({ owner: request().owner, locator: ref.locator }))
+      .rejects.toThrow('no longer available')
+  })
+
   it('registers as ctx.spillStore and saves under the configured root', async () => {
     const ctx = new Context()
     await ctx.plugin(LocalSpillStore, { root, cleanupPeriodDays: 0 })

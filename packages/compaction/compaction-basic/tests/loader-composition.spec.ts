@@ -90,8 +90,8 @@ describe('real Loader composition', () => {
     await agent.whenIdle()
     expect(calls).toBe(2)
     expect(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')).toHaveLength(2)
-    expect(agent.session.deriveMessages().some(message => message.source.kind === 'plugin'
-      && message.source.plugin === 'output-limit-continuation')).toBe(true)
+    expect(agent.session.deriveMessages().some(message =>
+      message.source.kind === 'output-limit-continuation')).toBe(true)
   })
 
   it('loads the shipped token-meter, pruning, and compaction-basic YAML order', async () => {

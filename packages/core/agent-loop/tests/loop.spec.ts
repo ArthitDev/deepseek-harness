@@ -541,7 +541,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     const request = adapter.requests[0]
-    expect(request!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.\n\nNever announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.')
+    expect(systemOf(request)).toBe('You are an AI agent powered by DeepSeek Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.\n\nNever announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.')
     expect(request!.tools?.map(t => t.name)).toEqual(['noop'])
   })
 

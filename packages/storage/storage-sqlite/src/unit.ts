@@ -9,7 +9,7 @@
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite'
 import { StorageError } from '@deepseek-ai/dsh-storage'
-import type { KvUnit, KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
+import type { KvRecordWrite, KvUnit, KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
 import { recordTableName } from './schema.ts'
 
 /** Prepared statements for one declared table. */
@@ -36,7 +36,7 @@ export class SqliteKvUnit implements KvUnit {
    * @param onClose - Backend callback releasing this unit's open-name slot.
    */
   constructor(
-    db: DatabaseSync,
+    private readonly db: DatabaseSync,
     private readonly descriptor: KvUnitDescriptor,
     private readonly onClose: () => void,
   ) {
@@ -99,6 +99,33 @@ export class SqliteKvUnit implements KvUnit {
   putRecord(table: string, key: string, value: unknown): Promise<void> {
     return this.settle(() => {
       this.statementsFor(table).upsert.run(key, JSON.stringify(value))
+    })
+  }
+
+  putRecords(entries: readonly KvRecordWrite[]): Promise<void> {
+    return this.settle(() => {
+      if (entries.length === 0) return
+      // Resolve every statement before opening the transaction, so an
+      // undeclared table rejects without leaving a rollback to run.
+      const prepared = entries.map(entry => ({
+        statement: this.statementsFor(entry.table).upsert,
+        key: entry.key,
+        value: JSON.stringify(entry.value),
+      }))
+      this.db.exec('BEGIN IMMEDIATE')
+      try {
+        for (const entry of prepared) entry.statement.run(entry.key, entry.value)
+        this.db.exec('COMMIT')
+      } catch (error: unknown) {
+        try {
+          this.db.exec('ROLLBACK')
+        } catch {
+          // A failed COMMIT on this connection still ends its transaction;
+          // nothing further can be rolled back, and the original error is
+          // the one callers and the medium's state actually disagree about.
+        }
+        throw error
+      }
     })
   }
 

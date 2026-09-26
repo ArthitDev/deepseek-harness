@@ -41,6 +41,10 @@ interface ComWorld {
   registered: number
   unregistered: number
   uninitialized: number
+  /** The synthesized keybd_event calls, in order. */
+  keyEvents: { vk: number; flags: number }[]
+  /** Cross-cutting call trace shared by keybd_event and the dialog Show slot. */
+  nativeOrder: string[]
   destroyedWindows: unknown[]
   destroyedIcons: unknown[]
   foregroundWindows: unknown[]
@@ -55,7 +59,7 @@ function comWorld(overrides: Partial<ComWorld> = {}): ComWorld {
     titles: [], options: [], dpiContexts: [], freed: [], released: [], posted: [],
     str16PointerSizes: [],
     registered: 0, unregistered: 0, uninitialized: 0,
-    destroyedWindows: [], destroyedIcons: [], foregroundWindows: [], windowMessages: [],
+    keyEvents: [], nativeOrder: [], destroyedWindows: [], destroyedIcons: [], foregroundWindows: [], windowMessages: [],
     ...overrides,
   }
 }
@@ -132,6 +136,10 @@ function installFakeKoffi(world: ComWorld, options: {
               world.windowMessages.push({ hwnd, message, wparam, lparam }); return 0
             }
             case 'DestroyIcon': return (icon: unknown) => { world.destroyedIcons.push(icon); return 1 }
+            case 'keybd_event': return (vk: number, _scan: number, flags: number, _extra: unknown) => {
+              world.keyEvents.push({ vk, flags })
+              world.nativeOrder.push(flags === 0 ? 'alt-down' : 'alt-up')
+            }
             case 'SetThreadDpiAwarenessContext': {
               if (!world.hasThreadDpi) throw new Error(`${dll}: SetThreadDpiAwarenessContext not found`)
               return (context: unknown) => {

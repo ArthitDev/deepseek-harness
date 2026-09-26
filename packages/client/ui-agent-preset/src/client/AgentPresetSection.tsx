@@ -1,6 +1,6 @@
 /**
- * Agent-presets settings section: the roster as cards, a copy dialog as the
- * only way a preset is created, a read-only viewer over shipped compositions,
+ * Agent-presets settings section: the roster as cards, direct-create and copy
+ * dialogs, a read-only viewer over shipped compositions,
  * and an editor over custom compositions.
  *
  * A shipped preset stays the known-good source a copy starts from. A custom
@@ -11,22 +11,20 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Button, IconBrowseOutline16, IconCopyOutline16, IconEditOutline16, IconFolderOpenOutline16,
-  IconPlusOutline16, IconTrashOutline16, Modal, Tooltip,
+  Button, IconBrowseOutlineRegular, IconCopyOutlineRegular, IconEditOutlineRegular, IconFolderOpenOutlineRegular,
+  IconPlusOutlineRegular, IconTrashOutlineRegular, Modal, Switch, Tag, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { AgentPresetSectionState } from './section-store.ts'
-import { isBuiltInPreset, presetDisplayText } from './locales.ts'
-import { PresetGuideDialog, presetGuide, type PresetGuidePage } from './PresetGuideDialog.tsx'
+import { draftBlocker, type AgentPresetSectionState } from './section-store.ts'
+import { presetDisplayText, type AgentPresetSettingsKey } from './locales.ts'
 import css from './AgentPresetSection.module.css'
 
-/** Settings actions and their shared controller state. */
+/** Registration-side business face for the management section. */
 export interface AgentPresetSectionInjected {
   hooks: {
+    /** Page snapshot bound by the renderer as useAgentPresetSection. */
     agentPresetSection: SnapshotStore<AgentPresetSectionState>
-    /** Shared preference controlling the picker-policy row. */
-    developerTools: ObservableSnapshot<boolean>
   }
   /** Read the roster; called once when the section first renders. */
   load: () => Promise<void>
@@ -48,6 +46,18 @@ export interface AgentPresetSectionInjected {
   setCopyName: (name: string) => void
   /** Submit the copy. */
   confirmCopy: () => Promise<void>
+  /** Open the direct-create dialog. */
+  beginCreate: () => void
+  /** Close the direct-create dialog. */
+  cancelCreate: () => void
+  /** Replace the direct-create id. */
+  setCreateId: (id: string) => void
+  /** Replace the direct-create display name. */
+  setCreateName: (name: string) => void
+  /** Replace the direct-create system prompt. */
+  setCreatePrompt: (prompt: string) => void
+  /** Submit direct creation. */
+  confirmCreate: () => Promise<void>
   /** Open one preset's directory, or reveal its path where there is no desktop. */
   openLocation: (id: string) => Promise<void>
   /**
@@ -56,14 +66,175 @@ export interface AgentPresetSectionInjected {
    * is composed without the conversation flow to land the session in.
    */
   startCreatorDraft?: () => void
-  load: () => Promise<void>
+  /** Ask for delete confirmation, or dismiss it with null. */
+  confirmDelete: (id: string | null) => void
+  /** Delete the preset awaiting confirmation. */
+  remove: () => Promise<void>
+  /** Make one preset the default for sessions created later. */
   makeDefault: (id: string) => Promise<void>
+  /** Show or hide preset selection on new-session surfaces. */
+  setPickerVisible: (showPicker: boolean) => Promise<void>
   /** Set one model's preset, or return it to the default preset. */
   bindModel: (provider: string, model: string, preset: string | undefined) => Promise<void>
 }
-/** Props assembled by the settings renderer. */
-export type AgentPresetSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.agentPreset'> & InjectFace<AgentPresetSectionInjected>
 
+/** Direct-create dialog over an id, display name, and system prompt. */
+function CreateDialog({ state, t, actions }: {
+  state: AgentPresetSectionState
+  t: (key: AgentPresetSettingsKey) => string
+  actions: Pick<AgentPresetSectionInjected,
+    'cancelCreate' | 'confirmCreate' | 'setCreateId' | 'setCreateName' | 'setCreatePrompt'>
+}): ReactNode {
+  const draft = state.create
+  const blocker = draft === null ? undefined : draftBlocker(draft, state.rows)
+  const message = draft === null ? null : draft.error ?? (blocker === undefined ? null : t(blocker))
+  return (
+    <Modal
+      open={draft !== null}
+      onClose={() => { actions.cancelCreate() }}
+      title={t('addPreset')}
+      closeLabel={t('close')}
+      description={t('createIntro')}
+      className={css.dialog as string}
+      footer={(
+        <>
+          <Button variant="outline" disabled={draft?.saving === true} onClick={() => { actions.cancelCreate() }}>
+            {t('cancel')}
+          </Button>
+          <Button
+            disabled={draft === null || draft.saving || blocker !== undefined}
+            onClick={() => { void actions.confirmCreate() }}
+          >
+            {draft?.saving === true ? t('creating') : t('create')}
+          </Button>
+        </>
+      )}
+    >
+      {draft === null ? null : (
+        <div className={css.dialogFields}>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('presetId')}</span>
+            <input
+              className={css.input}
+              value={draft.id}
+              autoFocus
+              spellCheck={false}
+              placeholder={t('presetIdPlaceholder')}
+              onChange={(event) => { actions.setCreateId(event.target.value) }}
+            />
+          </label>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('displayName')}</span>
+            <input
+              className={css.input}
+              value={draft.name}
+              spellCheck={false}
+              placeholder={t('displayNamePlaceholder')}
+              onChange={(event) => { actions.setCreateName(event.target.value) }}
+            />
+          </label>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('systemPrompt')}</span>
+            <textarea
+              className={`${css.input} ${css.promptInput}`}
+              value={draft.prompt}
+              spellCheck={false}
+              placeholder={t('systemPromptPlaceholder')}
+              onChange={(event) => { actions.setCreatePrompt(event.target.value) }}
+            />
+          </label>
+          {message === null ? null : <p className={css.error} role="alert">{message}</p>}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+/** Full component props. */
+export type AgentPresetSectionProps =
+  PropsRuntime<'settings.section'>
+  & PropsLocale<'settings.agentPreset'>
+  & InjectFace<AgentPresetSectionInjected>
+
+/** Copy-dialog sub-view props: the draft plus the actions that mutate it. */
+interface CopyDialogProps {
+  state: AgentPresetSectionState
+  t: (key: AgentPresetSettingsKey) => string
+  actions: Pick<AgentPresetSectionInjected,
+    'cancelCopy' | 'confirmCopy' | 'setCopyId' | 'setCopyName'>
+}
+
+function CopyDialog({ state, t, actions }: CopyDialogProps): ReactNode {
+  const draft = state.copy
+  const blocker = draft === null ? undefined : draftBlocker(draft, state.rows)
+  const message = draft === null ? null : draft.error ?? (blocker === undefined ? null : t(blocker))
+  const source = draft === null ? undefined : state.rows.find(row => row.id === draft.from)
+  const sourceTitle = source === undefined ? draft?.fromTitle : presetDisplayText(source, t).name
+  return (
+    <Modal
+      open={draft !== null}
+      onClose={() => { actions.cancelCopy() }}
+      title={draft === null ? t('copyTitle') : `${t('copyTitle')} · ${t('copyOf')} ${sourceTitle}`}
+      closeLabel={t('close')}
+      description={t('copyIntro')}
+      className={css.dialog as string}
+      footer={(
+        <>
+          <Button
+            variant="outline"
+            disabled={draft?.saving === true}
+            onClick={() => { actions.cancelCopy() }}
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            disabled={draft === null || draft.saving || blocker !== undefined}
+            onClick={() => { void actions.confirmCopy() }}
+          >
+            {draft?.saving === true ? t('creating') : t('create')}
+          </Button>
+        </>
+      )}
+    >
+      {draft === null
+        ? null
+        : (
+          <div className={css.dialogFields}>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>{t('presetId')}</span>
+              <input
+                className={css.input}
+                value={draft.id}
+                autoFocus
+                spellCheck={false}
+                placeholder={t('presetIdPlaceholder')}
+                onChange={(event) => { actions.setCopyId(event.target.value) }}
+              />
+            </label>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>{t('displayName')}</span>
+              <input
+                className={css.input}
+                value={draft.name}
+                spellCheck={false}
+                placeholder={t('displayNamePlaceholder')}
+                onChange={(event) => { actions.setCopyName(event.target.value) }}
+              />
+            </label>
+            {message === null ? null : <p className={css.error} role="alert">{message}</p>}
+          </div>
+        )}
+    </Modal>
+  )
+}
+
+/**
+ * Render one card's description, clamped by CSS and offered in full on hover.
+ * The tooltip is attached only while the text is actually cut off, so a short
+ * description does not answer a hover with a bubble repeating the card.
+ * @param props.text - the description as rendered, already localized.
+ * @returns the description element, tooltip-anchored while it overflows.
+ */
 function CardDescription({ text }: { text: string }): ReactNode {
   const ref = useRef<HTMLSpanElement | null>(null)
   const [truncated, setTruncated] = useState(false)
@@ -90,9 +261,10 @@ function CardDescription({ text }: { text: string }): ReactNode {
   )
 }
 
-/** Render the roster with its default, mode help, and the guidance to Creator mode.
- * @param props Settings actions, snapshot hooks and localized text.
- * @returns The preset settings section.
+/**
+ * Render the Agent presets section content column.
+ * @param props - composed slot props.
+ * @returns the section, or null when the deployment composes no presets.
  */
 export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
   const { useAgentPresetSection, t, load } = props
@@ -132,40 +304,88 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
       <button
         type="button"
         className={css.creatorButton}
-        disabled={!state.showPicker || state.policySaving}
-        title={state.showPicker ? undefined : t('enablePickerToCreate')}
-        onClick={() => { creator(); closeSettings() }}
+        disabled={!state.authorable || !state.showPicker || state.policySaving}
+        title={!state.showPicker
+          ? t('enablePickerToCreate')
+          : state.authorable ? undefined : t('duplicateUnavailable')}
+        onClick={() => {
+          props.startCreatorDraft?.()
+          props.close()
+        }}
       >
         <IconPlusOutlineRegular size={14} />
         {t('creatorDraft')}
       </button>
     )
     : null
+  const createSource = state.rows.find(row => row.isDefault && row.broken === undefined)
+  const addButton = (
+    <button
+      type="button"
+      className={css.creatorButton}
+      disabled={!state.authorable || createSource === undefined}
+      title={!state.authorable
+        ? t('duplicateUnavailable')
+        : createSource === undefined ? t('createUnavailable') : undefined}
+      onClick={() => { props.beginCreate() }}
+    >
+      <IconPlusOutlineRegular size={14} />
+      {t('addPreset')}
+    </button>
+  )
 
   return (
     <div className={css.section}>
       <h2 className={css.title}>{t('nav')}</h2>
       <p className={css.intro}>{t('sectionIntro')}</p>
+      <div className={css.pickerPreference}>
+        <div className={css.pickerPreferenceCopy}>
+          <span className={css.pickerPreferenceTitleRow}>
+            <span className={css.pickerPreferenceTitle}>{t('showPicker')}</span>
+            <Tag>{t('showPickerBeta')}</Tag>
+          </span>
+          <p className={css.pickerPreferenceDescription}>{t('showPickerDescription')}</p>
+        </div>
+        <Switch
+          checked={state.showPicker}
+          label={t('showPicker')}
+          disabled={state.status !== 'ready' || state.policySaving}
+          onChange={(next) => { void props.setPickerVisible(next) }}
+        />
+      </div>
       {state.error === null ? null : <p className={css.error} role="alert">{state.error}</p>}
       {([['system', t('builtInGroup')], ['user', t('customGroup')]] as const).map(([trust, heading]) => {
         const group = state.rows
           .filter(row => row.trust === trust)
-          .map(row => ({ row, text: presetDisplayText(row, t) }))
+          .map(row => ({
+            row,
+            text: presetDisplayText(row, t),
+            selectionAction: row.broken !== undefined
+              ? t('brokenBadge')
+              : row.isDefault
+                ? t(state.showPicker ? 'inUse' : 'selectionOffDefault')
+                : t(state.showPicker ? 'setDefault' : 'enablePickerToSetDefault'),
+          }))
         // The custom group is where a preset of one's own will appear, so it
         // stays on screen even while empty: heading plus the creator entry.
-        const tail = trust === 'user' ? creatorButton : null
+        const tail = trust === 'user' ? <>{addButton}{creatorButton}</> : null
         if (group.length === 0 && tail === null) return null
         return (
           <section key={trust} className={css.group}>
             <h3 className={css.groupHead}>{heading}</h3>
             {group.length === 0 ? null : (
               <ul className={css.cards}>
-                {group.map(({ row, text }) => (
+                {group.map(({ row, text, selectionAction }) => (
                   <li
                     key={row.id}
-                    className={row.broken !== undefined
-                      ? `${css.card} ${css.cardBroken}`
-                      : row.isDefault ? `${css.card} ${css.cardActive}` : css.card}
+                    className={[
+                      css.card,
+                      row.broken !== undefined ? css.cardBroken : undefined,
+                      row.isDefault ? css.cardActive : undefined,
+                      !state.showPicker && row.broken === undefined && !row.isDefault
+                        ? css.cardSelectionDisabled
+                        : undefined,
+                    ].filter(Boolean).join(' ')}
                   >
                     {/* The card body IS the control: picking a preset is the
                       common act, so it should not hide behind a small button.
@@ -183,15 +403,16 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                       // `disabled`, which would take the card out of the tab
                       // order. With the reason moved onto the badge, that is
                       // the only way anyone without a pointer reaches it.
-                      disabled={row.isDefault}
+                      disabled={row.isDefault
+                        || (row.broken === undefined && (!state.showPicker || state.policySaving))}
                       aria-disabled={row.broken !== undefined}
                       // Without this the name is the whole card read aloud —
                       // title, badge, description, id.
-                      aria-label={`${row.broken !== undefined ? t('brokenBadge') : row.isDefault ? t('inUse') : t('setDefault')}: ${text.name}`}
+                      aria-label={`${selectionAction}: ${text.name}`}
                       // The reason rides the badge, not the whole card: two
                       // tooltips over one target would race, and the card's
                       // own label answers what clicking it would do.
-                      title={row.broken !== undefined ? t('brokenBadge') : row.isDefault ? t('inUse') : t('setDefault')}
+                      title={selectionAction}
                       onClick={() => {
                         if (row.broken !== undefined) return
                         void props.makeDefault(row.id)
@@ -211,10 +432,16 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                             </span>
                           )
                           : null}
-                        <span className={css.badge}>
+                        <Tag>
                           {row.trust === 'user' ? t('userTrust') : t('builtIn')}
-                        </span>
-                        {row.isDefault ? <span className={css.inUse}>{t('inUse')}</span> : null}
+                        </Tag>
+                        {row.isDefault
+                          ? (
+                            <Tag tone="solid" className={css.inUse}>
+                              {state.showPicker ? t('inUse') : t('selectionOffDefault')}
+                            </Tag>
+                          )
+                          : null}
                       </span>
                       <CardDescription text={text.description ?? t('noDescription')} />
                       {/* Visually hidden, deliberately: the pointer path is the
@@ -281,7 +508,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                               aria-label={`${t('view')}: ${text.name}`}
                               onClick={() => { void props.view(row.id) }}
                             >
-                              <IconBrowseOutline16 />
+                              <IconBrowseOutlineRegular />
                             </button>
                           )
                           : null
@@ -294,7 +521,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                               aria-label={`${t('edit')}: ${text.name}`}
                               onClick={() => { void props.view(row.id) }}
                             >
-                              <IconEditOutline16 />
+                              <IconEditOutlineRegular />
                             </button>
                             <button
                               type="button"
@@ -303,7 +530,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                               aria-label={`${state.hasDocument ? t('openLocation') : t('showLocation')}: ${text.name}`}
                               onClick={() => { void props.openLocation(row.id) }}
                             >
-                              <IconFolderOpenOutline16 />
+                              <IconFolderOpenOutlineRegular />
                             </button>
                           </>
                         )}
@@ -317,7 +544,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                         aria-label={`${t('duplicate')}: ${text.name}`}
                         onClick={() => { props.beginCopy(row.id) }}
                       >
-                        <IconCopyOutline16 />
+                        <IconCopyOutlineRegular />
                       </button>
                       {row.trust === 'user'
                         ? (
@@ -328,7 +555,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                             aria-label={`${t('delete')}: ${text.name}`}
                             onClick={() => { props.confirmDelete(row.id) }}
                           >
-                            <IconTrashOutline16 />
+                            <IconTrashOutlineRegular />
                           </button>
                         )
                         : null}
@@ -357,6 +584,17 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
           confirmCopy: props.confirmCopy,
           setCopyId: props.setCopyId,
           setCopyName: props.setCopyName,
+        }}
+      />
+      <CreateDialog
+        state={state}
+        t={t}
+        actions={{
+          cancelCreate: props.cancelCreate,
+          confirmCreate: props.confirmCreate,
+          setCreateId: props.setCreateId,
+          setCreateName: props.setCreateName,
+          setCreatePrompt: props.setCreatePrompt,
         }}
       />
       <Modal

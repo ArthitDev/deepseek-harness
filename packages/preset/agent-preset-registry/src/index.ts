@@ -52,6 +52,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
     default: z.string().required(),
     selectedDefault: z.string().volatile(),
     modeSelectionEnabled: z.boolean().default(true).volatile(),
+    models: z.dict(z.dict(z.string())).volatile(),
   })
   private readonly owner: Context
   private readonly definitions = new Map<string, Definition>()
@@ -60,7 +61,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
   private readonly switches = new Map<string, Promise<unknown>>()
 
   constructor(ctx: Context, public config: Config) {
-    super(ctx, 'agentPresets')
+    super(ctx, 'agentPresets', { namespace: 'agentPresetRegistry' })
     this.owner = ctx
     ctx.sessionProjections.register(agentPresetProjectionDefinition)
     ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
@@ -75,6 +76,18 @@ export class AgentPresetRegistry extends TypertRemoteService {
   private policy(): { enabled: boolean; defaultId: string } {
     const enabled = this.config.modeSelectionEnabled.get()
     return { enabled, defaultId: enabled ? this.config.selectedDefault.get() ?? this.config.default : this.config.default }
+  }
+
+  /**
+   * Resolve the preset configured for one model route.
+   * @param provider - model provider route.
+   * @param model - model identifier within the provider.
+   * @returns the route override, or the current default preset when unbound.
+   */
+  presetIdForModel(provider: string, model: string): string {
+    const policy = this.policy()
+    if (!policy.enabled) return policy.defaultId
+    return this.config.models?.get()?.[provider]?.[model] ?? policy.defaultId
   }
 
   /** Register and eagerly load a definition; activation failure remains visible in the roster.
@@ -174,8 +187,13 @@ export class AgentPresetRegistry extends TypertRemoteService {
   @Remote('list')
   async remoteExportList(): Promise<AgentPresetRoster> {
     const policy = this.policy()
-    return { presets: (await this.list()).map(row => ({ ...row, isDefault: row.id === policy.defaultId })),
-      modeSelectionEnabled: policy.enabled }
+    return {
+      presets: (await this.list()).map(row => ({ ...row, isDefault: row.id === policy.defaultId })),
+      authorable: false,
+      modeSelectionEnabled: policy.enabled,
+      models: [],
+      modelPresets: {},
+    }
   }
 
   /** Resolve an identity without starting an Agent.

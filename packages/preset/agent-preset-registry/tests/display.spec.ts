@@ -10,7 +10,7 @@ const t = (key: BuiltInPresetCopyKey): string => `t:${key}`
 
 describe('presetDisplayText', () => {
   it('resolves a shipped preset through its dictionary keys', () => {
-    expect(presetDisplayText({ id: 'standard' }, t)).toEqual({
+    expect(presetDisplayText({ id: 'standard', name: '标准模式' }, t)).toEqual({
       name: 't:presetStandardName',
       description: 't:presetStandardDescription',
     })

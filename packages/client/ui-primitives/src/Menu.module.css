@@ -204,10 +204,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* Selected cell keeps the plain fill (marker is the trailing check); the
- * class remains as a hook for owner-side emphasis. */
 .selected {
-  background: transparent;
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-brand-text);
+}
+
+.selected .check {
+  color: var(--dsw-alias-brand-text);
 }
 
 /* Fill-mode selection: the row holds the hover fill instead of a check. */

@@ -164,7 +164,7 @@ export class SubagentContinuationManager {
           parent,
           create: {
             seed,
-            meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined),
+            meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined, agentOptions),
             inheritedEventCount,
             delegatedPolicies,
             descriptor,

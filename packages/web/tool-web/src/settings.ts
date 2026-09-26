@@ -1,6 +1,6 @@
 /** Host-owned preference for forcing web search on every user request. */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 
@@ -20,37 +20,22 @@ export interface WebSearchPolicySettings {
   always: boolean
 }
 
-export const WEB_SEARCH_POLICY_SETTINGS_SCHEMA: z<WebSearchPolicySettings> = z.object({
-  always: z.boolean().default(false),
+export const WEB_SEARCH_POLICY_SETTINGS_SCHEMA = z.object({
+  always: z.boolean().default(false).volatile(),
 })
 
 /** Optional deployment default beneath the user setting. */
 export interface Config {
-  always?: boolean
+  always: Volatile<boolean>
 }
 
 /** Own the global setting read by every preset-scoped tool-web instance. */
 export class WebSearchPolicyConfig extends Service {
-  static Config: z<Config> = z.object({ always: z.boolean().default(false) })
+  static Config = WEB_SEARCH_POLICY_SETTINGS_SCHEMA
 
-  private source: () => WebSearchPolicySettings
-
-  constructor(ctx: Context, config: Config = {}) {
+  constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'webSearchPolicy')
-    const entry = { always: config.always ?? false }
-    this.source = () => entry
-    ctx.inject(['settings'], (settingsCtx) => {
-      settingsCtx.settings.installSection(
-        ctx,
-        WEB_SEARCH_POLICY_SETTINGS_NAMESPACE,
-        WEB_SEARCH_POLICY_SETTINGS_SCHEMA,
-        entry,
-        {
-          setSource: (source) => { this.source = source },
-          onChange: () => {},
-        },
-      )
-    })
+    ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
   }
 
   /**
@@ -58,7 +43,7 @@ export class WebSearchPolicyConfig extends Service {
    * @returns the current global web-search policy.
    */
   current(): WebSearchPolicySettings {
-    return { ...this.source() }
+    return { always: this.config.always.get() }
   }
 }
 

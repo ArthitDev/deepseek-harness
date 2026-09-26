@@ -1,9 +1,9 @@
 // An enclosing `[data-conversation-scroll]` owns scrolling when present;
 // otherwise this view owns it. Each row subscribes to one stable node key.
 
-import { memo, useCallback, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import type {
-  NodeKey, RenderEntry, RenderMessageImages,
+  ConversationTimelineSnapshot, NodeKey, RenderEntry, RenderMessageImages,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -18,9 +18,9 @@ import { ChatGroupSeat } from './ChatGroupSeat.tsx'
 import { chatRenderKey } from './render-entry.ts'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { TurnNavigator } from './TurnNavigator.tsx'
-import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
+import { mergeTurnRailItems } from './turn-rail-items.ts'
 import { formatRunDuration } from './message-chrome.ts'
-import a11yCss from './accessibility.module.css'
+import { useChatScroll } from './use-chat-scroll.ts'
 import css from './ChatView.module.css'
 
 /** Host/OS refusal text for the file-open dialog; empty throws keep a locale fallback. */
@@ -55,6 +55,41 @@ function observedInputs(
 
 type PendingInput = PendingSubmission | InboxState['next-step'][number]
 
+function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | null {
+  let latest: number | null = null
+  for (const turn of timeline.turns.values()) {
+    if (turn.status === 'open') latest = turn.start?.time ?? null
+  }
+  return latest
+}
+
+/** Turn-level model activity retained across first-token, tool, and streaming phases. */
+function TurnStatus({ startTime, t }: {
+  readonly startTime: number | null
+  readonly t: ChatViewSlotProps['t']
+}) {
+  const [mountedAt] = useState(() => Date.now())
+  const anchor = startTime ?? mountedAt
+  const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - anchor))
+  useEffect(() => {
+    const tick = (): void => { setElapsedMs(Math.max(0, Date.now() - anchor)) }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => { clearInterval(id) }
+  }, [anchor])
+  return (
+    <div className={css.turnStatus} aria-live="polite">
+      <span className={css.turnStatusLogo} aria-hidden="true" />
+      <span className={css.turnStatusLabel}>{t('chat.deepDiving')}</span>
+      {elapsedMs >= 15_000 && (
+        <span className={css.turnStatusClock} aria-hidden>
+          {formatRunDuration(elapsedMs, t)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 type ChatNodeListProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey' | 'groupPart'> & {
   readonly entries: readonly RenderEntry[]
   readonly useChatGroup: ChatViewSlotProps['useChatGroup']
@@ -73,33 +108,13 @@ const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pending
       default:
         return assertNever(entry)
     }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => { clearInterval(id) }
-  }, [anchor])
-  // Short turns keep the plain label; the clock only appears once the turn
-  // has clearly been running for a while.
-  const showClock = elapsedMs >= 15_000
-  return (
-    <div className={css.turnStatus} role="status" aria-live="polite">
-      <span className={css.turnStatusLogo} aria-hidden="true" />
-      <span className={a11yCss.visuallyHidden}>{t('chat.deepDiving')}</span>
-      {showClock && (
-        <span className={css.turnStatusClock} aria-hidden>
-          {formatRunDuration(elapsedMs, t)}
-        </span>
-      )}
-    </div>
-  )
-}
-
-type ChatNodeListProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey'> & {
-  readonly order: readonly string[]
-}
-
-const ChatNodeList = memo(function ChatNodeList({ order, ...seatProps }: ChatNodeListProps) {
-  return order.map(nodeKey => (
-    <ChatNodeSeat key={nodeKey} nodeKey={nodeKey} {...seatProps} />
+  })
+  const pendingRows = pendingInputs.map(item => 'requestId' in item ? (
+    <PendingSubmissionBubble key={item.requestId} submission={item}
+      renderMessageImages={seatProps.renderMessageImages} t={seatProps.t} />
+  ) : (
+    <PendingSteeringBubble key={item.id} content={item.content}
+      renderMessageImages={seatProps.renderMessageImages} t={seatProps.t} />
   ))
   const tail = entries.at(-1)
   const node = tail?.kind === 'node' ? seatProps.nodeStore.get(tail.key) : undefined
@@ -127,6 +142,7 @@ export function ChatView({
   const entries = useMemo<readonly RenderEntry[]>(() => groupedEntries
     ?? order.map(key => ({ kind: 'node', key: key as NodeKey })), [groupedEntries, order])
   const nodeStore = useChat(s => s.nodes)
+  const timeline = useChat(s => s.timeline)
   // The rail's items are accumulated in the Chat snapshot, so this selector is
   // both the data and its change signal: the array identity moves only when a
   // Turn enters, leaves, or changes its preview.
@@ -215,6 +231,7 @@ export function ChatView({
     owner => renderSlot('conversation.message.images', { ...owner, loadImage }),
     [loadImage, renderSlot],
   )
+  const runningTurnStart = useMemo(() => runningTurnStartTime(timeline), [timeline])
 
   const firstKey = order[0]
   const firstSeq = firstKey === undefined ? null : nodeStore.get(firstKey)?.anchorSeq ?? null
@@ -282,6 +299,7 @@ export function ChatView({
                 t={t}
               />
             </MarkdownDelegateProvider>
+            {running && <TurnStatus startTime={runningTurnStart} t={t} />}
             {/* No pending placeholders: questions (ui-user-questions) and approvals
                 (ApprovalPanel) both take over the composer, so a flow card would
                 double-render the same wait. */}

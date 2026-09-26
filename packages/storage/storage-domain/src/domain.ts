@@ -93,6 +93,15 @@ export interface KvTable<K extends string, V> {
 export type DomainGlobalHandleOf<S extends DomainSpec> =
   S extends { readonly global: DomainGlobalSpec<infer G> } ? DomainGlobal<G> : never
 
+/** One typed record upsert inside a {@link Domain.commit} batch. */
+export type DomainWriteOf<S extends DomainSpec> = {
+  [N in keyof S['tables'] & string]: {
+    readonly table: N
+    readonly key: TableKeyOf<S, N>
+    readonly value: TableValueOf<S, N>
+  }
+}[keyof S['tables'] & string]
+
 /** One open domain, typed by its spec. */
 export interface Domain<S extends DomainSpec> {
   /** Domain name from the spec. */
@@ -106,6 +115,19 @@ export interface Domain<S extends DomainSpec> {
    * @returns the typed table handle.
    */
   table<N extends keyof S['tables'] & string>(name: N): KvTable<TableKeyOf<S, N>, TableValueOf<S, N>>
+
+  /**
+   * Upsert every write as one batch, queued on the domain's single write
+   * chain. When the backend unit supports an atomic batch
+   * ({@link KvUnit.putRecords}) the medium either holds every record or none;
+   * otherwise each record falls back to one sequential durable put, exactly
+   * as repeated `put` calls would. Change events emit after durability, one
+   * per record, in batch order. Overwrite semantics per record match `put`;
+   * callers keep idempotency (deterministic keys, conflict pre-checks).
+   * @param writes - Fully formed records to upsert; an empty batch is a no-op.
+   * @returns resolution after the batch's durability and event emission.
+   */
+  commit(writes: readonly DomainWriteOf<S>[]): Promise<void>
 
   /**
    * Close this domain: reject new writes immediately, drain already-queued
@@ -233,6 +255,38 @@ export class DomainImpl {
     return this.disposal
   }
 
+  /**
+   * Upsert every write as one batch, queued on the domain's single write
+   * chain. When the backend unit supports an atomic batch (`putRecords`) the
+   * medium either holds every record or none; otherwise each record falls
+   * back to one sequential durable put, exactly as repeated `put` calls
+   * would. Change events emit after durability, one per record, in batch
+   * order. Overwrite semantics per record match `put`; callers keep
+   * idempotency (deterministic keys, conflict pre-checks).
+   * @param writes - Fully formed records to upsert; an empty batch is a no-op.
+   * @returns resolution after the batch's durability and event emission.
+   */
+  commit(writes: readonly DomainWriteOf<DomainSpec>[]): Promise<void> {
+    return this.enqueue(async () => {
+      if (writes.length === 0) return
+      // Validate every table reference before any write so a bad batch fails
+      // loud with the medium untouched.
+      const resolved = writes.map((write) => {
+        const table = this.tables.get(write.table)
+        if (table === undefined) {
+          throw new Error(`domain '${this.name}' declares no table '${write.table}'`)
+        }
+        return { table, key: write.key, value: write.value }
+      })
+      if (this.unit.putRecords !== undefined) {
+        await this.unit.putRecords(writes)
+        for (const write of resolved) write.table.applyInMemory(write.key, write.value)
+      } else {
+        for (const write of resolved) await write.table.applyDurable(write.key, write.value)
+      }
+    })
+  }
+
   private async runClose(): Promise<void> {
     this.disposing = true
     // Chain links never reject (each is settled via then(noop, noop)), so
@@ -343,6 +397,18 @@ class KvTableImpl<K extends string, V> implements KvTable<K, V> {
       this.emitPut(key, next)
       return next
     })
+  }
+
+  /** Publish one already-durable batch record into memory and emit its event. Only a domain chain job may call this. */
+  applyInMemory(key: K, value: V): void {
+    this.records.set(key, value)
+    this.emitPut(key, value)
+  }
+
+  /** Durably upsert one record inside an already-serialized domain job. Only a domain chain job may call this. */
+  async applyDurable(key: K, value: V): Promise<void> {
+    await this.host.unit.putRecord(this.tableName, key, value)
+    this.applyInMemory(key, value)
   }
 
   private emitPut(key: K, value: V): void {

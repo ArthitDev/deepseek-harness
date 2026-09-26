@@ -55,6 +55,8 @@ export function SettingsValueField(props: Omit<SettingsFieldProps, 'hint'> & {
   numeric?: boolean
   /** Placeholder shown while the draft is empty. */
   placeholder?: string
+  /** Render a textarea for list or JSON values. */
+  multiline?: boolean
 }) {
   const [helpOpen, setHelpOpen] = useState(false)
   const helpId = `${props.id}-help`
@@ -92,18 +94,34 @@ export function SettingsValueField(props: Omit<SettingsFieldProps, 'hint'> & {
           )
           : null}
       </div>
-      <input
-        id={props.id}
-        className={css.input}
-        type="text"
-        {...props.numeric === true ? { inputMode: 'numeric' as const } : {}}
-        {...props.invalid ? { 'aria-invalid': true } : {}}
-        aria-describedby={description || undefined}
-        value={props.text}
-        placeholder={props.placeholder ?? ''}
-        disabled={props.disabled}
-        onChange={(event) => { props.onEdit(event.target.value) }}
-      />
+      {props.multiline
+        ? (
+          <textarea
+            id={props.id}
+            className={`${css.input} ${css.textarea}`}
+            rows={4}
+            {...props.invalid ? { 'aria-invalid': true } : {}}
+            aria-describedby={description || undefined}
+            value={props.text}
+            placeholder={props.placeholder ?? ''}
+            disabled={props.disabled}
+            onChange={(event) => { props.onEdit(event.target.value) }}
+          />
+        )
+        : (
+          <input
+            id={props.id}
+            className={css.input}
+            type="text"
+            {...props.numeric === true ? { inputMode: 'numeric' as const } : {}}
+            {...props.invalid ? { 'aria-invalid': true } : {}}
+            aria-describedby={description || undefined}
+            value={props.text}
+            placeholder={props.placeholder ?? ''}
+            disabled={props.disabled}
+            onChange={(event) => { props.onEdit(event.target.value) }}
+          />
+        )}
       {hasMessage
         ? <p id={messageId} className={props.invalid ? css.invalid : css.hint}>{props.invalid ? props.invalidLabel : props.hint}</p>
         : null}

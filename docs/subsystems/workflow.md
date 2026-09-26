@@ -212,6 +212,14 @@ Host service backing the generated `ctx.remote.pentestRuns` namespace.
 @Remote snapshot(runId: string): Promise<PentestRunSnapshot>
 
 /**
+ * Read one retained raw artifact back through the run's spill backend.
+ * @param runId - run identity from the Remote caller.
+ * @param artifactId - canonical artifact identity from the run snapshot.
+ * @returns the artifact metadata plus its verbatim content.
+ */
+@Remote loadArtifact(runId: string, artifactId: string): Promise<PentestArtifactContent>
+
+/**
  * Apply an operator-owned run lifecycle transition.
  * @param runId - run identity from the Remote caller.
  * @param request - requested run lifecycle transition.
@@ -236,7 +244,7 @@ Host service backing the generated `ctx.remote.pentestRuns` namespace.
 @Remote replaceScope(runId: string, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>
 ```
 
-Types: [ControlPentestRunRequest](../../packages/pentest/pentest-run/README.md) · [ControlPentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.md) · [PentestTaskRecord](../../packages/pentest/pentest-run/README.md) · [ReplacePentestScopeRequest](../../packages/pentest/pentest-run/README.md)
+Types: [ControlPentestRunRequest](../../packages/pentest/pentest-run/README.md) · [ControlPentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [PentestArtifactContent](../../packages/pentest/pentest-run/README.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.md) · [PentestTaskRecord](../../packages/pentest/pentest-run/README.md) · [ReplacePentestScopeRequest](../../packages/pentest/pentest-run/README.md)
 
 Source: [`packages/pentest/pentest-run/src/remote.ts`](../../packages/pentest/pentest-run/src/remote.ts)
 
@@ -339,6 +347,17 @@ replaceScope(runId: PentestRunId, request: ReplacePentestScopeRequest): Promise<
 commitEpisode( leaseId: PentestLeaseId, request: CommitPentestEpisodeRequest, ): Promise<CommittedPentestEpisode>
 
 /**
+ * Read one run's retained artifact back through the configured spill
+ * backend. The owner scope is the producing executor episode's session, so
+ * a locator is resolvable only inside that session's storage; an expired or
+ * swept artifact rejects without touching canonical state.
+ * @param runId - Run that owns the artifact.
+ * @param artifactId - Canonical artifact identity from the run snapshot.
+ * @returns the artifact metadata plus its verbatim content.
+ */
+loadArtifact(runId: PentestRunId, artifactId: PentestArtifactId): Promise<PentestArtifactContent>
+
+/**
  * Build a complete point-in-time run projection after preceding writes settle.
  * @param runId - Run to project.
  * @returns canonical records belonging to the run.
@@ -352,9 +371,17 @@ snapshot(runId: PentestRunId): Promise<PentestRunSnapshot>
 listRuns(): Promise<readonly PentestRunRecord[]>
 ```
 
-Types: [CommitPentestEpisodeRequest](../../packages/pentest/pentest-run/README.md) · [CommittedPentestEpisode](../../packages/pentest/pentest-run/README.md) · [ControlPentestRunRequest](../../packages/pentest/pentest-run/README.md) · [ControlPentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [CreatePentestRunRequest](../../packages/pentest/pentest-run/README.md) · [CreatePentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [LeasePentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [PentestLeaseId](../../packages/pentest/pentest-run/README.md) · [PentestRunId](../../packages/pentest/pentest-run/README.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.md) · [PentestTaskId](../../packages/pentest/pentest-run/README.md) · [PentestTaskLease](../../packages/pentest/pentest-run/README.md) · [PentestTaskRecord](../../packages/pentest/pentest-run/README.md) · [ReplacePentestScopeRequest](../../packages/pentest/pentest-run/README.md)
+Types: [CommitPentestEpisodeRequest](../../packages/pentest/pentest-run/README.md) · [CommittedPentestEpisode](../../packages/pentest/pentest-run/README.md) · [ControlPentestRunRequest](../../packages/pentest/pentest-run/README.md) · [ControlPentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [CreatePentestRunRequest](../../packages/pentest/pentest-run/README.md) · [CreatePentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [LeasePentestTaskRequest](../../packages/pentest/pentest-run/README.md) · [PentestArtifactContent](../../packages/pentest/pentest-run/README.md) · [PentestArtifactId](../../packages/pentest/pentest-run/README.md) · [PentestLeaseId](../../packages/pentest/pentest-run/README.md) · [PentestRunId](../../packages/pentest/pentest-run/README.md) · [PentestRunRecord](../../packages/pentest/pentest-run/README.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.md) · [PentestTaskId](../../packages/pentest/pentest-run/README.md) · [PentestTaskLease](../../packages/pentest/pentest-run/README.md) · [PentestTaskRecord](../../packages/pentest/pentest-run/README.md) · [ReplacePentestScopeRequest](../../packages/pentest/pentest-run/README.md)
 
 Source: [`packages/pentest/pentest-run/src/index.ts`](../../packages/pentest/pentest-run/src/index.ts)
+
+<a id="ctxreconengineoptions--reconengineoptions"></a>
+
+### `ctx.reconEngineOptions` — `ReconEngineOptions`
+
+Deployment-varying limits and scope the engine runs under.
+
+Source: [`packages/pentest/recon-engine/src/engine.ts`](../../packages/pentest/recon-engine/src/engine.ts)
 
 <a id="ctxworkflowengine--workflowengine-abstract-seam"></a>
 

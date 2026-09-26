@@ -68,7 +68,7 @@
       "path": "../../todo/tool-todo"
     },
     {
-      "path": "../locale"
+      "path": "../locale/tsconfig.client.json"
     },
     {
       "path": "../../settings/settings"
@@ -77,10 +77,10 @@
       "path": "../../interaction/permission-presets"
     },
     {
-      "path": "../ui-settings"
+      "path": "../ui-settings/tsconfig.client.json"
     },
     {
-      "path": "../ui-theme"
+      "path": "../ui-theme/tsconfig.client.json"
     },
     {
       "path": "../../util/crypto"

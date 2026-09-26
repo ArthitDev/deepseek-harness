@@ -29,6 +29,12 @@ import { ConversationGroupRegistry } from './group-registry.ts'
 export interface ConversationBinding {
   readonly snapshot: ObservableSnapshot<ConversationSnapshot>
   /**
+   * Record visible activity produced outside the Session event stream.
+   * The marker is monotonic for this binding's lifetime.
+   * @param source - stable feature identity such as `recon`.
+   */
+  markActivity(source: string): void
+  /**
    * Add one selected target to the Session's monotonic active set.
    * @param target - registered or subsequently registered Conversation target.
    */
@@ -49,6 +55,7 @@ class BoundConversation implements ConversationBinding {
   readonly snapshot: SnapshotStore<ConversationSnapshot>
   private readonly viewStore: ConversationViewSnapshotStore
   private readonly targetSources = new Map<string, ObservableSnapshot<unknown>>()
+  private readonly externalActivity = new Set<string>()
   private revision = -1
   private frame: number | undefined
   private disposeFeed: () => void = () => {}
@@ -86,6 +93,12 @@ class BoundConversation implements ConversationBinding {
 
   activate(target: string): void {
     if (this.assembler.activateTarget(target)) this.snapshot.set(this.currentSnapshot())
+  }
+
+  markActivity(source: string): void {
+    if (this.externalActivity.has(source)) return
+    this.externalActivity.add(source)
+    this.snapshot.set(this.currentSnapshot())
   }
 
   rebuild(): void { this.publish(this.assembler.rebuildRegistry()) }
@@ -160,9 +173,11 @@ class BoundConversation implements ConversationBinding {
   }
 
   private currentSnapshot(): ConversationSnapshot {
+    const activeTargets = new Set(this.assembler.activityTargets())
+    for (const source of this.externalActivity) activeTargets.add(source)
     return {
       views: this.viewStore,
-      activeTargets: this.assembler.activityTargets(),
+      activeTargets,
     }
   }
 }
@@ -182,6 +197,7 @@ export class UiConversation extends Service {
   /** Business grouping rules over already materialized target Nodes. */
   readonly groups: ConversationGroupRegistry
   private readonly bindings = new WeakMapWithValues<SessionBinding, BindingRecord>()
+  private readonly viewOpeners = new Map<SessionId, (target: string, focus?: string) => void>()
   private readonly images: HistoricalImageCache
 
   /**
@@ -245,6 +261,36 @@ export class UiConversation extends Service {
     )
     record.disposeScope = () => { void disposeScope() }
     return binding
+  }
+
+  /**
+   * Bind the rendered shell's View action face for one Session.
+   * @param sessionId - Session owning the rendered shell.
+   * @param open - Shell callback selecting a target and optional focus anchor.
+   */
+  setViewOpener(sessionId: SessionId, open: (target: string, focus?: string) => void): void {
+    this.viewOpeners.set(sessionId, open)
+  }
+
+  /**
+   * Open one registered View through the same selection path as its tab.
+   * @param sessionId - Session owning the rendered shell.
+   * @param target - Registered Conversation target.
+   * @param focus - Optional target-owned focus anchor.
+   */
+  openView(sessionId: SessionId, target: string, focus?: string): void {
+    const open = this.viewOpeners.get(sessionId)
+    if (open === undefined) throw new Error(`uiConversation.openView: session "${sessionId}" has no rendered shell`)
+    open(target, focus)
+  }
+
+  /**
+   * Mark one Session active because a feature completed work outside its event stream.
+   * @param sessionId - Session whose activity changed.
+   * @param source - Feature reporting the activity.
+   */
+  markActivity(sessionId: SessionId, source: string): void {
+    this.binding(sessionId).markActivity(source)
   }
 
   /**
@@ -314,6 +360,7 @@ export class UiConversation extends Service {
   private drop(record: BindingRecord, releaseScope: boolean): void {
     if (this.bindings.get(record.source) !== record) return
     this.bindings.delete(record.source)
+    this.viewOpeners.delete(record.source.sessionId)
     record.binding.dispose()
     if (releaseScope) record.disposeScope()
   }

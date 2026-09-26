@@ -209,7 +209,9 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   }
   const activateView = (sessionId: SessionId, preferred: string | null): void => {
     const active = resolveActiveView(viewTabs(), preferred)
-    if (active !== undefined) uiConversation.binding(sessionId).activate(active.id)
+    if (active === undefined) return
+    uiConversation.binding(sessionId).activate(active.id)
+    viewSelection.set(active.id)
   }
   const restoreView = (sessionId: SessionId): void => {
     activateView(sessionId, readConversationViewPreference(sessionId))
@@ -223,6 +225,9 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     bindings.add(binding)
     binding.ctx.effect(() => () => { bindings.delete(binding) }, 'ui-conversation: active Provider binding')
   }
+  // Raw selected-view id of the current session; the resident ConversationRoot
+  // reads it to scope chat-only chrome (the transcript width handles).
+  const viewSelection = createSnapshotStore<string | null>(null)
   const refreshViews = (): void => {
     const current = conversationViews.getSnapshot()
     const next = viewTabs()
@@ -307,6 +312,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
       },
+      viewSelection,
       selectWorkspace: workspaceId => workspaceNavigation.openWorkspace(workspaceId, (nextId) => {
         if (sessionId !== undefined && nextId !== sessionId) {
           const from = inputHub.shell(sessionId)
@@ -338,11 +344,13 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     },
     store: conversationStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => {
-      const openView = (view: string, focus: string): void => {
+      const openView = (view: string, focus?: string): void => {
         if (!viewTabs().some(tab => tab.id === view)) return
         activateView(sessionId, view)
-        actions.openView(view, focus)
+        if (focus === undefined) actions.setView(view)
+        else actions.openView(view, focus)
       }
+      uiConversation.setViewOpener(sessionId, openView)
       const inspectionTarget = () => uiConversation.views.entries().find(definition =>
         definition.toolCallFocus !== undefined
         && conversationViews.getSnapshot().some(view => view.id === definition.target),

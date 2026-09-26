@@ -285,27 +285,40 @@ export function apply(ctx: Context, config: Config = {}): void {
     text: 'Check the [exit code: N] marker on every bash result; investigate failures before moving on.',
   })
 
-  ctx.tools.register(defineTool({
-    name: 'bash',
-    description: bashDescription(backgroundEnabled, escalationModes),
-    parameters: {
-      command: { type: 'string', required: true, description: 'The bash command to execute.' },
-      description: {
-        type: 'string',
-        description: 'Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. '
-          + '5-10 words (shown in the UI). Examples: "ls" → "List files in current directory"; '
-          + '"git status" → "Show working tree status"; "npm install" → "Install package dependencies".',
-      },
-      timeoutMs: { type: 'number', description: 'Timeout in milliseconds. The executor applies its configured default and cap, and kills the command on expiry.' },
-      workdir: { type: 'string', description: 'Working directory for this command. Defaults to the session workspace; a relative path is resolved against it.' },
-      ...backgroundEnabled ? {
-        run_in_background: { type: 'boolean' as const, description: 'Run in the background and return a job id immediately (collect with job_output, stop with job_kill). No timeout applies.' },
-      } : {},
-      ...escalationModes.length > 0 ? {
-        sandbox_permissions: {
-          type: 'string' as const,
-          enum: [...escalationModes],
-          description: 'The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.',
+  /**
+   * One registration of the `bash` tool. With a registry, every call
+   * registers its process as a job at its start; without one the tool is
+   * foreground-only and the executor's deadline kills the command.
+   */
+  const bashTool = (jobs: JobRegistry | undefined): ToolDefinition => {
+    const background = jobs !== undefined
+    const promote = background && promoteOnTimeout
+    /** Register the command as a job; the process spawns inside the starter, after admission. */
+    const startJob = (registry: JobRegistry, args: BashToolArgs, exec: ToolExecution, spec: ShellExecSpec): StartedJob => {
+      let proc: ShellExecution | undefined
+      let stopped: string | undefined
+      const id = registry.start({
+        kind: 'bash',
+        label: args.command,
+        ...exec.agent ? { owner: exec.agent.id } : {},
+        output: processSources(() => proc),
+        run: () => {
+          const hooks = processJob(
+            async (signal) => {
+              proc = await ctx.shell.execute({ ...spec, signal })
+              return proc
+            },
+            started => processOutcome(started, escalationModes),
+          )
+          return {
+            done: hooks.done,
+            // A kill from outside this call (the human's, a parallel job_kill)
+            // reaches the process here; its reason is what the model reads.
+            cancel: (reason) => {
+              stopped = reason
+              hooks.cancel(reason)
+            },
+          }
         },
       })
       return { id, process: () => proc, stopped: () => stopped }
@@ -387,8 +400,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         command: { type: 'string', required: true, description: 'The bash command to execute.' },
         description: {
           type: 'string',
-          required: true,
-          description: 'Clear, concise description of what this command does in active voice, '
+          description: 'Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. '
             + '5-10 words (shown in the UI). Examples: "ls" → "List files in current directory"; '
             + '"git status" → "Show working tree status"; "npm install" → "Install package dependencies".',
         },

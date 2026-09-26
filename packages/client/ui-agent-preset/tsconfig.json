@@ -48,13 +48,10 @@
       "path": "../../api/session-controller/tsconfig.client.json"
     },
     {
-      "path": "../../preset/agent-preset-registry"
+      "path": "../../preset/agent-presets"
     },
     {
       "path": "../../core/session"
-    },
-    {
-      "path": "../../util/values"
     }
   ]
 }

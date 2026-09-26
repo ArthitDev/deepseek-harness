@@ -693,6 +693,8 @@ export function isPermissive(license: string): boolean {
 export function assertRuntimeLicenses(dependencies: readonly { name: string; license: string }[]): void {
   const rejected = dependencies.filter(dep => !isPermissive(dep.license)
     && !isOwnerAuthorizedRuntime(dep.name)
+    // Reviewed for browser embedding: Fontsource redistributes this family under the SIL OFL.
+    && !(dep.name === '@fontsource/ibm-plex-sans-thai' && dep.license === 'OFL-1.1')
     && !(LIBREOFFICE_PACKAGES.has(dep.name) && dep.license === 'MPL-2.0'))
   if (rejected.length > 0) {
     throw new Error(`gen-third-party-notices: runtime ${rejected.map(dep => `${dep.name} (${dep.license})`).join(', ')} is not a permissive license; review the distribution terms and record the decision before regenerating.`)

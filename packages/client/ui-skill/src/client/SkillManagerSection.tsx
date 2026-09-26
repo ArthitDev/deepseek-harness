@@ -3,7 +3,7 @@ import type {
   InstalledSkillsValue, SkillInstallValue, SkillRemoveValue, SkillSearchValue, SkillSetEnabledValue,
   SkillTerminalOpenValue, SkillTerminalReadValue,
 } from '@deepseek-ai/dsh-api-remotes/client'
-import { Button, IconTrashOutline16, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconTrashOutlineRegular, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SkillKey } from './locales.ts'
 import css from './SkillManagerSection.module.css'
@@ -319,7 +319,7 @@ export function SkillManagerSection(props: SkillManagerSectionProps) {
                       disabled={busy !== ''}
                       onClick={() => { setPendingRemoval(skill.name) }}
                     >
-                      <IconTrashOutline16 />
+                      <IconTrashOutlineRegular />
                     </button>
                   </div>
                 </li>

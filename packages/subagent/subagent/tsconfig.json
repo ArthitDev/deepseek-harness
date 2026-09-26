@@ -39,7 +39,7 @@
       "path": "../../interaction/user-approval"
     },
     {
-      "path": "../../preset/agent-preset-registry"
+      "path": "../../preset/agent-presets"
     },
     {
       "path": "../../sandbox/sandbox"

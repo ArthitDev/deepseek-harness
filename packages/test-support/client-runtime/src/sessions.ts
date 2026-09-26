@@ -311,7 +311,7 @@ export class TestSessions implements ISessions {
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
+    method: 'create' | 'refreshProjections' | 'setSubagentCatalogOpen' | 'refreshSubagents'
       | 'clear' | 'refresh' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
@@ -630,31 +630,6 @@ export class TestSessions implements ISessions {
   async delete(id: SessionId): Promise<void> {
     this.calls.push({ method: 'delete', args: [id] })
     await this.remove(id)
-  }
-
-  /**
-   * Service-level selection call (recorded, then applied to the list store
-   * synchronously — inject callbacks call this outside any act window; the
-   * store notify is microtask-batched so the next stabilized step observes it).
-   * @param id - session id.
-   */
-  open(id: SessionId): void {
-    this.calls.push({ method: 'open', args: [id] })
-    this.require(id)
-    this.list.update((draft) => {
-      draft.current = id
-      draft.currentAddress = undefined
-    })
-  }
-
-  /** Open an existing fixture through its catalog address. */
-  openSubagent(address: SubagentAddress): void {
-    this.calls.push({ method: 'openSubagent', args: [address] })
-    this.require(address.childSessionId)
-    this.list.update((draft) => {
-      draft.current = address.childSessionId
-      draft.currentAddress = address
-    })
   }
 
   /** Resolve the current fixture's retained catalog address. */

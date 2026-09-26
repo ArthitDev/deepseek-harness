@@ -1,59 +1,80 @@
-/** The preset settings page only selects a preset; creating one starts a Creator-mode task. */
+// Web e2e scenario: direct preset creation and whole-preset duplication.
+// A shipped preset opens in a read-only viewer, direct creation collects a
+// system prompt, and duplication copies the whole directory. The section's other job is
+// getting the user TO the files: this lane pins `nativeOpen: false` (see the
+// overlay), so the location affordance answers the preset directory as text —
+// the deterministic branch a golden can hold on every platform.
+//
+// Zero model calls: no replay fixture mounts, so a stray stream fails loud.
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold } from './scaffold.ts'
-import { openSettings, ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
+import type { Locator } from 'playwright'
+import {
+  captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchConsole,
+  webSnapshotMode, type WebScaffold,
+} from './scaffold.ts'
+import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
 
-const EXPECTED = fileURLToPath(new URL('./expected/agent-preset-authoring', import.meta.url))
-const mode = webSnapshotMode()
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/agent-preset-authoring', import.meta.url))
+const SECTION_EXPECTED = join(SNAPSHOT_DIR, 'section.expected.md')
+const COPY_DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'copy-dialog.expected.md')
+const CREATED_EXPECTED = join(SNAPSHOT_DIR, 'created.expected.md')
+const DAMAGED_EXPECTED = join(SNAPSHOT_DIR, 'damaged.expected.md')
+/** The shipped roster, bundled inside the `dsh-agent-presets` package. */
+const SHIPPED_PRESETS = fileURLToPath(new URL('../../../packages/preset/agent-presets/presets', import.meta.url))
+const OVERLAY = fileURLToPath(new URL('./agent-preset-authoring.overlay.yml', import.meta.url))
+const MODE = webSnapshotMode()
 
-describe('web e2e: preset roster guidance', () => {
+describe('web e2e: direct agent-preset creation and duplication', () => {
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let userRoot: string
+
+  /** The settings dialog, opened on the Agent-presets section. */
+  function settingsDialog(): Locator {
+    return page.getByRole('dialog', { name: '设置' })
+  }
+
   beforeAll(async () => {
-    scaffold = await launchWebScaffold({ profile: { packages: [] } })
+    userRoot = await realpath(await mkdtemp(join(tmpdir(), 'dsh-web-e2e-presets-')))
+    scaffold = await launchWebScaffold({
+      extraOverlayPath: OVERLAY,
+      agentPresets: {
+        // The shipped root is the plugin's own, prepended before this.
+        roots: [{ path: userRoot, trust: 'user' }],
+        default: 'standard',
+      },
+    })
     browser = await chromium.launch()
+    // The scenario asserts the shipped Chinese copy, so the browser asks for it.
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
-    await openSettings(page, 'zh')
-    await page.getByRole('dialog', { name: '设置' }).getByRole('button', { name: 'Agent 预设' }).click()
-    await page.getByRole('heading', { name: 'Agent 预设' }).waitFor()
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
-  afterAll(async () => { await browser?.close(); await scaffold?.close() })
 
-  it('shows the shipped roster with mode help and no editing actions', async () => {
-    onTestFailed(() => saveFailureShot(page, 'preset-roster-section'))
-    await expect.poll(() => page.locator('[data-agent-preset-id]').count()).toBe(4)
-    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
-    await compareOrRefreshGolden(join(EXPECTED, 'section.expected.md'), snapshot, mode)
-    expect(snapshot).toContain('让 Agent 帮我创建预设模式')
-    expect(snapshot).not.toContain('查看配置')
-    expect(snapshot).not.toContain('复制预设')
-    expect(snapshot).not.toContain('编辑插件')
-    expect(snapshot).not.toContain('打开目录')
-    expect(snapshot).not.toContain('删除')
+  afterAll(async () => {
+    await browser?.close()
+    await scaffold?.close()
+    await rm(userRoot, { recursive: true, force: true })
   })
 
-  it('reads mode details and examples without changing the new-task default', async () => {
-    onTestFailed(() => saveFailureShot(page, 'preset-roster-guide'))
-    const settings = page.getByRole('dialog', { name: '设置' })
-    const trigger = settings.getByRole('button', { name: '模式说明: PTC 模式', exact: true })
-    await trigger.click()
-    const guide = page.getByRole('dialog', { name: 'PTC 模式', exact: true })
-    await guide.getByRole('heading', { name: '怎样调用工具', exact: true }).waitFor()
-    await guide.getByRole('tab', { name: '如何使用', exact: true }).click()
-    await guide.getByRole('heading', { name: '批量检查配置文件', exact: true }).waitFor()
-    await guide.getByRole('tab', { name: '如何使用', exact: true }).press('Escape')
-    await guide.waitFor({ state: 'detached' })
-    expect(await trigger.evaluate(element => document.activeElement === element)).toBe(true)
-    expect(await settings.getByRole('button', { name: '新任务默认: 标准模式', exact: true }).getAttribute('aria-pressed')).toBe('true')
-  })
+  it('offers direct creation beside duplication and Creator mode', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-section'))
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const dialog = settingsDialog()
+    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: 'Agent 预设' }).click()
+    await dialog.getByRole('heading', { name: 'Agent 预设' }).waitFor({ timeout: 10_000 })
+    await dialog.getByText('标准模式').first().waitFor({ timeout: 10_000 })
 
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
 
@@ -247,11 +268,17 @@ describe('web e2e: preset roster guidance', () => {
     // the way to a composed host session.
     await settingsDialog().getByRole('button', { name: '关闭' }).last().click()
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
-    await openSettings(page, 'zh')
-    const settings = page.getByRole('dialog', { name: '设置' })
-    await settings.getByRole('button', { name: 'Agent 预设' }).click()
-    await settings.getByRole('button', { name: '让 Agent 帮我创建预设模式', exact: true }).click()
-    await settings.waitFor({ state: 'detached', timeout: 10_000 })
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const dialog = settingsDialog()
+    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: 'Agent 预设' }).click()
+    await dialog.getByRole('button', { name: '用「创造模式」创作自定义预设' }).click()
+
+    // Leaving settings is part of the gesture: the flow lands on the
+    // new-session screen with the self-referential preset staged, and the
+    // blank session the flow produces composes from it on the host.
+    await dialog.waitFor({ state: 'detached', timeout: 10_000 })
+    await page.getByRole('button', { name: '创造模式' }).waitFor({ timeout: 10_000 })
     await expect.poll(async () => {
       const response = await scaffold.hostFetch('/api/session/list', {
         method: 'POST',
@@ -262,13 +289,14 @@ describe('web e2e: preset roster guidance', () => {
         }),
       })
       const body = await response.json() as {
-        result: { value?: { items: { projections?: { values: { agentPreset?: string | null } } }[] } }
+        result: { value?: { items: unknown[] } }
       }
-      return body.result.value?.items
-        .map(item => item.projections?.values.agentPreset)
-        .filter(preset => typeof preset === 'string') ?? []
-    }, { timeout: 15_000 }).toContain('cordis')
-  })
+      return JSON.stringify(body.result.value?.items ?? body.result)
+    }, { timeout: 15_000 }).toContain('"agentPreset":"cordis"')
+  }, 60_000)
 
-  it('runs without page errors or model calls', () => { expect(tripwire.pageErrors).toEqual([]) })
+  it('drove every surface without a page error or a stream warning', () => {
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
+  })
 })

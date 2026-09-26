@@ -291,28 +291,41 @@ export function apply(ctx: Context, config: Config = {}): void {
       + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.',
   })
 
-  ctx.tools.register(defineTool({
-    name: 'pwsh',
-    description: pwshDescription(backgroundEnabled, escalationModes),
-    /* jscpd:ignore-start -- deliberate mirror of dsh-tool-bash's parameter surface (pwsh-tool-and-executor Agent Note). */
-    parameters: {
-      command: { type: 'string', required: true, description: 'The PowerShell command to execute.' },
-      description: {
-        type: 'string',
-        description: 'Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. '
-          + '5-10 words (shown in the UI). Examples: "ls" → "List files in current directory"; '
-          + '"git status" → "Show working tree status"; "Get-Process" → "List running processes".',
-      },
-      timeoutMs: { type: 'number', description: 'Timeout in milliseconds. The executor applies its configured default and cap, and kills the command on expiry.' },
-      workdir: { type: 'string', description: 'Working directory for this command. Defaults to the session workspace; a relative path is resolved against it.' },
-      ...backgroundEnabled ? {
-        run_in_background: { type: 'boolean' as const, description: 'Run in the background and return a job id immediately (collect with job_output, stop with job_kill). No timeout applies.' },
-      } : {},
-      ...escalationModes.length > 0 ? {
-        sandbox_permissions: {
-          type: 'string' as const,
-          enum: [...escalationModes],
-          description: 'The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.',
+  /**
+   * One registration of the `pwsh` tool. With a registry, every call
+   * registers its process as a job at its start; without one the tool is
+   * foreground-only and the executor's deadline kills the command.
+   */
+  const pwshTool = (jobs: JobRegistry | undefined): ToolDefinition => {
+    const background = jobs !== undefined
+    const promote = background && promoteOnTimeout
+    /* jscpd:ignore-start -- the job start and wait mirror dsh-tool-bash's by design (pwsh-tool-and-executor Agent Note). */
+    /** Register the command as a job; the process spawns inside the starter, after admission. */
+    const startJob = (registry: JobRegistry, args: PwshToolArgs, exec: ToolExecution, spec: ShellExecSpec): StartedJob => {
+      let proc: ShellExecution | undefined
+      let stopped: string | undefined
+      const id = registry.start({
+        kind: 'pwsh',
+        label: args.command,
+        ...exec.agent ? { owner: exec.agent.id } : {},
+        output: processSources(() => proc),
+        run: () => {
+          const hooks = processJob(
+            async (signal) => {
+              proc = await ctx.shell.execute({ ...spec, signal })
+              return proc
+            },
+            started => processOutcome(started, escalationModes),
+          )
+          return {
+            done: hooks.done,
+            // A kill from outside this call (the human's, a parallel job_kill)
+            // reaches the process here; its reason is what the model reads.
+            cancel: (reason) => {
+              stopped = reason
+              hooks.cancel(reason)
+            },
+          }
         },
       })
       return { id, process: () => proc, stopped: () => stopped }
@@ -396,8 +409,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         command: { type: 'string', required: true, description: 'The PowerShell command to execute.' },
         description: {
           type: 'string',
-          required: true,
-          description: 'Clear, concise description of what this command does in active voice, '
+          description: 'Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. '
             + '5-10 words (shown in the UI). Examples: "ls" → "List files in current directory"; '
             + '"git status" → "Show working tree status"; "Get-Process" → "List running processes".',
         },
@@ -555,6 +567,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       /* jscpd:ignore-end */
       /* jscpd:ignore-start -- the background call card mirrors presentBashCall's by design (Agent Note). */
       presentCall: (args: PwshToolArgs): TerminalCallView | GenericCallView => {
+        const description = args.description ?? args.command
         // Background acknowledgements carry no terminal exit status; the generic
         // card mirrors the bash tool's background presentation.
         if (args.run_in_background === true) {
@@ -563,83 +576,53 @@ export function apply(ctx: Context, config: Config = {}): void {
             title: args.command,
             kind: 'execute',
             rawInput: args.command,
-            content: [{ type: 'text', text: args.description }],
+            content: [{ type: 'text', text: description }],
           }
         }
-        const jobs = ctx.get('jobs')
-        if (jobs === undefined) {
-          throw new Error('background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs')
-        }
-        // The caller owns cancellation until ctx.jobs commits detached ownership.
-        if (exec.signal.aborted) {
-          const error = new HarnessError('tool call aborted', TOOL_ABORTED)
-          error.name = 'AbortError'
-          throw error
-        }
-        // Task preflight finishes before the starter can spawn a process.
-        const id = jobs.start({
-          kind: 'pwsh',
-          label: args.command,
-          ...exec.agent ? { owner: exec.agent } : {},
-          run: () => {
-            const proc = ctx.shell.start(ctx.shell.resolve(request))
-            return {
-              cancel: () => void proc.kill(),
-              done: proc.done.then(() => processOutcome(proc)),
-              readOutput: () => renderPwshProcessRead(proc.readOutput(), proc.sandbox, escalationModes),
-            }
-          },
-        })
-        return { kind: 'background' as const, jobId: id }
-      }
-      const result = await ctx.shell.run(ctx.shell.resolve({
-        ...request,
-        signal: exec.signal,
-      }))
-      if (result.aborted) {
-        const error = new HarnessError('tool call aborted', TOOL_ABORTED)
-        error.name = 'AbortError'
-        throw error
-      }
-      return canonicalPwshResult(result)
-    },
-    /* jscpd:ignore-end */
-    /* jscpd:ignore-start -- the background call card mirrors presentBashCall's by design (Agent Note). */
-    presentCall: (args: PwshToolArgs): TerminalCallView | GenericCallView => {
-      const description = args.description ?? args.command
-      // Background acknowledgements carry no terminal exit status; the generic
-      // card mirrors the bash tool's background presentation.
-      if (args.run_in_background === true) {
         return {
           card: 'terminal',
           title: args.command,
-          kind: 'execute',
-          rawInput: args.command,
-          content: [{ type: 'text', text: description }],
+          description,
+          ...args.workdir !== undefined ? { cwd: args.workdir } : {},
         }
-      }
-      return {
-        card: 'terminal',
-        title: args.command,
-        description,
-        ...args.workdir !== undefined ? { cwd: args.workdir } : {},
-      }
-    },
-    /* jscpd:ignore-end */
-    /* jscpd:ignore-start -- the completed-result presentation mirrors presentBashResult's by design (Agent Note). */
-    presentResult: (args: unknown, result: ToolResult): ToolResultView | undefined => {
-      const block = result.content.length === 1 ? result.content[0] : undefined
-      if (block === undefined || block.type !== 'text') return undefined
-      const raw = block.text
-      const isBackground = typeof args === 'object' && args !== null && (args as { run_in_background?: unknown }).run_in_background === true
-      // Background acknowledgements and errors have no terminal exit status.
-      if (isBackground || result.isError) {
-        return { card: 'generic', content: [{ type: 'text', text: `\`\`\`console\n${raw.replace(/\n+$/, '')}\n\`\`\`` }] }
-      }
-      // The exit marker becomes the card's exit pill, so it leaves the output body.
-      const { body, ...exit } = parseExitStatus(raw)
-      return { card: 'terminal', output: body, ...exit }
-    },
-    /* jscpd:ignore-end */
-  }))
+      },
+      /* jscpd:ignore-end */
+      /* jscpd:ignore-start -- the completed-result presentation mirrors presentBashResult's by design (Agent Note). */
+      presentResult: (args: unknown, result: ToolResult): ToolResultView | undefined => {
+        const block = result.content.length === 1 ? result.content[0] : undefined
+        if (block === undefined || block.type !== 'text') return undefined
+        const raw = block.text
+        const isBackground = typeof args === 'object' && args !== null && (args as { run_in_background?: unknown }).run_in_background === true
+        const isPromoted = (result as { value?: { kind?: unknown } }).value?.kind === 'promoted'
+        // Background acknowledgements, promotions, and errors have no terminal exit status.
+        if (isBackground || isPromoted || result.isError) {
+          return { card: 'generic', content: [{ type: 'text', text: `\`\`\`console\n${raw.replace(/\n+$/, '')}\n\`\`\`` }] }
+        }
+        // The exit marker becomes the card's exit pill, so it leaves the output body.
+        const { body, ...exit } = parseExitStatus(raw)
+        return { card: 'terminal', output: body, ...exit }
+      },
+      /* jscpd:ignore-end */
+    })
+  }
+
+  // The background surface follows the registry. The foreground-only variant
+  // registers now unless a registry is already composed, the job-backed
+  // variant replaces it for as long as `ctx.jobs` is present, and the
+  // foreground-only one returns when the registry unloads while this plugin
+  // stays. Both registrations belong to this plugin's own fiber.
+  if (!backgroundEnabled) {
+    ctx.tools.register(pwshTool(undefined))
+    return
+  }
+  let foregroundOnly = ctx.get('jobs') === undefined ? ctx.tools.register(pwshTool(undefined)) : undefined
+  ctx.inject(['jobs'], (jobCtx) => {
+    foregroundOnly?.()
+    foregroundOnly = undefined
+    const unregister = ctx.tools.register(pwshTool(jobCtx.jobs))
+    jobCtx.effect(() => () => {
+      unregister()
+      if (ctx.fiber.state === FiberState.ACTIVE) foregroundOnly = ctx.tools.register(pwshTool(undefined))
+    })
+  })
 }

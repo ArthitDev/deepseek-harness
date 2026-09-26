@@ -1,9 +1,9 @@
 import { defineConfig } from 'vitest/config'
-import { vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
+import { vitestExecArgv, vitestPathsPlugin } from './vitest.shared.ts'
 
 /** Opt-in browser performance lane; no default Vitest config includes *.stress.ts. */
 export default defineConfig({
-  plugins: [vitestTsconfigPathsPlugin()],
+  plugins: [vitestPathsPlugin()],
   test: {
     execArgv: vitestExecArgv,
     include: ['apps/web/stress-tests/**/*.stress.ts'],

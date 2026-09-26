@@ -16,6 +16,7 @@ export default defineConfig([
     clean: false,
     deps: {
       alwaysBundle: ['@deepseek-ai/cordis-plugin-include'],
+      onlyBundle: ['@deepseek-ai/cordis-plugin-include'],
     },
   },
   {
@@ -29,6 +30,7 @@ export default defineConfig([
     clean: false,
     deps: {
       alwaysBundle: ['resolve.exports'],
+      onlyBundle: ['resolve.exports'],
     },
   },
 ])

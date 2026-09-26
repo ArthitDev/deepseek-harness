@@ -30,6 +30,8 @@ export interface AgentPresetModelRow {
 export interface AgentPresetRoster {
   /** Every current declaration, including activation failures. */
   readonly presets: readonly AgentPresetRow[]
+  /** Whether visible mode selection is enabled for unnamed new sessions. */
+  readonly modeSelectionEnabled: boolean
   /** Whether this deployment has a root locally authored presets go to. */
   readonly authorable: boolean
   /** Every model currently advertised by the live providers. */

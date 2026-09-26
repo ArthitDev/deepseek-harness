@@ -2077,6 +2077,44 @@ export interface Config {
 
 来源： [`packages/document/office-to-pdf/src/index.ts:31`](../packages/document/office-to-pdf/src/index.ts)
 
+<a id="deepseek-aidsh-pentest-executor"></a>
+
+## `@deepseek-ai/dsh-pentest-executor`
+
+```ts config-catalog
+/** Durable global operating mode for ordinary Web sessions. */
+export interface PentestModeSettings {
+  /** Global operating mode applied to ordinary Web sessions. */
+  readonly mode: PentestMode
+}
+```
+
+依赖：[`PentestMode`](../packages/pentest/pentest-run/src/index.ts)
+
+来源：[`packages/pentest/pentest-executor/src/index.ts:264`](../packages/pentest/pentest-executor/src/index.ts)
+
+<a id="deepseek-aidsh-pentest-run"></a>
+
+## `@deepseek-ai/dsh-pentest-run`
+
+需要：`storageDomain`
+
+```ts config-catalog
+/** Deployment-varying convergence thresholds for one run manager. */
+export interface PentestRunManagerConfig {
+  /** Recent completed episodes inspected by the evidence-stagnation check. */
+  readonly recentEpisodeWindow: number
+  /** Repeats of one identical action fingerprint that raise a repeated-action warning. */
+  readonly repeatedActionThreshold: number
+  /** Failed tasks for one target and kind that raise a repeated-hypothesis warning. */
+  readonly repeatedFailedHypothesisThreshold: number
+  /** Total retained raw-artifact bytes one run may commit before new artifacts are omitted. */
+  readonly maxRunArtifactBytes: number
+}
+```
+
+来源：[`packages/pentest/pentest-run/src/index.ts:867`](../packages/pentest/pentest-run/src/index.ts)
+
 <a id="deepseek-aidsh-permission-presets"></a>
 
 ## `@deepseek-ai/dsh-permission-presets`
@@ -2300,6 +2338,89 @@ export type Config = LocalConfig
 Depends on: [`LocalConfig`](#deepseek-aidsh-pwsh-local)
 
 来源： [`packages/shell/pwsh-sandbox/src/index.ts:40`](../packages/shell/pwsh-sandbox/src/index.ts)
+
+<a id="deepseek-aidsh-recon-engine"></a>
+
+## `@deepseek-ai/dsh-recon-engine`
+
+需要：`tools` · `systemPrompt` · `subprocess`
+
+```ts config-catalog
+/** Plugin config: operator scope, budgets, port lists, evidence location, and cache TTLs. */
+export interface Config {
+  /** Retained for configuration compatibility; the application accepts every target. */
+  authorizedTargets?: string[]
+  /** Retained for configuration compatibility; the application accepts every target. */
+  excludedTargets?: string[]
+  /**
+   * Accept any target the model names without an authorized-target match.
+   * Retained for configuration compatibility. The application always enables
+   * this behavior.
+   */
+  allowAnyTarget?: boolean
+  /** Directory holding one subdirectory per run plus the `_cache` index. Defaults to `.recon`. */
+  evidenceDir?: string
+  /** Per-request timeout budget (ms). Defaults to 10000. */
+  requestTimeoutMs?: number
+  /** Maximum redirect hops followed per probe. Defaults to 5. */
+  maxRedirects?: number
+  /** Maximum bytes downloaded per response. Defaults to 2000000. */
+  maxResponseBytes?: number
+  /** Maximum bytes per public metadata document. Defaults to 200000. */
+  maxDiscoveryBodyBytes?: number
+  /** Maximum JS asset bodies downloaded per deep run. Defaults to 50. */
+  maxJsFiles?: number
+  /** Maximum pages the bounded deep crawl visits. Defaults to 50. */
+  maxPages?: number
+  /** Maximum link depth the bounded deep crawl follows. Defaults to 3. */
+  maxDepth?: number
+  /** Concurrent requests inside the deep crawl. Defaults to 4. */
+  crawlConcurrency?: number
+  /** Maximum source maps downloaded per deep run. Defaults to 20. */
+  maxSourceMaps?: number
+  /** Maximum endpoints inventoried and probed per deep run. Defaults to 100. */
+  maxApiEndpoints?: number
+  /** Maximum in-scope hosts resolved and probed per deep run. Defaults to 25. */
+  maxHosts?: number
+  /** Hard cap on total HTTP requests per deep run. Defaults to 300. */
+  maxTotalRequests?: number
+  /** Hard wall-clock budget per run (ms). Defaults to 180000. */
+  maxRunDurationMs?: number
+  /** Upper bound on characters of one evidence document returned to the model. Defaults to 40000. */
+  maxEvidenceOutputChars?: number
+  /** Ports probed by the deep profile's controlled connect scan. Defaults to a small common-service list. */
+  deepPorts?: number[]
+  /** Per-probe TCP connect timeout (ms). Defaults to 1500. */
+  connectTimeoutMs?: number
+  /** CT log lookup timeout (ms) in the deep profile. Defaults to 15000. */
+  ctTimeoutMs?: number
+  /** Path to a JSON file of extra technology signatures applied on top of the built-in table. */
+  fingerprintOverlay?: string
+  /** Cache TTL seconds per check category; every field defaults. */
+  cacheTtlSeconds?: {
+    /** Freshness window (seconds) for DNS observations. */
+    dns?: number
+    /** Freshness window (seconds) for HTTP probes. */
+    http?: number
+    /** Freshness window (seconds) for TLS facts. */
+    tls?: number
+    /** Freshness window (seconds) for public-metadata discovery. */
+    discovery?: number
+    /** Freshness window (seconds) for the HTML/JS asset inventory. */
+    assets?: number
+    /** Freshness window (seconds) for the deep page crawl. */
+    crawl?: number
+    /** Freshness window (seconds) for the API inventory and probing. */
+    api?: number
+    /** Freshness window (seconds) for the service connect probe. */
+    services?: number
+    /** Freshness window (seconds) for expanded hosts from DNS, TLS, links, and specifications. */
+    hosts?: number
+  }
+}
+```
+
+来源：[`packages/pentest/recon-engine/src/index.ts:40`](../packages/pentest/recon-engine/src/index.ts)
 
 <a id="deepseek-aidsh-repeat-tool-reminder"></a>
 
@@ -3744,7 +3865,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/web/tool-web/src/index.ts:51`](../packages/web/tool-web/src/index.ts)
+来源：[`packages/web/tool-web/src/index.ts:52`](../packages/web/tool-web/src/index.ts)
 
 <a id="deepseek-aidsh-tool-workflow"></a>
 
@@ -4134,6 +4255,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-open-in-app`（[`packages/client/ui-open-in-app/src/index.ts`](../packages/client/ui-open-in-app/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-permission-presets`（[`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-plan`（[`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-recon`（[`packages/client/ui-recon/src/index.ts`](../packages/client/ui-recon/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-reference`（[`packages/client/ui-reference/src/index.ts`](../packages/client/ui-reference/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-renderer`（[`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-schedule`（[`packages/client/ui-schedule/src/index.ts`](../packages/client/ui-schedule/src/index.ts)）
@@ -4180,7 +4302,9 @@ export interface Config {
 - `@deepseek-ai/dsh-host-plugin-inventory` — 需要 `loader`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
+- `@deepseek-ai/dsh-mcp-resources` — 需要 `tools`（[`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts)）
 - `@deepseek-ai/dsh-remote-machines` — 需要 `settings`（[`packages/remote/remote-machines/src/index.ts`](../packages/remote/remote-machines/src/index.ts)）
+- `@deepseek-ai/dsh-sandbox-ssh` — 需要 `ssh`（[`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts)）
 - `@deepseek-ai/dsh-schedule` — 需要 `agents` · `sessions` · `tools` · `sessionPersistence`（[`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts)）
 - `@deepseek-ai/dsh-session`（[`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts)）
 - `@deepseek-ai/dsh-session-checkpoint-policy` — 需要 `llm` · `sessionPersistence` · `sessions` · `tools`（[`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts)）

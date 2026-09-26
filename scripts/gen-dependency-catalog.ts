@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { runCommandWithTimeout } from './benchmark-npm-resolution.ts'
+import { npmInvocation, runCommandWithTimeout } from './benchmark-npm-resolution.ts'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const PACKAGE = '@deepseek-ai/dsh'
@@ -247,7 +247,8 @@ export function createNpmResolutionEnvironment(
 }
 
 async function runNpm(args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const result = await runCommandWithTimeout(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
+  const npm = npmInvocation()
+  const result = await runCommandWithTimeout(npm.command, [...npm.args, ...args], {
     cwd, env, timeoutMs: 300_000,
   })
   if (result.timedOut || result.status !== 0) {

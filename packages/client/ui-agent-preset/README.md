@@ -1,5 +1,5 @@
 ---
-description: "Choose Agent presets and the new-task default in Web, and read what each mode does. Authoring is guided to Creator mode."
+description: "Agent-preset surfaces for the Web GUI: the default-preset setting, the new-session chip, the session-header label, and the preset roster management section; for users and maintainers of agent composition."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Choose Agent presets and the new-task default in Web, and read what each mode does. Authoring is guided to Creator mode.
+The Web GUI lets users choose a preset for the next session, see the active preset in the header, and manage creation, copies, deletion, defaults, model bindings, and preset files in Settings. Running sessions keep their starting composition; only later sessions use a changed default. When no presets are composed, these controls stay hidden and sessions use the host composition.
 
 ## Table of Contents
 
@@ -25,11 +25,11 @@ Choose Agent presets and the new-task default in Web, and read what each mode do
 <a id="use-this-package"></a>
 ## Use this package
 
-Settings shows the built-in and custom card groups with default highlighting and card-body selection; a group without presets is omitted, except the custom group, which keeps its Creator entry on screen. The page edits nothing: that entry starts a Creator-mode task that authors or overrides a preset as a bundle, offered while the `cordis` preset is on the roster and a conversation flow exists.
+Mount this plugin alongside the settings and conversation packages; the preset surfaces then appear where their slots render. The new-session chip opens on the deployment default and stages a pick that lands on the next blank session; the stage is spent on first use, so the following new session opens on the default again.
 
-The “Choose a mode for new tasks” switch controls whether the saved user default is active. Hiding selection uses the deployment default; showing it restores the user preference. Choosing a healthy default also synchronizes the blank session on the current new-task surface. Creator starts a new task using the `cordis` preset. The new-session picker additionally requires Developer tools in General Settings.
+### Managing the roster
 
-The settings section shows the roster as cards: a copy dialog creates a preset, then opens that custom preset in a native textarea editor for `agent.cordis.yml`; every custom card also keeps a location action for its metadata, skills, and assets. Save sends only the preset id and text, preserves the draft on failure, and affects later sessions rather than sessions already composed. The default is set from any surface; deleting removes the preset directory while sessions already composed from it keep running. A shipped preset opens in a read-only viewer and offers no edit, location, or delete. A roster row carrying `broken` renders as a marked card whose body and duplication are disabled, because a copy of a broken preset is another broken preset; broken custom rows keep their location and delete actions so the files can be fixed and ghost directories cleared. The card face still shows the preset's own description — a chooser cannot act on a package specifier there — and the host's reason rides the badge as a tooltip, plus a visually hidden alert that carries it to assistive technology, which a disabled card body cannot.
+The settings section shows the roster as cards. Add preset collects an id, optional name, and system prompt, then creates a custom preset with the current default preset's capabilities. Duplicate keeps the selected source unchanged and opens the copy in the prompt editor. Every custom card also keeps a location action for its metadata, skills, and assets. Save sends only the preset id and text, preserves the draft on failure, and affects later sessions rather than sessions already composed. The default is set from any surface; deleting removes the preset directory while sessions already composed from it keep running. A shipped preset opens in a read-only viewer and offers no edit, location, or delete. A roster row carrying `broken` renders as a marked card whose body and duplication are disabled; broken custom rows keep their location and delete actions so the files can be fixed and ghost directories cleared.
 
 The Model bindings list joins the Host's current model catalog with the preset roster. Each model can select a healthy preset or Default preset; choosing Default preset removes that route's override. A changed binding applies to new sessions and to a blank session when the model is selected, while a session that has started keeps its current preset.
 
@@ -45,31 +45,43 @@ When the roster carries the self-referential `cordis` preset, a dashed add-card 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`agentPresets/list` supplies the roster and the chooser policy; default and visibility changes write the `agent-presets` settings namespace. The picker, blank-session synchronization and read-only session label use recorded preset identities. Connection resets and settings updates refresh the roster.
+The display options come from one `agentPresets/list` call — the roster already reports which id a session with no explicit choice gets, so no surface introspects the settings schema — and the default write targets the `agent-presets` settings namespace's `default` field. Direct creation reads that default composition, replaces its persona prompt in memory, and sends the complete text to one Host `agentPresets/create` operation; the Host copies the source directory and writes the replacement before the operation succeeds. The settings section queries `settings.canOpenAgentPresetDirectory()` when it first loads and joins that result with the roster; a failed query removes only the native-open affordance. The new-session chip and the header label share one controller because the staged choice belongs to the flow rather than to any session. [`dsh-client-connection`](../connection/README.md) authenticates the preset Remote methods and every other Host API method with the same browser session. The section re-reads on its own actions, `settings/document-updated`, and `connection/reset`, because composition files can also change outside the browser.
 
 </details>
+
+-----
 
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Scope](../../core/scope/README.md) — Registration isolation.
-- [Agent](../../core/agent/README.md) — Session runtime.
-- [Cordis](../../../docs/cordis-primer.md) — Plugin configuration and lifecycle.
+Read these pages when the preset surface is not enough. They move from the browser surfaces to the preset domain and the composition model.
+
+- [dsh-agent-presets](../../preset/agent-presets/README.md) — the host roster and composition the surfaces read and manage.
+- [ui-conversation](../ui-conversation/README.md) — declares the hero and session-header slots the chip and label fill.
+- [ui-settings](../ui-settings/README.md) — the settings shell that hosts the roster section.
+- [Client package map](../README.md) — adjacent browser UI packages.
+
+-----
 
 <a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through the selected preset, whose plugins own model-visible capabilities.
+Indirectly, through the preset a later session is composed from; the preset it selects owns every model-facing effect.
 
 #### KV Cache effect
 
-Selection changes affect only later tasks; existing plugins and prompts remain unchanged.
+No direct invalidation. Changing the default never touches a running session's prefix; a session created afterwards establishes its own prefix from its own composition.
 
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Web creates and edits no preset: a bundle installed through Creator mode declares a new preset or overrides a shipped one by row id, replacing its complete child list.
+
+These limits define the current preset surfaces. They are current package constraints, not a general composition comparison or a task backlog.
+
+- **A preset without metadata is listed by id** — display text is optional, and a copy given no name deliberately falls back to its directory name rather than presenting itself identically to its source. The resolution itself is the shared `presetDisplayText` fold from [`dsh-agent-presets/display`](../../preset/agent-presets/README.md), which the Settings plugin list inlines over this plugin’s dictionaries to show shipped presets in the active locale without translating user-authored metadata.
+- **A revealed path is display text, not a link** — where the host has no desktop opener the row shows the directory to copy by hand; the browser cannot open a host filesystem location itself.
+- **Composition edits are invisible to the page** — the files are edited outside the browser and nothing on the wire announces a file change, so the roster re-reads on its own actions, `settings/changed`, and `connection/reset`, not on every disk edit.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -81,4 +93,4 @@ None.
 
 </details>
 
-**Runtime invariant:** No companion is published; the Host registry owns state, and component tests cover client presentation and selection.
+**Runtime invariant:** No companion is published. This is a browser-side surface plugin whose node half owns no event stream or mutable runtime data; the roster and the settings write are host contracts covered there.

@@ -1275,4 +1275,4 @@ Source: [`packages/web/web-search-deepseek/src/provider.ts:83`](../packages/web/
 'web-search/mode': { always: boolean }
 ```
 
-Source: [`packages/web/tool-web/src/index.ts:30`](../packages/web/tool-web/src/index.ts)
+Source: [`packages/web/tool-web/src/index.ts:31`](../packages/web/tool-web/src/index.ts)

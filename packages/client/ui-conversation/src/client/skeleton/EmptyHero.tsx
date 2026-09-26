@@ -4,7 +4,7 @@
 import type { ReactNode, RefObject } from 'react'
 import { useEffect, useState } from 'react'
 import {
-  IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16,
+  IconChevronDownOutlineRegular, IconFolderCloseRegular, IconFolderOpenRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type { ConversationContentProps } from '../contract/slots.ts'

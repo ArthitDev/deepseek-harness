@@ -1,5 +1,6 @@
 /** Installed PDF.js parses and draws a deterministic fixture using a real worker thread. */
 import { Worker as Thread, type Transferable } from 'node:worker_threads'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { getDocument, PDFWorker } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { renderPdfPage } from '../src/client/pdf/document.ts'
@@ -7,6 +8,9 @@ import { pdfFixture } from './pdf-fixture.ts'
 
 describe('PDF.js real-library smoke', () => {
   it('parses two pages and draws their distinct vector colors in a real worker', async () => {
+    const standardFontDataUrl = fileURLToPath(new URL(
+      '../../standard_fonts/', import.meta.resolve('pdfjs-dist/legacy/build/pdf.mjs'),
+    )).replaceAll('\\', '/')
     const thread = new Thread(new URL('./pdf-worker.fixture.mjs', import.meta.url), {
       workerData: { workerUrl: import.meta.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs') },
     })
@@ -34,7 +38,7 @@ describe('PDF.js real-library smoke', () => {
       await Promise.race([ready.promise, failed.promise])
       // The adapter carries browser-style messages across an actual Node worker thread.
       bridge = PDFWorker.create({ port: port as unknown as Worker })
-      loading = getDocument({ data: pdfFixture(), worker: bridge })
+      loading = getDocument({ data: pdfFixture(), worker: bridge, standardFontDataUrl })
       const pdf = await Promise.race([loading.promise, failed.promise])
       expect(pdf.numPages).toBe(2)
       const factory = pdf.canvasFactory as {

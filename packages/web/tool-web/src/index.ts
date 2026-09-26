@@ -11,6 +11,7 @@ import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
 import type {} from '@deepseek-ai/dsh-commands'
+import { CommandDefinitionId } from '@deepseek-ai/dsh-commands/brand'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-web'
@@ -125,6 +126,7 @@ function applyAlwaysSearchMode(ctx: Context): void {
       : next()
   ))
   ctx.inject(['commands'], commandCtx => commandCtx.commands.register({
+    definitionId: CommandDefinitionId('@deepseek-ai/dsh-tool-web/web-search'),
     name: 'web-search',
     description: 'Require web search on every request, or return to automatic use',
     input: { hint: '<always|auto>' },

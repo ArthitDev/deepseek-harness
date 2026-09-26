@@ -286,6 +286,7 @@ async function bench(snapshot = historySnapshot(NODES)) {
   }
   const binding: ConversationBinding = {
     snapshot: conversationStore,
+    markActivity: () => {},
     activate: () => {},
     target: target => targetSources[target],
   }
@@ -861,7 +862,7 @@ describe('timeline projection', () => {
     // pointer interaction, and earlier cases in this file press pointers.
     fireEvent.keyDown(boundary, { key: 'Tab' })
     fireEvent.focus(boundary)
-    expect(screen.getByRole('tooltip').textContent)
+    expect(screen.getByRole('tooltip', { hidden: true }).textContent)
       .toContain('Click to load earlier history')
     fireEvent.click(boundary)
     expect(onLoadEarlier).toHaveBeenCalledOnce()

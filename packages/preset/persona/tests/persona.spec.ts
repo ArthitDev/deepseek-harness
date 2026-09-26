@@ -18,23 +18,6 @@ async function personaText(ctx: Context, scope?: ScopeKey): Promise<string | und
 }
 
 describe('the persona row', () => {
-  it('normalizes legacy text without accepting an invalid explicit prefix', async () => {
-    const config = Persona.Config({ text: 'Legacy identity.', suffix: 'Workspace.' })
-    const ctx = await harness('Deployment.')
-    try {
-      const key: ScopeKey = { agent: 'legacy' }
-      await createScope(ctx, key).ctx.plugin(Persona, config)
-      expect(await personaText(ctx, key)).toBe('Legacy identity.')
-      expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))).toContain('Workspace.')
-      expect(() => z.resolve({ text: 'Legacy.', prefix: 42 }, Persona.Config, {})).toThrow()
-      expect(() => z.resolve({ text: 42 }, Persona.Config, {})).toThrow()
-      await expect(createScope(ctx, { agent: 'missing-persona' }).ctx.plugin(Persona, {}))
-        .rejects.toThrow('config.prefix is required')
-    } finally {
-      await ctx.fiber.dispose()
-    }
-  })
-
   it('shadows and interpolates the environment per scope, restoring both defaults on disposal', async () => {
     const ctx = new Context()
     try {

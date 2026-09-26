@@ -149,11 +149,8 @@ export async function assertFinalWorkspaceSnapshot(
   const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
   expect(manifest.workspace?.final, `${manifest.scenario ?? scenarioDir}: mutating Web scenario declares workspace.final`)
     .toBe(true)
-  const actual = (await captureWorkspaceSnapshot(workspaceRoot))
-    .filter(entry => entry.path !== '.git')
-    .map(entry => entry.kind === 'text' ? { ...entry, content: entry.content.replaceAll('\r\n', '\n') } : entry)
-  const expected = (await captureExpectedWorkspaceSnapshot(join(scenarioDir, 'workspace.expected')))
-    .map(entry => entry.kind === 'text' ? { ...entry, content: entry.content.replaceAll('\r\n', '\n') } : entry)
+  const actual = await captureWorkspaceSnapshot(workspaceRoot, options)
+  const expected = await captureExpectedWorkspaceSnapshot(join(scenarioDir, 'workspace.expected'))
   expect(actual, `${manifest.scenario ?? scenarioDir}: complete final workspace`).toEqual(expected)
 }
 
@@ -415,6 +412,7 @@ export interface LaunchOptions {
   agentPresets?: {
     default: string
     definitions?: import('@deepseek-ai/dsh-agent-preset-registry').PresetDefinition[]
+    roots?: { path: string; trust: 'system' | 'user' }[]
   }
   /**
    * Patch the telemetry exporter URL while preserving the shipped enabled
@@ -508,6 +506,21 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // paths at load, and an in-process boot must NEVER touch the developer's
   // real ~/.dsh document or credential file.
   const harnessHome = options.harnessHome ?? join(workspaceCwd, '.dsh-home')
+  const presetRoots = [...options.agentPresets?.roots ?? []]
+  if (options.agentPresets?.definitions !== undefined) {
+    const root = join(workspaceCwd, '.agent-preset-definitions')
+    presetRoots.unshift({ path: root, trust: 'user' })
+    for (const definition of options.agentPresets.definitions) {
+      const directory = join(root, definition.id)
+      await mkdir(directory, { recursive: true })
+      await writeFile(join(directory, 'agent.cordis.yml'), yaml.dump(definition.plugins, { noRefs: true, lineWidth: -1 }), 'utf8')
+      await writeFile(join(directory, 'preset.yml'), yaml.dump({
+        ...definition.name === undefined ? {} : { name: definition.name },
+        ...definition.description === undefined ? {} : { description: definition.description },
+        ...definition.order === undefined ? {} : { order: definition.order },
+      }), 'utf8')
+    }
+  }
   // Skill discovery is model-visible input, and its roots now resolve inside a
   // PRESET — a subtree this lane's include patches cannot reach, because the
   // roster mounts it directly per session rather than as a row of the booted
@@ -573,7 +586,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       ? []
       : [{ id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }],
     ...extraOverlayPatches,
-    { id: 'agent-preset-registry', config: { default: 'standard' } },
+    { id: 'agent-presets', config: { default: 'standard', includeUserRoot: false } },
     { id: 'session-persistence-jsonl', config: { root: persistenceRoot } },
     // Content search is enabled here although the shipped bundles default it
     // off (`openAt: never`, pinned by apps/cli/tests/lazy-search-startup):
@@ -663,10 +676,10 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // Open In scenario supplies launch facts that suppress every native probe.
     { id: 'open-in-app', disabled: options.openInAppEnvironment === undefined },
     { id: 'ui-open-in-app', disabled: options.openInAppEnvironment === undefined },
-    ...options.agentPresets === undefined ? [] : [
-      { id: 'agent-preset-registry', config: { default: options.agentPresets.default } },
-      { insert: (options.agentPresets.definitions ?? []).map(config => ({ id: `preset-${config.id}`, name: '@deepseek-ai/dsh-agent-preset', config })) },
-    ],
+    ...options.agentPresets === undefined ? [] : [{
+      id: 'agent-presets',
+      config: { default: options.agentPresets.default, roots: presetRoots, includeUserRoot: false },
+    }],
     ...options.toolsMode === undefined ? [] : [{ id: 'tools', config: { mode: options.toolsMode } }],
     ...options.deepSeekSearch === undefined
       ? []
@@ -681,7 +694,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   ]
 
   // Live fields use a shared deployment layer; process-specific ports and roots stay in CLI overlays.
-  const formEntries = new Set(['agent-default-model', 'agent-preset-registry', 'llm-deepseek', 'llm-pi-ai',
+  const formEntries = new Set(['agent-default-model', 'agent-presets', 'llm-deepseek', 'llm-pi-ai',
     'web-search-deepseek', 'agent-loop', 'subagent', 'bash-sandbox', 'pwsh-sandbox',
     'ui-theme', 'locale', 'ui-chat', 'ui-conversation', 'ui-settings', 'ui-settings-general', 'permission'])
   const formDefaults: PatchOptions[] = []
@@ -887,13 +900,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       baseUrl = `http://${publicHost}:${String(publicProxy.port)}${publicPrefix}`
     }
     authenticatedUrl = ctx.connection.authenticatedUrl(baseUrl)
+    // Chromium resolves *.localhost itself; Node may not, so a mounted scaffold
+    // posts the exchange to loopback, the authority the Host fence always trusts.
     const loginUrl = new URL(authenticatedUrl)
-    const loginHeaders = new Headers()
-    if (options.remoteAuthority !== undefined) {
-      loginHeaders.set('host', loginUrl.host)
-      loginUrl.hostname = '127.0.0.1'
-    }
-    const login = await fetch(loginUrl, { redirect: 'manual', headers: loginHeaders })
+    if (publicPrefix !== undefined) loginUrl.hostname = '127.0.0.1'
+    const login = await fetch(loginUrl, { redirect: 'manual' })
     const setCookie = login.headers.get('set-cookie')
     if (login.status !== 303 || login.headers.get('location') !== './' || setCookie === null) {
       throw new Error('web e2e scaffold: browser token exchange did not return its session cookie')
@@ -929,12 +940,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     hostFetch(path: string, init: RequestInit = {}): Promise<Response> {
       const headers = new Headers(init.headers)
       headers.set('cookie', cookieHeader)
-      const url = new URL(path, baseUrl)
-      if (options.remoteAuthority !== undefined) {
-        headers.set('host', url.host)
-        url.hostname = '127.0.0.1'
-      }
-      return fetch(url, { ...init, headers })
+      return fetch(new URL(path, baseUrl), { ...init, headers })
     },
     // Barrier stack: the in-process turn/end identifies the session, its
     // explicit flush makes the transcript durable, and the caller's browser
@@ -1056,7 +1062,6 @@ function normalizeClientTimeZones(value: unknown): unknown {
 
 const WEB_PATH_TEXT_BOUNDARY_RE = /[\s<>'"`()\[\]{},;:!?=]/
 const WEB_FILE_URI_PATH_PREFIX_RE = /(?:^|[^a-z0-9+.-])file:\/\/\/?$/i
-const HARNESS_HOME_ROOTED_PATH_RE = /\{\{harnessHome\}\}(?:[\\/]+[^\s<>"'`]+)+/g
 
 function isWebCwdMatch(value: string, start: number, length: number): boolean {
   const before = value[start - 1]
@@ -1073,7 +1078,7 @@ function isWebCwdMatch(value: string, start: number, length: number): boolean {
   return startsAtBoundary && endsAtBoundary
 }
 
-function replaceWebCwd(value: string, cwd: string, replacement = '{{cwd}}'): string {
+function replaceWebCwd(value: string, cwd: string): string {
   let cursor = 0
   let normalized = ''
   while (cursor < value.length) {
@@ -1081,7 +1086,7 @@ function replaceWebCwd(value: string, cwd: string, replacement = '{{cwd}}'): str
     if (match < 0) return normalized + value.slice(cursor)
     const end = match + cwd.length
     if (isWebCwdMatch(value, match, cwd.length)) {
-      normalized += value.slice(cursor, match) + replacement
+      normalized += value.slice(cursor, match) + '{{cwd}}'
       cursor = end
     } else {
       normalized += value.slice(cursor, end)
@@ -1097,29 +1102,23 @@ function replaceWebCwd(value: string, cwd: string, replacement = '{{cwd}}'): str
  * @param workspaceCwd - optional scaffold parent used before a live Session selects its cwd.
  * @returns compact JSONL with run-local strings tokenized.
  */
-export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string, harnessHome?: string): string {
+export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string): string {
   const headerLine = log.split(/\r?\n/).find(line => line.trim().length > 0)
   const header = headerLine === undefined ? undefined : JSON.parse(headerLine) as { cwd?: unknown }
   const sessionCwd = typeof header?.cwd === 'string' && header.cwd.length > 0 ? header.cwd : undefined
-  const cwdSpellings = [...new Set([sessionCwd, workspaceCwd]
+  const cwdSpellings = [...new Set([sessionCwd ?? workspaceCwd]
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
     .flatMap((value) => {
       const forward = value.replaceAll('\\', '/')
       const native = /^[A-Za-z]:[\\/]/.test(value) ? forward.replaceAll('/', '\\') : value
       return [value, value.replaceAll('\\', '\\\\'), forward, native]
     }))].sort((left, right) => right.length - left.length)
-  const harnessHomeSpellings = [...new Set([harnessHome]
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .flatMap(value => [value, value.replaceAll('\\', '\\\\'), value.replaceAll('\\', '/')]))]
-    .sort((left, right) => right.length - left.length)
   return log.split(/\r?\n/).map((line) => {
     if (line.trim() === '') return line
     const record = normalizeClientTimeZones(mapJsonStringValues(JSON.parse(line), (value) => {
       let normalized = value
         .replace(/Anonymous user: [0-9a-f-]{36}(?=\.$)/gi, 'Anonymous user: {{anonymousUserId}}')
-      for (const home of harnessHomeSpellings) normalized = replaceWebCwd(normalized, home, '{{harnessHome}}')
       for (const cwd of cwdSpellings) normalized = replaceWebCwd(normalized, cwd)
-      normalized = normalized.replace(HARNESS_HOME_ROOTED_PATH_RE, path => path.replace(/\\+/g, '/'))
       return normalized
     })) as { type?: unknown; data?: { endpoint?: unknown } }
     if (record.type === 'web/deepseek-search-llm-request' && typeof record.data?.endpoint === 'string') {
@@ -1129,39 +1128,6 @@ export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string,
   }).join('\n')
 }
 
-export function omitMachineLocalContextMessages(log: string): string {
-  const omittedSeqs: number[] = []
-  return log.split(/\r?\n/).flatMap((line, seq) => {
-    if (line.trim() === '') return [line]
-    const record = JSON.parse(line) as {
-      type?: unknown
-      data?: { source?: { kind?: unknown } }
-      sourceEventSeqs?: unknown
-    }
-    if (record.type === 'user/message'
-      && (record.data?.source?.kind === 'agent-instructions' || record.data?.source?.kind === 'skill-catalog')) {
-      omittedSeqs.push(seq)
-      return []
-    }
-    if (Array.isArray(record.sourceEventSeqs)) {
-      record.sourceEventSeqs = record.sourceEventSeqs.flatMap(sourceSeq =>
-        typeof sourceSeq === 'number' && !omittedSeqs.includes(sourceSeq)
-          ? [sourceSeq - omittedSeqs.filter(omittedSeq => omittedSeq < sourceSeq).length]
-          : [])
-      return [JSON.stringify(record)]
-    }
-    return [line]
-  }).join('\n')
-}
-
-function normalizeMessagePlaceholderOrdinals(log: string): string {
-  const ordinals = new Map<string, number>()
-  return log.replace(/\{\{message:\d+\}\}/g, (placeholder) => {
-    if (!ordinals.has(placeholder)) ordinals.set(placeholder, ordinals.size + 1)
-    return `{{message:${String(ordinals.get(placeholder))}}}`
-  })
-}
-
 function stableSessionFixture(
   session: Session,
   existing: string,
@@ -1169,7 +1135,7 @@ function stableSessionFixture(
   harnessHome: string,
 ): string {
   const prepared = prepareSessionSnapshotFixtureForComparison(
-    normalizeWebSessionVolatiles(rawSessionLog(session), workspaceCwd, harnessHome),
+    normalizeWebSessionVolatiles(rawSessionLog(session), workspaceCwd),
   )
   const stabilized = existing === ''
     ? prepared
@@ -1179,6 +1145,7 @@ function stableSessionFixture(
     })
   const fresh = scrubSessionSnapshot(stabilized)
     .split(session.id).join('{{session:1}}')
+    .split(harnessHome).join('{{harnessHome}}')
   const stable = redactSessionSnapshotIds(stabilizeFixtureMessageIds([fresh], [existing]))[0]
   if (stable === undefined) throw new Error('session harvest produced no stabilized fixture')
   return stable
@@ -1225,14 +1192,10 @@ async function assertReplaySession(
     sessionIds: typeof expectedHeader.id === 'string' ? [expectedHeader.id] : [],
     cwd: typeof expectedHeader.cwd === 'string' ? expectedHeader.cwd : '\0no-cwd\0',
   }
-  const actualNormalized = normalizeWebSessionVolatiles(actual, undefined, harnessHome)
-  const expectedNormalized = normalizeWebSessionVolatiles(expected, undefined, harnessHome)
-  const actualSnapshot = normalizeMessagePlaceholderOrdinals(omitMachineLocalContextMessages(normalizeSessionSnapshots([
-    actualNormalized,
-  ], actualContext)[0] as string))
-  const expectedSnapshot = normalizeMessagePlaceholderOrdinals(omitMachineLocalContextMessages(normalizeSessionSnapshots([
-    expectedNormalized,
-  ], expectedContext)[0] as string))
+  const actualSnapshot = normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual)], actualContext)[0]
+    ?.split(harnessHome).join('{{harnessHome}}')
+  const expectedSnapshot = normalizeSessionSnapshots([normalizeWebSessionVolatiles(expected)], expectedContext)[0]
+    ?.split(harnessHome).join('{{harnessHome}}')
   expect(actualSnapshot, `${fixturePath}: persisted replay`).toBe(expectedSnapshot)
 
   if (manifest.header?.pin !== true) return
@@ -1246,14 +1209,10 @@ async function assertReplaySession(
   const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
   const schemaSnapshot = formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1))
   if (mode === 'refresh') {
-    await writeFile(promptPath, promptSnapshot)
-    if (process.platform !== 'win32') await writeFile(schemaPath, schemaSnapshot)
+    await Promise.all([writeFile(promptPath, promptSnapshot), writeFile(schemaPath, schemaSnapshot)])
   }
   expect(promptSnapshot, `${fixturePath}: system-prompt pin`).toBe(await readFile(promptPath, 'utf8'))
-  // Standard exposes bash on POSIX and pwsh on Windows; the Linux lane owns the shared schema golden.
-  if (process.platform !== 'win32') {
-    expect(schemaSnapshot, `${fixturePath}: tool-schema pin`).toBe(await readFile(schemaPath, 'utf8'))
-  }
+  expect(schemaSnapshot, `${fixturePath}: tool-schema pin`).toBe(await readFile(schemaPath, 'utf8'))
 }
 
 /**
@@ -1570,13 +1529,10 @@ const ARIA_AGE =
 function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): string {
   // The session heading renders the workspace's basename, not the full
   // path, so both spellings must collapse to the token.
-  const base = workspaceCwd.split(/[\\/]/).pop()!
-  const escapedCwd = workspaceCwd.replaceAll('\\', '\\\\')
+  const base = workspaceCwd.split('/').pop()!
   return (age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot)
-    .split(escapedCwd).join('{{cwd}}')
     .split(workspaceCwd).join('{{cwd}}')
     .split(base).join('{{workspace}}')
-    .replace(/\{\{cwd\}\}\\+/g, '{{cwd}}/')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
     // The optional space in `\d+m ?\d+s` covers both minute spellings: the
     // stats line's compact `2m42s` and the message-chrome template's `2m 42s`.

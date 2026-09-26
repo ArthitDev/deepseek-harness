@@ -1,9 +1,10 @@
 /** Saved SSH machine registry and strict host-key connection owner. */
 
 import { randomUUID } from 'node:crypto'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, type Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { SshConnectionPool, type RemoteMachineProfile } from './connection.ts'
 import { SshFileSystem } from './fs.ts'
@@ -32,7 +33,7 @@ export { SshSubprocessRuntime } from './subprocess.ts'
 export const SETTINGS_NAMESPACE = 'remote-machines'
 
 interface RemoteMachineSettings {
-  machines: RemoteMachineProfile[]
+  machines: Volatile<RemoteMachineProfile[]>
 }
 
 const ProfileSchema: z<RemoteMachineProfile> = z.object({
@@ -49,8 +50,8 @@ const ProfileSchema: z<RemoteMachineProfile> = z.object({
   fingerprint: z.string(),
 })
 
-const SettingsSchema: z<RemoteMachineSettings> = z.object({
-  machines: z.array(ProfileSchema).default([]),
+const SettingsSchema = z.object({
+  machines: z.array(ProfileSchema).default([]).volatile(),
 })
 
 function trimmed(value: string, field: string): string {
@@ -84,8 +85,10 @@ declare module '@deepseek-ai/cordis' {
 /** Owns saved SSH profiles, fingerprint trust, and shared remote transports. */
 export class RemoteMachines extends TypertRemoteService {
   static inject = ['settings']
+  static Config = SettingsSchema
 
-  private readonly settings: SettingsScope<RemoteMachineSettings>
+  private readonly settingsService: Context['settings']
+  private readonly entryId: string
   private readonly transientPasswords = new Map<string, {
     host: string
     port: number
@@ -95,11 +98,11 @@ export class RemoteMachines extends TypertRemoteService {
   /** Fingerprint-verified connection pool shared by filesystem and subprocess providers. */
   readonly connections: SshConnectionPool
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, public config: RemoteMachineSettings) {
     super(ctx, 'remoteMachines', { namespace: 'remoteMachines' })
-    this.settings = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema)
+    this.settingsService = ctx.settings
+    this.entryId = ctx.fiber.entry?.options.id ?? SETTINGS_NAMESPACE
     this.connections = new SshConnectionPool(id => this.profile(id))
-    this.settings.watch(() => { this.connections.invalidate() })
     ctx.effect(() => () => { this.connections.invalidate() }, 'remote-machines: close SSH connections')
     ctx.plugin(SshFileSystem)
     ctx.plugin(SshSubprocessRuntime)
@@ -111,7 +114,7 @@ export class RemoteMachines extends TypertRemoteService {
    * @returns the complete profile, or undefined when it is absent.
    */
   profile(id: string): RemoteMachineProfile | undefined {
-    const profile = this.settings.get().machines.find(machine => machine.id === id)
+    const profile = this.config.machines.get().find(machine => machine.id === id)
     const transient = this.transientPasswords.get(id)
     return profile?.auth === 'password-prompt'
       && transient?.host === profile.host
@@ -127,7 +130,7 @@ export class RemoteMachines extends TypertRemoteService {
    */
   @Remote('list')
   list(): RemoteMachinesValue {
-    return { machines: this.settings.get().machines.map(viewOf) }
+    return { machines: this.config.machines.get().map(viewOf) }
   }
 
   /**
@@ -139,7 +142,7 @@ export class RemoteMachines extends TypertRemoteService {
   async save(request: RemoteMachineSaveRequest): Promise<RemoteMachineValue> {
     const id = request.id ?? `machine-${randomUUID()}`
     if (!isRemoteMachineId(id)) throw new RemoteError('remote-machine/invalid', 'invalid machine id', { field: 'id' })
-    const machines = this.settings.get().machines
+    const machines = this.config.machines.get()
     const previous = machines.find(machine => machine.id === id)
     const profile: RemoteMachineProfile = {
       id,
@@ -176,7 +179,7 @@ export class RemoteMachines extends TypertRemoteService {
     if (!Number.isInteger(profile.port) || profile.port < 1 || profile.port > 65_535) {
       throw new RemoteError('remote-machine/invalid', 'port must be an integer from 1 to 65535', { field: 'port' })
     }
-    await this.settings.update({ machines: [...machines.filter(machine => machine.id !== id), profile] })
+    await this.updateMachines([...machines.filter(machine => machine.id !== id), profile])
     this.transientPasswords.delete(id)
     return { machine: viewOf(profile) }
   }
@@ -197,7 +200,7 @@ export class RemoteMachines extends TypertRemoteService {
         { id: request.id },
       )
     }
-    await this.settings.update({ machines: this.settings.get().machines.filter(machine => machine.id !== request.id) })
+    await this.updateMachines(this.config.machines.get().filter(machine => machine.id !== request.id))
     this.transientPasswords.delete(request.id)
     this.connections.invalidate(request.id)
     return { removed: true }
@@ -256,9 +259,9 @@ export class RemoteMachines extends TypertRemoteService {
       )
     }
     const profile = { ...current, fingerprint }
-    await this.settings.update({
-      machines: this.settings.get().machines.map(machine => machine.id === request.id ? profile : machine),
-    })
+    await this.updateMachines(
+      this.config.machines.get().map(machine => machine.id === request.id ? profile : machine),
+    )
     this.connections.invalidate(request.id)
     return { machine: viewOf(profile) }
   }
@@ -270,9 +273,14 @@ export class RemoteMachines extends TypertRemoteService {
   }
 
   private requireStoredProfile(id: string): RemoteMachineProfile {
-    const profile = this.settings.get().machines.find(machine => machine.id === id)
+    const profile = this.config.machines.get().find(machine => machine.id === id)
     if (profile === undefined) throw new RemoteError('remote-machine/not-found', `remote machine ${JSON.stringify(id)} was not found`, { id })
     return profile
+  }
+
+  private async updateMachines(machines: RemoteMachineProfile[]): Promise<void> {
+    await this.settingsService.update(this.entryId, { machines })
+    this.connections.invalidate()
   }
 }
 

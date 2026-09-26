@@ -437,7 +437,7 @@ class JsonlSessionPersistence extends SessionPersistence {
       options?.signal?.throwIfAborted()
       this.coldLogMemo.delete(id)
       try {
-        await rm(dirname(path), { recursive: true })
+        await rm(dirname(path.sourcePath), { recursive: true })
         return true
       } catch (error: unknown) {
         if (isENOENT(error)) return false

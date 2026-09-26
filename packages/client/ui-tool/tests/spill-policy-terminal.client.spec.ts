@@ -7,7 +7,7 @@ import type { PtcRunRequest, PtcRunSpec, PtcRunResult } from '@deepseek-ai/dsh-p
 import { estimateContent } from '@deepseek-ai/dsh-token-meter/estimate'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { SpillLocator, SpillStore, type SaveTextSpill, type SpillRef } from '@deepseek-ai/dsh-spill'
+import { SpillLocator, SpillStore, type ReadTextSpill, type SaveTextSpill, type SpillRef, type SpillText } from '@deepseek-ai/dsh-spill'
 import * as SpillPolicy from '@deepseek-ai/dsh-spill-policy'
 import { formatSpillNotice } from '@deepseek-ai/dsh-spill-policy/notice'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -30,6 +30,10 @@ class MemorySpillStore extends SpillStore {
       ...spillReference,
       bytes: bytes.length,
     }
+  }
+
+  readText(_input: ReadTextSpill): Promise<SpillText> {
+    return Promise.reject(new Error('spill artifact is no longer available'))
   }
 }
 

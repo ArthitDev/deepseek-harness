@@ -98,7 +98,7 @@ describe('WorkspaceBrowser.module.css list', () => {
 
   it('keeps the compact fade, overflow control, search field, and row heights', () => {
     expect(declarations('.fade')?.get('height')).toBe('24px')
-    expect(declarations('.sessionOverflowButton')?.get('height')).toBe('28px')
+    expect(declarations('.sessionOverflowButton')?.get('height')).toBe('32px')
     expect(declarations('.searchExpanded')?.get('height')).toBe('30px')
     expect(rowDeclarations('.projectRow')?.get('height')).toBe('34px')
     expect(rowDeclarations('.sessionRow')?.get('height')).toBe('32px')
@@ -106,6 +106,56 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(rowDeclarations('.searchResultRow')?.get('min-height')).toBe('48px')
     expect(rowDeclarations('.sessionRow.selected')?.get('background'))
       .toBe('var(--dsw-alias-interactive-bg-hover)')
+  })
+
+  it('chains the session guide through per-row segments with no overlap', () => {
+    // The status slot sits 6px into the 32px row, so the elbow's span-relative
+    // box [-8px, 10px] lands on row-relative [-2px, 16px]: its tick crosses
+    // the row midline, and the box starts above the 2px row margin where the
+    // previous row's drop segment ends. The drop segment then covers the
+    // row's lower half, so consecutive rows chain one single-painted guide —
+    // a section-level spine under the elbows would double-brighten.
+    const connector = declarations(".groupSection > * > [data-row-key^='session:'] > [data-tree-connector]")
+    expect(connector?.get('top')).toBe('-2px')
+    expect(connector?.get('height')).toBe('34px')
+    expect(connector?.get('width')).toBe('8px')
+    expect(connector?.get('background')).toContain('1px 100%')
+    const terminal = declarations(
+      ".groupSection > :last-child > [data-row-key^='session:'] > [data-tree-connector]",
+    )
+    expect(terminal?.get('background-size')).toBe('1px 19px, 7px 1px')
+    const overflowElbow = declarations('.sessionOverflowButton::before')
+    expect(overflowElbow?.get('top')).toBe('-2px')
+    expect(overflowElbow?.get('height')).toBe('18px')
+    expect(overflowElbow?.get('width')).toBe('8px')
+    expect(overflowElbow?.get('box-shadow')).toBe('inset 1px -1px 0 var(--dsh-tree-line)')
+    expect(declarations('.sessionOverflowButton')?.get('padding')).toBe('0 12px 0 28px')
+    expect(declarations('.sessionOverflowButton')?.get('height')).toBe('32px')
+  })
+
+  it('continues the last nested group down to the section rows that follow', () => {
+    // The last child's through-rule carries :has() with its own argument
+    // list, which the comma-splitting declarations() helper cannot match, so
+    // its geometry is asserted textually.
+    expect(css).toContain('.groupSection:has(> * > [data-row-key^=\'session:\'], > .sessionOverflowButton)')
+    expect(css).toContain('> [role=\'group\'] > .groupSection:last-child:not(.workspaceDropAfter)::after')
+  })
+
+  it('bridges the section margins so sibling guides read as one line', () => {
+    const machineElbow = declarations(".groupSection[data-tree-depth='0']:not(.workspaceDropBefore)::before")
+    expect(machineElbow?.get('border-bottom-left-radius')).toBe('8px')
+    expect(machineElbow?.get('width')).toBe('8px')
+    const machineGuide = declarations(
+      ".groupSection[data-tree-depth='0']:not([data-tree-last='true']):not(.workspaceDropAfter)::after",
+    )
+    expect(machineGuide?.get('top')).toBe('18px')
+    expect(machineGuide?.get('bottom')).toBe('-4px')
+    const riser = declarations(".groupSection:not([data-tree-depth='0']):not(.workspaceDropBefore)::before")
+    expect(riser?.get('top')).toBe('-4px')
+    expect(riser?.get('height')).toBe('21px')
+    const through = declarations(".groupSection:not([data-tree-depth='0']):not([data-tree-last='true']):not(.workspaceDropAfter)::after")
+    expect(through?.get('top')).toBe('17px')
+    expect(through?.get('bottom')).toBe('0')
   })
 
   it('marquees a clipped session title on row hover', () => {

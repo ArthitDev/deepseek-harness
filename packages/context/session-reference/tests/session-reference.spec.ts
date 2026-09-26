@@ -18,7 +18,7 @@ import SessionReferenceResolver, {
   type SessionReferenceErrorCode,
 } from '@deepseek-ai/dsh-session-reference'
 import { stringifyTagSafeJson } from '../src/serialization.ts'
-import { SpillLocator, SpillStore, type SaveTextSpill, type SpillRef } from '@deepseek-ai/dsh-spill'
+import { SpillLocator, SpillStore, type ReadTextSpill, type SaveTextSpill, type SpillRef, type SpillText } from '@deepseek-ai/dsh-spill'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -302,6 +302,10 @@ class RecordingSpill extends SpillStore {
   override async saveText(input: SaveTextSpill): Promise<SpillRef> {
     this.saves.push(input)
     return { locator: SpillLocator('memory:reference'), bytes: Buffer.byteLength(input.content), retrievalHint: 'Read memory:reference by lines.' }
+  }
+
+  readText(_input: ReadTextSpill): Promise<SpillText> {
+    return Promise.reject(new Error('spill artifact is no longer available'))
   }
 }
 

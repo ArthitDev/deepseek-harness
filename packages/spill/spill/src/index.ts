@@ -15,10 +15,10 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { SaveTextSpill, SpillRef } from './types.ts'
+import type { ReadTextSpill, SaveTextSpill, SpillRef, SpillText } from './types.ts'
 
 export { SpillLocator } from './types.ts'
-export type { SaveTextSpill, SpillOwner, SpillRef, SpillSource } from './types.ts'
+export type { ReadTextSpill, SaveTextSpill, SpillOwner, SpillRef, SpillSource, SpillText } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -53,6 +53,17 @@ export abstract class SpillStore extends Service {
    * @returns the saved artifact's {@link SpillRef}; rejects on a storage failure.
    */
   abstract saveText(input: SaveTextSpill): Promise<SpillRef>
+
+  /**
+   * Read back one artifact the same owner saved earlier. Implementations must
+   * resolve `input.locator` only inside `input.owner`'s storage scope — a
+   * locator belonging to another owner's scope, one that escapes it, or one
+   * whose file is gone rejects rather than returning content.
+   * @param input - the owning session and the locator to resolve.
+   * @returns the verbatim text and its byte length; rejects when the locator
+   * is out of the owner's scope or unavailable.
+   */
+  abstract readText(input: ReadTextSpill): Promise<SpillText>
 }
 
 export default SpillStore

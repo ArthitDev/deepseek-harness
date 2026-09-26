@@ -114,6 +114,15 @@
   animation: dsh-turn-status-pulse 1.6s ease-in-out infinite;
 }
 
+.turnStatusLabel {
+  margin-left: 10px;
+  font: var(--dsw-font-xs-13);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .turnStatusClock {
   margin-left: 8px;
   font: var(--dsw-font-xs-13);

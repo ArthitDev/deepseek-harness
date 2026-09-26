@@ -126,6 +126,10 @@ export class DirectoryBrowseError extends Error {
 class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
   private readonly lifetime = new AbortController()
+  private readonly selection = createSnapshotStore<MainSelection>(
+    {}, { persist: { name: 'dsh.sessions.current' } },
+  )
+  private mainReference: SessionReference | undefined
   private lastSessionId: SessionId | undefined
   private lastWorkspaceId: WorkspaceId | undefined
 
@@ -240,7 +244,9 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
     void this.sessions.create({ workspaceId: target }).then(
       (sessionId) => { if (!navigation.aborted) this.openSession(sessionId) },
-      (reason: unknown) => { console.warn('new session failed:', reason) },
+      (reason: unknown) => {
+        if (!navigation.aborted) this.notify({ kind: 'createFailed', message: creationFailureMessage(reason) })
+      },
     )
   }
 
@@ -289,7 +295,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     let initial: 'waiting' | 'connecting' | 'done' = 'waiting'
     const reconcile = (): void => {
       if (this.lifetime.signal.aborted) return
-      const current = this.sessions.list.getSnapshot().current
+      const current = this.mainReference?.sessionId
       const currentWorkspace = current === undefined
         ? undefined
         : this.workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(current))

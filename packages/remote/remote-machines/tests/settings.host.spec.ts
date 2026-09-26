@@ -1,6 +1,6 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MemorySettings } from '../../../settings/settings/tests/memory.ts'
+import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 import RemoteMachines from '../src/index.ts'
 import { remoteExecutionPath } from '../src/path.ts'
 
@@ -19,10 +19,11 @@ describe('remote machine settings', () => {
   it('redacts saved secrets and removes credentials from the previous auth mode', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await ctx.plugin(MemorySettings).await()
+    ctx.provide('settings', {
+      update: async (_ns: string, patch: Record<string, unknown>) => { await live.update(patch) },
+    } as never)
     await ctx.plugin(TestWorkspaceRegistry).await()
-    const fiber = ctx.plugin(RemoteMachines)
-    await fiber.await()
+    const live = await liveConfig(ctx, RemoteMachines)
     const machines = ctx.remoteMachines
     const base = {
       id: 'machine-test', name: 'Test', host: 'ssh.test', port: 22, username: 'tester',

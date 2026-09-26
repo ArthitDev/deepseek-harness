@@ -14,15 +14,15 @@ import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import z from '@deepseek-ai/schemastery'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
-import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
+import type { ReadTextSpill, SaveTextSpill, SpillRef, SpillText } from '@deepseek-ai/dsh-spill'
 import { gatherSweepRoots, sweepSpillRoots } from './cleanup.ts'
 import type { SweepRoot, WarnFn } from './cleanup.ts'
-import { privateRoot, saveTextFile } from './store.ts'
+import { privateRoot, readTextFile, saveTextFile } from './store.ts'
 
 export { discoverDefaultRoots, sweepSpillRoots } from './cleanup.ts'
 export type { SweepOptions, SweepRoot, WarnFn } from './cleanup.ts'
-export { DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, saveTextFile, sessionDir } from './store.ts'
-export type { SavedText, SaveTextOptions } from './store.ts'
+export { DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, readTextFile, saveTextFile, sessionDir } from './store.ts'
+export type { ReadTextOptions, SavedText, SaveTextOptions } from './store.ts'
 
 /** Milliseconds in one day — converts the `cleanupPeriodDays` config to the sweep cutoff. */
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -158,6 +158,15 @@ export class LocalSpillStore extends SpillStore {
       bytes: saved.bytes,
       retrievalHint: 'Use read with offset/limit, or grep this path to search within it.',
     }
+  }
+
+  async readText(input: ReadTextSpill): Promise<SpillText> {
+    const saved = await readTextFile({
+      root: this.root,
+      sessionId: input.owner.sessionId,
+      locator: input.locator,
+    })
+    return { content: saved.content, bytes: saved.bytes }
   }
 }
 

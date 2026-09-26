@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runCommandWithTimeout } from './benchmark-npm-resolution.ts'
+import { npmInvocation, runCommandWithTimeout } from './benchmark-npm-resolution.ts'
 import {
   collectDependencies, computeDependencyCatalog, createNpmResolutionEnvironment,
   deduplicateDependencies, isDependencyCatalogCurrent,
@@ -161,22 +161,23 @@ describe('published npm dependency catalog', () => {
       NPM_CONFIG_CACHE: join(root, 'inherited-cache'),
       NPM_CONFIG_USER_AGENT: 'inherited-agent',
     }
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-    const args = ['config', 'list', '--json', '--registry=https://registry.npmjs.org/', '--loglevel=error']
-    const before = await runCommandWithTimeout(npm, args, { cwd: root, env: inherited, timeoutMs: 30_000 })
+    const npm = npmInvocation()
+    const args = [...npm.args, 'config', 'list', '--json', '--registry=https://registry.npmjs.org/', '--loglevel=error']
+    const before = await runCommandWithTimeout(npm.command, args, { cwd: root, env: inherited, timeoutMs: 30_000 })
     expect(before).toMatchObject({ status: 0, signal: null, timedOut: false })
     expect(JSON.parse(before.output)).toMatchObject({
       '@deepseek-ai:registry': 'https://user-override.invalid/', 'install-strategy': 'nested',
     })
     const isolated = createNpmResolutionEnvironment(root, inherited)
-    const after = await runCommandWithTimeout(npm, args, { cwd: root, env: isolated, timeoutMs: 30_000 })
+    const after = await runCommandWithTimeout(npm.command, args, { cwd: root, env: isolated, timeoutMs: 30_000 })
     expect(after).toMatchObject({ status: 0, signal: null, timedOut: false })
     const settings = JSON.parse(after.output) as Record<string, unknown>
     expect(settings).toMatchObject({
-      registry: 'https://registry.npmjs.org/', '@deepseek-ai:registry': 'https://registry.npmjs.org/',
+      registry: 'https://registry.npmjs.org/',
       'install-strategy': 'hoisted', 'strict-peer-deps': false, 'prefer-dedupe': false, offline: false,
       cache: join(root, '.npm-cache'), userconfig: join(root, '.npmrc-user'), globalconfig: join(root, '.npmrc-global'),
     })
+    expect(readFileSync(join(root, '.npmrc'), 'utf8')).toContain('@deepseek-ai:registry=https://registry.npmjs.org/')
     expect(settings['@other:registry']).toBeUndefined()
     expect(isolated['NPM_CONFIG_USER_AGENT']).toBeUndefined()
     expect(inherited['npm_config_userconfig']).toBe(userConfig)

@@ -1277,4 +1277,4 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'web-search/mode': { always: boolean }
 ```
 
-来源：[`packages/web/tool-web/src/index.ts:30`](../packages/web/tool-web/src/index.ts)
+来源：[`packages/web/tool-web/src/index.ts:31`](../packages/web/tool-web/src/index.ts)

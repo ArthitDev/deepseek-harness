@@ -54,7 +54,7 @@
       "path": "../../llm/llm"
     },
     {
-      "path": "../../preset/agent-preset-registry"
+      "path": "../../preset/agent-presets"
     },
     {
       "path": "../../remote/remote-machines"
@@ -94,6 +94,9 @@
     },
     {
       "path": "../../pentest/pentest-run"
+    },
+    {
+      "path": "../../pentest/recon-engine"
     },
     {
       "path": "../../pentest/pentest-executor"

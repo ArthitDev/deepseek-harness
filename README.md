@@ -4,6 +4,11 @@ English | [中文](README.zh.md)
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
+> [!IMPORTANT]
+> This checkout contains the custom `shield-break-agent-v2` branch. Read the
+> [Shield Break Agent modification and responsible-use guide](README.SHIELD-BREAK.md)
+> before running Recon or pentest workflows.
+
 It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
 
 Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)

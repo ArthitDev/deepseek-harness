@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv, vitestTsconfigPathsPlugin } from './vitest.shared.ts'
+import { standardDecoratorPlugin, vitestExecArgv, vitestPathsPlugin } from './vitest.shared.ts'
 
 // Web browser lane: real host entry points, built-client interaction snapshots,
 // and replayed keyless e2e scenarios outside the unit/e2e includes. Linux PR CI
@@ -13,10 +13,7 @@ try {
 }
 
 export default defineConfig({
-  plugins: [
-    vitestTsconfigPathsPlugin(),
-    standardDecoratorPlugin(),
-  ],
+  plugins: [vitestPathsPlugin(), standardDecoratorPlugin()],
   test: {
     execArgv: vitestExecArgv,
     include: [

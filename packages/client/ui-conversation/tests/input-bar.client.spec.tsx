@@ -1649,8 +1649,10 @@ describe('command launcher chrome and control seats', () => {
     // seat set is the contract).
     expect([...new Set(slotCalls.map(c => c.key))]).toEqual([
       'conversation.input.overlay', 'conversation.input.attachments',
-      'conversation.input.webSearch', 'conversation.input.machine', 'conversation.input.plan', 'conversation.input.left',
+      'conversation.input.permission', 'conversation.input.webSearch', 'conversation.input.machine',
+      'conversation.input.plan', 'conversation.input.left',
       'conversation.input.right', 'conversation.input.model',
+      'conversation.input.activity',
       'conversation.composer.dock',
     ])
     expect(view.queryByLabelText('Plan mode')).toBeNull()

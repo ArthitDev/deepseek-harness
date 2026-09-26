@@ -26,7 +26,7 @@ import type {} from '@deepseek-ai/dsh-permission-presets'
 // documented `ctx.get` pattern), never as a hard dep. A rosterless deployment
 // keeps its model-facing rows on the host plane, where the child already sees
 // them through the tool registry's global layer.
-import type {} from '@deepseek-ai/dsh-agent-preset-registry'
+import type {} from '@deepseek-ai/dsh-agent-presets'
 import { delegationDepthOf } from './depth.ts'
 
 /** Thrown when starting a child would exceed the requested depth cap. */
@@ -125,24 +125,27 @@ export function resolveChildAgentOptions(
  * survive persistence, the seed boundary that separates inherited parent
  * history from child work, and the composition the child runs under.
  *
- * The preset is read from the parent's LIVE scope chain rather than from its
- * header, because a parent that switched preset while blank runs on the newer
- * composition and its header still names the older one. Recording it is what
- * makes a child's history reconstructable: without it a cold read of the child
- * resolves the deployment default and rebuilds turns under a tool set the
- * child never had.
+ * A seeded child joins the parent's LIVE preset generation because its inherited
+ * history was produced there. A fresh child instead resolves the preset bound
+ * to its own model route. Recording either choice keeps cold resume on the same
+ * named composition.
  * @param parent - the delegating parent agent.
  * @param childDepth - the resolved delegation depth to persist.
  * @param isSeeded - whether this child inherits a parent-log prefix, including an explicitly empty one.
+ * @param agentOptions - resolved child route used for model-to-preset selection.
  * @returns the `meta` for `ctx.agents.create()`.
  */
 export function childSessionMeta(
   parent: Agent,
   childDepth: number,
   isSeeded: boolean,
+  agentOptions: AgentOptions,
 ): NonNullable<CreateAgentOptions['meta']> {
   const parentHeader = parent.session.header
-  const agentPreset = parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
+  const presets = parent.ctx.get('agentPresets')
+  const agentPreset = !isSeeded && agentOptions.provider !== undefined && agentOptions.model !== undefined
+    ? presets?.presetIdForModel(agentOptions.provider, agentOptions.model)
+    : presets?.composedPreset(parent.ctx)
   return {
     ...parentHeader.cwd !== undefined ? { cwd: parentHeader.cwd } : {},
     ...agentPreset === undefined ? {} : { agentPreset },
@@ -176,10 +179,10 @@ export const SUBAGENT_DELEGATION_CONTEXT
     + 'limitation in your reply so the delegating agent can handle it.'
 
 /**
- * Compose one child inside its creation window: join its parent's preset,
- * register the fixed delegation-scope statement, then apply the child's own
- * shadowing persona section and tool restriction, all owned by the child's
- * scope and therefore invisible to its parent and siblings. Creation and cold
+ * Compose one child inside its creation window: a seeded child joins its
+ * parent's exact preset generation, while a fresh child mounts the model-bound
+ * preset recorded in its header. Then register the fixed delegation statement,
+ * persona, and tool restriction in the child's own scope. Creation and cold
  * resume both pass through here.
  *
  * The join comes first and the child's own registrations second, which is the
@@ -194,15 +197,22 @@ export const SUBAGENT_DELEGATION_CONTEXT
  * sections. Taking the parent as a parameter is what makes that omission
  * unrepresentable at the call sites.
  * @param childCtx - the child agent's scoped creation context.
- * @param parent - the delegating parent whose composition the child joins.
+ * @param parent - the delegating parent whose composition a seeded child joins.
+ * @param child - the child whose durable header selects its composition.
  * @param composition - the per-child persona and tool filter to install.
  */
-export function applyChildComposition(
+export async function applyChildComposition(
   childCtx: Context,
   parent: Agent,
+  child: Agent,
   composition: ChildComposition,
-): void {
-  childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
+): Promise<void> {
+  const presets = childCtx.get('agentPresets')
+  if (!child.session.header.isSeeded && child.session.header.agentPreset !== undefined) {
+    await presets?.mount(childCtx, child.session.header.agentPreset)
+  } else {
+    presets?.composeFrom(childCtx, parent.ctx)
+  }
   childCtx.systemPrompt.context({
     name: 'subagent:delegation',
     order: childCtx.systemPrompt.getContextOrder('SUBAGENT_DELEGATION'),

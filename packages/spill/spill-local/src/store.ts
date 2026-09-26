@@ -8,8 +8,8 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
-import { mkdir, open } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, open, readFile, realpath } from 'node:fs/promises'
+import { join, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 
 /** Prefix shared by default-root creation and startup discovery. */
@@ -80,6 +80,16 @@ export function sessionDir(root: string, sessionId: string): string {
   return join(root, `session-${hash}`)
 }
 
+/** Inputs for reading back one saved spill file. */
+export interface ReadTextOptions {
+  /** Spill root. */
+  root: string
+  /** Owning session id. */
+  sessionId: string
+  /** Locator previously returned by {@link saveTextFile}. */
+  locator: string
+}
+
 /** Inputs needed to save a local spill file. */
 export interface SaveTextOptions {
   /** Spill root. */
@@ -98,6 +108,39 @@ export interface SavedText {
   path: string
   /** UTF-8 content length. */
   bytes: number
+}
+
+/**
+ * Read back one saved spill file for its owning session. The locator resolves
+ * only inside the owner's session directory — both sides resolve symlinks
+ * first, so a planted link can never carry the read outside the owner's
+ * scope, and a locator that is gone, unreadable, or foreign rejects.
+ * @param options The root, owning session id, and saved locator.
+ * @returns The verbatim content and UTF-8 byte length.
+ */
+export async function readTextFile(options: ReadTextOptions): Promise<{ path: string; content: string; bytes: number }> {
+  const dir = sessionDir(options.root, options.sessionId)
+  const [resolvedFile, resolvedDir] = await Promise.all([
+    realpath(options.locator).catch((error: unknown) => {
+      if (isErrno(error, 'ENOENT')) {
+        throw new Error('spill artifact is no longer available at its retention location')
+      }
+      throw error
+    }),
+    // A missing owner session directory means nothing was ever saved for it,
+    // so any locator is outside this owner's scope by definition.
+    realpath(dir).catch((error: unknown) => {
+      if (isErrno(error, 'ENOENT')) {
+        throw new Error('spill artifact locator is outside the owning session scope')
+      }
+      throw error
+    }),
+  ])
+  if (resolvedFile !== resolvedDir && !resolvedFile.startsWith(resolvedDir + sep)) {
+    throw new Error('spill artifact locator is outside the owning session scope')
+  }
+  const content = await readFile(resolvedFile, 'utf8')
+  return { path: resolvedFile, content, bytes: Buffer.byteLength(content, 'utf8') }
 }
 
 /**

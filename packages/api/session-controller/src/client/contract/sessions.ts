@@ -94,16 +94,6 @@ export interface ISessions {
    */
   delete(id: SessionId): Promise<void>
   /**
-   * Select a session as current.
-   * @param id - session id (must exist in the list; unknown ids fail loud).
-   */
-  open(id: SessionId): void
-  /**
-   * Open a healthy catalog child through its exact direct-parent address.
-   * @param address - catalog-derived parent and child ids.
-   */
-  openSubagent(address: SubagentAddress): void
-  /**
    * Resolve an already discovered direct-parent address without opening it.
    * @param id - possible addressed child id.
    * @returns a retained or loaded-catalog address, without retaining a new selection or scope.

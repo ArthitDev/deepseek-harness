@@ -5,6 +5,7 @@ import type { PdfSession } from './document.ts'
 import { PdfWorkerFailure } from './errors.ts'
 
 const WORKER_READY = 'dsh-pdf-worker-ready'
+const INLINE_ASSET_BASE = 'dsh-inline:///'
 
 /**
  * Open complete PDF bytes with an explicitly owned Worker. Startup failure
@@ -93,6 +94,9 @@ export function openPdf(data: Uint8Array<ArrayBuffer>, signal: AbortSignal, repo
       data: bytes,
       worker: bridge,
       BinaryDataFactory,
+      cMapUrl: INLINE_ASSET_BASE,
+      standardFontDataUrl: INLINE_ASSET_BASE,
+      wasmUrl: INLINE_ASSET_BASE,
       cMapPacked: true,
       useWorkerFetch: false,
       enableXfa: false,

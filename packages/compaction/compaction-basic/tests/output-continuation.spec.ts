@@ -2,7 +2,6 @@ import { expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { LlmAdapter, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -36,7 +35,6 @@ it.each([
   const ctx = new Context()
   try {
     await mountAgentLoopTestDependencies(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)
     await ctx.plugin(BasicCompactionEngine, { maxOutputContinuations: limit })
@@ -51,7 +49,7 @@ it.each([
     expect(events.some(event => event.type === 'tool/call')).toBe(false)
     expect(events.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: ending } } })
     const notices = events.filter(event => event.type === 'user/message'
-      && event.data.source.kind === 'plugin' && event.data.source.plugin === 'output-limit-continuation')
+      && event.data.source.kind === 'output-limit-continuation')
     expect(notices).toHaveLength(expected - 1)
     if (expected > 1) {
       expect(notices[0]).toMatchObject({ data: {
@@ -78,7 +76,6 @@ it.each(['cancel', 'queued', 'manual', 'dispose'] as const)('respects %s at the 
   const ctx = new Context()
   try {
     await mountAgentLoopTestDependencies(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)
     const intercept = ctx.on('agent/turn-stopping', ({ agent }) => {
@@ -98,7 +95,7 @@ it.each(['cancel', 'queued', 'manual', 'dispose'] as const)('respects %s at the 
     await agent.whenIdle()
     expect(adapter.calls).toHaveLength(mode === 'queued' ? 2 : 1)
     expect(agent.session.snapshotEvents().filter(event => event.type === 'user/message'
-      && event.data.source.kind === 'plugin' && event.data.source.plugin === 'output-limit-continuation')).toEqual([])
+      && event.data.source.kind === 'output-limit-continuation')).toEqual([])
     if (mode === 'cancel') expect(agent.session.snapshotEvents().at(-1)).toMatchObject({
       type: 'turn/end', data: { reason: { kind: 'aborted' } },
     })

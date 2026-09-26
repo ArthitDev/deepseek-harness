@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { mkdtemp, rm, symlink } from 'node:fs/promises'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { promisify } from 'node:util'
 import { expect, it, vi } from 'vitest'
 import { prepareWindowsSignatureCacheDirectory, resolveWindowsSignatureCacheDirectory } from '../scripts/windows-signature-cache-directory.mjs'
@@ -17,7 +17,7 @@ it('accepts an explicit local cache directory', () => {
 })
 
 it.skipIf(process.platform !== 'win32')('prepares storage when the inherited process execution policy is Restricted', async (t) => {
-  const root = await mkdtemp(join(import.meta.dirname, 'directory-test-'))
+  const root = await mkdtemp(join(tmpdir(), 'dsh-signature-cache-directory-test-'))
   t.onTestFinished(() => rm(root, { recursive: true, force: true }))
   vi.stubEnv('PSExecutionPolicyPreference', 'Restricted')
   t.onTestFinished(() => { vi.unstubAllEnvs() })
@@ -31,7 +31,7 @@ it.each(['', 'cache', 'C:cache', '\\cache', '\\\\server\\share', '\\\\?\\C:\\cac
 })
 
 it.skipIf(process.platform !== 'win32')('creates private storage and rejects linked or publicly readable cache roots', async (t) => {
-  const root = await mkdtemp(join(import.meta.dirname, 'directory-test-'))
+  const root = await mkdtemp(join(tmpdir(), 'dsh-signature-cache-directory-test-'))
   t.onTestFinished(() => rm(root, { recursive: true, force: true }))
   const cache = join(root, 'private')
   await prepareWindowsSignatureCacheDirectory(cache)

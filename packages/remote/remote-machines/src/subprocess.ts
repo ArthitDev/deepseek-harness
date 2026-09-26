@@ -13,6 +13,7 @@ import type {
   SubprocessOutputRead,
   SubprocessOutputReader,
   SubprocessSpawnSpec,
+  SubprocessTerminalActivity,
   SubprocessTerminalForeground,
   SubprocessTerminalHandle,
   SubprocessTerminalSignal,
@@ -76,6 +77,7 @@ class SshProcessHandle implements SubprocessHandle {
   readonly stdin: Writable | undefined
   readonly stdout: Readable | undefined
   readonly stderr: Readable | undefined
+  readonly control = undefined
   readonly collected: SubprocessCollectedOutputs
   readonly done: Promise<SubprocessOutcome>
 
@@ -160,6 +162,7 @@ class SshTerminalHandle implements SubprocessTerminalHandle {
   readonly done: Promise<SubprocessOutcome>
   private channel: ClientChannel | undefined
   private stopping = false
+  private revision = 0
 
   constructor(open: Promise<ClientChannel>) {
     this.done = open.then(channel => new Promise<SubprocessOutcome>((resolve, reject) => {
@@ -189,16 +192,30 @@ class SshTerminalHandle implements SubprocessTerminalHandle {
         else reject(error instanceof Error ? error : new Error(String(error)))
       })
     })
+    this.revision += 1
+  }
+
+  resize(cols: number, rows: number): Promise<void> {
+    const channel = this.channel
+    if (channel === undefined) throw new Error('remote terminal is not ready')
+    channel.setWindow(rows, cols, 0, 0)
+    this.revision += 1
+    return Promise.resolve()
   }
 
   inspectForeground(): Promise<SubprocessTerminalForeground | undefined> {
     return Promise.resolve(undefined)
   }
 
+  inspectActivity(): Promise<SubprocessTerminalActivity> {
+    return Promise.resolve({ state: 'unknown', revision: this.revision })
+  }
+
   signalForeground(signal: SubprocessTerminalSignal): Promise<number> {
     const channel = this.channel
     if (channel === undefined) throw new Error('remote terminal is not ready')
     channel.signal(signal)
+    this.revision += 1
     return Promise.resolve(0)
   }
 
@@ -231,7 +248,7 @@ export class SshSubprocessRuntime extends LocalSubprocessRuntime {
     spec.signal?.throwIfAborted()
     const command = remoteCommand({ argv: spec.argv, env: spec.env }, remote.path)
     const channel = this.ctx.remoteMachines.connections.exec(remote.machineId, command, {
-      pty: { term: 'xterm-256color', rows: spec.rows, cols: spec.cols },
+      pty: { term: spec.terminalType, rows: spec.rows, cols: spec.cols },
     })
     return new SshTerminalHandle(channel)
   }

@@ -110,7 +110,6 @@ describe('web e2e: queue row actions', () => {
     await input.fill(ACTIVE_PROMPT)
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
-    await page.getByText('partial', { exact: true }).waitFor({ timeout: 15_000 })
 
     const admitted = page.waitForResponse('**/api/session/prompt')
     const received = Promise.withResolvers<undefined>()
@@ -165,28 +164,28 @@ describe('web e2e: queue row actions', () => {
     ).toBe(2)
 
     await page.setViewportSize({ width: 640, height: 1000 })
-    const collapsedFrame = page.locator('[data-sidebar-collapsed="true"]')
-    await collapsedFrame.waitFor()
-    await collapsedFrame.evaluate(async (element) => {
-      await Promise.all(element.getAnimations().map(animation => animation.finished))
-    })
-    const queueBox = await page.locator('[data-queue-dock]').boundingBox()
-    const composerBox = await page.locator('[data-composer-card]').boundingBox()
-    expect(queueBox).not.toBeNull()
-    expect(composerBox).not.toBeNull()
-    expect(queueBox!.x).toBeGreaterThanOrEqual(composerBox!.x)
-    expect(queueBox!.x + queueBox!.width)
-      .toBeLessThanOrEqual(composerBox!.x + composerBox!.width)
-    const queueLeftInset = queueBox!.x - composerBox!.x
-    const queueRightInset = composerBox!.x + composerBox!.width - queueBox!.x - queueBox!.width
-    const composerMetrics = await page.locator('[data-composer-card]').evaluate((element) => {
-      const style = getComputedStyle(element)
-      return {
-        dockInset: Number.parseFloat(style.getPropertyValue('--dsh-composer-dock-inset')),
-      }
-    })
-    expect(queueLeftInset).toBeCloseTo(composerMetrics.dockInset, 1)
-    expect(queueRightInset).toBeCloseTo(composerMetrics.dockInset, 1)
+    await page.locator('[data-sidebar-collapsed="true"]').waitFor()
+    // The responsive sidebar and composer settle independently; sample both
+    // rectangles in one browser task so the comparison uses one layout.
+    await vi.waitFor(async () => {
+      const metrics = await page.evaluate(() => {
+        const queue = document.querySelector('[data-queue-dock]')
+        const composer = document.querySelector('[data-composer-card]')
+        if (queue === null || composer === null) return undefined
+        const queueBox = queue.getBoundingClientRect()
+        const composerBox = composer.getBoundingClientRect()
+        return {
+          leftInset: queueBox.left - composerBox.left,
+          rightInset: composerBox.right - queueBox.right,
+          dockInset: Number.parseFloat(getComputedStyle(composer).getPropertyValue('--dsh-composer-dock-inset')),
+        }
+      })
+      expect(metrics).toBeDefined()
+      expect(metrics!.leftInset).toBeGreaterThanOrEqual(0)
+      expect(metrics!.rightInset).toBeGreaterThanOrEqual(0)
+      expect(metrics!.leftInset).toBeCloseTo(metrics!.dockInset, 1)
+      expect(metrics!.rightInset).toBeCloseTo(metrics!.dockInset, 1)
+    }, { timeout: 10_000 })
     await page.setViewportSize({ width: 1680, height: 1000 })
 
     const editRow = page.locator('[data-queue-dock] li', { hasText: EDIT })

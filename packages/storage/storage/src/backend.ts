@@ -73,6 +73,16 @@ export interface KvUnitDescriptor {
   readonly compatibleVersions?: readonly number[]
 }
 
+/** One record upsert inside a {@link KvUnit.putRecords} batch. */
+export interface KvRecordWrite {
+  /** Declared table name. */
+  readonly table: string
+  /** Record key; same per-layout rules as {@link KvUnit.putRecord}. */
+  readonly key: string
+  /** Opaque JSON-serializable record. */
+  readonly value: unknown
+}
+
 /**
  * One opened unit. Values are opaque JSON to this layer: no schema, no
  * events, no domain meaning. The unit does NOT serialize concurrent writes —
@@ -100,6 +110,18 @@ export interface KvUnit {
    * @returns resolution after durability.
    */
   putRecord(table: string, key: string, value: unknown): Promise<void>
+
+  /**
+   * Upsert every entry as one atomic batch: either all records land, or the
+   * medium keeps its prior content. Overwrite semantics per record match
+   * {@link KvUnit.putRecord}. Optional — backends whose medium cannot make a
+   * multi-record write atomic (a document-per-record tree) omit the member,
+   * and callers fall back to sequential `putRecord` calls, which stay
+   * individually durable but never batch-atomic.
+   * @param entries - Records to upsert; an empty batch is a no-op.
+   * @returns resolution after every record is durable.
+   */
+  putRecords?(entries: readonly KvRecordWrite[]): Promise<void>
 
   /**
    * Delete one record durably. Idempotent: a missing key is a no-op.

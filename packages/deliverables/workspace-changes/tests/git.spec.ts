@@ -83,6 +83,8 @@ describe('snapshots and diffs', () => {
 
   it('fails loudly when the addressed repository cannot be written or diffed', async () => {
     const cwd = await scratchDir('dsh-git-broken-', cleanups)
+    vi.stubEnv('GIT_CEILING_DIRECTORIES', join(cwd, '..'))
+    cleanups.push(async () => { vi.unstubAllEnvs() })
     const { git: runnerGit } = await runner()
     const store = objectsIn(await scratchDir('dsh-git-store-', cleanups))
     expect(await locateGitWorkspace(runnerGit, cwd, store, signal)).toBeNull()

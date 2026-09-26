@@ -91,6 +91,9 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     b.locale.register('settings.agentPreset', 'zh', { presetStandardName: '标准模式' } as never)
     expect(injected.presetName({ id: 'standard', isDefault: true, rows: [] })).toBe('标准模式')
     expect(injected.presetName({ id: 'mine', name: '我自己的', isDefault: false, rows: [] })).toBe('我自己的')
+    b.locale.register('settings.agentPreset', 'en', { presetStandardName: 'Standard mode' } as never)
+    b.locale.setLocale('en')
+    expect(injected.presetName({ id: 'standard', name: '标准模式', isDefault: true, rows: [] })).toBe('Standard mode')
     await b.ctx.fiber.dispose()
   })
 
