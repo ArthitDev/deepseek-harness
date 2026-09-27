@@ -466,15 +466,13 @@ function assertLeanChildRecord(agent: Agent, mode: 'one-shot' | 'continuable'): 
  * The catalog the shipped Web composition puts in front of the model, minus the
  * ripgrep-dependent pair below. The absences are deliberate, not incidental
  * gaps: the `cordis_*` toolset executes model-written JavaScript that no
- * sandbox row confines, `mcp_*` servers spawn outside `ctx.shell`, and `ralph`
- * runs unsupervised rounds whose completion is a worker self-report.
+ * sandbox row confines and `mcp_*` servers spawn outside `ctx.shell`.
  * `web_fetch` is present because public-address enforcement and one-shot
  * approval now confine its model-selected request target. The composition
  * Agent Note owns the rationale and its sources.
  */
 const EXPECTED_TOOLS = [
   'ask_user_question',
-  'bash',
   'create_goal',
   'edit',
   'exit_plan_mode',
@@ -485,8 +483,12 @@ const EXPECTED_TOOLS = [
   'job_output',
   'list_agents',
   'present',
+  process.platform === 'win32' ? 'pwsh' : 'bash',
+  'ralph',
   'read',
   'read_image',
+  'recon_get_evidence',
+  'recon_scan',
   'send_message',
   'skill',
   'subagent',
@@ -588,12 +590,9 @@ it('assembles the shipped Web transport, catalog, guidance, and defaults', async
       "mode": "always",
     }
   `)
-  // The catalog belongs to an AGENT, not to the process: every model-facing row
-  // now lives in a preset mounted under one session's scope, so the global
-  // layer holds nothing and a caller must name the agent to see anything. This
-  // composes from the deployment default — what a session that names no preset
-  // gets — which is the shape this test has always been about.
-  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([])
+  // Preset tools belong to an agent, while the operator-facing Recon engine is
+  // deployment-wide so both Chat and the Recon view share the same run store.
+  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['recon_scan', 'recon_get_evidence'])
   const handle = await ctx.agents.create({
     sessionId: SessionId('shipped-composition'),
     setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
