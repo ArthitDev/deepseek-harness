@@ -181,13 +181,21 @@ Host-owned global mode setting and ordinary-session prompt policy.
 
 ```ts cordis-catalog
 /**
- * Read the selected mode at prompt assembly time.
+ * Read the selected mode and its prompt overrides at prompt assembly time.
  * @returns the current global mode setting.
  */
 current(): PentestModeSettings
+
+/**
+ * Resolve the policy text injected for one mode: the operator override when
+ * it carries non-whitespace content, otherwise the built-in policy.
+ * @param mode - Operating mode to resolve.
+ * @returns the effective mode policy text.
+ */
+policyText(mode: PentestMode): string
 ```
 
-Types: [PentestModeSettings](../../packages/pentest/pentest-executor/README.md)
+Types: [PentestMode](../../packages/pentest/pentest-executor/README.md) · [PentestModeSettings](../../packages/pentest/pentest-executor/README.md)
 
 Source: [`packages/pentest/pentest-executor/src/index.ts`](../../packages/pentest/pentest-executor/src/index.ts)
 
@@ -256,8 +264,9 @@ Owns canonical penetration-test run state outside Session history.
 
 ```ts cordis-catalog
 /**
- * Create one active run with an explicit authorized target set.
- * @param request - Objective and scope strings captured from the operator.
+ * Create one active run. An empty authorized list means the run is
+ * unrestricted; listed targets still bound it, and exclusions always win.
+ * @param request - Objective and optional scope strings captured from the operator.
  * @returns the durable run record.
  */
 createRun(request: CreatePentestRunRequest): Promise<PentestRunRecord>

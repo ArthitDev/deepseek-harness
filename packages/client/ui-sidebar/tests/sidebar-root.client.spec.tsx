@@ -124,14 +124,15 @@ describe('SidebarRoot shell', () => {
     />)
 
     expect(screen.getByText('Shield Break Agent')).toBeTruthy()
-    expect(screen.getByText('1.2.3-rc.4-0123456-dirty')).toBeTruthy()
+    expect(screen.getByText('1.2.3-rc.4-0123456-pentest')).toBeTruthy()
+    // The suffix is unconditional now; the dirty env stub is kept for boot parity.
     expect(container.querySelector('[data-dsh-agent-logo]')).not.toBeNull()
   })
 
   it.each([
-    [{ DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3'],
-    [{ DSH_CLIENT_COMMIT_HASH: 'abcdef0', DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-abcdef0'],
-  ])('omits unavailable build-version suffixes from %j', (environment, expected) => {
+    [{ DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-pentest'],
+    [{ DSH_CLIENT_COMMIT_HASH: 'abcdef0', DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-abcdef0-pentest'],
+  ])('always carries the fork suffix, omitting only unavailable parts from %j', (environment, expected) => {
     for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value)
     render(<SidebarRoot
       collapsed={false} width={300}

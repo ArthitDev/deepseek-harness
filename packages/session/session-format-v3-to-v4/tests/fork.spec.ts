@@ -29,13 +29,16 @@ function fork() {
   }, { surfaceOp: 'append' })
   const seed = buildForkSeed(source.snapshotEvents(), SessionSeq(2))
   return Session.create(SessionId('fork-child'), seed, {
-    version: 4, id: SessionId('fork-child'), createdAt: 1, delegationDepth: 0, isSeeded: true, parentSession: source.id,
+    version: 5, id: SessionId('fork-child'), createdAt: 1, delegationDepth: 0, isSeeded: true, parentSession: source.id,
   }, SessionLogOffset(3))
 }
 
 function artifact(session = fork()): SessionFormatArtifact {
+  // The live Session writes at the current writer version; the identity
+  // conversion means re-stamping the header yields the equivalent released V4
+  // artifact this spec restores against.
   return JSON.parse(JSON.stringify({
-    header: session.header, events: session.snapshotEvents(), inheritedEventCount: session.inheritedEventCount,
+    header: { ...session.header, version: 4 }, events: session.snapshotEvents(), inheritedEventCount: session.inheritedEventCount,
   })) as SessionFormatArtifact
 }
 
@@ -77,7 +80,7 @@ describe('V4 fork results', () => {
     expect(result.data.message.id).toBe(`forked-tool-result-read-one-${result.seq}`)
     expect(JSON.stringify(result)).toContain('The parent session may have executed it after the fork point.')
     const nested = Session.create(SessionId('fork-grandchild'), buildForkSeed(child.snapshotEvents(), result.seq), {
-      version: 4, id: SessionId('fork-grandchild'), createdAt: 1, delegationDepth: 0, isSeeded: true, parentSession: child.id,
+      version: 5, id: SessionId('fork-grandchild'), createdAt: 1, delegationDepth: 0, isSeeded: true, parentSession: child.id,
     }, SessionLogOffset(result.seq + 1))
     expect(restoreReleasedV4Artifact(artifact(nested), new Set(original.map(event => event.type)))).toBeDefined()
   })

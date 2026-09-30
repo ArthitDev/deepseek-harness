@@ -87,7 +87,7 @@ function parseRecord(block: string, version: number): PersistenceFormatRecord {
   return { source: parseSource(record.source, label), roots }
 }
 
-function validateInventory(inventory: PersistenceSchemaInventory, version: number, current: boolean): ReadonlySet<string> {
+export function validateInventory(inventory: PersistenceSchemaInventory, version: number, current: boolean): ReadonlySet<string> {
   const label = `v${version}`
   for (const key of ['SessionHeader', 'JsonlHeaderLine', 'SessionEventEnvelope']) {
     const root = inventory.roots.find(root => root.key === key)

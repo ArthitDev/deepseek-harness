@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-webhook",
-  "description": "Fire-and-forget webhook rule runtime that creates Workspace-backed DeepSeek Harness Sessions",
+  "description": "Fire-and-forget webhook rule runtime that creates Workspace-backed Shield Break Harness Sessions",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"
@@ -41,6 +41,7 @@
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-agent-default-model": "workspace:*",
     "@deepseek-ai/dsh-agent-preset-registry": "workspace:*",
+    "@deepseek-ai/dsh-agent-presets": "workspace:*",
     "@deepseek-ai/dsh-invariants": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-permission-presets": "workspace:*",

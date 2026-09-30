@@ -160,18 +160,19 @@ export async function loadWin32DialogBindings(iconPath?: string): Promise<Win32D
       coUninitialize()
     },
     currentThreadId: () => getCurrentThreadId() as number,
-    pressAltForForeground: () => {
+    createFolderDialog: (): Win32FolderDialog => {
+      // Windows only honors SetForegroundWindow after this process receives
+      // recent input. Grant activation before foregrounding the owner; doing
+      // it later leaves the dialog hidden until another click.
       if (keybdEvent === undefined) {
         try {
           keybdEvent = user32.func('__stdcall', 'keybd_event', 'void', ['uint8', 'uint8', 'uint32', 'uintptr'])
         } catch {
-          return
+          keybdEvent = undefined
         }
       }
-      keybdEvent(VK_MENU, 0, 0, 0)
-      keybdEvent(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
-    },
-    createFolderDialog: (): Win32FolderDialog => {
+      keybdEvent?.(VK_MENU, 0, 0, 0)
+      keybdEvent?.(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
       // The topmost owner keeps the user-initiated chooser in front; its
       // icons replace the spawned node.exe identity in the taskbar.
       const owner = createWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, 'STATIC', '', WS_POPUP, 0, 0, 0, 0, null, null, null, null)

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-ptc-runtime",
-  "description": "Abstract PTC execution seam (ctx.ptcRuntime) for the DeepSeek Harness",
+  "description": "Abstract PTC execution seam (ctx.ptcRuntime) for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

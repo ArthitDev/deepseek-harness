@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-llm",
-  "description": "Provider-neutral LLM service interface for the DeepSeek Harness",
+  "description": "Provider-neutral LLM service interface for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

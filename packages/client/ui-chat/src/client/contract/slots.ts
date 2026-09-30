@@ -117,6 +117,11 @@ export interface ChatNodeOwnerProps {
   inspectCall: ((callId: ToolCallId) => void) | undefined
   forkAt: (seq: number) => void
   /**
+   * Edit-and-regenerate: fork before this durable user message and seed the
+   * child composer with its text, so the next submit reruns the question.
+   */
+  editAt: (seq: number, text: string) => void
+  /**
    * Session-authorized image loader, down-threaded from the Chat view so a
    * chat-node renderer can render the attachment presentation slot directly
    * with only the durable references plus this loader, instead of receiving a
@@ -206,6 +211,8 @@ export interface ChatViewInjected {
     read: () => ChatScrollPosition | null
   }
   forkAt: (seq: number) => void
+  /** Fork before one durable user message and seed the child composer with its text. */
+  editAt: (seq: number, text: string) => void
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 

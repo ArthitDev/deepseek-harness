@@ -1,17 +1,14 @@
 /**
- * The session header's agent-preset label.
- *
- * Read-only by construction: a session's composition is fixed once its
- * conversation starts, and a header is only worth reading after that. Offering
- * a control here would promise a switch the host refuses; naming what the
- * session runs is the honest affordance, and the choice itself lives on the
- * new-session screen ({@link AgentPresetSeat}).
+ * The session header's agent-preset switcher.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconAgentPresetOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import {
+  IconAgentPresetOutlineRegular, IconChevronDownOutlineRegular, Menu,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the ui-conversation SlotMap merge (the header actions).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
@@ -27,6 +24,8 @@ export interface AgentPresetLabelInjected {
   }
   /** Read the roster, so the label can show a name rather than an id. */
   load: () => Promise<void>
+  /** Recompose one idle session under another preset. */
+  select: (sessionId: SessionId, presetId: string) => Promise<string | undefined>
 }
 
 /** Full component props. */
@@ -41,13 +40,16 @@ export type AgentPresetLabelProps =
  * @returns the label, or null when the session records no preset.
  */
 export function AgentPresetLabel({
-  sessionId, useSessions, useAgentPresets, load, t,
+  sessionId, useSessions, useAgentPresets, load, select, t,
 }: AgentPresetLabelProps) {
   const preset = useSessions((state) => {
     const value = state.byId[sessionId]?.projectionValues?.agentPreset
     return typeof value === 'string' ? value : undefined
   })
-  const options = useAgentPresets(state => state.options)
+  const roster = useAgentPresets(state => state)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Deployments that compose no presets never label anything, so the roster
@@ -57,12 +59,57 @@ export function AgentPresetLabel({
 
   if (preset === undefined) return null
 
-  const option = options.find(entry => entry.id === preset)
+  const option = roster.options.find(entry => entry.id === preset)
   const text = option === undefined ? undefined : presetDisplayText(option, t)
+  if (!roster.modeSelectionEnabled || roster.options.length === 0) {
+    return (
+      <span className={css.label} title={text?.description ?? t('headerHint')}>
+        <IconAgentPresetOutlineRegular size={14} className={css.icon} />
+        {text?.name ?? preset}
+      </span>
+    )
+  }
   return (
-    <span className={css.label} title={text?.description ?? t('headerHint')}>
-      <IconAgentPresetOutlineRegular size={14} className={css.icon} />
-      {text?.name ?? preset}
-    </span>
+    <Menu
+      open={open}
+      onClose={() => { setOpen(false) }}
+      items={roster.options.map(entry => ({
+        id: entry.id,
+        label: presetDisplayText(entry, t).name,
+      }))}
+      selectedId={preset}
+      onSelect={(id) => {
+        setOpen(false)
+        setBusy(true)
+        setError(null)
+        void select(sessionId, id).then(
+          (refusal) => {
+            setBusy(false)
+            setError(refusal ?? null)
+          },
+          (cause: unknown) => {
+            setBusy(false)
+            setError(cause instanceof Error ? cause.message : String(cause))
+          },
+        )
+      }}
+      align="start"
+      portal
+      anchor={(
+        <button
+          type="button"
+          className={`${css.label} ${css.button}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={busy}
+          title={error ?? text?.description ?? t('headerHint')}
+          onClick={() => { setOpen(value => !value) }}
+        >
+          <IconAgentPresetOutlineRegular size={14} className={css.icon} />
+          <span className={css.text}>{text?.name ?? preset}</span>
+          <IconChevronDownOutlineRegular size={12} className={css.chevron} />
+        </button>
+      )}
+    />
   )
 }

@@ -3,16 +3,27 @@ import type { RemoteMachineAuth, RemoteMachineProbeValue } from './types.ts'
 
 /** Complete saved SSH profile used only by the Host. */
 export interface RemoteMachineProfile {
+  /** Stable identifier stored in user settings and addressed by every pool operation. */
   readonly id: string
+  /** Operator-chosen display name shown in the machine list. */
   readonly name: string
+  /** Remote host name or IP address the SSH client connects to. */
   readonly host: string
+  /** SSH port on the remote host; defaults to 22 at save time. */
   readonly port: number
+  /** Account name the SSH session authenticates as. */
   readonly username: string
+  /** Credential mode: `agent`, `password`, `password-prompt`, or `private-key`. */
   readonly auth: RemoteMachineAuth
+  /** Initial directory for new remote filesystem sessions; the login home when absent. */
   readonly defaultPath?: string
+  /** Stored password used when `auth` is `password`. */
   readonly password?: string
+  /** PEM private key text used when `auth` is `private-key`. */
   readonly privateKey?: string
+  /** Decrypts `privateKey` when the key is encrypted. */
   readonly passphrase?: string
+  /** Expected SHA-256 host fingerprint; absent until the operator trusts an observed key. */
   readonly fingerprint?: string
 }
 

@@ -225,6 +225,11 @@
   -webkit-app-region: no-drag;
 }
 
+/* Top-right window-chrome seat: the frame's trailing counterpart of
+   .leadingSeat. Always mounted on every platform so web deployments keep a
+   fixed home for frame-wide controls. */
+
+
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
    centered on the column border via inline left, above column content. No
    handle draws a visible pill: the details column was the only one that did,

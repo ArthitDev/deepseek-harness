@@ -28,6 +28,9 @@ Two small plugins cover the two patterns; each README below explains when to kee
 |---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.md) | Reminds the model when it repeats the same tool call, so it changes approach or finishes |
 | [`timeout-policy/`](timeout-policy/README.md) | Times out tool calls that declare a limit, so the model gets a clear error instead of waiting forever |
+| [`scope-policy/`](scope-policy/README.md) | Denies tool calls referencing targets outside the operator-authorized network scope (opt-in; Dead Mode enforcement) |
+| [`run-budget/`](run-budget/README.md) | Denies further tool calls once the token or wall-clock budget is exhausted, so the run ends in a partial report (opt-in) |
+| [`scope-proxy/`](scope-proxy/README.md) | Loopback forward proxy that scope-judges and address-pins every `HTTP_PROXY` connection, closing DNS rebinding without a sandbox (opt-in) |
 
 -----
 

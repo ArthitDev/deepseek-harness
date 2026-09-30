@@ -40,6 +40,32 @@
   word-break: break-word;
 }
 
+.editBubble {
+  width: min(525px, 70vw);
+  box-sizing: border-box;
+}
+
+.editInput {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  padding: 0;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .referenceSummary {
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsh-content-font-size-secondary, 13px);

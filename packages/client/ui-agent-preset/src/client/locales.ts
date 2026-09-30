@@ -27,7 +27,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   error: 'Could not load agent presets.',
   userTrust: 'Custom',
   seatHint: 'Agent preset for the session you are about to start',
-  headerHint: 'The agent preset this session runs, fixed when it started',
+  headerHint: 'Switch the Agent preset for this session',
   nav: 'Agent presets',
   sectionIntro:
     'A preset is the plugin composition one session\'s agent runs — its tools, prompt, and capabilities. '
@@ -98,7 +98,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   modelBindings: 'Models',
   showPicker: 'Allow switching Agent modes',
   showPickerBeta: 'Beta',
-  showPickerDescription: 'When enabled, new tasks can choose any available mode. When disabled, all new tasks use the configured default. Only affects new tasks.',
+  showPickerDescription: 'When enabled, new and running tasks can switch to any available mode between turns. When disabled, new tasks use the configured default.',
   enablePickerToSetDefault: 'Turn on Agent mode selection to choose a default',
   enablePickerToCreate: 'Turn on Agent mode selection to start Creator mode',
 }
@@ -108,7 +108,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   error: '无法加载 Agent 预设。',
   userTrust: '自定义',
   seatHint: '即将开始的这个会话所用的 Agent 预设',
-  headerHint: '本会话运行的 Agent 预设，开始时即固定',
+  headerHint: '切换本会话使用的 Agent 预设',
   nav: 'Agent 预设',
   sectionIntro: '预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。填写系统提示词直接新建、复制既有预设，或用「创造模式」让 Agent 帮你创建。',
   builtIn: '内置',
@@ -170,7 +170,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   modelBindings: '模型',
   showPicker: '允许切换 Agent 模式',
   showPickerBeta: 'Beta',
-  showPickerDescription: '开启后，新任务可以选择可用模式。关闭后，所有新任务使用配置的默认模式。仅影响新任务。',
+  showPickerDescription: '开启后，新任务和运行中的任务都可在两轮之间切换可用模式。关闭后，新任务使用配置的默认模式。',
   enablePickerToSetDefault: '开启 Agent 模式选择后才能设置默认模式',
   enablePickerToCreate: '开启 Agent 模式选择后才能启动创造者模式',
 }

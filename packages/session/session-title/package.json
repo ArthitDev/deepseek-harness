@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-session-title",
-  "description": "Log-backed session title service and provider registry for the DeepSeek Harness",
+  "description": "Log-backed session title service and provider registry for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

@@ -1,6 +1,7 @@
 /** Cross-platform native single-directory chooser behind the native backend's capability. */
 
 import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
+import type { DirectoryPickerBrand } from '@deepseek-ai/dsh-host-directory-picker'
 import { pickWin32Directory } from './win32-dialog.ts'
 
 /** Testable command boundary; native implementations never invoke a shell. */
@@ -11,7 +12,7 @@ export interface DirectoryPickerInternals {
   platform?: NodeJS.Platform
   run?: DirectoryPickerRunner
   /** Replaces the in-process Win32 dialog (`pickWin32Directory`) for deterministic tests. */
-  pickWin32Dialog?: (signal: AbortSignal) => Promise<string | null>
+  pickWin32Dialog?: (signal: AbortSignal, brand?: DirectoryPickerBrand) => Promise<string | null>
 }
 
 function outputPath(stdout: string): string | null {
@@ -43,11 +44,13 @@ function rethrowIfAborted(signal: AbortSignal, error: unknown): void {
  * Open the platform directory picker.
  * @param signal - caller/connection lifetime; abort terminates the native command.
  * @param internals - Platform and runner hooks for deterministic tests.
+ * @param brand - App brand whose icon the Windows dialog displays.
  * @returns the selected path, or null when the user cancels.
  */
 export async function pickNativeDirectory(
   signal: AbortSignal,
   internals: DirectoryPickerInternals = {},
+  brand: DirectoryPickerBrand = 'red',
 ): Promise<string | null> {
   const platform = internals.platform ?? process.platform
   const run = internals.run ?? runNativeCommand
@@ -73,7 +76,7 @@ export async function pickNativeDirectory(
     // tier: any failure surfaces as-is (no PowerShell fallback tier; see
     // .agents/notes/archived/simplification/2026-08-04-drop-windows-powershell-picker-fallback.md).
     const pickDialog = internals.pickWin32Dialog ?? pickWin32Directory
-    return await pickDialog(signal)
+    return await pickDialog(signal, brand)
   }
 
   if (platform === 'linux') {

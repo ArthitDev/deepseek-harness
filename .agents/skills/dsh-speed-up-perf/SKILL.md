@@ -1,9 +1,9 @@
 ---
 name: dsh-speed-up-perf
-description: 'Use when investigating or optimizing DeepSeek Harness performance, designing realistic synthetic benchmarks or CI performance gates, profiling long Sessions or Web responsiveness, or turning performance PR evidence into measured behavior-preserving fixes.'
+description: 'Use when investigating or optimizing Shield Break Harness performance, designing realistic synthetic benchmarks or CI performance gates, profiling long Sessions or Web responsiveness, or turning performance PR evidence into measured behavior-preserving fixes.'
 ---
 
-# Speed Up DeepSeek Harness
+# Speed Up Shield Break Harness
 
 Turn a broad “make it faster” request into reproducible user-path measurements and small, evidence-backed fixes. This is guidance, not a quota or a script: survey broadly, follow measured cost, and reject attractive changes that do not improve the workload users actually run.
 

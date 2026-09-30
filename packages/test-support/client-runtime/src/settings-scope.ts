@@ -20,7 +20,10 @@ export interface StubSettingsScope<T> {
   publish(next: Partial<SettingsScopeSnapshot<T>>): void
 }
 
-/** Build an in-memory settings scope for service specs. */
+/**
+ * Build an in-memory settings scope for service specs.
+ * @returns the stub handle carrying the scope, write spies, and publication controls.
+ */
 export function stubSettingsScope<T>(): StubSettingsScope<T> {
   let snapshot: SettingsScopeSnapshot<T> = {
     status: 'loading', value: undefined, base: undefined, user: undefined,

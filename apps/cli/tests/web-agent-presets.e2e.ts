@@ -116,7 +116,7 @@ async function bootWeb(
       { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
       { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
     ] },
-    { id: 'agent-preset-registry', config: { default: 'standard' } },
+    { id: 'agent-presets', name: '@deepseek-ai/dsh-agent-presets', config: { default: 'standard' } },
     ...extra,
   ]
   const home = profileHome

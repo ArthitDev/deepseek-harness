@@ -1276,7 +1276,7 @@ describe('scope-aware search guidance', () => {
 /** Preserve the default persona and exact section separators in the oracle. */
 function withPersona(...sections: string[]): string {
   return [
-    'You are an AI agent powered by DeepSeek Harness.',
+    'You are an AI agent powered by Shield Break Harness.',
     ...(sections.length === 0 ? [] : [
       'Never announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.',
     ]),

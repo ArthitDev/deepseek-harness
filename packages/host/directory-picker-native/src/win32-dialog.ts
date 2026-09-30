@@ -8,6 +8,7 @@
 
 import { closeThreadWindows as hostCloseThreadWindows, spawnDialogWorker } from './win32-dialog-host.ts'
 import { fileURLToPath } from 'node:url'
+import type { DirectoryPickerBrand } from '@deepseek-ai/dsh-host-directory-picker'
 import type { Win32DialogWorkerData, Win32DialogWorkerMessage } from './win32-dialog-worker.ts'
 
 /** The child-process surface the driver drives (satisfied by `node:child_process`). */
@@ -45,7 +46,11 @@ export interface Win32DialogInternals {
 
 /** The dialog title every host shows. */
 export const DIALOG_TITLE = 'Select Workspace Directory'
-const DIALOG_ICON_PATH = fileURLToPath(new URL('../assets/app.ico', import.meta.url))
+const DIALOG_ICON_PATHS: Record<DirectoryPickerBrand, string> = {
+  red: fileURLToPath(new URL('../assets/app.ico', import.meta.url)),
+  blue: fileURLToPath(new URL('../assets/app-blue.ico', import.meta.url)),
+  black: fileURLToPath(new URL('../assets/app-black.ico', import.meta.url)),
+}
 
 /** `WM_CLOSE` re-post cadence while an abort waits for the worker to unwind. */
 const CLOSE_RETRY_MS = 150
@@ -63,18 +68,21 @@ function assertNever(value: never): never {
  * Open the modern Win32 folder picker off the event loop.
  * @param signal - caller lifetime; abort closes the dialog and rejects.
  * @param internals - Worker/window hooks for deterministic tests.
+ * @param brand - App brand whose icon the dialog displays.
  * @returns the selected path, or null when the user cancels.
  */
 export async function pickWin32Directory(
   signal: AbortSignal,
   internals: Win32DialogInternals = {},
+  brand: DirectoryPickerBrand = 'red',
 ): Promise<string | null> {
   if (signal.aborted) throw new Error('native directory picker aborted')
   const spawnWorker = internals.spawnWorker ?? spawnDialogWorker
   const closeWindows = internals.closeThreadWindows ?? hostCloseThreadWindows
   const closeRetryMs = internals.closeRetryMs ?? CLOSE_RETRY_MS
+  const iconPath = DIALOG_ICON_PATHS[brand]
 
-  const worker: Win32DialogWorkerLike = spawnWorker({ title: DIALOG_TITLE, iconPath: DIALOG_ICON_PATH })
+  const worker: Win32DialogWorkerLike = spawnWorker({ title: DIALOG_TITLE, iconPath })
   let dialogThreadId: number | undefined
   let closeTimer: NodeJS.Timeout | undefined
   let settled = false
@@ -139,7 +147,9 @@ export async function pickWin32Directory(
           return
         case 'error':
           settle(() => {
-            reject(new Error(`win32 folder dialog failed: ${message.message}`))
+            reject(new Error(signal.aborted
+              ? 'native directory picker aborted'
+              : `win32 folder dialog failed: ${message.message}`))
           })
           return
         /* v8 ignore next 2 -- closed worker-owned union; a fourth kind becomes a compile error */

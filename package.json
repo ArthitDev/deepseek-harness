@@ -205,6 +205,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-web-app": "workspace:*",
     "@deepseek-ai/dsh-browser-use": "workspace:*",
     "@deepseek-ai/dsh-experimental-browser-use-runtime": "workspace:*",
     "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp": "workspace:*",

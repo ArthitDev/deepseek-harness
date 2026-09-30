@@ -54,7 +54,7 @@ const CHAT_NODE_INJECT: ChatNodeInjected = {
 
 /** Services required by the Chat target and its presentation registrations. */
 export const inject = [
-  'slots', 'sessions', 'uiWorkspace', 'uiSession', 'uiConversation', 'locale',
+  'slots', 'sessions', 'uiWorkspace', 'uiSession', 'uiConversation', 'conversation', 'locale',
   'configForms', 'remote', 'remote.session', 'sidebarRight',
 ]
 
@@ -218,6 +218,21 @@ export function apply(ctx: Context): void {
               .then((childId) => { ctx.uiWorkspace.openSession(childId) })
               .catch(() => {
                 // Fork or child-title failure leaves the source view unchanged.
+              })
+          },
+          editAt: (seq, text) => {
+            ctx.sessions.fork({ sessionId, atSeq: seq - 1, increaseTitle: true })
+              .then((childId) => {
+                ctx.uiWorkspace.openSession(childId, (openedId) => {
+                  const scope = ctx.sessions.scope(openedId)
+                  if (scope === undefined) throw new Error(`edited session "${openedId}" has no retained scope`)
+                  const input = ctx.conversation.input.for(scope)
+                  input.setDraft(text)
+                  input.submit()
+                })
+              }, () => {
+                // No completed-turn prefix before this question (it opens the
+                // session): the fork is refused and the source view stays put.
               })
           },
         }

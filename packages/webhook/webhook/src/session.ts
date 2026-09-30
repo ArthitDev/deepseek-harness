@@ -1,5 +1,6 @@
 /** Workspace-backed Session creation for one settled webhook rule result. */
 
+import type {} from '@deepseek-ai/dsh-agent-presets'
 import type { Context } from '@deepseek-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'node:path'

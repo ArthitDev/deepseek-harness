@@ -7,7 +7,7 @@ import { createSessionFormatV3ToV4 } from '../src/index.ts'
 import { remapV3References } from '../src/references.ts'
 
 const header = { type: 'session', version: 3, id: 'restart', createdAt: 1, isSeeded: false, delegationDepth: 0 }
-const nativeHeader: SessionHeader = { version: 4, id: SessionId(header.id), createdAt: 1, isSeeded: false, delegationDepth: 0 }
+const nativeHeader: SessionHeader = { version: 5, id: SessionId(header.id), createdAt: 1, isSeeded: false, delegationDepth: 0 }
 const user = (id: string) => ({ id, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: id }] })
 const row = (type: string, data: SessionFormatJsonObject) => ({ type, data })
 const splice = () => row('agent/inbox/spliced', { target: 'next-turn', inserted: [user('next')] })

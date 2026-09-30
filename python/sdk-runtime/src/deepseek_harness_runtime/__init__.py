@@ -129,7 +129,7 @@ def resolve_bundled_launch_args(mode: str | None = None) -> tuple[str, ...]:
     if selected == "node":
         return _node_launch_args()
     raise ValueError(
-        f"unsupported DeepSeek Harness runtime mode {selected!r}: expected 'exe' or 'node' "
+        f"unsupported Shield Break Harness runtime mode {selected!r}: expected 'exe' or 'node' "
         f"(explicit argument or ${RUNTIME_MODE_ENV_VAR})"
     )
 
@@ -143,7 +143,7 @@ def _current_platform_tag() -> str:
         or (plat == "win" and arch != "x64")
     ):
         raise FileNotFoundError(
-            "no bundled DeepSeek Harness SDK runtime exists for this platform "
+            "no bundled Shield Break Harness SDK runtime exists for this platform "
             f"(sys.platform={sys.platform!r}, machine={platform.machine()!r}); supported: "
             "Linux x64/arm64, macOS x64/arm64, and Windows x64. " + _EXE_ACQUISITION_HINT
         )

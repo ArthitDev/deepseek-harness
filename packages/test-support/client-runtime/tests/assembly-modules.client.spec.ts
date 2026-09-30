@@ -17,7 +17,7 @@ import { MODULES_PACKAGE, createInProcessModules, loadPluginModules } from '../s
 
 const RENDERER = '@deepseek-ai/dsh-client-ui-renderer'
 const TYPERT = '@deepseek-ai/dsh-typert-registry'
-const BRAND = '@deepseek-ai/dsh-client-ui-brand-official'
+const BRAND = '@deepseek-ai/dsh-client-ui-chat'
 const MISSING = '@deepseek-ai/dsh-client-does-not-exist'
 
 const row = (name: string, immediately = false) => ({ name, inject: [], immediately })

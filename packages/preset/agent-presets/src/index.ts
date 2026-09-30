@@ -730,10 +730,9 @@ export class AgentPresets extends TypertRemoteService {
   /**
    * Re-link one agent to a different preset's standing composition.
    *
-   * Only valid while the agent has produced nothing: swapping tools mid
-   * conversation would leave logged tool calls the new composition cannot
-   * make. The CALLER owns that check — this method does not read session
-   * history.
+   * Only valid between turns: swapping tools while one is running would split
+   * that turn across two compositions. The CALLER owns that check — this
+   * method does not read session history.
    *
    * The swap is a parent re-link, not an unmount: standing mounts are shared
    * and permanent, so the old composition stays for its other agents and the
@@ -808,18 +807,16 @@ export class AgentPresets extends TypertRemoteService {
     }
   }
 
-  /** One queued switch: re-check, recompose, then record what the agent runs. */
+  /** One queued switch: wait for an active turn, recompose, then record what the agent runs. */
   private async swap(agent: Agent, agentPreset: string): Promise<string> {
-    // Re-read inside the queue: an earlier switch may have run, and a
-    // conversation may have started, since this call was queued. A turn is one
-    // model-loop execution; standalone plugin events never open one, so a
-    // session that has only run commands is still blank.
+    // Re-read inside the queue: an earlier switch may have run, or a turn may
+    // have opened, since this call was queued. Completed history stays in the
+    // session log; only an in-flight turn is unsafe to recompose underneath.
     const boundary = this.selfCtx.sessionProjections.stateOf(agent.session, 'turnBoundary')
-    if (boundary !== undefined
-      && (boundary.openTurnStartSeq !== null || boundary.lastTurn > 0)) {
+    if (boundary?.openTurnStartSeq !== null && boundary?.openTurnStartSeq !== undefined) {
       throw new RemoteError(
         'agent-preset/locked',
-        `session "${agent.id}" has already started; its agent preset is fixed`,
+        `session "${agent.id}" has a turn in progress; wait for it to finish before switching presets`,
         { sessionId: agent.id, agentPreset },
       )
     }

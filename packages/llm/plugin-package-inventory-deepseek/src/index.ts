@@ -161,7 +161,8 @@ async function collectActivePluginPackages(
   sessionId?: string,
 ): Promise<DeepSeekPluginPackageIdentity[]> {
   const entries = activeEntries(ctx.loader)
-  if (sessionId !== undefined && ctx.get('agentPresets') !== undefined) {
+  if (sessionId !== undefined
+      && (ctx.get('agentPresets') !== undefined || ctx.get('agentPresetRegistry') !== undefined)) {
     const agent = ctx.agents.get(brandString<SessionId>(sessionId))
     if (agent !== undefined) {
       // The optional peer is loaded only when its service is present. Its existing

@@ -1,12 +1,15 @@
 import type { ThemeRuntime, ThemeTokenOverrides } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-export type AgentMode = 'blue' | 'red' | 'black'
+/** Operator-facing agent identity; selects the logo, headline, and theme palette. */
+export type AgentMode = 'blue' | 'red' | 'black' | 'dead'
 
+/** Persisted settings scope holding the selected agent mode. */
 export interface AgentModeSettings {
   readonly mode: AgentMode
 }
 
+/** Store binding for the agent-mode settings scope: read, subscribe, and write the mode. */
 export interface AgentModeSettingsBinding {
   getSnapshot: () => SettingsScopeSnapshot<AgentModeSettings>
   subscribe: (listener: () => void) => () => void
@@ -19,6 +22,7 @@ const MODE_LOGOS: Record<AgentMode, string> = {
   blue: '/new-logo-blue.png',
   red: '/new-logo.png',
   black: '/new-logo-black.png',
+  dead: '/new-logo-black.png',
 }
 const same = (value: string) => ({ light: value, dark: value })
 const mix = (foreground: string, amount: number, background = 'transparent') =>
@@ -146,12 +150,19 @@ const MODE_TOKENS: Record<AgentMode, ThemeTokenOverrides> = {
     light: { accent: '#181818', accentHover: '#333', base: '#f7f7f7', layer1: '#fff', onAccent: '#fff', text: '#111', toast: '#202020' },
     dark: { accent: '#f5f5f5', accentHover: '#d4d4d4', base: '#050505', layer1: '#0d0d0d', onAccent: '#111', text: '#f5f5f5', toast: '#242424' },
   }),
+  dead: modeTokens({
+    logo: MODE_LOGOS.dead,
+    headline: 'Dead Mode Agent',
+    glow: { light: 'rgb(126 34 206 / 40%)', dark: 'rgb(192 132 252 / 65%)' },
+    light: { accent: '#7e22ce', accentHover: '#6b21a8', base: '#fcf8ff', layer1: '#fff', onAccent: '#fff', text: '#24112f', toast: '#321640' },
+    dark: { accent: '#c084fc', accentHover: '#d8b4fe', base: '#09050d', layer1: '#150d1d', onAccent: '#1d0829', text: '#fbf3ff', toast: '#2b1738' },
+  }),
 }
 
 function storedMode(): AgentMode {
   try {
     const value = typeof localStorage === 'undefined' ? null : localStorage.getItem(STORAGE_KEY)
-    if (value === 'blue' || value === 'red' || value === 'black') return value
+    if (value === 'blue' || value === 'red' || value === 'black' || value === 'dead') return value
   } catch {
     // Storage access can be blocked (sandboxed frame or disabled storage); the shipped default applies.
   }
@@ -174,13 +185,23 @@ export class AgentModeController {
     this.syncSettings()
   }
 
+  /** Current agent mode.
+   * @returns The active agent mode.
+   */
   readonly getSnapshot = (): AgentMode => this.mode
 
+  /** Subscribe to agent-mode changes.
+   * @param listener - Called after the mode changes.
+   * @returns Unsubscribes the listener.
+   */
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
 
+  /** Switch the agent mode, persist it locally, and mirror it into the settings scope.
+   * @param mode - The agent mode to apply.
+   */
   set(mode: AgentMode): void {
     if (this.mode === mode) return
     this.setLocal(mode)
@@ -200,6 +221,7 @@ export class AgentModeController {
     for (const listener of this.listeners) listener()
   }
 
+  /** Release the settings subscription and the theme token overrides. */
   dispose(): void {
     this.disposeSettings?.()
     this.disposeTokens?.()
@@ -218,6 +240,6 @@ export class AgentModeController {
 
   private syncSettings(): void {
     const mode = this.settings?.getSnapshot().value?.mode
-    if ((mode === 'blue' || mode === 'red' || mode === 'black') && mode !== this.mode) this.setLocal(mode)
+    if ((mode === 'blue' || mode === 'red' || mode === 'black' || mode === 'dead') && mode !== this.mode) this.setLocal(mode)
   }
 }

@@ -1,6 +1,6 @@
 {
-  "name": "DeepSeek Harness",
-  "short_name": "DSH",
+  "name": "Shield Break Agent",
+  "short_name": "Shield Break",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

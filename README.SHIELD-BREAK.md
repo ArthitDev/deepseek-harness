@@ -1,6 +1,6 @@
 # Shield Break Agent — คู่มือ Mod และการใช้งานอย่างรับผิดชอบ
 
-เอกสารนี้อธิบายส่วนที่ branch `shield-break-agent-v2` เพิ่มจาก DeepSeek Harness,
+เอกสารนี้อธิบายส่วนที่ branch `shield-break-agent-v2` เพิ่มจาก Shield Break Harness,
 แนวทางนำไปใช้กับงาน Pentest และข้อจำกัดที่ต้องทราบก่อนใช้งาน
 
 > [!CAUTION]
@@ -20,6 +20,7 @@
 - จัดการ Agent preset และ system prompt แยกตาม provider/model ได้
 - กำหนดโมเดลและ preset ของ Sub-agent ได้อย่างอิสระ ไม่ต้องใช้ provider, model หรือ prompt เดียวกับ Main agent
 - Dynamic Recon เลือก Sub-agent route จาก provider เดียวกับโมเดลที่เลือกใน Session (ถ้าไม่ระบุจะใช้ default model ของระบบ) พร้อม preset ที่ผูกกับ route นั้น ไม่หยิบรายการแรกจาก allow-list; ถ้าไม่มี route ที่อนุญาตภายใต้ provider นั้น งานจะจบด้วยข้อผิดพลาดทันที
+- เพิ่มหน้าตั้งค่า "Team mode prompts" สำหรับกำหนดข้อความนโยบายที่ inject ตามโหมดทีม (Blue/Red/Black/Dead) แทนข้อความ built-in; ช่องว่างใช้ข้อความ built-in และมีผลทั้ง session ทั่วไปและ episode ของ Supervisor/Executor ใน run
 - ปรับ workflow ของ session, New Session, การลบ session และ sidebar แบบโครงสร้าง workspace/folder
 
 Team mode ช่วยสื่อบทบาทและบริบทการทำงาน แต่ขอบเขตจริงยังขึ้นกับ Permission mode,
@@ -161,7 +162,7 @@ Full test suite ใช้เวลานานกว่า targeted tests มา
 
 ## สถานะและต้นทาง
 
-branch นี้เป็น custom modification ไม่ใช่ release ทางการของ DeepSeek Harness
+branch นี้เป็น custom modification ไม่ใช่ release ทางการของ Shield Break Harness
 เมื่อ merge upstream ต้องรักษา behavior ของ branch นี้ในจุด conflict และทดสอบ preset, session,
 plugin loading, Recon queue, Dynamic Recon และ evidence flow ซ้ำทุกครั้ง
 

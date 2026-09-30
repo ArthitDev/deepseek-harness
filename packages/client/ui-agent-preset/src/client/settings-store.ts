@@ -172,12 +172,14 @@ export interface AgentPresetSettingsState {
   status: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
   error: string | null
   options: readonly AgentPresetOption[]
+  modeSelectionEnabled: boolean
 }
 
 const INITIAL: AgentPresetSettingsState = {
   status: 'idle',
   error: null,
   options: [],
+  modeSelectionEnabled: false,
 }
 
 /** Reads the roster for the surfaces that only display it. */
@@ -207,13 +209,14 @@ export class AgentPresetSettingsController {
     if (roster === undefined) return
     const { presets } = roster
     if (presets.length === 0) {
-      this.set({ status: 'unavailable', options: [] })
+      this.set({ status: 'unavailable', options: [], modeSelectionEnabled: false })
       return
     }
     this.set({
       status: 'ready',
       error: null,
       options: presetOptions(presets),
+      modeSelectionEnabled: roster.modeSelectionEnabled,
     })
   }
 

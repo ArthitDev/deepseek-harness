@@ -638,6 +638,22 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Plugins declare effect-scoped DSH_* facts; each shell tool collects one trusted snapshot per execution and its executor rebuilds the namespace.',
   },
   {
+    key: 'scopeProxy',
+    pkg: 'scope-proxy',
+    title: 'Scoped forward proxy',
+    mode: 'core',
+    consumers: ['scope-policy'],
+    note: 'The pentest run mounts one local forward proxy per scope; its DSH_SCOPE_PROXY environment fact routes managed shell calls through the authorized targets while the listener rejects everything outside.',
+  },
+  {
+    key: 'agentPresetRegistry',
+    pkg: 'agent-preset-registry',
+    title: 'Declarative preset registry',
+    mode: 'core',
+    consumers: ['agent-preset'],
+    note: 'The legacy declarative registry keeps its own service key so compositions can still submit YAML definitions while the composed preset roster package owns session preset state.',
+  },
+  {
     key: 'terminals',
     pkg: 'terminal',
     title: 'Persistent PTY session registry',

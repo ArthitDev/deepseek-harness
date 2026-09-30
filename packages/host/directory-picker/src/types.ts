@@ -7,6 +7,9 @@
  * @module @deepseek-ai/dsh-host-directory-picker/types
  */
 
+/** Brand variants the native chooser may present. */
+export type DirectoryPickerBrand = 'blue' | 'red' | 'black'
+
 /** One directory row: a listing child or a breadcrumb ancestor. */
 export interface DirectoryEntry {
   /** Base name shown in a browser row (a root crumb carries its full path). */

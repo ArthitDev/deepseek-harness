@@ -336,9 +336,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Workspace archive and directory operations consumed by Client UI domains.',
     methods: [
       {
-        signature: 'openSession(target: SessionTarget): void',
+        signature: 'openSession(target: SessionTarget, beforeOpen?: (sessionId: SessionId) => void): void',
         description: 'Select a Session and show its Conversation as one UI navigation action.',
-        parameters: [{ name: 'target', description: 'known Session identity or durable direct-parent subagent address to display.' }],
+        parameters: [{ name: 'target', description: 'known Session identity or durable direct-parent subagent address to display.' }, { name: 'beforeOpen', description: 'optional synchronous preparation for the selected Session, skipped after supersession.' }],
       },
       {
         signature: 'openWorkspace(workspaceId: WorkspaceId, beforeOpen?: (sessionId: SessionId) => void): Promise<void>',

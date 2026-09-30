@@ -321,7 +321,10 @@ export const en: Record<ReconKey, string> = {
   'settings.saveFailed': 'The deployment did not accept these values; they were left for you to correct.',
 }
 
-/** Shared settings-frame labels from the recon dictionary. */
+/** Shared settings-frame labels from the recon dictionary.
+ * @param t - Lookup over the recon dictionary.
+ * @returns The localized settings-frame labels.
+ */
 export function reconSettingsFormLabels(t: (key: ReconKey) => string): SettingsFormLabels {
   return {
     unavailable: t('settings.unavailable'),

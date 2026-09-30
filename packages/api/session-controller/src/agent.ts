@@ -8,11 +8,12 @@ import type {
 } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-presets'
+import { presetServiceOf } from './preset-service.ts'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
-import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import type { ModelSelection } from './types.ts'
 
@@ -427,17 +428,38 @@ export class ApiSessionAgentController {
   /**
    * Resolve the preset id and pre-publication Agent setup for a create or resume.
    * @param presetId - requested preset or the configured default when omitted.
+   * @param recoverMissing - resolve the model-matched or default preset when the requested preset is not found.
    * @returns the resolved preset identity and Agent setup callback.
    */
-  async composeAgent(presetId: string | undefined): Promise<{
+  async composeAgent(presetId: string | undefined, recoverMissing = false): Promise<{
     readonly agentPreset?: string
     readonly setup: AgentSetup
   }> {
-    const presets = this.ctx.get('agentPresets')
+    const presets = presetServiceOf(this.ctx)
     if (presets === undefined) return { setup: (_agentCtx, agent) => { this.installSelection(agent) } }
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const requestedId = presetId ?? presets.presetIdForModel(selection.provider, selection.model)
-    const resolvedId = (await presets.resolve(requestedId)).id
+    let resolvedId: string
+    try {
+      resolvedId = (await presets.resolve(requestedId)).id
+    } catch (error: unknown) {
+      if (!recoverMissing || remoteErrorOf(error)?.code !== 'agent-preset/not-found') throw error
+      const fallbacks = [
+        presets.presetIdForModel(selection.provider, selection.model),
+        presets.defaultId,
+      ].filter((id, index, ids) => id !== requestedId && ids.indexOf(id) === index)
+      let recovered: string | undefined
+      for (const fallback of fallbacks) {
+        try {
+          recovered = (await presets.resolve(fallback)).id
+          break
+        } catch (fallbackError: unknown) {
+          if (remoteErrorOf(fallbackError)?.code !== 'agent-preset/not-found') throw fallbackError
+        }
+      }
+      if (recovered === undefined) throw error
+      resolvedId = recovered
+    }
     return {
       agentPreset: resolvedId,
       setup: async (agentCtx, agent) => {
@@ -479,17 +501,22 @@ export class ApiSessionAgentController {
     if (hasApiSessionSubagentOwner(this.ctx, { header: observation.header }, undefined)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
-    const composition = await this.composeAgent(this.presetForObservation(observation))
+    const storedPreset = this.presetForObservation(observation)
+    const composition = await this.composeAgent(storedPreset, true)
     const published = this.ctx.sessions.get(sessionId)
     const live = this.ctx.agents.get(sessionId)
     if (published !== undefined && hasApiSessionSubagentOwner(this.ctx, published, live)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
-    return this.adoptHandle(await this.ctx.agents.resume({
+    const agent = this.adoptHandle(await this.ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: this.agentOptions(),
       setup: composition.setup,
     }))
+    if (composition.agentPreset !== undefined && composition.agentPreset !== storedPreset) {
+      agent.session.append('agent-preset/selected', { agentPreset: composition.agentPreset })
+    }
+    return agent
   }
 
   private async createOrAdopt(
@@ -516,12 +543,16 @@ export class ApiSessionAgentController {
         }
         const storedPreset = this.presetForObservation(observation)
         this.assertPresetUnchanged(sessionId, presetId, storedPreset)
-        const composition = await this.composeAgent(storedPreset)
-        return this.adoptHandle(await this.ctx.agents.resume({
+        const composition = await this.composeAgent(storedPreset, true)
+        const agent = this.adoptHandle(await this.ctx.agents.resume({
           resumeSessionId: sessionId,
           agentOptions: this.agentOptions(),
           setup: composition.setup,
         }))
+        if (composition.agentPreset !== undefined && composition.agentPreset !== storedPreset) {
+          agent.session.append('agent-preset/selected', { agentPreset: composition.agentPreset })
+        }
+        return agent
       } catch (error: unknown) {
         if (!(error instanceof SessionQueryError)
           || error.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') throw error

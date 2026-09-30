@@ -7,8 +7,10 @@ import {
   type SettingsFormScope, type SettingsFormShell,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 
+/** Cordis config namespace owning the recon-engine settings form. */
 export const RECON_SETTINGS_NS = 'recon-engine'
 
+/** Complete `recon-engine` Cordis config as edited on the settings form; every field is optional so the form can render defaults. */
 export interface ReconSettings {
   evidenceDir?: string
   dynamicTools?: string[]
@@ -33,6 +35,7 @@ export interface ReconSettings {
   cacheTtlSeconds?: Record<string, number>
 }
 
+/** ReconSettings field names in settings-form order. */
 export const RECON_SETTINGS_FIELDS = [
   'evidenceDir', 'dynamicTools',
   'requestTimeoutMs', 'maxRedirects', 'maxResponseBytes', 'maxDiscoveryBodyBytes',
@@ -41,12 +44,15 @@ export const RECON_SETTINGS_FIELDS = [
   'deepPorts', 'connectTimeoutMs', 'ctTimeoutMs', 'fingerprintOverlay', 'cacheTtlSeconds',
 ] as const
 
+/** One ReconSettings field name. */
 export type ReconSettingsField = typeof RECON_SETTINGS_FIELDS[number]
 
+/** Snapshot state of the recon settings card: form shell plus per-field state. */
 export interface ReconSettingsCardState extends SettingsFormShell {
   fields: Record<ReconSettingsField, SettingsFieldState>
 }
 
+/** View contract for the recon settings card: snapshot hooks plus form actions. */
 export interface ReconSettingsCardFace extends SettingsFormActions {
   hooks: { reconSettingsCard: SnapshotStore<ReconSettingsCardState> }
 }
@@ -128,9 +134,13 @@ export class ReconSettingsCardController {
     }
   }
 
+  /** Expose the card's snapshot store and form actions to the renderer.
+   * @returns The render face for the recon settings card.
+   */
   inject(): ReconSettingsCardFace {
     return { hooks: { reconSettingsCard: this.store }, ...this.form.actions() }
   }
 
+  /** Release the underlying settings form model and its snapshot store. */
   dispose(): void { this.form.dispose() }
 }

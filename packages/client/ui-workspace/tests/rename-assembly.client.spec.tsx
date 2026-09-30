@@ -20,7 +20,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  RemoteError, SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages,
+  RemoteError, SlotTestRuntime, stubConfigForms, stubSettingsScope, usePinnedBrowserLanguages,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -41,6 +41,7 @@ async function createRuntime(): Promise<SlotTestRuntime> {
   runtime.ctx.provide('layout', { selectPanel: vi.fn() })
   runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}) } as never)
   runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  runtime.ctx.provide('configForms', stubConfigForms().registry as never)
   runtime.releaseWorkspaceSource()
   // The rename flow never picks a directory; the namespace only has to be there
   // for ui-workspace's inject to settle.
@@ -109,7 +110,7 @@ describe('session rename through the assembled browser', () => {
         ({ sessionId, displayTitle, useMenuOpenState }: PropsRuntime<'sidebar.workspaces.session.menu.item'>) => {
           const [, setMenuOpen] = useMenuOpenState()
           return (
-            <MenuItemButton separatorBefore={order === 500} onSelect={() => {
+            <MenuItemButton separatorBefore={order === 600} onSelect={() => {
               setMenuOpen(false)
               selected(id, sessionId, displayTitle)
             }}>
@@ -119,21 +120,21 @@ describe('session rename through the assembled browser', () => {
         },
       )
     }
-    // `order` places plugin rows after the shipped rows (100/200/300/400)
+    // `order` places plugin rows after the shipped rows (100/200/300/400/500)
     // even when the later registration has the lower shadowing priority
     // assigned to dynamic browser packages; the first plugin row opens the
     // plugin group with a hairline.
-    registerAction('export', 500, -1, 'Export action')
-    registerAction('last', 600, -2, 'Last action')
+    registerAction('export', 600, -1, 'Export action')
+    registerAction('last', 700, -2, 'Last action')
     const view = runtime.renderRoot()
 
     const row = (await view.findByText('Session title')).closest('[role="treeitem"]')!
     const trigger = within(row as HTMLElement).getByLabelText('会话“Session title”的操作')
     fireEvent.click(trigger)
     expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '置顶会话', '重命名', '分叉会话', '归档会话', 'Export action', 'Last action',
+      '置顶会话', '重命名', '分叉会话', '归档会话', '删除会话', 'Export action', 'Last action',
     ])
-    expect(view.getAllByRole('separator')).toHaveLength(1)
+    expect(view.getAllByRole('separator')).toHaveLength(2)
     const last = view.getByRole('menuitem', { name: 'Last action' })
     const exportRow = view.getByRole('menuitem', { name: 'Export action' })
     trigger.focus()

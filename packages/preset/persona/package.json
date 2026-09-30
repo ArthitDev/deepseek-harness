@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-persona",
-  "description": "Composition-authored deployment persona section for the DeepSeek Harness",
+  "description": "Composition-authored deployment persona section for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

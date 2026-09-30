@@ -43,10 +43,11 @@ interface MessageItemProps {
   readonly t: ChatNodeViewProps['t']
   readonly referenceLabels?: readonly string[]
   readonly skillNames?: readonly string[]
+  readonly editAt?: (seq: number, text: string) => void
 }
 
 /** Legacy-node fixture adapter for the independently registered renderers. */
-function MessageItem({ node, t: translate, referenceLabels, skillNames }: MessageItemProps) {
+function MessageItem({ node, t: translate, referenceLabels, skillNames, editAt }: MessageItemProps) {
   const kind = node.kind === 'assistant' ? 'assistant-step' : node.kind
   const viewNode: ChatConversationViewNode = {
     key: `fixture:${node.kind}:${node.seq}`,
@@ -68,6 +69,7 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
   }
   const props = {
     node: viewNode, t: translate, renderMessageImages, openFile: vi.fn(), openSkill: vi.fn(), useChat: useDetachedChat,
+    ...(editAt === undefined ? {} : { editAt }),
   } as unknown as ChatNodeViewProps
   switch (node.kind) {
     case 'user':
@@ -158,7 +160,7 @@ describe('MessageItem arms', () => {
     expect(resolved.container.textContent).toContain('/123 then ')
   })
 
-  it('user bubbles expose clock / copy and neither branch nor edit; copy writes the text', () => {
+  it('edits a user message in its bubble and confirms regeneration with the revised text', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -167,20 +169,40 @@ describe('MessageItem arms', () => {
     // Same-day clock: construct "today at 14:24" so the label stays `HH:mm`.
     const now = new Date()
     const time = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 24).getTime()
+    const editAt = vi.fn()
     render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 1, time,
+        kind: 'user', seq: 7, time,
         content: [{ type: 'text', text: 'hello bubble' }] as never,
         source: null,
       }}
+      editAt={editAt}
       />,
     )
     expect(screen.getByText('14:24')).toBeTruthy()
     expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '编辑消息' }))
+    expect(editAt).not.toHaveBeenCalled()
+    const editor = screen.getByRole('textbox', { name: '编辑消息' })
+    expect((editor as HTMLTextAreaElement).value).toBe('hello bubble')
+    fireEvent.change(editor, { target: { value: 'edited bubble' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存并重新生成' }))
+    expect(editAt).toHaveBeenCalledWith(7, 'edited bubble')
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('hello bubble')
+  })
+
+  it('a user bubble without the edit seat exposes no edit action', () => {
+    render(
+      <MessageItem t={t} node={{
+        kind: 'user', seq: 1, time: 1_000,
+        content: [{ type: 'text', text: 'plain body' }] as never,
+        source: null,
+      }}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: '编辑消息' })).toBeNull()
   })
 
   it('user copy falls back to execCommand when clipboard.writeText is unavailable', () => {

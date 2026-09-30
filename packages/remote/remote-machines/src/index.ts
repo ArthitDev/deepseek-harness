@@ -33,6 +33,7 @@ export { SshSubprocessRuntime } from './subprocess.ts'
 export const SETTINGS_NAMESPACE = 'remote-machines'
 
 interface RemoteMachineSettings {
+  /** Saved SSH machine profiles loaded from user settings and consulted for every connection. */
   machines: Volatile<RemoteMachineProfile[]>
 }
 

@@ -12,6 +12,7 @@ import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type { SubprocessTerminalHandle } from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { presetServiceOf } from './preset-service.ts'
 import type {
   InstalledSkillsValue,
   SkillInstallRequest,
@@ -440,7 +441,7 @@ export class SessionSkillCatalog extends TypertRemoteService {
     }
 
     const live = this.ctx.agents.get(sessionId)
-    const presets = this.ctx.get('agentPresets')
+    const presets = presetServiceOf(this.ctx)
     const scoped = live === undefined ? undefined : presets?.serviceFor(live, 'skills')
     const skillRegistry = scoped ?? this.ctx.get('skills')
     if (skillRegistry === undefined) {
@@ -473,7 +474,7 @@ export class SessionSkillCatalog extends TypertRemoteService {
   private async scopeFor(
     agentPreset: string | undefined,
   ): Promise<({ key: ScopeKey } & AsyncDisposable) | undefined> {
-    const presets = this.ctx.get('agentPresets')
+    const presets = presetServiceOf(this.ctx)
     if (presets === undefined) return undefined
     try {
       return await presets.acquireScope(agentPreset)

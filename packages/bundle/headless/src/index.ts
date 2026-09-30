@@ -192,8 +192,8 @@ function* liveEvents(session: Session): Generator<SessionEvent> {
 function currentPreset(header: AdoptableHeader, events: Iterable<SessionEvent>, sessionId: SessionId): string | undefined {
   let preset = header.agentPreset
   for (const event of events) {
-    // Owned by dsh-agent-preset-registry, which this bundle does not compose, so the
-    // event is read structurally rather than through its module augmentation.
+    // Owned by dsh-agent-presets; this bundle reads the event structurally
+    // rather than through its module augmentation.
     const candidate = event as unknown as { type: string; data?: { agentPreset?: unknown } }
     if (candidate.type !== 'agent-preset/selected') continue
     const selected = candidate.data?.agentPreset

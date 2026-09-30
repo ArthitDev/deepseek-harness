@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, posix } from 'node:path'
 import { isSessionFormatJsonObject, parseSessionFormatLogFilename, sessionFormatLogFilename } from '@deepseek-ai/dsh-session-format'
-import { createSessionFormatCatalogWithChildren, historicalSessionFormatCatalog, sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
+import { createSessionFormatCatalogWithChildren, historicalSessionFormatCatalog, historicalV4SessionFormatCatalog, sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { historicalChildCatalogSource } from '@deepseek-ai/dsh-session-format-v3-to-v4'
 import { packVfsOverlay, type ImageTree, type PackOverlayResult } from './pack.ts'
 import type { ImageFiles } from './transform-image.ts'
@@ -35,7 +35,8 @@ export function packPreviewFixture(trees: readonly ImageTree[]): PackOverlayResu
     if (!isSessionFormatJsonObject(header) || header['version'] !== source.version || header['id'] !== source.id) {
       throw new Error(`preview fixture: ${source.path} disagrees with its Session header`)
     }
-    const catalog = source.version <= 3 ? historicalSessionFormatCatalog : sessionFormatCatalog
+    const catalog = source.version <= 3 ? historicalSessionFormatCatalog
+      : source.version === 4 ? historicalV4SessionFormatCatalog : sessionFormatCatalog
     const restore = catalog.createRestore(header, { recovery: 'strict', validation: 'current' })
     const events: unknown[] = rows.map(row => JSON.parse(row) as unknown)
     for (const event of events) restore.decodeRow(event)

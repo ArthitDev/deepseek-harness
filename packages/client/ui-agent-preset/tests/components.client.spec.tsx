@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The two conversation-adjacent surfaces: the new-session chip naming the
- * next session's preset, and the session header's read-only label. The split
- * is the host's rule — a session's history is produced under its preset's
- * tools, so the choice is only ever offered before one starts.
+ * next session's preset, and the session header's preset switcher.
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -24,6 +22,7 @@ const ROSTER_READY: AgentPresetSettingsState = {
   status: 'ready',
   error: null,
   options: [{ id: 'standard', trust: 'system', name: '标准模式' }, { id: 'mine', trust: 'user' }],
+  modeSelectionEnabled: true,
 }
 
 const SEAT_READY: AgentPresetSeatState = {
@@ -70,14 +69,16 @@ function renderLabel(
   })
   const sessions = createSnapshotStore({ byId: summary === undefined ? {} : { s1: summary } })
   const load = vi.fn(() => Promise.resolve())
+  const select = vi.fn(() => Promise.resolve(undefined))
   const view = render(<AgentPresetLabel {...({
     load,
+    select,
     sessionId: 's1',
     useSessions: bindSnapshotSelector(sessions),
     useAgentPresets: bindSnapshotSelector(store),
     t: (key: keyof typeof en) => en[key],
   } as unknown as AgentPresetLabelProps)} />)
-  return { load, view }
+  return { load, select, view }
 }
 
 describe('the new-session chip', () => {
@@ -291,20 +292,23 @@ describe('the chip introduce cue', () => {
 })
 
 describe('the session-header label', () => {
-  it('names the preset the session runs, and never offers a switch', async () => {
-    const { load } = renderLabel({
+  it('switches the running session preset between turns', async () => {
+    const { load, select } = renderLabel({
       blank: false,
       projectionValues: { agentPreset: 'standard' },
     })
 
     await waitFor(() => { expect(load).toHaveBeenCalledTimes(1) })
-    // A control here would promise a switch the host refuses outright.
-    expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.getByTitle(en.presetStandardDescription).textContent).toBe(en.presetStandardName)
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('mine'))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith('s1', 'mine') })
   })
 
   it('falls back to the id, and to the generic hint, when metadata is absent', () => {
-    renderLabel({ blank: true, projectionValues: { agentPreset: 'mine' } })
+    renderLabel(
+      { blank: true, projectionValues: { agentPreset: 'mine' } },
+      { modeSelectionEnabled: false },
+    )
 
     expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
   })
@@ -313,7 +317,7 @@ describe('the session-header label', () => {
     renderLabel({
       blank: false,
       projectionValues: { agentPreset: 'standard' },
-    }, { options: [] })
+    }, { options: [], modeSelectionEnabled: false })
 
     // The session's own summary is the authority on which preset it runs; the
     // roster only supplies the display name, and its arrival is a later frame.

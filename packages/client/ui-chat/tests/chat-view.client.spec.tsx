@@ -453,6 +453,7 @@ function makeHarness(
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     chatScroll,
     forkAt,
+    editAt: vi.fn(),
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
     t,

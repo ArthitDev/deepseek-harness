@@ -121,7 +121,7 @@ Source: [`packages/core/agent-loop/src/index.ts:292`](../packages/core/agent-loo
 
 ## `@deepseek-ai/dsh-agent-preset`
 
-Requires: `agentPresets`
+Requires: `agentPresetRegistry`
 
 ```ts config-catalog
 /** Definition submitted to the preset registry. */
@@ -147,12 +147,68 @@ export interface Config {
   selectedDefault: Volatile<string | undefined>
   /** Whether new-session surfaces expose preset selection and the saved default applies. */
   modeSelectionEnabled: Volatile<boolean>
+  /** Preset overrides by provider and model. */
+  models?: Volatile<Record<string, Record<string, string>> | undefined>
 }
 ```
 
 Depends on: `Volatile` (`@deepseek-ai/cordis`)
 
 Source: [`packages/preset/agent-preset-registry/src/preset.ts:13`](../packages/preset/agent-preset-registry/src/preset.ts)
+
+<a id="deepseek-aidsh-agent-presets"></a>
+
+## `@deepseek-ai/dsh-agent-presets`
+
+Requires: `loader` · `sessionProjections`
+
+```ts config-catalog
+/** Plugin config: which preset is the default, and where presets live. */
+export interface Config {
+  /** Preset id mounted when a caller names none. Missing at mount time fails loud. */
+  default: string
+  /** User-selected default while the chooser is shown. */
+  selectedDefault?: Volatile<string | undefined>
+  /** Whether new-session surfaces expose preset selection. */
+  modeSelectionEnabled?: Volatile<boolean>
+  /** Preset overrides by provider and model. */
+  models?: Volatile<Record<string, Record<string, string>> | undefined>
+  /** Scanned roots in precedence order; an earlier root wins a duplicate id. */
+  roots: PresetRoot[]
+  /**
+   * Prepend this package's bundled shipped presets as a `system` root, before
+   * every configured root, so the shipped set always mounts and wins a
+   * duplicate id. The default survives a whole-`config` patch replacement;
+   * only an explicit `false` — a deployment supplying purely its own presets,
+   * or an embedder using the roster as bare machinery — drops the set.
+   */
+  includeShippedRoot: boolean
+  /**
+   * Append the harness home's `USER_PRESET_DIR` as a `user` root, after every
+   * configured root. False mounts a roster without the derived writable root.
+   */
+  includeUserRoot: boolean
+}
+
+/** One directory scanned for preset subdirectories. */
+export interface PresetRoot {
+  /** Directory holding one subdirectory per preset; a leading `~` expands. */
+  path: string
+  /** Trust recorded on every preset discovered under this root. */
+  trust: PresetTrust
+}
+
+/**
+ * Where a preset's composition came from. A `system` preset ships with the
+ * deployment; a `user` preset was authored locally, by a person or by an
+ * agent, and therefore carries the same trust as shell access.
+ */
+export type PresetTrust = 'system' | 'user'
+```
+
+Depends on: `Volatile` (`@deepseek-ai/cordis`)
+
+Source: [`packages/preset/agent-presets/src/preset.ts:53`](../packages/preset/agent-presets/src/preset.ts)
 
 <a id="deepseek-aidsh-agent-tool-presentation"></a>
 
@@ -237,12 +293,16 @@ Source: [`packages/api/session-controller/src/index.ts:81`](../packages/api/sess
 ```ts config-catalog
 /** Host integrations replaceable by direct unit tests. */
 export interface SettingsControllerInternals {
+  /** Host directory-opening integration used for locally authored presets. */
+  readonly openPath?: (path: string, signal: AbortSignal) => Promise<void>
   /** Host text-editor integration used to open the settings document. */
   readonly openTextFile?: (path: string, signal: AbortSignal) => Promise<void>
+  /** Native directory-opening availability probe. */
+  readonly canOpenPath?: () => boolean
 }
 ```
 
-Source: [`packages/api/settings-controller/src/index.ts:35`](../packages/api/settings-controller/src/index.ts)
+Source: [`packages/api/settings-controller/src/index.ts:38`](../packages/api/settings-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-terminal-controller"></a>
 
@@ -2080,16 +2140,25 @@ Source: [`packages/document/office-to-pdf/src/index.ts:31`](../packages/document
 ## `@deepseek-ai/dsh-pentest-executor`
 
 ```ts config-catalog
-/** Durable global operating mode for ordinary Web sessions. */
-export interface PentestModeSettings {
-  /** Global operating mode applied to ordinary Web sessions. */
-  readonly mode: PentestMode
+interface PentestModeConfig {
+  /** Live global operating mode selected from the Web mode selector. */
+  mode: Volatile<PentestMode>
+  /** Blue Team policy text injected for ordinary Web sessions. */
+  bluePrompt: Volatile<string>
+  /** Red Team policy text injected for ordinary Web sessions. */
+  redPrompt: Volatile<string>
+  /** Black Team policy text injected for ordinary Web sessions. */
+  blackPrompt: Volatile<string>
+  /** Dead Mode policy text injected for ordinary Web sessions. */
+  deadPrompt: Volatile<string>
+  /** Whether built-in global prompt sections are withheld from assembly. */
+  suppressSections: Volatile<boolean>
 }
 ```
 
-Depends on: [`PentestMode`](../packages/pentest/pentest-run/src/index.ts)
+Depends on: [`PentestMode`](subsystems/../../packages/pentest/pentest-executor/README.md) · `Volatile` (`@deepseek-ai/cordis`)
 
-Source: [`packages/pentest/pentest-executor/src/index.ts:264`](../packages/pentest/pentest-executor/src/index.ts)
+Source: [`packages/pentest/pentest-executor/src/index.ts:318`](../packages/pentest/pentest-executor/src/index.ts)
 
 <a id="deepseek-aidsh-pentest-run"></a>
 
@@ -2111,7 +2180,7 @@ export interface PentestRunManagerConfig {
 }
 ```
 
-Source: [`packages/pentest/pentest-run/src/index.ts:867`](../packages/pentest/pentest-run/src/index.ts)
+Source: [`packages/pentest/pentest-run/src/index.ts:882`](../packages/pentest/pentest-run/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -2226,7 +2295,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/boot/plugin-manager/src/index.ts:37`](../packages/boot/plugin-manager/src/index.ts)
+Source: [`packages/boot/plugin-manager/src/index.ts:39`](../packages/boot/plugin-manager/src/index.ts)
 
 <a id="deepseek-aidsh-plugin-package-inventory-deepseek"></a>
 
@@ -2344,81 +2413,58 @@ Source: [`packages/shell/pwsh-sandbox/src/index.ts:40`](../packages/shell/pwsh-s
 Requires: `tools` · `systemPrompt` · `subprocess`
 
 ```ts config-catalog
-/** Plugin config: operator scope, budgets, port lists, evidence location, and cache TTLs. */
-export interface Config {
-  /** Retained for configuration compatibility; the application accepts every target. */
-  authorizedTargets?: string[]
-  /** Retained for configuration compatibility; the application accepts every target. */
-  excludedTargets?: string[]
-  /**
-   * Accept any target the model names without an authorized-target match.
-   * Retained for configuration compatibility. The application always enables
-   * this behavior.
-   */
-  allowAnyTarget?: boolean
-  /** Directory holding one subdirectory per run plus the `_cache` index. Defaults to `.recon`. */
-  evidenceDir?: string
-  /** Per-request timeout budget (ms). Defaults to 10000. */
-  requestTimeoutMs?: number
-  /** Maximum redirect hops followed per probe. Defaults to 5. */
-  maxRedirects?: number
-  /** Maximum bytes downloaded per response. Defaults to 2000000. */
-  maxResponseBytes?: number
-  /** Maximum bytes per public metadata document. Defaults to 200000. */
-  maxDiscoveryBodyBytes?: number
-  /** Maximum JS asset bodies downloaded per deep run. Defaults to 50. */
-  maxJsFiles?: number
-  /** Maximum pages the bounded deep crawl visits. Defaults to 50. */
-  maxPages?: number
-  /** Maximum link depth the bounded deep crawl follows. Defaults to 3. */
-  maxDepth?: number
-  /** Concurrent requests inside the deep crawl. Defaults to 4. */
-  crawlConcurrency?: number
-  /** Maximum source maps downloaded per deep run. Defaults to 20. */
-  maxSourceMaps?: number
-  /** Maximum endpoints inventoried and probed per deep run. Defaults to 100. */
-  maxApiEndpoints?: number
-  /** Maximum in-scope hosts resolved and probed per deep run. Defaults to 25. */
-  maxHosts?: number
-  /** Hard cap on total HTTP requests per deep run. Defaults to 300. */
-  maxTotalRequests?: number
-  /** Hard wall-clock budget per run (ms). Defaults to 180000. */
-  maxRunDurationMs?: number
-  /** Upper bound on characters of one evidence document returned to the model. Defaults to 40000. */
-  maxEvidenceOutputChars?: number
-  /** Ports probed by the deep profile's controlled connect scan. Defaults to a small common-service list. */
-  deepPorts?: number[]
-  /** Per-probe TCP connect timeout (ms). Defaults to 1500. */
-  connectTimeoutMs?: number
-  /** CT log lookup timeout (ms) in the deep profile. Defaults to 15000. */
-  ctTimeoutMs?: number
-  /** Path to a JSON file of extra technology signatures applied on top of the built-in table. */
-  fingerprintOverlay?: string
-  /** Cache TTL seconds per check category; every field defaults. */
-  cacheTtlSeconds?: {
-    /** Freshness window (seconds) for DNS observations. */
-    dns?: number
-    /** Freshness window (seconds) for HTTP probes. */
-    http?: number
-    /** Freshness window (seconds) for TLS facts. */
-    tls?: number
-    /** Freshness window (seconds) for public-metadata discovery. */
-    discovery?: number
-    /** Freshness window (seconds) for the HTML/JS asset inventory. */
-    assets?: number
-    /** Freshness window (seconds) for the deep page crawl. */
-    crawl?: number
-    /** Freshness window (seconds) for the API inventory and probing. */
-    api?: number
-    /** Freshness window (seconds) for the service connect probe. */
-    services?: number
-    /** Freshness window (seconds) for expanded hosts from DNS, TLS, links, and specifications. */
-    hosts?: number
-  }
-}
+/** Live root config supplied by Loader. */
+type LiveConfig = ReturnType<typeof Config>
 ```
 
-Source: [`packages/pentest/recon-engine/src/index.ts:40`](../packages/pentest/recon-engine/src/index.ts)
+Source: [`packages/pentest/recon-engine/src/index.ts:222`](../packages/pentest/recon-engine/src/index.ts)
+
+<a id="deepseek-aidsh-remote-machines"></a>
+
+## `@deepseek-ai/dsh-remote-machines`
+
+Requires: `settings`
+
+```ts config-catalog
+interface RemoteMachineSettings {
+  /** Saved SSH machine profiles loaded from user settings and consulted for every connection. */
+  machines: Volatile<RemoteMachineProfile[]>
+}
+
+/** Complete saved SSH profile used only by the Host. */
+export interface RemoteMachineProfile {
+  /** Stable identifier stored in user settings and addressed by every pool operation. */
+  readonly id: string
+  /** Operator-chosen display name shown in the machine list. */
+  readonly name: string
+  /** Remote host name or IP address the SSH client connects to. */
+  readonly host: string
+  /** SSH port on the remote host; defaults to 22 at save time. */
+  readonly port: number
+  /** Account name the SSH session authenticates as. */
+  readonly username: string
+  /** Credential mode: `agent`, `password`, `password-prompt`, or `private-key`. */
+  readonly auth: RemoteMachineAuth
+  /** Initial directory for new remote filesystem sessions; the login home when absent. */
+  readonly defaultPath?: string
+  /** Stored password used when `auth` is `password`. */
+  readonly password?: string
+  /** PEM private key text used when `auth` is `private-key`. */
+  readonly privateKey?: string
+  /** Decrypts `privateKey` when the key is encrypted. */
+  readonly passphrase?: string
+  /** Expected SHA-256 host fingerprint; absent until the operator trusts an observed key. */
+  readonly fingerprint?: string
+}
+
+/** Browser-safe vocabulary for saved SSH machines. Secret fields only exist on write requests. */
+
+export type RemoteMachineAuth = 'agent' | 'password' | 'password-prompt' | 'private-key'
+```
+
+Depends on: `Volatile` (`@deepseek-ai/cordis`)
+
+Source: [`packages/remote/remote-machines/src/index.ts:35`](../packages/remote/remote-machines/src/index.ts)
 
 <a id="deepseek-aidsh-repeat-tool-reminder"></a>
 
@@ -2453,6 +2499,26 @@ export interface Config {
 ```
 
 Source: [`packages/guard/repeat-tool-reminder/src/index.ts:35`](../packages/guard/repeat-tool-reminder/src/index.ts)
+
+<a id="deepseek-aidsh-run-budget"></a>
+
+## `@deepseek-ai/dsh-run-budget`
+
+```ts config-catalog
+/**
+ * Plugin config. `0` disables a ceiling; at least one must be positive —
+ * mounting the plugin with both at zero is a misconfiguration and fails loud
+ * at load.
+ */
+export interface Config {
+  /** Deny further tool calls once the session's measured token total reaches this. `0` disables. */
+  maxTotalTokens?: number
+  /** Deny further tool calls once `maxWallMs` have passed since the agent's first observed call. `0` disables. */
+  maxWallMs?: number
+}
+```
+
+Source: [`packages/guard/run-budget/src/index.ts:37`](../packages/guard/run-budget/src/index.ts)
 
 <a id="deepseek-aidsh-sandbox-local"></a>
 
@@ -2514,6 +2580,60 @@ export interface Config {
 Depends on: [`SandboxMode`](subsystems/sandbox.md)
 
 Source: [`packages/sandbox/sandbox-policy/src/index.ts:71`](../packages/sandbox/sandbox-policy/src/index.ts)
+
+<a id="deepseek-aidsh-scope-policy"></a>
+
+## `@deepseek-ai/dsh-scope-policy`
+
+```ts config-catalog
+/**
+ * Plugin config, validated at load: every scope entry must parse
+ * (`host[:port][/path]` forms), `allowedSchemes` must be non-empty lowercase
+ * scheme tokens. An empty `authorizedTargets` list is unrestricted on hosts —
+ * only exclusions then bind.
+ */
+export interface Config {
+  /** Hosts the run may touch; empty means every host is authorized. */
+  authorizedTargets?: string[]
+  /** Hosts refused even when authorized (`http://10.0.0.8`, `host:port`, `host/path`). */
+  excludedTargets?: string[]
+  /** URL schemes a tool call may reference (default `['http', 'https', 'ws', 'wss']`). */
+  allowedSchemes?: string[]
+  /** Resolve each hostname and refuse answers that hit an excluded IP literal (default `true`). */
+  resolveAddresses?: boolean
+}
+```
+
+Source: [`packages/guard/scope-policy/src/index.ts:58`](../packages/guard/scope-policy/src/index.ts)
+
+<a id="deepseek-aidsh-scope-proxy"></a>
+
+## `@deepseek-ai/dsh-scope-proxy`
+
+```ts config-catalog
+/**
+ * Plugin config, validated at load exactly like `scope-policy`: every scope
+ * entry must parse, `allowedSchemes` must be non-empty lowercase tokens.
+ * `host`/`port` place the listener; the default is loopback with an
+ * OS-assigned port.
+ */
+export interface Config {
+  /** Hosts the run may touch; empty means every host is authorized. */
+  authorizedTargets?: string[]
+  /** Hosts refused even when authorized; exclusions always win. */
+  excludedTargets?: string[]
+  /** URL schemes an absolute-form request may use (default `['http', 'https', 'ws', 'wss']`). */
+  allowedSchemes?: string[]
+  /** Resolve each hostname once and refuse answers that hit an excluded IP literal (default `true`). */
+  resolveAddresses?: boolean
+  /** Listener bind address (default `127.0.0.1`). */
+  host?: string
+  /** Listener port; `0` picks a free one (default). */
+  port?: number
+}
+```
+
+Source: [`packages/guard/scope-proxy/src/index.ts:56`](../packages/guard/scope-proxy/src/index.ts)
 
 <a id="deepseek-aidsh-sdk-app"></a>
 
@@ -2811,7 +2931,7 @@ Source: [`packages/session/session-title-first-prompt-llm/src/index.ts:15`](../p
 ```ts config-catalog
 /** Plugin config (all optional — the built-in facts resolve without defaults). */
 export interface Config {
-  /** DeepSeek Harness home directory exposed as `DSH_HOME`; defaults to `$DSH_HOME` or `~/.dsh`. */
+  /** Shield Break Harness home directory exposed as `DSH_HOME`; defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
 }
 ```
@@ -2845,7 +2965,7 @@ export interface Config {
   providerName?: string
   /** Whether project and user roots are included around custom roots. */
   includeDefaultRoots?: boolean
-  /** DeepSeek Harness config root. Defaults to `$DSH_HOME` or `~/.dsh`. */
+  /** Shield Break Harness config root. Defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
   /** Shared agent config root. Defaults to `$DSH_AGENTS_HOME` or `~/.agents`. */
   agentsHome?: string
@@ -3283,7 +3403,7 @@ Source: [`packages/subagent/subagent-spawn-in-process/src/index.ts:25`](../packa
 ```ts config-catalog
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.personaPrefix} for its contract). */
 export interface Config {
-  /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
+  /** Include the fixed Shield Break Harness identity before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
   includeRuntimeContext?: boolean
@@ -4236,7 +4356,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-agent-preset` ([`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-approval` ([`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-attachment` ([`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts))
-- `@deepseek-ai/dsh-client-ui-brand-official` ([`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-chat` ([`packages/client/ui-chat/src/index.ts`](../packages/client/ui-chat/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-commands` ([`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-conversation` ([`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts))
@@ -4301,7 +4420,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-llm` ([`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts))
 - `@deepseek-ai/dsh-lsp` ([`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts))
 - `@deepseek-ai/dsh-mcp-resources` — requires `tools` ([`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts))
-- `@deepseek-ai/dsh-remote-machines` — requires `settings` ([`packages/remote/remote-machines/src/index.ts`](../packages/remote/remote-machines/src/index.ts))
 - `@deepseek-ai/dsh-sandbox-ssh` — requires `ssh` ([`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts))
 - `@deepseek-ai/dsh-schedule` — requires `agents` · `sessions` · `tools` · `sessionPersistence` ([`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts))
 - `@deepseek-ai/dsh-session` ([`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts))
@@ -4390,6 +4508,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-session-format-v1-to-v2` ([`packages/session/session-format-v1-to-v2/src/index.ts`](../packages/session/session-format-v1-to-v2/src/index.ts))
 - `@deepseek-ai/dsh-session-format-v2-to-v3` ([`packages/session/session-format-v2-to-v3/src/index.ts`](../packages/session/session-format-v2-to-v3/src/index.ts))
 - `@deepseek-ai/dsh-session-format-v3-to-v4` ([`packages/session/session-format-v3-to-v4/src/index.ts`](../packages/session/session-format-v3-to-v4/src/index.ts))
+- `@deepseek-ai/dsh-session-format-v4-to-v5` ([`packages/session/session-format-v4-to-v5/src/index.ts`](../packages/session/session-format-v4-to-v5/src/index.ts))
 - `@deepseek-ai/dsh-session-snapshot` ([`packages/test-support/session-snapshot/src/index.ts`](../packages/test-support/session-snapshot/src/index.ts))
 - `@deepseek-ai/dsh-session-telemetry` ([`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts))
 - `@deepseek-ai/dsh-session-title-llm` ([`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts))

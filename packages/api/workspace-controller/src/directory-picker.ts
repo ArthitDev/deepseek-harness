@@ -11,7 +11,7 @@ import type {
 } from '@deepseek-ai/dsh-host-directory-picker'
 // The seam owns the listing declaration; the generator requires the reference
 // site to name that package rather than this package's re-export of it.
-import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
+import type { DirectoryListing, DirectoryPickerBrand } from '@deepseek-ai/dsh-host-directory-picker/types'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { RemoteErrorCode } from '@deepseek-ai/dsh-typert-protocol'
 
@@ -48,14 +48,15 @@ export class DirectoryPickerController extends TypertRemoteService {
 
   /**
    * Open the host's OS chooser for a Remote caller.
+   * @param brand - validated client brand used by the native chooser.
    * @param signal - caller lifetime; abort terminates the chooser.
    * @returns the chosen absolute path, or null when the operator cancels.
    */
   @Remote('pick')
-  async pick(signal: AbortSignal): Promise<string | null> {
+  async pick(brand: DirectoryPickerBrand, signal: AbortSignal): Promise<string | null> {
     const capability = this.requireCapability('native', 'pick')
     try {
-      return await capability.pick(signal)
+      return await capability.pick(signal, brand)
     } catch (error: unknown) {
       throw cancellableFailure(error, signal, 'directory picker was aborted', 'directory picker failed')
     }

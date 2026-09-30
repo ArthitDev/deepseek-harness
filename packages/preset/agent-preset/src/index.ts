@@ -10,7 +10,7 @@ export type Config = PresetDefinition
 
 /** Registers child plugin configuration without owning Agents using older revisions. */
 export default class AgentPreset {
-  static inject = ['agentPresets']
+  static inject = ['agentPresetRegistry']
   /** Preserve child expressions until their own plugins activate. */
   static readonly [EntryGroup.key] = true
   static Config: z<Config> = z.object({
@@ -25,6 +25,6 @@ export default class AgentPreset {
   constructor(private readonly ctx: Context, private readonly config: Config) {}
 
   async* [Service.init]() {
-    yield await this.ctx.agentPresets.register(this.config)
+    yield await this.ctx.agentPresetRegistry.register(this.config)
   }
 }

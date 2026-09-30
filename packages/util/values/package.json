@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-util-values",
-  "description": "Duplicate-install-safe value primitives for the DeepSeek Harness",
+  "description": "Duplicate-install-safe value primitives for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

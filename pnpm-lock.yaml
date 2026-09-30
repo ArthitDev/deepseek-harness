@@ -64,6 +64,9 @@ importers:
       '@deepseek-ai/dsh-tool-workspace-dependencies':
         specifier: workspace:*
         version: link:packages/skill/tool-workspace-dependencies
+      '@deepseek-ai/dsh-web-app':
+        specifier: workspace:*
+        version: link:packages/bundle/web-app
       '@deepseek-ai/dsh-web-fetch-http':
         specifier: workspace:*
         version: link:packages/web/web-fetch-http
@@ -2350,9 +2353,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-attachment':
         specifier: workspace:^
         version: link:../../client/ui-attachment
-      '@deepseek-ai/dsh-client-ui-brand-official':
-        specifier: workspace:^
-        version: link:../../client/ui-brand-official
       '@deepseek-ai/dsh-client-ui-chat':
         specifier: workspace:^
         version: link:../../client/ui-chat
@@ -2958,33 +2958,6 @@ importers:
       clsx:
         specifier: ^2.0.0
         version: 2.1.1
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.2.0
-        version: 18.3.1(react@18.3.1)
-
-  packages/client/ui-brand-official:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:~
-        version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-client-ui-primitives':
-        specifier: workspace:*
-        version: link:../ui-primitives
-      '@deepseek-ai/dsh-client-ui-renderer':
-        specifier: workspace:*
-        version: link:../ui-renderer
-      '@deepseek-ai/dsh-client-ui-sidebar':
-        specifier: workspace:*
-        version: link:../ui-sidebar
-      '@testing-library/react':
-        specifier: ^16.1.0
-        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@types/react':
-        specifier: ~18.3.1
-        version: 18.3.31
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -4503,6 +4476,9 @@ importers:
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../host/webserver
+      '@deepseek-ai/dsh-web-app':
+        specifier: workspace:*
+        version: link:../../bundle/web-app
       '@testing-library/react':
         specifier: ^16.1.0
         version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -8495,6 +8471,66 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/guard/run-budget:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
+  packages/guard/scope-policy:
+    dependencies:
+      '@deepseek-ai/dsh-pentest-run':
+        specifier: workspace:*
+        version: link:../../pentest/pentest-run
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
+  packages/guard/scope-proxy:
+    dependencies:
+      '@deepseek-ai/dsh-pentest-run':
+        specifier: workspace:*
+        version: link:../../pentest/pentest-run
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-shell':
+        specifier: workspace:*
+        version: link:../../shell/shell
+      '@deepseek-ai/dsh-shell-env':
+        specifier: workspace:*
+        version: link:../../shell/shell-env
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
   packages/guard/timeout-policy:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -9851,6 +9887,9 @@ importers:
       '@deepseek-ai/dsh-agent-preset':
         specifier: workspace:*
         version: link:../agent-preset
+      '@deepseek-ai/dsh-agent-presets':
+        specifier: workspace:*
+        version: link:../agent-presets
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../boot/app-boot
@@ -10591,6 +10630,9 @@ importers:
       '@deepseek-ai/dsh-session-format-v3-to-v4':
         specifier: workspace:*
         version: link:../session-format-v3-to-v4
+      '@deepseek-ai/dsh-session-format-v4-to-v5':
+        specifier: workspace:*
+        version: link:../session-format-v4-to-v5
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -10661,6 +10703,19 @@ importers:
       '@deepseek-ai/dsh-session-format-v2-to-v3':
         specifier: workspace:*
         version: link:../session-format-v2-to-v3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+
+  packages/session/session-format-v4-to-v5:
+    dependencies:
+      '@deepseek-ai/dsh-session-format':
+        specifier: workspace:*
+        version: link:../session-format
+      '@deepseek-ai/dsh-session-format-v3-to-v4':
+        specifier: workspace:*
+        version: link:../session-format-v3-to-v4
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -10751,6 +10806,9 @@ importers:
       '@deepseek-ai/dsh-session-format-v3-to-v4':
         specifier: workspace:*
         version: link:../session-format-v3-to-v4
+      '@deepseek-ai/dsh-session-format-v4-to-v5':
+        specifier: workspace:*
+        version: link:../session-format-v4-to-v5
       '@deepseek-ai/node-addon-system':
         specifier: workspace:~
         version: link:../../../native/system/packages/entry
@@ -13452,6 +13510,9 @@ importers:
 
   packages/webhook/webhook:
     dependencies:
+      '@deepseek-ai/dsh-agent-presets':
+        specifier: workspace:*
+        version: link:../../preset/agent-presets
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../util/brand

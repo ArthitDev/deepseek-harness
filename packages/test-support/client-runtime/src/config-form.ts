@@ -59,3 +59,50 @@ export function stubConfigForm<T>(): StubConfigForm<T> {
     },
   }
 }
+
+/** Handle over one stubbed configuration-forms registry: scopes by namespace plus the serving control. */
+export interface StubConfigForms {
+  /** The registry face handed to the plugin under test. */
+  registry: {
+    get: <T>(namespace: string) => ConfigForm<T>
+    whileServed: (namespaces: readonly string[], register: (served: ReadonlySet<string>) => () => void) => () => void
+  }
+  /** Scopes handed out per namespace, keyed by namespace. */
+  scopes: Map<string, StubConfigForm<unknown>>
+  /** Mark namespaces as served, running every waiting registration. */
+  serve: (namespaces: readonly string[]) => void
+}
+
+/**
+ * Build an in-memory configuration-forms registry for plugin specs.
+ * @returns the stub handle carrying the registry face and per-namespace form stubs.
+ */
+export function stubConfigForms(): StubConfigForms {
+  const scopes = new Map<string, StubConfigForm<unknown>>()
+  const served = new Set<string>()
+  const registered: Array<(served: ReadonlySet<string>) => () => void> = []
+  return {
+    registry: {
+      get: <T>(namespace: string) => {
+        const existing = scopes.get(namespace) as StubConfigForm<T> | undefined
+        if (existing !== undefined) return existing.scope
+        const scope = stubConfigForm<T>()
+        scopes.set(namespace, scope)
+        return scope.scope
+      },
+      whileServed: (namespaces, register) => {
+        registered.push(register)
+        if (namespaces.every(name => served.has(name))) return register(served)
+        return () => {
+          const at = registered.indexOf(register)
+          if (at >= 0) registered.splice(at, 1)
+        }
+      },
+    },
+    scopes,
+    serve: (namespaces) => {
+      for (const name of namespaces) served.add(name)
+      for (const register of [...registered]) register(served)
+    },
+  }
+}

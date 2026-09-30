@@ -10,6 +10,7 @@ import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
+import { catalogProvider, catalogProviderIds } from '../src/catalog.ts'
 import { resolveProfiles } from '../src/config.ts'
 import { createModels, createProvider, getSupportedThinkingLevels } from '../src/models.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
@@ -69,6 +70,38 @@ async function harness(config: LlmPiAi.Options): Promise<Context> {
 }
 
 describe('hand-declared providers', () => {
+  it('offers separate Z.AI Coding Plan and pay-as-you-go routes', async () => {
+    expect(catalogProviderIds()).toEqual(expect.arrayContaining(['zai', 'zai-payg']))
+
+    const coding = catalogProvider('zai')
+    const payg = catalogProvider('zai-payg')
+    expect(coding).toMatchObject({
+      id: 'zai',
+      name: 'Z.ai Individual',
+      baseUrl: 'https://api.z.ai/api/coding/paas/v4',
+    })
+    expect(payg).toMatchObject({
+      id: 'zai-payg',
+      name: 'Z.AI Pay-as-you-go',
+      baseUrl: 'https://api.z.ai/api/paas/v4',
+    })
+    expect(payg?.getModels()).not.toHaveLength(0)
+    expect(payg?.getModels().every(model =>
+      model.provider === 'zai-payg' && model.baseUrl === 'https://api.z.ai/api/paas/v4')).toBe(true)
+
+    const resolved = resolveProfiles({ 'zai-payg': {} }).get('zai-payg')
+    expect(resolved?.piProvider?.getModels()).not.toHaveLength(0)
+    expect(resolved?.piProvider?.getModels().every(model =>
+      model.provider === 'zai-payg' && model.baseUrl === 'https://api.z.ai/api/paas/v4')).toBe(true)
+
+    for (const ctx of [await harness({}), await harness({ providers: { zai: {}, 'zai-payg': {} } })]) {
+      expect(ctx.llm.listConfigurableProviders()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ provider: 'zai', displayName: 'Z.ai Individual', declared: false }),
+        expect.objectContaining({ provider: 'zai-payg', displayName: 'Z.AI Pay-as-you-go', declared: false }),
+      ]))
+    }
+  })
+
   it('serves a route pi-ai has never heard of from its own declaration', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(gateway(`${server.url}/v1`))

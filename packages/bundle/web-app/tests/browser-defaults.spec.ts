@@ -7,6 +7,12 @@ import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import * as Browser from '@deepseek-ai/dsh-client-ui-sidebar-browser'
 import { expect, it, onTestFinished } from 'vitest'
 
+it('leaves agent-preset personas free of the Harness identity', () => {
+  const row = loadOverlayPatches('prompt-defaults', fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)))
+    .find(patch => patch.id === 'system-prompt')
+  expect(row?.config).toMatchObject({ includeHarnessIdentity: false })
+})
+
 it.each([
   { profile: 'web', override: undefined, disabled: true },
   { profile: 'custom-web', override: undefined, disabled: true },

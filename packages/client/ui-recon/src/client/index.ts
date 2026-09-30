@@ -27,6 +27,7 @@ export type {
   ReconSettings, ReconSettingsCardFace, ReconSettingsCardState,
 } from './recon-settings-controller.ts'
 
+/** Recon-target input controls injected into one Session's composer slot. */
 export interface ReconTargetInjected {
   enqueue: (target: string, aiAssisted: boolean) => Promise<ReconQueueEntry>
   openRecon: () => void

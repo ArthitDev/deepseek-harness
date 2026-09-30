@@ -1,15 +1,12 @@
 /**
  * Agent-preset surface plugin, browser half — three surfaces over one roster:
- * a chip on the new-session screen for the session about to start, a
- * read-only label in the session header, and a settings section that manages
+ * a chip on the new-session screen, a preset switcher in the session header,
+ * and a settings section that manages
  * the roster (copy, delete, default, and the way into a preset's own files).
  *
- * A running session keeps the composition it began with (the host refuses to
- * adopt an existing session under a different preset). That is what splits
- * the choice from the display: the hero chip is before-the-fact, while the
- * header only reports what a session already runs. The default preset is
- * edited where the roster is visible — the settings section's "make default"
- * — so General settings carries no duplicate control for the same field.
+ * A running session may switch composition between turns. The default preset
+ * is edited where the roster is visible, so General settings carries no
+ * duplicate control for the same field.
  */
 
 // Type-only: pulls the Session Controller service merge (ctx.sessions).
@@ -125,6 +122,13 @@ export function apply(ctx: ClientContext): void {
     const labelInjected = (): AgentPresetLabelInjected => ({
       hooks: { agentPresets: controller.store },
       load: () => controller.load(),
+      select: async (sessionId, presetId) => {
+        const result = await scope.remote.agentPresets.select(sessionId, presetId)
+        if (result.ok) return undefined
+        return 'reason' in result.error.details && typeof result.error.details.reason === 'string'
+          ? result.error.details.reason
+          : result.error.message
+      },
     })
 
     scope.effect(() => {

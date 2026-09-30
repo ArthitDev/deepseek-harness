@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-skill",
-  "description": "Agent skill provider registry for the DeepSeek Harness",
+  "description": "Agent skill provider registry for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

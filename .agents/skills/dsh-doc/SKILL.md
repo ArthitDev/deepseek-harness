@@ -1,13 +1,13 @@
 ---
 name: dsh-doc
-description: Create, restructure, review, audit, or migrate DeepSeek Harness Markdown documentation, package READMEs, and the documentation website using audience-first hierarchy, kind-mapped YAML metadata, bilingual line alignment, summary/contents navigation, progressive user-to-developer detail, executed-operation fact-checking, and repository validation. Use for new or revised DSH docs, docs-tree organization, documentation-quality audits and budgets, website page publishing, and bilingual documentation structure changes.
+description: Create, restructure, review, audit, or migrate Shield Break Harness Markdown documentation, package READMEs, and the documentation website using audience-first hierarchy, kind-mapped YAML metadata, bilingual line alignment, summary/contents navigation, progressive user-to-developer detail, executed-operation fact-checking, and repository validation. Use for new or revised DSH docs, docs-tree organization, documentation-quality audits and budgets, website page publishing, and bilingual documentation structure changes.
 ---
 
-# DeepSeek Harness documentation
+# Shield Break Harness documentation
 
 ## Summary
 
-The DeepSeek Harness documentation standard: make every page searchable, newcomer-readable, and exact enough for agents and maintainers, and keep the documentation website a tested projection of repository Markdown. Apply repository `AGENTS.md` files and executed gates first, then this workflow for kind-mapped metadata, progressive detail, line-aligned bilingual pages, corpus audits, and website publication. Preserve one owner per fact: source, tests, generated catalogs, package READMEs, guides, Agent Notes, and scratch each keep their own kind of truth. The `session-persistence-jsonl` README pair is the reference example of the format.
+The Shield Break Harness documentation standard: make every page searchable, newcomer-readable, and exact enough for agents and maintainers, and keep the documentation website a tested projection of repository Markdown. Apply repository `AGENTS.md` files and executed gates first, then this workflow for kind-mapped metadata, progressive detail, line-aligned bilingual pages, corpus audits, and website publication. Preserve one owner per fact: source, tests, generated catalogs, package READMEs, guides, Agent Notes, and scratch each keep their own kind of truth. The `session-persistence-jsonl` README pair is the reference example of the format.
 
 ## Table of Contents
 

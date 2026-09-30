@@ -2,7 +2,7 @@ import { Fragment, memo, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { fileExtension, FileTypeIcon, fileSizeText, JsonBlock, projectUserText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, fileExtension, FileTypeIcon, fileSizeText, JsonBlock, projectUserText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
@@ -156,7 +156,7 @@ function TurnMaxTokensItem({ t }: {
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
   content, renderMessageImages, actions, pending = false, echo = false, referenceLabels = [], skillNames = [],
-  previewAttachments, references, t,
+  previewAttachments, references, editor, t,
 }: {
   content: readonly unknown[]
   renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
@@ -173,6 +173,12 @@ function UserStyleBubble({
   /** Local submission-echo attachments replacing the content-derived attachment sequence. */
   previewAttachments?: readonly PresentedAttachment[]
   references?: Pick<ChatNodeOwnerProps, 'openFile' | 'openSkill'>
+  editor?: {
+    value: string
+    onChange: (value: string) => void
+    onCancel: () => void
+    onConfirm: () => void
+  }
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const { text, attachments: contentAttachments, rest } = contentParts(content)
@@ -213,17 +219,40 @@ function UserStyleBubble({
               ))}
           </div>
         )}
-        {showBubble && <div className={css.bubble}>
-          {projectUserText(text, referenceLabels, skillNames, 'skill', references)}
-          {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
-        </div>}
+        {editor === undefined
+          ? showBubble && <div className={css.bubble}>
+            {projectUserText(text, referenceLabels, skillNames, 'skill', references)}
+            {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
+          </div>
+          : (
+            <form className={`${css.bubble} ${css.editBubble}`} onSubmit={(event) => {
+              event.preventDefault()
+              if (editor.value.trim() !== '') editor.onConfirm()
+            }}>
+              <textarea
+                autoFocus
+                className={css.editInput}
+                aria-label={t('message.edit')}
+                value={editor.value}
+                onChange={(event) => { editor.onChange(event.target.value) }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') editor.onCancel()
+                  else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.form?.requestSubmit()
+                }}
+              />
+              <div className={css.editActions}>
+                <Button type="button" variant="outline" size="sm" onClick={editor.onCancel}>{t('cancel')}</Button>
+                <Button type="submit" size="sm" disabled={editor.value.trim() === ''}>{t('message.editConfirm')}</Button>
+              </div>
+            </form>
+          )}
         {referenceLabels.length > 0 && (
           <div className={css.referenceSummary}>
             {t('message.referenceSummary', { labels: referenceLabels.join(t('message.referenceSeparator')) })}
           </div>
         )}
       </div>
-      {actions?.(text)}
+      {editor === undefined ? actions?.(text) : null}
     </div>
   )
 }
@@ -313,9 +342,10 @@ export function PendingSubmissionBubble({ submission, renderMessageImages, t }: 
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, openFile, openSkill, t,
+  node, renderMessageImages, openFile, openSkill, editAt, t,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
+  const [draft, setDraft] = useState<string>()
   return (
     <UserStyleBubble
       content={data.content}
@@ -323,6 +353,17 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       renderMessageImages={renderMessageImages}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+      {...draft === undefined ? {} : {
+        editor: {
+          value: draft,
+          onChange: setDraft,
+          onCancel: () => { setDraft(undefined) },
+          onConfirm: () => {
+            editAt?.(data.seq, draft)
+            setDraft(undefined)
+          },
+        },
+      }}
       t={t}
       actions={text => (
         <MessageIconActions
@@ -330,6 +371,9 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           time={data.time}
           clock="start"
           className={css.actions}
+          {...node.kind === 'user' && editAt !== undefined
+            ? { onEdit: () => { setDraft(text) } }
+            : {}}
           t={t}
         />
       )}

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-brand",
-  "description": "Stateless branded primitive types for the DeepSeek Harness",
+  "description": "Stateless branded primitive types for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

@@ -11,10 +11,10 @@ Paused on 2026-09-07. Do not store the browser connection token in this file.
 - Remote repository: `/root/deepseek-harness`
 - Branch: `shield-break-agent`
 - Server process: tmux session `shield-break-agent`, launched with `/usr/local/bin/dsh-server`
-- Remote commit before the pending deployment: `f6b7038184bd778adf9967da19e4855b6ed63224`
-- Latest pushed commit: `05437afb6ce4667667826c4464f8faf98de7e0ee`
+- Remote commit before the pending deployment: the last deployment baseline on `shield-break-agent`
+- Latest pushed commit: the current head of `shield-break-agent` on origin
 
-Commit `05437af` fixes the Models page error `settings are unavailable in this browser` for the exact authenticated origin `http://100.123.30.41`. The fix and its focused test passed locally, but the Kali server was offline during deployment. Both `100.123.30.41:2222` and `100.123.30.41:3080` timed out.
+The pending Models page fix for the error `settings are unavailable in this browser` on the exact authenticated origin `http://100.123.30.41` passed locally with its focused test, but the Kali server was offline during deployment. Both `100.123.30.41:2222` and `100.123.30.41:3080` timed out.
 
 ## Resume
 

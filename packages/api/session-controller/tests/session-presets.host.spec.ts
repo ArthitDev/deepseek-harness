@@ -11,6 +11,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { afterEach, describe, expect, it } from 'vitest'
+import { ApiSessionAgentController } from '../src/agent.ts'
 import { createSessionTestRemote } from './test-remote.ts'
 
 /** Booted contexts and their temp roots, torn down after each test. */
@@ -91,6 +92,14 @@ async function harness(
 }
 
 describe('session.create Agent preset identity', () => {
+  it('recovers a removed persisted preset through the current model default', async () => {
+    const { ctx } = await harness(['standard', 'minimal'])
+
+    const composition = await new ApiSessionAgentController(ctx).composeAgent('dark-mode-agent', true)
+
+    expect(composition.agentPreset).toBe('standard')
+  })
+
   it('records the requested preset on the Session header', async () => {
     const { ctx, remote } = await harness(['standard', 'minimal'])
 

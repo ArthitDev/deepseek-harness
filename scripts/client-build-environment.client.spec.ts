@@ -82,7 +82,7 @@ describe('client build environment', () => {
     const expected = {
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'Shield Break Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     } as const
 
@@ -112,7 +112,7 @@ describe('client build environment', () => {
     expect(resolveClientBuildEnvironment(parent)).toEqual({
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'Shield Break Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     })
     expect(() => {
@@ -128,13 +128,13 @@ describe('client build environment', () => {
     expect(clientBuildProcessEnvironment(parent, {
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'Shield Break Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     }, '/runtime/node')).toEqual({
       PATH: `/runtime${delimiter}/bin`,
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'Shield Break Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     })
     expect(clientBuildProcessEnvironment({ PATH: '/bin', Path: '/custom/bin' }, {}, '/runtime/node')).toEqual({
@@ -162,7 +162,7 @@ describe('client build environment', () => {
     expect(officialClientBuildEnvironment(fixtureRoot)).toEqual({
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: commit,
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'Shield Break Harness',
       DSH_CLIENT_VERSION: '1.2.3-rc.4',
     })
 
@@ -266,7 +266,7 @@ describe('client build environment', () => {
     const officialEnvironment = {
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'Shield Break Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     }
     const official = buildFixture(officialEnvironment)

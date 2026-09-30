@@ -7,8 +7,7 @@
  * @module @deepseek-ai/dsh-plugin-manager/registry
  */
 
-import type { ParsedInstallSpec } from './install-spec.ts'
-import type { PluginInstallFailureKind, PluginRegistries, Registry } from './types.ts'
+import type { ParsedInstallSpec, PluginInstallFailureKind, PluginRegistries, Registry } from './types.ts'
 
 /** npm's own registry: what pnpm names without any configuration, and the one public registry a plan trusts as such. */
 export const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org/'

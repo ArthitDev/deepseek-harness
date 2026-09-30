@@ -19,7 +19,8 @@ import type {} from '@deepseek-ai/dsh-hmr'
 import type { ProfileContext, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
 import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
-import { InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from './install-spec.ts'
+import { InvalidInstallSpecError, parseInstallSpec } from './install-spec.ts'
+import type { ParsedInstallSpec } from './types.ts'
 import { attributeFailure, normalizeRegistry, NPMMIRROR_REGISTRY, registryPlan } from './registry.ts'
 import { writePluginEnabled } from './patch.ts'
 import { ManagementFailure } from './failure.ts'
@@ -31,7 +32,8 @@ import type {
 } from './types.ts'
 export type * from './types.ts'
 export { classifyInstallFailure, type InstallFailureFacts } from './install-failure.ts'
-export { InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from './install-spec.ts'
+export { InvalidInstallSpecError, parseInstallSpec } from './install-spec.ts'
+export type { ParsedInstallSpec } from './types.ts'
 
 /** The pnpm executable, the registries asked, and the limits for package diagnostics and registry lookups. */
 export interface Config {

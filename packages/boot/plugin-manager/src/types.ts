@@ -2,6 +2,14 @@
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { PluginLocalizedMeta } from '@deepseek-ai/dsh-package-manifest'
 import type { PluginInventoryEntry } from '@deepseek-ai/dsh-host-plugin-inventory/types'
+
+/** One install spec pnpm accepts, parsed into its addressed form. */
+export type ParsedInstallSpec =
+  | { readonly kind: 'registry'; readonly spec: string; readonly name: string; readonly range?: string }
+  | { readonly kind: 'path'; readonly spec: string; readonly path: string }
+  | { readonly kind: 'tarball'; readonly spec: string; readonly path?: string; readonly host?: string }
+  | { readonly kind: 'git'; readonly spec: string; readonly host: string }
+
 export type { PluginEntryId } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 import type { PluginEntryId } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 

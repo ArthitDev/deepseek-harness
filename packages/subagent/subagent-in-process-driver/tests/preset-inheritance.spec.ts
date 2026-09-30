@@ -41,14 +41,14 @@ async function setupPresetHost(): Promise<{ ctx: Context; adapter: MockAdapter; 
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(AgentPresets, { default: 'coding' })
   for (const [id, tool] of [['coding', 'preset_only'], ['reviewing', 'reviewing_only']] as const) {
-    await ctx.agentPresets.register({ id, plugins: [{ name: pathToFileURL(join(FIXTURES, 'plugins/preset-tool.js')).href, config: { tool } }] })
+    await ctx.agentPresetRegistry.register({ id, plugins: [{ name: pathToFileURL(join(FIXTURES, 'plugins/preset-tool.js')).href, config: { tool } }] })
   }
   const adapter = new MockAdapter([textResponse('parent idle'), textResponse('child done')])
   ctx.llm.registerAdapter(['mock'], adapter)
   const handle = await ctx.agents.create({
     sessionId: SessionId('parent'),
     agentOptions: { provider: 'mock', model: 'mock' },
-    setup: async (agentCtx: Context) => void await ctx.agentPresets.mount(agentCtx, 'coding'),
+    setup: async (agentCtx: Context) => void await ctx.agentPresetRegistry.mount(agentCtx, 'coding'),
   })
   return { ctx, adapter, parent: handle.agent }
 }
@@ -71,7 +71,7 @@ function spawnRequest(parent: Agent) {
 describe('a child agent composed in-process', () => {
   it('uses the preset mapped to its own model route', async () => {
     const { ctx, adapter, parent } = await setupPresetHost()
-    const presetForModel = vi.spyOn(ctx.agentPresets, 'presetIdForModel').mockReturnValue('reviewing')
+    const presetForModel = vi.spyOn(ctx.agentPresetRegistry, 'presetIdForModel').mockReturnValue('reviewing')
 
     const run = await startInProcessRun({
       ...spawnRequest(parent),
@@ -145,7 +145,7 @@ describe('a child agent composed in-process', () => {
     // A DIFFERENT preset, so the assertion below distinguishes reading the
     // parent's live scope chain from reading its creation header — re-linking
     // to the same id would pass either way.
-    await ctx.agentPresets.recompose(parent.ctx, 'reviewing')
+    await ctx.agentPresetRegistry.recompose(parent.ctx, 'reviewing')
 
     const run = await startInProcessRun(spawnRequest(parent), { seed: [] })
     await run.result

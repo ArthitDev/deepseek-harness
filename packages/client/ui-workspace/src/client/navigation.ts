@@ -17,6 +17,7 @@ import type {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type { AgentMode } from './agent-mode.ts'
 import type { RowToast } from './contract/slots.ts'
 import { en, zh } from './locales.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
@@ -32,8 +33,9 @@ export interface UiWorkspace {
   /**
    * Select a Session and show its Conversation as one UI navigation action.
    * @param target - known Session identity or durable direct-parent subagent address to display.
+   * @param beforeOpen - optional synchronous preparation for the selected Session, skipped after supersession.
    */
-  openSession(target: SessionTarget): void
+  openSession(target: SessionTarget, beforeOpen?: (sessionId: SessionId) => void): void
   /**
    * Connect a Workspace and open its Session unless a later navigation supersedes it.
    * @param workspaceId - target Workspace.
@@ -148,6 +150,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     private readonly sessions: ISessions,
     private readonly view: Pick<WorkspaceViewStoreActions, 'pinSessionOrder'>,
     private readonly notify: (toast: RowToast) => void,
+    private readonly agentMode: () => AgentMode = () => 'red',
   ) {
     super(ctx, 'uiWorkspace')
     ctx.effect(() => {
@@ -198,8 +201,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     }
   }
 
-  openSession(target: SessionTarget): void {
-    this.replaceMain(target, this.lifetime.signal, 'reveal')
+  openSession(target: SessionTarget, beforeOpen?: (sessionId: SessionId) => void): void {
+    this.replaceMain(target, this.lifetime.signal, 'reveal', beforeOpen)
   }
 
   async openWorkspace(workspaceId: WorkspaceId, beforeOpen?: (sessionId: SessionId) => void): Promise<void> {
@@ -274,7 +277,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   async pickDirectory(): Promise<string | null> {
-    const result = await this.directoryPicker.pick()
+    const mode = this.agentMode()
+    const result = await this.directoryPicker.pick(mode === 'dead' ? 'black' : mode)
     if (!result.ok) throw new Error(`directory picker failed: ${result.error.message}`)
     return result.value
   }

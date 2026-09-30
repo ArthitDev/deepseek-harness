@@ -66,7 +66,7 @@ import type {} from '@deepseek-ai/dsh-fs'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
-import { catalogProviderIds } from './catalog.ts'
+import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -127,6 +127,10 @@ function directoryEntries(
 ): LlmConfigurableProvider[] {
   const catalog = new Set(catalogProviderIds())
   const entries = new Map<string, LlmConfigurableProvider>()
+  const displayName = (provider: string, fallback: string): string =>
+    (provider === 'zai' || provider === 'zai-payg') && fallback === provider
+      ? catalogProvider(provider)?.name ?? fallback
+      : fallback
   const declare = (provider: string, displayName: string, error?: string): void => {
     entries.set(provider, {
       provider,
@@ -140,8 +144,10 @@ function directoryEntries(
       ...error === undefined ? {} : { error },
     })
   }
-  for (const provider of catalog) declare(provider, provider)
-  for (const [provider, profile] of profiles) declare(provider, profile.displayName, profile.catalogError)
+  for (const provider of catalog) declare(provider, displayName(provider, provider))
+  for (const [provider, profile] of profiles) {
+    declare(provider, displayName(provider, profile.displayName), profile.catalogError)
+  }
   return [...entries.values()]
 }
 

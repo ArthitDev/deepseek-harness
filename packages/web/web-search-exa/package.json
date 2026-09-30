@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-web-search-exa",
-  "description": "Exa-backed search provider for the DeepSeek Harness web capability seam (ctx.web)",
+  "description": "Exa-backed search provider for the Shield Break Harness web capability seam (ctx.web)",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

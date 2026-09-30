@@ -12,9 +12,9 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { DirectoryListing } from './types.ts'
+import type { DirectoryListing, DirectoryPickerBrand } from './types.ts'
 
-export type { DirectoryEntry, DirectoryListing } from './types.ts'
+export type { DirectoryEntry, DirectoryListing, DirectoryPickerBrand } from './types.ts'
 
 /** The native interaction: one OS directory chooser on the host display. */
 export interface DirectoryPickerNativeCapability {
@@ -24,7 +24,7 @@ export interface DirectoryPickerNativeCapability {
    * @param signal - caller/connection lifetime; abort terminates the chooser.
    * @returns the chosen absolute path, or null when the operator cancels.
    */
-  pick(signal: AbortSignal): Promise<string | null>
+  pick(signal: AbortSignal, brand?: DirectoryPickerBrand): Promise<string | null>
 }
 
 /**

@@ -68,6 +68,7 @@
     {
       "path": "../ui-settings/tsconfig.client.json"
     },
+    { "path": "../ui-plugin-manager/tsconfig.client.json" },
     {
       "path": "../ui-theme/tsconfig.client.json"
     },

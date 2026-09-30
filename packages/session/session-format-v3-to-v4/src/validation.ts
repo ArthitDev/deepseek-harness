@@ -86,7 +86,7 @@ export function restoreReleasedV4Artifact(artifact: SessionFormatArtifact, known
  * @param currentVersion - generation whose watermark coordinates are active.
  * @returns the active delivery's nonempty Session id, or undefined for other events and generations.
  */
-export function validateDeliveryAccepted(event: SessionFormatEvent, currentVersion: 3 | 4): string | undefined {
+export function validateDeliveryAccepted(event: SessionFormatEvent, currentVersion: 3 | 4 | 5): string | undefined {
   if (event.type !== 'session-log-deepseek/delivery-accepted') return undefined
   const data = event.data
   if (!isSessionFormatJsonObject(data)) throw new SessionFormatError('delivery-accepted data must be an object')

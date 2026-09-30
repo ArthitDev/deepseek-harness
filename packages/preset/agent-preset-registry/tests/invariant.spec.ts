@@ -18,7 +18,7 @@ it('rejects model use by an unjoined Agent but permits Host and cold-scope reads
   const agent = await agentOn(ctx, 'joined')
   await expect(ctx.systemPrompt.assemble(assembleContextFor(agent))).resolves.toBeDefined()
   await expect(ctx.systemPrompt.assemble({})).resolves.toBeDefined()
-  await using lease = await ctx.agentPresets.acquireScope()
+  await using lease = await ctx.agentPresetRegistry.acquireScope()
   await expect(ctx.systemPrompt.assemble({ scope: lease.key })).resolves.toBeDefined()
 })
 

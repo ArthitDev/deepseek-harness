@@ -7,21 +7,24 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 // Type-only: the optional `settings` service this registry keeps off the generated pages.
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-tools'
+// Type-only: the `sessionProjections` service and the `agent-preset/selected` event declaration.
+import type {} from '@deepseek-ai/dsh-session-projection'
+import type {} from '@deepseek-ai/dsh-agent-presets'
+// Type-only: the `agent-preset/selected` Session event declaration and the
+// `sessionProjections` service live with the composed preset roster package.
 import type { AgentPresetRoster } from './types.ts'
 import { entryListProblem, type PresetDefinition } from './definition.ts'
 import type { AgentPreset, Config } from './preset.ts'
-import { agentPresetProjectionDefinition } from './session.ts'
 import { auditRows, mountPreset, standingMountFor, serviceForAgent, type PresetMount } from './mount.ts'
 import { definitionComposition, mountedCompositionRows, type AgentPresetComposition } from './composition-inventory.ts'
 
-export { agentPresetProjectionDefinition } from './session.ts'
 export { entryListProblem, type PresetDefinition } from './definition.ts'
 export { auditRows, livePresetMounts, leakedServices, serviceForAgent, standingMountFor, type PresetMount, type RowAudit } from './mount.ts'
 export type { AgentPreset, Config } from './preset.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    agentPresets: AgentPresetRegistry
+    agentPresetRegistry: AgentPresetRegistry
   }
 }
 
@@ -61,13 +64,9 @@ export class AgentPresetRegistry extends TypertRemoteService {
   private readonly switches = new Map<string, Promise<unknown>>()
 
   constructor(ctx: Context, public config: Config) {
-    super(ctx, 'agentPresets', { namespace: 'agentPresetRegistry' })
+    super(ctx, 'agentPresetRegistry', { namespace: 'agentPresetRegistry' })
     this.owner = ctx
-    ctx.sessionProjections.register(agentPresetProjectionDefinition)
     ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
-    ctx.on('session/event', (session, event) => {
-      if (event.type === 'agent-preset/selected') ctx.emit('agent-preset/selected', session.id, event.data.agentPreset)
-    })
   }
 
   /** Default preset for a subsequently created session. */

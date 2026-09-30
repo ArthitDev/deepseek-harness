@@ -4,6 +4,7 @@ import Group from '@deepseek-ai/cordis-plugin-group'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
@@ -24,6 +25,7 @@ export async function harness(options: { live?: boolean } = {}): Promise<Context
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
+  ctx.sessionProjections.register(agentPresetProjectionDefinition)
   await ctx.plugin(SystemPrompt, { personaPrefix: '' })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -34,19 +36,19 @@ export async function harness(options: { live?: boolean } = {}): Promise<Context
 }
 export async function declare(ctx: Context, config: PresetDefinition) {
   return await ctx.plugin({
-    inject: ['agentPresets'],
-    async* apply(child: Context) { yield await child.agentPresets.register(config) },
+    inject: ['agentPresetRegistry'],
+    async* apply(child: Context) { yield await child.agentPresetRegistry.register(config) },
   })
 }
 export async function agentOn(ctx: Context, id: string, presetId?: string) {
   const handle = await ctx.agents.create({
     sessionId: SessionId(id),
-    setup: async (agentCtx: Context) => { await ctx.agentPresets.mount(agentCtx, presetId) },
+    setup: async (agentCtx: Context) => { await ctx.agentPresetRegistry.mount(agentCtx, presetId) },
   })
   return handle.agent
 }
 
 export async function currentKey(ctx: Context, id?: string) {
-  await using lease = await ctx.agentPresets.acquireScope(id)
+  await using lease = await ctx.agentPresetRegistry.acquireScope(id)
   return lease.key
 }

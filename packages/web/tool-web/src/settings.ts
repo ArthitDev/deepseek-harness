@@ -20,6 +20,7 @@ export interface WebSearchPolicySettings {
   always: boolean
 }
 
+/** Stored schema of the shared global web-search preference. */
 export const WEB_SEARCH_POLICY_SETTINGS_SCHEMA = z.object({
   always: z.boolean().default(false).volatile(),
 })

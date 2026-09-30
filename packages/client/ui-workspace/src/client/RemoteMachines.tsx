@@ -45,7 +45,7 @@ export interface RemoteMachineInjected {
   listRunningPentestLoops: () => Promise<readonly string[]>
 }
 
-const AGENT_MODES: readonly AgentMode[] = ['blue', 'red', 'black']
+const AGENT_MODES: readonly AgentMode[] = ['blue', 'red', 'black', 'dead']
 const MODE_TRANSITION_MS = 1100
 
 const BlackTeamIcon = ({ size = 16, className }: {
@@ -65,13 +65,29 @@ const BlackTeamIcon = ({ size = 16, className }: {
   </svg>
 )
 
+const DeadModeIcon = ({ size = 16, className }: {
+  size?: number | undefined
+  className?: string | undefined
+}) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 1.8 13 4.7v6.6L8 14.2 3 11.3V4.7L8 1.8Z" stroke="currentColor" strokeWidth="1.3" />
+    <path d="m6.2 5.7 3.6 4.6m0-4.6-3.6 4.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+)
+
 const AGENT_MODE_ICONS = {
   blue: IconShieldOutlineRegular,
   red: IconGoalOutlineRegular,
   black: BlackTeamIcon,
+  dead: DeadModeIcon,
 } satisfies Record<AgentMode, typeof IconShieldOutlineRegular>
 
-function AgentModeControl({ controller, locked, t }: {
+/**
+ * The team-mode switch shown at the top of the Remote machines section.
+ * @param props - injected controller, lock state, and locale.
+ * @returns the mode switch menu and its transition overlay.
+ */
+export function AgentModeControl({ controller, locked, t }: {
   controller: AgentModeController
   locked: boolean
   t: RemoteMachineControlProps['t']
@@ -150,9 +166,7 @@ type PttNode = PentestRunSnapshot['ptt'][number]
 
 interface PentestRunDraft {
   readonly objective: string
-  readonly mode: 'blue' | 'red' | 'black'
-  readonly authorized: string
-  readonly excluded: string
+  readonly mode: AgentMode
   readonly startsAt: string
   readonly endsAt: string
 }
@@ -164,7 +178,7 @@ function localDateTime(date: Date): string {
 function emptyRunDraft(): PentestRunDraft {
   const now = new Date()
   return {
-    objective: '', mode: 'red', authorized: '', excluded: '',
+    objective: '', mode: 'red',
     startsAt: localDateTime(now), endsAt: localDateTime(new Date(now.getTime() + 24 * 60 * 60 * 1000)),
   }
 }
@@ -503,8 +517,8 @@ function PentestRunsControl({
         const run = await createRun({
           objective: draft.objective,
           mode: draft.mode,
-          authorizedTargets: scopeValues(draft.authorized),
-          excludedTargets: scopeValues(draft.excluded),
+          authorizedTargets: [],
+          excludedTargets: [],
           testWindow: {
             startsAt: new Date(draft.startsAt).toISOString(), endsAt: new Date(draft.endsAt).toISOString(),
           },
@@ -624,14 +638,16 @@ function PentestRunsControl({
         {error !== null && <p className={css.error} role="alert">{error}</p>}
         {runs === null && error === null && <p className={css.muted}>{t('runs.loading')}</p>}
         {runs?.length === 0 && <p className={css.empty}>{t('runs.empty')}</p>}
+        {runs !== null && (
+          <Button size="sm" variant="outline" onClick={() => {
+            setCreateError(null); setDraft(emptyRunDraft()); setCreateOpen(true)
+          }}>
+            {t('runs.new')}
+          </Button>
+        )}
         {runs !== null && runs.length > 0 && (
           <div className={css.runsDashboard}>
             <nav className={css.runsList} aria-label={t('runs.list')}>
-              <Button size="sm" variant="outline" onClick={() => {
-                setCreateError(null); setDraft(emptyRunDraft()); setCreateOpen(true)
-              }}>
-                {t('runs.new')}
-              </Button>
               {runs.map(run => (
                 <button
                   type="button"
@@ -863,7 +879,7 @@ function PentestRunsControl({
             <Button
               type="submit"
               form="pentest-run-form"
-              disabled={busy || draft.objective.trim().length === 0 || scopeValues(draft.authorized).length === 0
+              disabled={busy || draft.objective.trim().length === 0
                 || Date.parse(draft.endsAt) <= Date.parse(draft.startsAt)}
             >
               {t(busy ? 'runs.creating' : 'runs.new.submit')}
@@ -905,23 +921,6 @@ function PentestRunsControl({
               required
               value={draft.endsAt}
               onChange={(event) => { setDraft(current => ({ ...current, endsAt: event.target.value })) }}
-            />
-          </label>
-          <label className={css.field}>
-            <span>{t('runs.new.authorized')}</span>
-            <textarea
-              rows={3}
-              required
-              value={draft.authorized}
-              onChange={(event) => { setDraft(current => ({ ...current, authorized: event.target.value })) }}
-            />
-          </label>
-          <label className={css.field}>
-            <span>{t('runs.new.excluded')}</span>
-            <textarea
-              rows={2}
-              value={draft.excluded}
-              onChange={(event) => { setDraft(current => ({ ...current, excluded: event.target.value })) }}
             />
           </label>
           {createError !== null && <p className={css.error} role="alert">{createError}</p>}

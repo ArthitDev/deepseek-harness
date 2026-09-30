@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { pickWin32Directory, type Win32DialogInternals, type Win32DialogWorkerLike } from '../src/win32-dialog.ts'
-import type { Win32DialogWorkerMessage } from '../src/win32-dialog-worker.ts'
+import type { Win32DialogWorkerData, Win32DialogWorkerMessage } from '../src/win32-dialog-worker.ts'
 
 class FakeWorker extends EventEmitter implements Win32DialogWorkerLike {
   kill = vi.fn(() => true)
@@ -23,16 +23,19 @@ interface Harness {
   worker: FakeWorker
   internals: Win32DialogInternals
   close: ReturnType<typeof vi.fn>
+  spawned: Win32DialogWorkerData[]
 }
 
 function harness(overrides: Partial<Win32DialogInternals> = {}): Harness {
   const worker = new FakeWorker()
   const close = vi.fn(async () => undefined)
+  const spawned: Win32DialogWorkerData[] = []
   return {
     worker,
     close,
+    spawned,
     internals: {
-      spawnWorker: () => worker,
+      spawnWorker: (data) => { spawned.push(data); return worker },
       closeThreadWindows: close,
       closeRetryMs: 1,
       ...overrides,
@@ -67,11 +70,12 @@ const opensRealDialog = process.platform === 'win32' && spawnSync('powershell.ex
 describe('pickWin32Directory', () => {
   it('resolves the selected path and the cancellation null', async () => {
     const first = harness()
-    const picked = pickWin32Directory(live(), first.internals)
+    const picked = pickWin32Directory(live(), first.internals, 'blue')
     first.worker.post({ kind: 'showing', threadId: 7 })
     first.worker.post({ kind: 'done', path: 'C:\\picked' })
     await expect(picked).resolves.toBe('C:\\picked')
     expect(first.close).not.toHaveBeenCalled()
+    expect(first.spawned[0]!.iconPath).toMatch(/app-blue\.ico$/)
 
     const second = harness()
     const cancelled = pickWin32Directory(live(), second.internals)

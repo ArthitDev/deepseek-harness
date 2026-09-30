@@ -610,6 +610,10 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.modeMenuIcon[data-agent-mode='dead'] {
+  color: #c084fc;
+}
+
 .modeLoading {
   position: fixed;
   z-index: 9999;

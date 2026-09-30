@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-compaction",
-  "description": "Abstract compaction service seam (ctx.compaction) for the DeepSeek Harness",
+  "description": "Abstract compaction service seam (ctx.compaction) for the Shield Break Harness",
   "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"

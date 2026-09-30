@@ -58,6 +58,8 @@ import {
 import { RemoteMachineController } from './remote-machine-store.ts'
 import { AgentModeController, type AgentModeSettings } from './agent-mode.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
+import { TEAM_MODE_SETTINGS_NS, TeamModePromptsCardController } from './team-mode-prompts-controller.ts'
+import { TeamModePromptsCard } from './TeamModePromptsCard.tsx'
 
 export type { UiWorkspace } from './navigation.ts'
 export type {
@@ -102,6 +104,7 @@ const NS = 'workspace'
 export const inject = [
   'slots', 'sessions', 'workspaces', 'layout', 'theme', 'locale', 'settingsScope', 'remote',
   'remote.directoryPicker', 'remote.remoteMachines', 'remote.pentestRuns', 'remote.pentestLoop',
+  'configForms',
 ]
 
 /**
@@ -122,15 +125,29 @@ export function apply(ctx: Context): void {
   const rowToast = createSnapshotStore<RowToastState | null>(null)
   let toastSeq = 0
   const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
-  const uiWorkspace = new UiWorkspaceService(
-    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
-  )
-  const remoteMachines = new RemoteMachineController(ctx)
   const modeSettings = ctx.settingsScope.bind<AgentModeSettings>({ namespace: 'pentest-mode' })
   const agentMode = new AgentModeController(ctx.theme, modeSettings)
   ctx.effect(() => () => { agentMode.dispose() }, 'ui-workspace: agent mode theme')
+  const uiWorkspace = new UiWorkspaceService(
+    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify, agentMode.getSnapshot,
+  )
+  const remoteMachines = new RemoteMachineController(ctx)
   ctx.slots.provideRoot({ hooks: { workspaces: workspaces.list } })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
+  const t = ctx.locale.bind(NS)
+  const teamPrompts = new TeamModePromptsCardController(ctx.configForms.get(TEAM_MODE_SETTINGS_NS))
+  ctx.effect(() => () => { teamPrompts.dispose() }, 'ui-workspace: team mode prompts form')
+  ctx.effect(() => ctx.configForms.whileServed(
+    [TEAM_MODE_SETTINGS_NS],
+    () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+      name: 'plugins.item',
+      id: 'team-mode-prompts',
+      order: 40,
+      label: () => t('teamMode.title'),
+      locale: NS,
+      inject: () => teamPrompts.inject(),
+    }, TeamModePromptsCard)),
+  ), 'ui-workspace: team mode prompts page')
 
   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
     const result = await sessions.search(query, signal)

@@ -2,9 +2,8 @@
  * Hero-chip controller: which preset the NEXT session gets.
  *
  * The new-session screen has no session, so a pick is staged rather than
- * applied. It reaches a session when one becomes current and is still blank —
- * whether the workspace connect created it or reused an existing blank one,
- * which is why staging cannot simply ride along on `sessions.create`.
+ * applied. It reaches a session when one becomes current. The same controller
+ * can also switch a running session between completed turns.
  *
  * The stage is forgotten once applied. The next new session starts from the
  * Host-effective default again.
@@ -104,8 +103,7 @@ export class AgentPresetSeatController {
   }
 
   /**
-   * Stage one preset for the next session, applying it immediately when a
-   * blank session is already current.
+   * Stage one preset, applying it immediately when a session is current.
    *
    * The refusal is returned as well as stored, because the two readers need
    * different things from it: the chip's own label carries the standing state,
@@ -187,9 +185,7 @@ export class AgentPresetSeatController {
       return
     }
     if (session === undefined) return
-    // A started session's history was produced under its own composition; the
-    // host refuses the swap, so the stage is no longer meaningful.
-    if (!session.blank || presetOf(session) === staged) {
+    if (presetOf(session) === staged) {
       this.staged = undefined
       return
     }

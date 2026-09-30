@@ -28,6 +28,7 @@ describe('BootPage', () => {
     ['blue', '/new-logo-blue.png', 'Blue Team Agent', 'rgb(0 153 255 / 70%)'],
     ['red', '/new-logo.png', 'Red Team Agent', 'rgb(255 51 71 / 70%)'],
     ['black', '/new-logo-black.png', 'Black Team Agent', 'rgb(255 255 255 / 55%)'],
+    ['dead', '/new-logo-black.png', 'Dead Mode Agent', 'rgb(192 132 252 / 65%)'],
   ])('uses the saved %s team loading brand', (mode, logo, title, glow) => {
     const favicon = document.createElement('link')
     favicon.rel = 'icon'

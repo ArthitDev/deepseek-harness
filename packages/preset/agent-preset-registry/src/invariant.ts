@@ -46,7 +46,7 @@ const install: InvariantInstaller = (ctx, fail) => {
   // Bare Agents are valid until model assembly. Cold scoped reads carry no
   // Agent and do not require a session binding.
   ctx.on('system-prompt/assemble', (_assembly, context, next) => {
-    const presets = ctx.get('agentPresets')
+    const presets = ctx.get('agentPresetRegistry')
     const agent = context.agent
     if (presets !== undefined
       && agent !== undefined && presets.composedPreset(agent.ctx) === undefined) {

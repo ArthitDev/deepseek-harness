@@ -67,12 +67,14 @@ export const SERVICE_PAGE: Record<string, string> = {
   agentLoop: 'core.md',
   agentDefaultModel: 'core.md',
   agentPresets: 'core.md',
+  agentPresetRegistry: 'core.md',
   agents: 'core.md',
   approval: 'approval.md',
   officeToPdf: 'office-to-pdf.md',
   attachments: 'attachment.md',
   shell: 'shell.md',
   shellEnv: 'shell.md',
+  scopeProxy: 'shell.md',
   clientModules: 'client-modules.md',
   ptcRuntime: 'ptc-runtime.md',
   browserUse: 'browser-use.md',
@@ -757,6 +759,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   PentestArtifactId: '../../packages/pentest/pentest-run/README.md',
   PentestLeaseId: '../../packages/pentest/pentest-run/README.md',
   PentestLoopStartRequest: '../../packages/pentest/pentest-executor/README.md',
+  PentestMode: '../../packages/pentest/pentest-executor/README.md',
   PentestModeSettings: '../../packages/pentest/pentest-executor/README.md',
   PentestRunId: '../../packages/pentest/pentest-run/README.md',
   PentestRunRecord: '../../packages/pentest/pentest-run/README.md',
@@ -821,6 +824,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   ProjectionSnapshot: 'session-projection.md',
   ProjectionCheckpoint: 'session-projection.md',
   DirectoryPickerCapability: 'workspace.md',
+  DirectoryPickerBrand: 'workspace.md',
   DirectoryListing: 'workspace.md',
   TypertContribution: 'invariants.md',
   TypertRemoteEventSource: 'typert.md',
@@ -864,6 +868,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  AgentPresetRosterComposition: 'roster composition rows are owned by packages/preset/agent-presets/README.md',
   ConnectionFetchHandler: 'shared Fetch dispatch is owned by packages/client/connection/src/rpc.ts',
   ConnectionRequestRejection: 'transport rejection status is owned by packages/client/connection/src/rpc.ts',
   ConnectionTrustRequest: 'transport authentication input is owned by packages/client/connection/src/rpc.ts',

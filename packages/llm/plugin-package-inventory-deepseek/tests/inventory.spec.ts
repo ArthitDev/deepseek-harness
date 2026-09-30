@@ -222,9 +222,9 @@ describe('DeepSeek plugin package inventory', () => {
   it('resolves a declared preset plugin from its owning composition', async () => {
     const { ctx, root } = await harness()
     await packagePlugin(root, 'node_modules/preset-only', { name: 'preset-only', version: '4.0.0' })
-    await ctx.agentPresets.register({ id: 'fixture', plugins: [{ id: 'preset-only', name: 'preset-only/plugin.mjs' }] })
+    await ctx.agentPresetRegistry.register({ id: 'fixture', plugins: [{ id: 'preset-only', name: 'preset-only/plugin.mjs' }] })
     const agentScope = createScope(ctx, {})
-    await ctx.agentPresets.mount(agentScope.ctx)
+    await ctx.agentPresetRegistry.mount(agentScope.ctx)
     const id = SessionId('preset-agent')
     const agent = { id, ctx: agentScope.ctx, session: { id } } as unknown as Agent
     await ctx.agents.register(agent)

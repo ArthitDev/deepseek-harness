@@ -249,7 +249,7 @@ class FakeDirectoryPicker {
     () => Promise.resolve({ ok: true, value: '/home/u/new' })
 
   readonly remote: ClientRemote['directoryPicker'] = {
-    pick: () => this.record('pick', {}, this.onPick()),
+    pick: (brand: 'blue' | 'red' | 'black') => this.record('pick', { brand }, this.onPick()),
     list: (path?: string) => this.record('list', { path }, this.onList()),
     createDirectory: (path: string, name: string) =>
       this.record('createDirectory', { path, name }, this.onCreateDirectory()),
@@ -267,6 +267,7 @@ class FakeDirectoryPicker {
 
 interface BenchOptions {
   readonly language?: string
+  readonly agentMode?: () => 'blue' | 'red' | 'black' | 'dead'
   readonly configureWorkspaces?: (workspaces: FakeWorkspaces) => void
   readonly workspaces?: WorkspaceSnapshot
   readonly sessions?: SessionListState
@@ -302,6 +303,7 @@ function bench(options: BenchOptions = {}) {
     sessions,
     view.actions,
     notify,
+    options.agentMode,
   )
   return { ctx, directoryPicker, sessions, uiWorkspace, workspaces, layout, selectPanel, view, notify }
 }
@@ -930,7 +932,11 @@ describe('UiWorkspaceService', () => {
     await expect(b.uiWorkspace.pickDirectory()).resolves.toBe('/w/alpha')
     b.directoryPicker.onPick = () => Promise.resolve({ ok: true, value: null })
     await expect(b.uiWorkspace.pickDirectory()).resolves.toBeNull()
-    expect(b.directoryPicker.callsOf('pick')).toEqual([{}, {}])
+    expect(b.directoryPicker.callsOf('pick')).toEqual([{ brand: 'red' }, { brand: 'red' }])
+
+    const dead = bench({ agentMode: () => 'dead' })
+    await dead.uiWorkspace.pickDirectory()
+    expect(dead.directoryPicker.callsOf('pick')).toEqual([{ brand: 'black' }])
 
     await expect(b.uiWorkspace.listDirectory()).resolves.toEqual(listing)
     await expect(b.uiWorkspace.listDirectory('/home/u')).resolves.toEqual(listing)

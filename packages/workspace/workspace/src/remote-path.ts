@@ -14,7 +14,11 @@ function normalizeAbsolute(path: string): string {
   return `/${parts.join('/')}`
 }
 
-/** @returns the parsed remote location, or undefined for a local path. */
+/**
+ * Parse a machine-qualified execution path into its machine id and remote path.
+ * @param value - execution path under the remote path root.
+ * @returns the machine id and normalized remote path, or undefined for a local or malformed path.
+ */
 export function parseRemoteExecutionPath(value: string): { readonly machineId: string; readonly path: string } | undefined {
   if (!value.startsWith(REMOTE_PATH_ROOT)) return undefined
   const rest = value.slice(REMOTE_PATH_ROOT.length)

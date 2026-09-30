@@ -130,7 +130,11 @@ function installFakeKoffi(world: ComWorld, options: {
             case 'GetCurrentThreadId': return () => 31337
             case 'CreateWindowExW': return () => ({ kind: 'owner' })
             case 'DestroyWindow': return (hwnd: unknown) => { world.destroyedWindows.push(hwnd); return 1 }
-            case 'SetForegroundWindow': return (hwnd: unknown) => { world.foregroundWindows.push(hwnd); return 1 }
+            case 'SetForegroundWindow': return (hwnd: unknown) => {
+              world.foregroundWindows.push(hwnd)
+              world.nativeOrder.push('foreground')
+              return 1
+            }
             case 'LoadImageW': return (_instance: unknown, path: unknown, _type: unknown, width: unknown) => ({ kind: 'icon', path, width })
             case 'SendMessageW': return (hwnd: unknown, message: number, wparam: number, lparam: unknown) => {
               world.windowMessages.push({ hwnd, message, wparam, lparam }); return 0
@@ -212,14 +216,12 @@ describe('loadWin32DialogBindings over the fake COM world', () => {
     expect(world.titles).toEqual(['选择工作区目录'])
     expect(world.options).toHaveLength(1)
     expect(showing).toHaveBeenCalledWith(31337)
-    // One synthesized Alt press (down, then up) immediately precedes Show, so
-    // the dialog's activation attempt finds this process as the recent-input
-    // owner.
+    // Windows grants activation before the hidden owner is foregrounded.
     expect(world.keyEvents).toEqual([
       { vk: 0x12, flags: 0 },
       { vk: 0x12, flags: 2 },
     ])
-    expect(world.nativeOrder.slice(-3)).toEqual(['alt-down', 'alt-up', 'show'])
+    expect(world.nativeOrder.slice(-4)).toEqual(['alt-down', 'alt-up', 'foreground', 'show'])
     expect(world.freed).toHaveLength(1)
     expect(world.str16PointerSizes).toEqual([FAKE_POINTER_SIZE])
     expect(world.released).toEqual(['item', 'dialog'])
@@ -397,7 +399,6 @@ describe('the worker entry over a mocked process boundary', () => {
         coInitializeSta: () => 0,
         coUninitialize: () => undefined,
         currentThreadId: () => 11,
-        pressAltForForeground: () => undefined,
         createFolderDialog: () => ({
           setOptions: () => 0,
           setTitle: () => 0,

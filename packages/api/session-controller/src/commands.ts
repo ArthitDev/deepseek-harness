@@ -23,6 +23,7 @@ import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
+import { presetServiceOf } from './preset-service.ts'
 import {
   ApiSessionAgentController,
   ApiSessionCwdConflict,
@@ -165,7 +166,7 @@ export class SessionCommandController {
             ? {}
             : { reasoningEffort: resolved.reasoningEffort }),
         }
-        const presets = this.ctx.get('agentPresets')
+        const presets = presetServiceOf(this.ctx)
         if (presets !== undefined) {
           const agentPreset = presets.presetIdForModel(selected.provider, selected.model)
           if (this.agents.presetForSession(agent.session) !== agentPreset) {

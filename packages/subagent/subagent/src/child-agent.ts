@@ -21,6 +21,24 @@ import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-permission-presets'
+/**
+ * The preset-service members a child's composition needs. Both the composed
+ * roster (`agentPresets`) and the legacy declarative registry
+ * (`agentPresetRegistry`) satisfy this face.
+ */
+interface ChildPresetFace {
+  presetIdForModel(provider: string, model: string): string
+  composedPreset(ctx: Context): string | undefined
+  mount(ctx: Context, id?: string): Promise<unknown>
+  composeFrom(childCtx: Context, parentCtx: Context): unknown
+}
+
+/** Read whichever preset service the composition mounts, preferring the composed roster. */
+function childPresetsOf(ctx: Context): ChildPresetFace | undefined {
+  return (ctx.get('agentPresets') as ChildPresetFace | undefined)
+    ?? (ctx.get('agentPresetRegistry') as ChildPresetFace | undefined)
+}
+
 // Type-only: make `ctx.get('agentPresets')` resolve to the preset roster when
 // composed — a child inherits its parent's composition opportunistically (the
 // documented `ctx.get` pattern), never as a hard dep. A rosterless deployment
@@ -142,7 +160,7 @@ export function childSessionMeta(
   agentOptions: AgentOptions,
 ): NonNullable<CreateAgentOptions['meta']> {
   const parentHeader = parent.session.header
-  const presets = parent.ctx.get('agentPresets')
+  const presets = childPresetsOf(parent.ctx)
   const agentPreset = !isSeeded && agentOptions.provider !== undefined && agentOptions.model !== undefined
     ? presets?.presetIdForModel(agentOptions.provider, agentOptions.model)
     : presets?.composedPreset(parent.ctx)
@@ -207,7 +225,7 @@ export async function applyChildComposition(
   child: Agent,
   composition: ChildComposition,
 ): Promise<void> {
-  const presets = childCtx.get('agentPresets')
+  const presets = childPresetsOf(childCtx)
   if (!child.session.header.isSeeded && child.session.header.agentPreset !== undefined) {
     await presets?.mount(childCtx, child.session.header.agentPreset)
   } else {

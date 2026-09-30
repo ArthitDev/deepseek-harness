@@ -28,6 +28,9 @@ kind: "package-group"
 |---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.zh.md) | 在模型重复完全相同的工具调用时提醒它，使其改变方法或结束任务 |
 | [`timeout-policy/`](timeout-policy/README.zh.md) | 为声明了限时的工具调用设置超时，让模型得到清晰错误而不是无限等待 |
+| [`scope-policy/`](scope-policy/README.zh.md) | 拒绝引用操作者授权网络范围之外目标的工具调用（选择性启用；Dead Mode 强制执行） |
+| [`run-budget/`](run-budget/README.zh.md) | token 或墙钟预算耗尽后拒绝后续工具调用，使运行以 partial 报告收尾（选择性启用） |
+| [`scope-proxy/`](scope-proxy/README.zh.md) | 回环正向代理：对每条 `HTTP_PROXY` 连接做范围判定与地址钉扎，无需沙箱关闭 DNS rebinding（选择性启用） |
 
 -----
 

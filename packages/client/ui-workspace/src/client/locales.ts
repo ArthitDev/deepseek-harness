@@ -4,6 +4,9 @@
  * messages (wire error strings) pass through untranslated by policy.
  */
 
+
+import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'defaultWorkspace.failed': '无法创建默认工作区，请通过“选择工作区”选择文件夹',
@@ -72,6 +75,28 @@ export const zh = {
   'agentMode.blue': 'Blue Team',
   'agentMode.red': 'Red Team',
   'agentMode.black': 'Black Team',
+  'agentMode.dead': 'Dead Mode',
+  'agentMode.title': 'โหมดทีม',
+  'teamMode.title': 'โหมดทีม',
+  'teamMode.description': 'ปรับข้อความนโยบายที่ inject ตามโหมดทีม; ช่องแสดงข้อความปัจจุบันให้แก้ไขได้',
+  'teamMode.blue': 'Blue Team prompt',
+  'teamMode.blue.hint': 'แทนที่บรรทัดโหมด Blue Team ใน prompt; Preset prompt ยังอยู่ครบ',
+  'teamMode.red': 'Red Team prompt',
+  'teamMode.red.hint': 'แทนที่บรรทัดโหมด Red Team ใน prompt; Preset prompt ยังอยู่ครบ',
+  'teamMode.black': 'Black Team prompt',
+  'teamMode.black.hint': 'แทนที่บรรทัดโหมด Black Team ใน prompt; Preset prompt ยังอยู่ครบ',
+  'teamMode.dead': 'Dead Mode prompt',
+  'teamMode.dead.hint': 'แทนที่บรรทัดโหมด Dead Mode ใน prompt; Preset prompt ยังอยู่ครบ',
+  'teamMode.suppress': 'ซ่อน built-in prompt sections',
+  'teamMode.suppress.hint': 'เปิดแล้วจะซ่อนเฉพาะ built-in tool guidance; Preset prompt ยังอยู่ครบ',
+  'teamMode.overridden': 'แก้ไขแล้ว',
+  'teamMode.reset': 'คืนค่า',
+  'teamMode.invalidValue': 'ค่าไม่ถูกต้อง',
+  'teamMode.unavailable': 'การตั้งค่านี้ใช้ไม่ได้ในขณะนี้',
+  'teamMode.readOnly': 'เอกสารตั้งค่านี้เป็นแบบ read-only',
+  'teamMode.saveFailed': 'บันทึกไม่สำเร็จ ลองใหม่',
+  'teamMode.save': 'บันทัก',
+  'teamMode.saving': 'กำลังบันทึก...',
   'agentMode.aria': 'Agent 模式：{mode}',
   'agentMode.loading': '正在切换到 {mode}…',
   'agentMode.agent': '{mode} Agent',
@@ -132,8 +157,6 @@ export const zh = {
   'runs.new.mode': '运行模式',
   'runs.new.startsAt': '测试窗口开始时间',
   'runs.new.endsAt': '测试窗口结束时间',
-  'runs.new.authorized': '授权目标，每行一个',
-  'runs.new.excluded': '排除目标，每行一个',
   'runs.new.submit': '创建运行',
   'runs.creating': '正在创建…',
   'runs.execution.required': '创建测试运行前请选择工作区。',
@@ -337,6 +360,28 @@ export const en = {
   'agentMode.blue': 'Blue Team',
   'agentMode.red': 'Red Team',
   'agentMode.black': 'Black Team',
+  'agentMode.dead': 'Dead Mode',
+  'agentMode.title': 'Team mode',
+  'teamMode.title': 'Team mode prompts',
+  'teamMode.description': 'Customize the policy prompt injected per team mode; the field shows the current text, edit and save.',
+  'teamMode.blue': 'Blue Team prompt',
+  'teamMode.blue.hint': 'Replaces only this mode line in the injected prompt; the preset prompt contributions remain.',
+  'teamMode.red': 'Red Team prompt',
+  'teamMode.red.hint': 'Replaces only this mode line in the injected prompt; the preset prompt contributions remain.',
+  'teamMode.black': 'Black Team prompt',
+  'teamMode.black.hint': 'Replaces only this mode line in the injected prompt; the preset prompt contributions remain.',
+  'teamMode.dead': 'Dead Mode prompt',
+  'teamMode.dead.hint': 'Replaces only this mode line in the injected prompt; the preset prompt contributions remain.',
+  'teamMode.suppress': 'Suppress built-in prompt sections',
+  'teamMode.suppress.hint': 'Hides only the built-in tool-guidance sections; the preset prompt contributions stay intact.',
+  'teamMode.overridden': 'Overridden',
+  'teamMode.reset': 'Reset',
+  'teamMode.invalidValue': 'Invalid value',
+  'teamMode.unavailable': 'This namespace is currently unavailable.',
+  'teamMode.readOnly': 'This settings document is read-only.',
+  'teamMode.saveFailed': 'Save failed; try again.',
+  'teamMode.save': 'Save',
+  'teamMode.saving': 'Saving...',
   'agentMode.aria': 'Agent mode: {mode}',
   'agentMode.loading': 'Switching to {mode}…',
   'agentMode.agent': '{mode} Agent',
@@ -397,8 +442,6 @@ export const en = {
   'runs.new.mode': 'Mode',
   'runs.new.startsAt': 'Test window starts',
   'runs.new.endsAt': 'Test window ends',
-  'runs.new.authorized': 'Authorized targets, one per line',
-  'runs.new.excluded': 'Excluded targets, one per line',
   'runs.new.submit': 'Create run',
   'runs.creating': 'Creating…',
   'runs.execution.required': 'Choose a workspace before creating a test run.',
@@ -530,3 +573,17 @@ export const en = {
   'time.years': '{n}y',
   'time.ago': '{t} ago',
 } satisfies Record<WorkspaceKey, string>
+
+/** Map the prompts card's form-state copy onto the shared settings-form labels.
+ * @param t - the workspace namespace translator.
+ * @returns the labels SettingsForm renders with.
+ */
+export function teamModeFormLabels(t: (key: WorkspaceKey) => string): SettingsFormLabels {
+  return {
+    unavailable: t('teamMode.unavailable'),
+    readOnly: t('teamMode.readOnly'),
+    saveFailed: t('teamMode.saveFailed'),
+    save: t('teamMode.save'),
+    saving: t('teamMode.saving'),
+  }
+}

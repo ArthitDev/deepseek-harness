@@ -437,19 +437,29 @@ describe('switching one session\'s composition', () => {
     expect(agentPresets(ctx).composedPreset(agent.ctx)).toBe('standard')
   })
 
-  it('refuses once the conversation has started', async () => {
+  it('switches after a completed turn', async () => {
     const ctx = await harness()
     const agent = await agentOn(ctx, 'sel-locked', 'standard')
-    // One turn is enough: the history from here on was produced under
-    // `standard`'s tools, and a swap would strand those tool calls.
+    agent.session.append('turn/start', { turn: 0 })
+    agent.session.append('turn/end', { turn: 0, reason: { kind: 'completed' } })
+
+    await expect(agentPresets(ctx).select(agent, 'minimal')).resolves.toBe('minimal')
+
+    expect(agentPresets(ctx).composedPreset(agent.ctx)).toBe('minimal')
+    expect(recordedPreset(agent)).toEqual({ agentPreset: 'minimal' })
+  })
+
+  it('refuses while a turn is in progress', async () => {
+    const ctx = await harness()
+    const agent = await agentOn(ctx, 'sel-active', 'standard')
     agent.session.append('turn/start', { turn: 0 })
 
     const failure = await remoteFailure(agentPresets(ctx).select(agent, 'minimal'))
 
     expect(failure).toMatchObject({
       code: 'agent-preset/locked',
-      message: 'session "sel-locked" has already started; its agent preset is fixed',
-      details: { sessionId: SessionId('sel-locked'), agentPreset: 'minimal' },
+      message: 'session "sel-active" has a turn in progress; wait for it to finish before switching presets',
+      details: { sessionId: SessionId('sel-active'), agentPreset: 'minimal' },
     })
     expect(agentPresets(ctx).composedPreset(agent.ctx)).toBe('standard')
     expect(recordedPreset(agent)).toBeUndefined()

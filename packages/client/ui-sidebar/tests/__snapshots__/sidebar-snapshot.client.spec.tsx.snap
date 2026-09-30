@@ -135,7 +135,7 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
                 <span
                   class="buildVersion"
                 >
-                  1.2.3-rc.4-abc1234-dirty
+                  1.2.3-rc.4-abc1234-pentest
                 </span>
               </span>
             </div>
@@ -363,7 +363,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 <span
                   class="buildVersion"
                 >
-                  1.2.3-rc.4-abc1234-dirty
+                  1.2.3-rc.4-abc1234-pentest
                 </span>
               </span>
             </div>
@@ -494,7 +494,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 <span
                   class="buildVersion"
                 >
-                  1.2.3-rc.4-abc1234-dirty
+                  1.2.3-rc.4-abc1234-pentest
                 </span>
               </span>
             </div>

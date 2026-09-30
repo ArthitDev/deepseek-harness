@@ -30,6 +30,9 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../agent-presets"
+    },
+    {
       "path": "../../core/agent-default-model"
     },
     {

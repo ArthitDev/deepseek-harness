@@ -1,4 +1,4 @@
-/* Session-header agent-preset label: static chrome, never a control. */
+/* Session-header agent-preset label and switcher. */
 
 .label {
   display: inline-flex;
@@ -13,6 +13,21 @@
   line-height: 22px;
   color: var(--dsw-alias-label-secondary);
   white-space: nowrap;
+}
+
+.button {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -20,4 +35,9 @@
 .icon {
   flex: none;
   opacity: 0.7;
+}
+
+.chevron {
+  flex: none;
+  opacity: 0.65;
 }

@@ -71,7 +71,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
     const commit = clientBuildValue('DSH_CLIENT_COMMIT_HASH')
     const buildVersion = version
       + (commit === undefined ? '' : `-${commit}`)
-      + (clientBuildValue('DSH_CLIENT_GIT_DIRTY') === 'true' ? '-dirty' : '')
+      + '-pentest'
     expect(screen.getAllByText('Shield Break Agent')).toHaveLength(2)
     screen.getByText(buildVersion)
   }

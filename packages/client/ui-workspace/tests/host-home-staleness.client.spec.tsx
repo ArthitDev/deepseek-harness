@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, screen } from '@testing-library/react'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
+import { SlotTestRuntime, stubConfigForms, stubSettingsScope, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 
@@ -31,6 +31,7 @@ async function bench() {
   runtime.ctx.provide('layout', { selectPanel: vi.fn() })
   runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}) } as never)
   runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  runtime.ctx.provide('configForms', stubConfigForms().registry as never)
   runtime.releaseWorkspaceSource()
   const directoryPicker = {}
   const remoteMachines = { list: async () => ({ ok: true as const, value: { machines: [] } }) }

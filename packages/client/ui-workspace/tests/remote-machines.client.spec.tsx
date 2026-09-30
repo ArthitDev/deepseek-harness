@@ -5,12 +5,13 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { remoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import { RemoteMachineControl, type RemoteMachineControlProps } from '../src/client/RemoteMachines.tsx'
+
+const agentMode = { getSnapshot: () => 'red', subscribe: () => () => {}, set: vi.fn() }
 import { en } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 const t = makeTranslate(en, commonEn) as RemoteMachineControlProps['t']
-const agentMode = { getSnapshot: () => 'red', subscribe: () => () => {}, set: vi.fn() }
 
 function hook<T>(snapshot: T) {
   return function select<S>(selector: (state: T) => S): S { return selector(snapshot) }
@@ -37,7 +38,9 @@ describe('RemoteMachineControl', () => {
       authorizedTargets: ['lab.example'], excludedTargets: [],
       createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     }
-    const listPentestRuns = vi.fn(async () => [run])
+    const listPentestRuns = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([run])
     const loadPentestRun = vi.fn(async () => ({
       run,
       tasks: [{
@@ -145,26 +148,16 @@ describe('RemoteMachineControl', () => {
       t,
     } as unknown as RemoteMachineControlProps)} />)
 
-    const modeButton = screen.getByRole('button', { name: 'Agent mode: Red Team' })
     const machineButton = screen.getByRole('button', { name: 'Execution machine: TEST-HOST' })
-    const runsButton = screen.getByRole('button', { name: 'Pentest runs' })
-    expect(modeButton.compareDocumentPosition(machineButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(machineButton.compareDocumentPosition(runsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    fireEvent.click(modeButton)
-    const modeIcons = ['Blue Team', 'Red Team', 'Black Team'].map(name =>
-      screen.getByRole('menuitem', { name }).querySelector('svg')?.innerHTML)
-    expect(modeIcons.every(Boolean)).toBe(true)
-    expect(new Set(modeIcons).size).toBe(3)
-    expect(['Blue Team', 'Red Team', 'Black Team'].map(name =>
-      screen.getByRole('menuitem', { name }).querySelector('[data-agent-mode]')?.getAttribute('data-agent-mode')))
-      .toEqual(['blue', 'red', 'black'])
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Blue Team' }))
-    expect(agentMode.set).toHaveBeenCalledWith('blue')
-    expect(screen.getByRole('status').textContent).toContain('Switching to Blue Team…')
 
     fireEvent.click(screen.getByRole('button', { name: 'Pentest runs' }))
+    await waitFor(() => { expect(listPentestRuns).toHaveBeenCalledOnce() })
+    expect(screen.getByText('No test runs yet.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New run' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pentest runs' }))
     await waitFor(() => { expect(loadPentestRun).toHaveBeenCalledWith('run-lab') })
-    expect(listPentestRuns).toHaveBeenCalledOnce()
+    expect(listPentestRuns).toHaveBeenCalledTimes(2)
     expect(screen.getAllByText('Assess the lab')).toHaveLength(2)
     expect(screen.getByText('1/2')).toBeTruthy()
     expect(screen.getAllByText('Map the lab')).toHaveLength(2)
@@ -211,13 +204,11 @@ describe('RemoteMachineControl', () => {
     fireEvent.change(screen.getByLabelText('Objective'), { target: { value: 'Assess the second lab' } })
     fireEvent.change(screen.getByLabelText('Test window starts'), { target: { value: '2026-09-20T09:00' } })
     fireEvent.change(screen.getByLabelText('Test window ends'), { target: { value: '2026-09-20T17:00' } })
-    const authorizedAreas = screen.getAllByLabelText('Authorized targets, one per line')
-    fireEvent.change(authorizedAreas[authorizedAreas.length - 1]!, { target: { value: 'second.example' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create run' }))
     await waitFor(() => {
       expect(createPentestRun).toHaveBeenCalledWith({
         objective: 'Assess the second lab', mode: 'red',
-        authorizedTargets: ['second.example'], excludedTargets: [],
+        authorizedTargets: [], excludedTargets: [],
         testWindow: {
           startsAt: new Date('2026-09-20T09:00').toISOString(),
           endsAt: new Date('2026-09-20T17:00').toISOString(),

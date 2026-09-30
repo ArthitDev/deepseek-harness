@@ -94,7 +94,13 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return { path, content, enabled: last ? !last.disabled : !entry.disabled, roster: undefined, localId }
   }
 
-  /** Read one switch's stored state and revision without exposing config contents. */
+  /**
+   * Read one switch's stored state and revision without exposing config contents.
+   * @param entryId - entry id as the Loader tree spells it.
+   * @param moduleName - plugin module name the entry runs.
+   * @param preset - agent preset owning the composition; omitted targets the global profile.
+   * @returns the stored enablement and revision, or the failure reason.
+   */
   @Remote('edit')
   async edit(entryId: string, moduleName: string, preset?: string): Promise<PluginEnablementDocument> {
     try {
@@ -105,7 +111,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }
   }
 
-  /** Persist a confirmed enablement change against the exact revision the browser read. */
+  /**
+   * Persist a confirmed enablement change against the exact revision the browser read.
+   * @param entryId - entry id as the Loader tree spells it.
+   * @param moduleName - plugin module name the entry runs.
+   * @param enabled - enablement state to store.
+   * @param expectedRevision - revision previously read by `edit`; a mismatch rejects the write.
+   * @param preset - agent preset owning the composition; omitted targets the global profile.
+   * @returns the new revision and applied enablement.
+   */
   @Remote('setEnabled')
   async setEnabled(
     entryId: string, moduleName: string, enabled: boolean, expectedRevision: string, preset?: string,

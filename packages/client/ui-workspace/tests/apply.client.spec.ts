@@ -7,7 +7,7 @@ import type { WorkspaceId, WorkspaceSnapshot, WorkspaceView } from '@deepseek-ai
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import { RemoteError, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, stubConfigForms, stubSettingsScope, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
@@ -56,6 +56,9 @@ async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  const configForms = stubConfigForms()
+  ctx.provide('configForms', configForms.registry as never)
+  configForms.serve(['pentest-mode'])
   const create = vi.fn(async (input: { name: string } | { path: string }) => ({
     workspaceId: 'ws-new' as never,
     path: 'name' in input ? `/projects/${input.name}` : input.path,
@@ -209,7 +212,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'layout', 'theme', 'locale', 'settingsScope', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'remote.pentestRuns', 'remote.pentestLoop',
+      'slots', 'sessions', 'workspaces', 'layout', 'theme', 'locale', 'settingsScope', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'remote.pentestRuns', 'remote.pentestLoop', 'configForms',
     ])
   })
 

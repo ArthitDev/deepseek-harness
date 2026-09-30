@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { createScope, scopeOf, type Scope, type ScopeKey } from '@deepseek-ai/dsh-scope'
 import SystemPrompt, {
   AssembleContext, PromptAssembly, renderContextSnapshot, renderPrompt,
 } from '@deepseek-ai/dsh-system-prompt'
@@ -12,7 +13,7 @@ import type { PromptContextOrderName, PromptSectionOrderName } from '@deepseek-a
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
 const BUILT_IN = ['harness:identity', 'deployment:persona-prefix', 'deployment:persona-suffix']
-const IDENTITY = 'You are an AI agent powered by DeepSeek Harness.'
+const IDENTITY = 'You are an AI agent powered by Shield Break Harness.'
 const SECTION_ORDER_NAMES = [
   'HARNESS_IDENTITY', 'DEPLOYMENT_PERSONA_PREFIX',
   'PLAN_POLICY', 'TEAM_POLICY', 'PTC_ONLY', 'FILE_REFERENCE', 'TOOL_BASH',
@@ -39,6 +40,77 @@ describe('SystemPrompt', () => {
     expect(new Set(orders).size).toBe(orders.length)
     const sorted = [...orders].sort((a, b) => a - b)
     expect(sorted.slice(1).every((order, index) => order - sorted[index]! >= 10)).toBe(true)
+  })
+
+  it('suppressSections withholds every unlisted section and re-evaluates its allowlist per assembly', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, {})
+    const slots = SECTION_ORDER_NAMES.slice(0, 3) as [
+      PromptSectionOrderName, PromptSectionOrderName, PromptSectionOrderName,
+    ]
+    for (const slot of slots) {
+      ctx.systemPrompt.section({ name: slot, order: ctx.systemPrompt.getSectionOrder(slot), text: slot })
+    }
+    const [first, second, third] = slots
+    // Built-in identity and persona sections share these slots; assertions
+    // track only the sections this test registered.
+    const names = async () => {
+      const assembled = await ctx.systemPrompt.assemble()
+      const registered = new Set<PromptSectionOrderName>(slots)
+      return assembled.sections.map(section => section.name).filter(name => registered.has(name as PromptSectionOrderName))
+    }
+
+    expect(await names()).toEqual(slots)
+
+    let allow: readonly string[] | undefined = [first, third]
+    const dispose = ctx.systemPrompt.suppressSections({ except: () => allow })
+    expect(await names()).toEqual([first, third])
+    expect(await names()).not.toContain(second)
+
+    allow = [third]
+    expect(await names()).toEqual([third])
+
+    allow = undefined
+    expect(await names()).toEqual(slots)
+
+    dispose()
+    expect(await names()).toEqual(slots)
+  })
+
+  async function mintScope(ctx: Context, name: string): Promise<Scope> {
+    let scope!: Scope
+    await ctx.plugin(Object.assign((inner: Context) => { scope = createScope(inner, { name }) },
+      { inject: ['systemPrompt'] }))
+    return scope
+  }
+
+  function scopeKeyOf(scope: Scope): ScopeKey {
+    return scopeOf(scope.ctx)!
+  }
+
+  it('globalOnly suppression spares scoped sections and withholds unlisted global ones', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, {})
+    ctx.systemPrompt.section({ name: 'tool:read', order: ctx.systemPrompt.getSectionOrder('TOOL_READ'), text: 'tool:read' })
+    const scope = await mintScope(ctx, 'preset-composition')
+    scope.ctx.systemPrompt.section({ name: 'preset:persona', order: ctx.systemPrompt.getSectionOrder('TEAM_POLICY'), text: 'preset:persona' })
+
+    const visible = async () => {
+      const assembled = await ctx.systemPrompt.assemble({ scope: scopeKeyOf(scope) })
+      return assembled.sections.map(section => section.name)
+        .filter(name => name === 'tool:read' || name === 'pentest:mode-policy' || name === 'preset:persona')
+    }
+
+    expect(await visible()).toEqual(['preset:persona', 'tool:read'])
+
+    const dispose = ctx.systemPrompt.suppressSections({
+      except: () => ['pentest:mode-policy'],
+      globalOnly: true,
+    })
+    expect(await visible()).toEqual(['preset:persona'])
+
+    dispose()
+    expect(await visible()).toEqual(['preset:persona', 'tool:read'])
   })
 
   it('keeps reusable instructions identical across local environments', async () => {
@@ -102,7 +174,7 @@ describe('SystemPrompt', () => {
 
     it('registers the harness identity and the configured deployment persona', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt, { personaPrefix: 'You are DeepSeek Harness.' })
+      await ctx.plugin(SystemPrompt, { personaPrefix: 'You are Shield Break Harness.' })
 
       const assembly = await ctx.systemPrompt.assemble()
       expect(assembly.sections.map(s => s.name)).toEqual([
@@ -110,7 +182,7 @@ describe('SystemPrompt', () => {
         'deployment:persona-prefix',
         'deployment:persona-suffix',
       ])
-      expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are DeepSeek Harness.`)
+      expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are Shield Break Harness.`)
       // The names are reserved by the plugin — one owner per section.
       expect(() => ctx.systemPrompt.section({ name: 'deployment:persona-prefix', order: 0, text: 'imposter' }))
         .toThrow('prompt section "deployment:persona-prefix" is already registered')
@@ -164,7 +236,7 @@ describe('SystemPrompt', () => {
 
   it('assembles sections in order with context-resolved text and collected tools', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt, { personaPrefix: 'You are DeepSeek Harness.' })
+    await ctx.plugin(SystemPrompt, { personaPrefix: 'You are Shield Break Harness.' })
 
     ctx.systemPrompt.section({ name: 'cwd', order: 20, text: () => 'cwd: /tmp' })
     ctx.systemPrompt.section({ name: 'rules', order: 10, text: 'Be precise.' })
@@ -174,14 +246,14 @@ describe('SystemPrompt', () => {
 
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', 'deployment:persona-prefix', 'rules', 'cwd', 'deployment:persona-suffix'])
-    expect(assembly.sections.map(s => s.text)).toEqual([IDENTITY, 'You are DeepSeek Harness.', 'Be precise.', 'cwd: /tmp', ''])
+    expect(assembly.sections.map(s => s.text)).toEqual([IDENTITY, 'You are Shield Break Harness.', 'Be precise.', 'cwd: /tmp', ''])
     expect(assembly.contexts).toEqual([
       { name: 'earlier', text: 'context 1' },
       { name: 'later', text: 'context 2' },
     ])
     expect(assembly.tools).toEqual([{ name: 'echo', description: 'echo back', parameters: {} }])
     expect(assembly.variables).toEqual({})
-    expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are DeepSeek Harness.\n\nBe precise.\n\ncwd: /tmp`)
+    expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are Shield Break Harness.\n\nBe precise.\n\ncwd: /tmp`)
     expect(renderContextSnapshot(assembly)).toBe('Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\ncontext 1\n\ncontext 2')
   })
 

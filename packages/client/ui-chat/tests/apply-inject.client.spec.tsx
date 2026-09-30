@@ -77,7 +77,9 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
     () => Promise.resolve({ ok: true, value: { opened: true } }),
   )
   runtime.remote.provideNamespaces({ session: { openWorkspacePath } })
-  const openSession = vi.fn<(id: SessionId) => void>()
+  const openSession = vi.fn<(id: SessionId, beforeOpen?: (id: SessionId) => void) => void>(
+    (id, beforeOpen) => { beforeOpen?.(id) },
+  )
   runtime.ctx.provide('uiWorkspace', {
     openWorkspace: vi.fn(async (_workspaceId: WorkspaceId, beforeOpen: (id: SessionId) => void) => {
       beforeOpen(ROOT)
@@ -183,6 +185,25 @@ describe('Chat inject API', () => {
     await vi.waitFor(() => {
       expect(fork).toHaveBeenCalledWith({ sessionId: ROOT, atSeq: 18, increaseTitle: true })
     })
+    await b.runtime.dispose()
+  })
+
+  it('forks before an edited question and immediately submits its revised text', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(b.rootReference)
+    const scope = b.runtime.ctx.sessions.scope(ROOT)!
+    expect(scope).toBeDefined()
+
+    injected.editAt(19, 'revised question')
+
+    await vi.waitFor(() => { expect(b.session.prompt).toHaveBeenCalledOnce() })
+    expect(b.runtime.sessions.calls).toContainEqual({
+      method: 'fork', args: [{ sessionId: ROOT, atSeq: 18, increaseTitle: true }],
+    })
+    expect(b.openSession).toHaveBeenCalledWith(ROOT, expect.any(Function))
+    expect(b.session.prompt.mock.calls[0]?.[0]).toEqual([
+      { type: 'text', text: 'revised question' },
+    ])
     await b.runtime.dispose()
   })
 
