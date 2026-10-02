@@ -374,7 +374,11 @@ type SectionSuppressor = () => readonly string[] | undefined
 interface SectionSuppressorEntry {
   /** Sections that remain visible when this suppressor is active. */
   readonly allow: SectionSuppressor
-  /** When true, scoped sections are exempt; the allowlist gates global sections only. */
+  /**
+   * When true, sections whose effective definition a scoped layer supplies are
+   * exempt — including a scoped section that shadows a global name — and the
+   * allowlist gates only the remaining global sections.
+   */
   readonly globalOnly: boolean
 }
 
@@ -603,7 +607,11 @@ export class SystemPrompt extends Service {
     const scopeLayers = this.layers.chainLayers(scope)
     const runtimeContextSuppressed = !this.layers.global.runtimeContextSuppressors.isEmpty()
       || scopeLayers.some(layer => !layer.runtimeContextSuppressors.isEmpty())
-    const globalSectionNames = new Set(this.layers.global.sections.keys())
+    // Names whose effective definition a scoped layer supplies. A preset row
+    // may shadow a global name on purpose (the persona row), so globalOnly
+    // exemption follows the definition's origin layer, not name membership in
+    // the global layer.
+    const scopedSectionNames = new Set(scopeLayers.flatMap(layer => [...layer.sections.keys()]))
     const sectionSuppressors = [
       ...this.layers.global.sectionSuppressors.values(),
       ...scopeLayers.flatMap(layer => [...layer.sectionSuppressors.values()]),
@@ -645,7 +653,7 @@ export class SystemPrompt extends Service {
     }
     const sectionDefinitions = [...sectionByName.values()]
       .filter(section => sectionSuppressors.every((suppress) => {
-        if (suppress.globalOnly && !globalSectionNames.has(section.name)) return true
+        if (suppress.globalOnly && scopedSectionNames.has(section.name)) return true
         return suppress.allow.has(section.name)
       }))
       .sort(comparePromptSections)

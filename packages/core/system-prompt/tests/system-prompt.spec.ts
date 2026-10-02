@@ -113,6 +113,50 @@ describe('SystemPrompt', () => {
     expect(await visible()).toEqual(['preset:persona', 'tool:read'])
   })
 
+  it('globalOnly suppression spares a scoped section that shadows a global name', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { personaPrefix: 'deployment persona' })
+    const scope = await mintScope(ctx, 'preset-persona')
+    // The preset persona row shadows the global persona name by design.
+    scope.ctx.systemPrompt.section({
+      name: 'deployment:persona-prefix',
+      order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+      text: 'preset persona',
+    })
+    scope.ctx.systemPrompt.section({ name: 'tool:read', order: ctx.systemPrompt.getSectionOrder('TOOL_READ'), text: 'scoped tool:read' })
+    ctx.systemPrompt.section({ name: 'tool:write', order: ctx.systemPrompt.getSectionOrder('TOOL_WRITE'), text: 'global tool:write' })
+
+    const visible = async () => {
+      const assembled = await ctx.systemPrompt.assemble({ scope: scopeKeyOf(scope) })
+      return assembled.sections.map(section => ({ name: section.name, text: section.text }))
+        .filter(section => ['deployment:persona-prefix', 'tool:read', 'tool:write'].includes(section.name))
+    }
+
+    expect(await visible()).toEqual([
+      { name: 'deployment:persona-prefix', text: 'preset persona' },
+      { name: 'tool:read', text: 'scoped tool:read' },
+      { name: 'tool:write', text: 'global tool:write' },
+    ])
+
+    const dispose = ctx.systemPrompt.suppressSections({
+      except: () => ['pentest:mode-policy'],
+      globalOnly: true,
+    })
+    // The preset's own shadowing definition survives even though its name is global;
+    // the unlisted global section does not.
+    expect(await visible()).toEqual([
+      { name: 'deployment:persona-prefix', text: 'preset persona' },
+      { name: 'tool:read', text: 'scoped tool:read' },
+    ])
+
+    dispose()
+    expect(await visible()).toEqual([
+      { name: 'deployment:persona-prefix', text: 'preset persona' },
+      { name: 'tool:read', text: 'scoped tool:read' },
+      { name: 'tool:write', text: 'global tool:write' },
+    ])
+  })
+
   it('keeps reusable instructions identical across local environments', async () => {
     const ctx = new Context()
     try {
