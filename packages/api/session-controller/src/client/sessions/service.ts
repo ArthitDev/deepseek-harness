@@ -482,6 +482,21 @@ export class ClientSessions implements ISessions {
   }
 
   /**
+   * Edit one sent user message in place: the Host shadows the old exchange and
+   * queues the edited text as a followup inside the same Session log.
+   * @param request - session id, the sent message's seq (a current surface
+   *   node), and the edited text-only prompt.
+   * @returns acknowledgement that the edit replaced the exchange and scheduled regeneration.
+   * @throws {Error} when the Host rejects the edit (not a sent user message,
+   *   not the current surface tail, running Agent, or blank text).
+   */
+  async editMessage(request: { sessionId: SessionId; seq: number; text: string }): Promise<{ accepted: true }> {
+    const result = await this.manager.editMessage(request)
+    if (!result.ok) throw new Error(`session message edit failed: ${result.error.code}: ${result.error.message}`)
+    return result.value
+  }
+
+  /**
    * Borrow an already-retained Agent-scoped Context.
    * @param id - session id (the agent identity — 1:1 same axis).
    * @returns the scoped Context, or undefined without a retained generation.

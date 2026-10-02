@@ -136,6 +136,13 @@ export interface ISessions {
    */
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>
   /**
+   * Edit one sent user message in place: the old exchange is shadowed on the
+   * surface and the Agent regenerates its answer inside the same Session log.
+   * @param request - source session id, the sent message's seq, and the edited text.
+   * @returns acknowledgement that the edit replaced the exchange and scheduled regeneration.
+   */
+  editMessage(request: { sessionId: SessionId; seq: number; text: string }): Promise<{ accepted: true }>
+  /**
    * Borrow an already-retained Agent-scoped Context without extending its lifetime.
    * @param id - session id.
    * @returns the live scoped Context, or undefined without a retained generation.

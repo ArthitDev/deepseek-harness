@@ -188,7 +188,7 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('forks before an edited question and immediately submits its revised text', async () => {
+  it('edits the sent question in place through the Host edit face', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(b.rootReference)
     const scope = b.runtime.ctx.sessions.scope(ROOT)!
@@ -196,14 +196,12 @@ describe('Chat inject API', () => {
 
     injected.editAt(19, 'revised question')
 
-    await vi.waitFor(() => { expect(b.session.prompt).toHaveBeenCalledOnce() })
-    expect(b.runtime.sessions.calls).toContainEqual({
-      method: 'fork', args: [{ sessionId: ROOT, atSeq: 18, increaseTitle: true }],
+    await vi.waitFor(() => {
+      expect(b.runtime.sessions.calls).toContainEqual({
+        method: 'editMessage', args: [{ sessionId: ROOT, seq: 19, text: 'revised question' }],
+      })
     })
-    expect(b.openSession).toHaveBeenCalledWith(ROOT, expect.any(Function))
-    expect(b.session.prompt.mock.calls[0]?.[0]).toEqual([
-      { type: 'text', text: 'revised question' },
-    ])
+    expect(b.session.prompt).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })
 

@@ -11,9 +11,15 @@ import type {
 import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload/types'
 import type {} from '@deepseek-ai/dsh-client-file-upload'
 import {
-  ReasoningEffortId, assistantStreamChunks, createUserMessage, freezeMessage,
+  ReasoningEffortId, assistantStreamChunks, createDeveloperMessage, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'session-edit': { kind: 'session-edit' }
+  }
+}
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -41,6 +47,8 @@ import type {
   SessionCancelValue,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
   SessionForkRequest,
   SessionForkValue,
   SessionPromptRequest,
@@ -313,6 +321,52 @@ export class SessionCommandController {
       }
     }
     return { sessionId: childId }
+  }
+
+  /**
+   * Edit one sent user message in place: shadow the old exchange on the
+   * surface and regenerate the answer inside the same Session log.
+   * @param request - Session identity, the sent message's seq, and the edited text.
+   * @returns acknowledgement that the edit replaced the exchange and scheduled regeneration.
+   */
+  async editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue> {
+    const text = request.text.trim()
+    if (text.length === 0) {
+      throw new RemoteError('gateway/bad-request', 'edited prompt text must not be blank', {})
+    }
+    const agent = await this.resolveAgent(request.sessionId)
+    if (agent.status !== 'idle') {
+      throw new RemoteError('session/agent-busy', 'prompt rejected', {
+        reason: 'the Agent is running; stop it before editing a message',
+      })
+    }
+    const seq = SessionSeq(request.seq)
+    const event = agent.session.eventAt(seq)
+    if (event?.type !== 'user/message') {
+      throw new RemoteError('gateway/bad-request', `event ${request.seq} is not a user message`, {})
+    }
+    const tail = agent.session.surface.nodes.at(-1)
+    if (tail === undefined || tail < seq) {
+      throw new RemoteError('gateway/bad-request', 'event is not on the current surface', {})
+    }
+    const nextTurn = agent.session.snapshotEvents().findLast(logEvent => logEvent.type === 'turn/start')?.data.turn ?? 0
+    agent.session.append('developer/message', {
+      turn: nextTurn + 1,
+      step: 1,
+      message: createDeveloperMessage({
+        source: { kind: 'session-edit' },
+        content: [{ type: 'text', text: 'the operator edited the question below; its earlier exchange is retained in the log' }],
+      }),
+    }, {
+      surfaceOp: { op: 'replace', startSeq: seq, endSeq: tail },
+      sourceEventSeqs: [seq],
+    })
+    const message: UserMessage = createUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: 'user' },
+    })
+    agent.followup(message)
+    return { accepted: true }
   }
 
   /**

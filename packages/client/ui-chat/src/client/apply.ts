@@ -221,19 +221,12 @@ export function apply(ctx: Context): void {
               })
           },
           editAt: (seq, text) => {
-            ctx.sessions.fork({ sessionId, atSeq: seq - 1, increaseTitle: true })
-              .then((childId) => {
-                ctx.uiWorkspace.openSession(childId, (openedId) => {
-                  const scope = ctx.sessions.scope(openedId)
-                  if (scope === undefined) throw new Error(`edited session "${openedId}" has no retained scope`)
-                  const input = ctx.conversation.input.for(scope)
-                  input.setDraft(text)
-                  input.submit()
-                })
-              }, () => {
-                // No completed-turn prefix before this question (it opens the
-                // session): the fork is refused and the source view stays put.
-              })
+            // In-place edit: the same Session log shadows the old exchange and
+            // regenerates; no forked history is created.
+            ctx.sessions.editMessage({ sessionId, seq, text }).catch(() => {
+              // Edit failure (busy Agent, off-surface seq) leaves the source
+              // view unchanged.
+            })
           },
         }
       },

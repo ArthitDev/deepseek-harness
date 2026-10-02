@@ -7,6 +7,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type {
   SessionControlBaseline,
   SessionControlFrame,
+  SessionEditMessageValue,
   SessionProjectionHints,
   SessionRenameValue,
   SessionSummary,
@@ -571,6 +572,19 @@ export class SessionManager {
       this.projectionStore(sessionId).apply('title', result.value.title, SessionSeq(result.value.seq))
     }
     return result
+  }
+
+  /**
+   * Edit one sent user message in place: the Host shadows the old exchange and
+   * queues the edited text as a followup in the same Session log.
+   * @param opts - session id, the sent user message seq (a current surface
+   *   node), and the edited text-only prompt.
+   * @returns the acceptance receipt, or the Remote failure.
+   */
+  async editMessage(
+    opts: { sessionId: SessionId; seq: number; text: string },
+  ): Promise<RemoteResult<SessionEditMessageValue>> {
+    return this.remote.session.editMessage(opts)
   }
 
   /**

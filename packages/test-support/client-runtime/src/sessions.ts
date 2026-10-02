@@ -312,7 +312,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'create' | 'refreshProjections' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'refresh' | 'search' | 'fork' | 'delete'
+      | 'clear' | 'refresh' | 'search' | 'fork' | 'editMessage' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -687,6 +687,17 @@ export class TestSessions implements ISessions {
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
+  }
+
+  /**
+   * Recorded edit stub: no log mutation (benches asserting the full edit flow
+   * drive the production service; this face only proves the call).
+   * @param request - session id, sent message seq, and the edited text.
+   * @returns the acceptance receipt.
+   */
+  editMessage(request: { sessionId: SessionId; seq: number; text: string }): Promise<{ accepted: true }> {
+    this.calls.push({ method: 'editMessage', args: [request] })
+    return Promise.resolve({ accepted: true })
   }
 
   /**

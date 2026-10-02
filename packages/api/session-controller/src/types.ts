@@ -464,6 +464,21 @@ export interface SessionPromptValue {
   readonly accepted: true
 }
 
+/** Edit one sent user message in place: the old exchange is shadowed on the
+ * surface and the Agent regenerates its answer in the same Session log. */
+export interface SessionEditMessageRequest {
+  readonly sessionId: SessionId
+  /** Seq of the sent user message to edit; must be a current surface node. */
+  readonly seq: number
+  /** The edited prompt text (text-only; attachments keep their original admission). */
+  readonly text: string
+}
+
+/** Receipt after one edit replaced the exchange and scheduled regeneration. */
+export interface SessionEditMessageValue {
+  readonly accepted: true
+}
+
 /** Durable image read request. */
 export interface SessionAttachmentRequest {
   readonly sessionId: SessionId

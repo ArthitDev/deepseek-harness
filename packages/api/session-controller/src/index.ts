@@ -42,6 +42,8 @@ import type {
   SessionDeleteValue,
   SessionFollowFrame,
   SessionFollowRequest,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
   SessionForkRequest,
   SessionForkValue,
   SessionListRequest,
@@ -450,6 +452,17 @@ export class SessionController extends TypertRemoteService {
   @Remote('fork')
   fork(request: SessionForkRequest): Promise<SessionForkValue> {
     return this.commands.fork(request)
+  }
+
+  /**
+   * Edit one sent user message in place: the old exchange is shadowed on the
+   * surface and the Agent regenerates its answer inside the same Session log.
+   * @param request - Session identity, the sent message's seq, and the edited text.
+   * @returns acknowledgement that the edit replaced the exchange and scheduled regeneration.
+   */
+  @Remote('editMessage')
+  editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue> {
+    return this.commands.editMessage(request)
   }
 
   /**
