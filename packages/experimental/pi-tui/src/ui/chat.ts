@@ -95,6 +95,8 @@ export interface ChatScreenOptions {
   tui: ViewportTUI
   agent: Agent
   config: {
+    /** The running TUI release for the banner. */
+    version?: string
     provider?: string
     model?: string
     cwd?: string
@@ -466,6 +468,7 @@ export class ChatScreen {
     pushNotice(
       this.model,
       buildBanner({
+        ...(this.config.version !== undefined ? { version: this.config.version } : {}),
         cwd: basename(this.cwd),
         ...(this.config.preset !== undefined ? { preset: this.config.preset } : {}),
         model: route.model,

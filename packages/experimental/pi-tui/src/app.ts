@@ -6,6 +6,8 @@
  * session log → subscribe to live `session/event` → quit on Ctrl+C by
  * disposing the whole tree (bounded fallback, cc-tui semantics).
  */
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 import { TuiAltScreen, type ViewportTUI } from '@earendil-works/pi-tui'
@@ -110,6 +112,16 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
 
   const resolved = await resolveAgent(ctx, sessionId, agentOptions, meta)
   const agent = resolved.agent
+  /** The plugin's own manifest release, shown on the banner; boot never depends on this read. */
+  const tuiVersion = (() => {
+    try {
+      const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as { version?: unknown }
+      return typeof manifest.version === 'string' ? manifest.version : '0.0.0'
+    } catch {
+      // A missing or unreadable manifest must not block boot; the placeholder keeps the banner honest.
+      return '0.0.0'
+    }
+  })()
   // Keep the handle so the initial agent is disposed on the first in-session
   // switch (new/fork/resume) — dropping it leaked its scoped context.
   let current: ResolvedAgent = resolved
@@ -135,6 +147,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     tui,
     agent,
     config: {
+      version: tuiVersion,
       ...(effectiveProvider !== undefined ? { provider: effectiveProvider } : {}),
       ...(effectiveModel !== undefined ? { model: effectiveModel } : {}),
       ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
