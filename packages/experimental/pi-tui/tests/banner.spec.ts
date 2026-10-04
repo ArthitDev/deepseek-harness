@@ -24,9 +24,9 @@ describe('buildBanner', () => {
 })
 
 describe('SHIELD_ART', () => {
-  it('renders 13 half-block rows with the bolt shaft and baked colors', () => {
+  it('renders 8 half-block rows with the bolt shaft and baked colors', () => {
     const rows = SHIELD_ART.split('\n')
-    expect(rows.length).toBe(13)
+    expect(rows.length).toBe(8)
     expect(rows.join('')).toContain('\u2588')
     // Baked truecolor codes: bright-red shield (91), white bolt shaft (97).
     expect(SHIELD_ART).toContain('\u001b[91m')
