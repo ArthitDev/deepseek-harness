@@ -86,7 +86,8 @@ import {
   sessionTitles,
   type ResolvedAgent,
 } from '../core/session.js'
-import { pickFromListWithSearch, openFindOverlay } from './overlays.js'
+import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
+import { pickFromListWithSearch, openFindOverlay, promptSecret } from './overlays.js'
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 
@@ -806,6 +807,7 @@ export class ChatScreen {
     if (parsed.name === 'runs') return this.cmdRuns(parsed.raw.trim())
     if (parsed.name === 'recon') return this.cmdRecon(parsed.raw.trim())
     if (parsed.name === 'machines') return this.cmdMachines(parsed.raw.trim())
+    if (parsed.name === 'key') return this.cmdKey(parsed.raw.trim())
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1127,6 +1129,45 @@ export class ChatScreen {
     }
   }
 
+
+  /** Save a provider credential through the host credentials service: the
+   * entry is masked at render time, so the key never reaches the transcript. */
+  private async cmdKey(raw: string): Promise<void> {
+    const credentials = this.ctx.get('credentials') as
+      | { set(ref: string, value: string): Promise<void> }
+      | undefined
+    if (credentials === undefined) {
+      this.pushNotice('credentials service unavailable in this profile', 'error')
+      return
+    }
+    const ref = raw.trim() === '' ? 'DEEPSEEK_API_KEY' : raw.trim()
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) {
+      this.pushNotice(`credential reference "${ref}" must match [A-Za-z_][A-Za-z0-9_]*`, 'error')
+      return
+    }
+    const key = await promptSecret(this.tui, {
+      title: `API key for ${ref}`,
+      body: 'Paste the key and press Enter · Esc cancels',
+    })
+    if (key === undefined) {
+      this.pushNotice('credential entry cancelled', 'info')
+      return
+    }
+    const check = normalizeApiKey(key)
+    if (!check.ok) {
+      this.pushNotice(`invalid key: ${check.reason}`, 'error')
+      return
+    }
+    try {
+      await credentials.set(ref, check.value)
+      this.pushNotice(`credential saved for ${ref} — applies from the next request`, 'info')
+    } catch (error) {
+      this.pushNotice(
+        `credential save failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
 
   private async cmdModel(query: string): Promise<void> {
     const llm = this.llm()

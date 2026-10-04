@@ -23,6 +23,7 @@ import {
   Text,
   fuzzyFilter,
   matchesKey,
+  type Component,
   type TUI,
 } from '@earendil-works/pi-tui'
 import { RG_DISPLAY_CAP } from '../core/files.js'
@@ -645,4 +646,80 @@ class FindPanel extends Container {
       ),
     )
   }
+}
+
+/** One masked entry field: the operator's key never renders, only bullets. */
+class SecretPanel implements Component {
+  private value = ''
+  private done = false
+
+  constructor(
+    private readonly title: string,
+    private readonly body: string | undefined,
+    private readonly resolve: (value: string | undefined) => void,
+    private readonly hide: () => void,
+  ) {}
+
+  render(width: number): string[] {
+    const masked = '\u2022'.repeat(this.value.length)
+    const cursor = this.done ? '' : '\u2588'
+    const lines = [style.accent(this.title)]
+    if (this.body !== undefined && this.body !== '') lines.push(this.body)
+    lines.push('', masked === '' ? cursor : `${masked}${cursor}`)
+    lines.push(style.muted('Enter save · Esc cancel'))
+    return lines.map(line => line.slice(0, Math.max(width - 2, 1)))
+  }
+
+  /** No cached render state: every render recomputes from the current value. */
+  invalidate(): void {}
+
+  handleInput(data: string): void {
+    if (this.done) return
+    if (data === '\x1b') {
+      this.done = true
+      this.hide()
+      this.resolve(undefined)
+      return
+    }
+    // ANSI escape sequences (arrow keys etc.) arrive as one multi-char chunk
+    // starting with ESC — a masked field has no use for any of them.
+    if (data.startsWith('\x1b')) return
+    for (const ch of data) {
+      if (ch === '\r' || ch === '\n') {
+        this.done = true
+        this.hide()
+        this.resolve(this.value)
+        return
+      }
+      if (ch === '\x7f' || ch === '\b') {
+        this.value = this.value.slice(0, -1)
+        continue
+      }
+      if (ch >= ' ' && ch <= '~') this.value += ch
+    }
+  }
+}
+
+/**
+ * Prompt for a secret over the TUI with the value masked at render time:
+ * every keystroke renders as a bullet, so neither the key nor a paste echo
+ * ever lands in the transcript or terminal scrollback.
+ * @param tui - the live TUI; the prompt shows as a focused overlay.
+ * @param options - the panel title and an optional body line.
+ * @returns the entered value, or undefined when the operator cancelled.
+ */
+export function promptSecret(tui: TUI, options: { title: string; body?: string }): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    // The panel closes through a holder (not a captured let), so the overlay
+    // handle is assignable only after the panel exists.
+    const overlay: { handle?: ReturnType<TUI['showOverlay']> } = {}
+    const panel = new SecretPanel(options.title, options.body, (value) => {
+      resolve(value)
+    }, () => {
+      overlay.handle?.hide()
+      tui.requestRender()
+    })
+    overlay.handle = tui.showOverlay(panel, { width: '60%' })
+    tui.requestRender()
+  })
 }
