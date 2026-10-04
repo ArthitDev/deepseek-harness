@@ -648,24 +648,25 @@ class FindPanel extends Container {
   }
 }
 
-/** One masked entry field: the operator's key never renders, only bullets. */
-class SecretPanel implements Component {
+/** One entry field; masked renders bullets (credentials), visible renders text. */
+class PromptPanel implements Component {
   private value = ''
   private done = false
 
   constructor(
     private readonly title: string,
     private readonly body: string | undefined,
+    private readonly masked: boolean,
     private readonly resolve: (value: string | undefined) => void,
     private readonly hide: () => void,
   ) {}
 
   render(width: number): string[] {
-    const masked = '\u2022'.repeat(this.value.length)
+    const shown = this.masked ? '\u2022'.repeat(this.value.length) : this.value
     const cursor = this.done ? '' : '\u2588'
     const lines = [style.accent(this.title)]
     if (this.body !== undefined && this.body !== '') lines.push(this.body)
-    lines.push('', masked === '' ? cursor : `${masked}${cursor}`)
+    lines.push('', shown === '' ? cursor : `${shown}${cursor}`)
     lines.push(style.muted('Enter save · Esc cancel'))
     return lines.map(line => line.slice(0, Math.max(width - 2, 1)))
   }
@@ -708,12 +709,12 @@ class SecretPanel implements Component {
  * @param options - the panel title and an optional body line.
  * @returns the entered value, or undefined when the operator cancelled.
  */
-export function promptSecret(tui: TUI, options: { title: string; body?: string }): Promise<string | undefined> {
+function promptField(tui: TUI, options: { title: string; body?: string; masked: boolean }): Promise<string | undefined> {
   return new Promise((resolve) => {
     // The panel closes through a holder (not a captured let), so the overlay
     // handle is assignable only after the panel exists.
     const overlay: { handle?: ReturnType<TUI['showOverlay']> } = {}
-    const panel = new SecretPanel(options.title, options.body, (value) => {
+    const panel = new PromptPanel(options.title, options.body, options.masked, (value) => {
       resolve(value)
     }, () => {
       overlay.handle?.hide()
@@ -722,4 +723,26 @@ export function promptSecret(tui: TUI, options: { title: string; body?: string }
     overlay.handle = tui.showOverlay(panel, { width: '60%' })
     tui.requestRender()
   })
+}
+
+/**
+ * Prompt for a secret over the TUI with the value masked at render time:
+ * every keystroke renders as a bullet, so neither the key nor a paste echo
+ * ever lands in the transcript or terminal scrollback.
+ * @param tui - the live TUI; the prompt shows as a focused overlay.
+ * @param options - the panel title and an optional body line.
+ * @returns the entered value, or undefined when the operator cancelled.
+ */
+export function promptSecret(tui: TUI, options: { title: string; body?: string }): Promise<string | undefined> {
+  return promptField(tui, { ...options, masked: true })
+}
+
+/**
+ * Prompt for one visible line over the TUI (names, endpoints).
+ * @param tui - the live TUI; the prompt shows as a focused overlay.
+ * @param options - the panel title and an optional body line.
+ * @returns the entered value, or undefined when the operator cancelled.
+ */
+export function promptText(tui: TUI, options: { title: string; body?: string }): Promise<string | undefined> {
+  return promptField(tui, { ...options, masked: false })
 }

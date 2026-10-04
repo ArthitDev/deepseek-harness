@@ -87,7 +87,7 @@ import {
   type ResolvedAgent,
 } from '../core/session.js'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
-import { pickFromListWithSearch, openFindOverlay, promptSecret } from './overlays.js'
+import { pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 
@@ -808,6 +808,7 @@ export class ChatScreen {
     if (parsed.name === 'recon') return this.cmdRecon(parsed.raw.trim())
     if (parsed.name === 'machines') return this.cmdMachines(parsed.raw.trim())
     if (parsed.name === 'key') return this.cmdKey(parsed.raw.trim())
+    if (parsed.name === 'provider') return this.cmdProvider()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1129,6 +1130,109 @@ export class ChatScreen {
     }
   }
 
+
+  /** Register a custom OpenAI/Anthropic-compatible provider: prompts for the
+   * endpoint and masked key, discovers the model list live, and writes the
+   * profile into the shared settings namespace the web Models page reads. */
+  private async cmdProvider(): Promise<void> {
+    const settings = this.ctx.get('settings') as
+      | { mutate(ns: string, ops: readonly { op: 'set'; path: readonly string[]; value: unknown }[]): Promise<void> }
+      | undefined
+    const llm = this.llm() as
+      | { discoverModels(settingsNs: string, request: DiscoveredModelRequest): Promise<readonly DiscoveredModel[]> }
+      | undefined
+    if (settings === undefined || llm === undefined) {
+      this.pushNotice('settings or llm service unavailable in this profile', 'error')
+      return
+    }
+    const name = await promptText(this.tui, { title: 'Provider display name', body: 'e.g. OpenRouter, Chutes, local vLLM' })
+    if (name === undefined || name.trim() === '') {
+      this.pushNotice('provider setup cancelled', 'info')
+      return
+    }
+    const route = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (route === '') {
+      this.pushNotice('display name has no usable route characters', 'error')
+      return
+    }
+    const baseURL = await promptText(this.tui, { title: `API endpoint for ${route}`, body: 'https://host/v1' })
+    if (baseURL === undefined || !/^https?:\/\/.+/.test(baseURL.trim())) {
+      this.pushNotice('provider setup cancelled or endpoint is not an http(s) URL', 'info')
+      return
+    }
+    const api = await pickFromListWithSearch(this.tui, {
+      title: 'Wire protocol',
+      items: ['openai-completions', 'openai-responses', 'anthropic-messages'].map(label => ({ value: label, label })),
+    })
+    if (api === undefined) {
+      this.pushNotice('provider setup cancelled', 'info')
+      return
+    }
+    const key = await promptSecret(this.tui, {
+      title: `API key for ${route} (masked)`,
+      body: 'Paste and Enter to save · Esc to skip (provider-native auth)',
+    })
+    let apiKey: string | undefined
+    if (key !== undefined) {
+      const check = normalizeApiKey(key)
+      if (!check.ok) {
+        this.pushNotice(`invalid key: ${check.reason}`, 'error')
+        return
+      }
+      apiKey = check.value
+    }
+    this.pushNotice(`discovering models at ${baseURL.trim()} …`, 'info')
+    let discovered: readonly DiscoveredModel[]
+    try {
+      discovered = await llm.discoverModels('llm-pi-ai', {
+        baseURL: baseURL.trim(),
+        api,
+        ...(apiKey === undefined ? {} : { apiKey }),
+      })
+    } catch (error) {
+      this.pushNotice(
+        `model discovery failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+      return
+    }
+    if (discovered.length === 0) {
+      this.pushNotice('the endpoint advertised no models — nothing saved', 'error')
+      return
+    }
+    const keyRef = `${route.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
+    const profile = {
+      displayName: name.trim(),
+      api,
+      baseURL: baseURL.trim(),
+      models: discovered.map(model => ({
+        name: model.name ?? model.id,
+        contextWindow: model.contextWindow ?? 128_000,
+        maxTokens: model.maxTokens ?? 8_192,
+        input: model.inputModalities === undefined ? ['text'] : [...model.inputModalities],
+      })),
+      ...(apiKey === undefined ? {} : { apiKeyEnv: keyRef }),
+    }
+    try {
+      await settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', route], value: profile }])
+      if (apiKey !== undefined) {
+        const credentials = this.ctx.get('credentials') as
+          | { set(ref: string, value: string): Promise<void> }
+          | undefined
+        await credentials?.set(keyRef, apiKey)
+      }
+    } catch (error) {
+      this.pushNotice(
+        `provider save failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+      return
+    }
+    this.pushNotice(
+      `provider ${route} saved with ${discovered.length} model(s) — /model to switch (key: ${apiKey === undefined ? 'provider-native' : keyRef})`,
+      'info',
+    )
+  }
 
   /** Save a provider credential through the host credentials service: the
    * entry is masked at render time, so the key never reaches the transcript. */
@@ -2468,4 +2572,20 @@ interface RemoteMachineRow {
   port: number
   username: string
   defaultPath?: string
+}
+
+/** One model a discovery interrogation returned for a draft provider. */
+interface DiscoveredModel {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  inputModalities?: readonly string[]
+}
+
+/** The discovery request fields the /provider flow sends. */
+interface DiscoveredModelRequest {
+  baseURL?: string
+  api?: string
+  apiKey?: string
 }
