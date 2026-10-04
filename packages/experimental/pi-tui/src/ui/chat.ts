@@ -17,7 +17,7 @@
  *   Shift+Tab  cycle thinking effort
  */
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, relative } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -809,6 +809,8 @@ export class ChatScreen {
     if (parsed.name === 'machines') return this.cmdMachines(parsed.raw.trim())
     if (parsed.name === 'key') return this.cmdKey(parsed.raw.trim())
     if (parsed.name === 'provider') return this.cmdProvider()
+    if (parsed.name === 'memory') return this.cmdMemory(parsed.raw.trim())
+    if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1206,7 +1208,7 @@ export class ChatScreen {
       api,
       baseURL: baseURL.trim(),
       models: discovered.map(model => ({
-        name: model.name ?? model.id,
+        name: model.id,
         contextWindow: model.contextWindow ?? 128_000,
         maxTokens: model.maxTokens ?? 8_192,
         input: model.inputModalities === undefined ? ['text'] : [...model.inputModalities],
@@ -1273,6 +1275,30 @@ export class ChatScreen {
     }
   }
 
+  /** Context windows the shared custom-provider profiles declare, keyed
+   * by 'provider/model' — the catalog itself carries no sizes. */
+  private async profileContexts(): Promise<Map<string, number>> {
+    const settings = this.ctx.get('settings') as
+      | { describe(): readonly { ns: string; value: unknown }[] }
+      | undefined
+    const contexts = new Map<string, number>()
+    try {
+      const section = settings?.describe().find(row => row.ns === 'llm-pi-ai')?.value as
+        | { providers?: Record<string, { models?: { name?: string; contextWindow?: number }[] }> }
+        | undefined
+      for (const [route, profile] of Object.entries(section?.providers ?? {})) {
+        for (const model of profile.models ?? []) {
+          if (model.contextWindow !== undefined && model.name !== undefined) {
+            contexts.set(`${route}/${model.name}`, model.contextWindow)
+          }
+        }
+      }
+    } catch {
+      // Settings are optional; the picker just shows no ctx column.
+    }
+    return contexts
+  }
+
   private async cmdModel(query: string): Promise<void> {
     const llm = this.llm()
     if (llm === undefined) {
@@ -1280,7 +1306,7 @@ export class ChatScreen {
       return
     }
     if (query !== '') {
-      const routes = await listAllModels(llm)
+      const routes = await listAllModels(llm, await this.profileContexts())
       const match =
         routes.find(route => route.model === query) ??
         routes.find(route => route.model.toLowerCase().includes(query.toLowerCase()))
@@ -1289,7 +1315,7 @@ export class ChatScreen {
         return
       }
     }
-    const picked = await pickModel(this.tui, llm, this.currentRoute())
+    const picked = await pickModel(this.tui, llm, await this.profileContexts(), this.currentRoute())
     if (picked !== undefined) await this.applyModel(picked)
   }
 
@@ -1473,6 +1499,100 @@ export class ChatScreen {
         'error',
       )
     }
+  }
+
+
+  /** Open an instruction file in $EDITOR: project AGENTS.md by default,
+   * `global` for the harness-home file. The agent-instructions loader picks
+   * project changes up on the next request; global on the next session. */
+  private async cmdMemory(raw: string): Promise<void> {
+    const scope = raw.trim()
+    if (scope !== '' && scope !== 'global') {
+      this.pushNotice('usage: /memory [global]', 'error')
+      return
+    }
+    const path = scope === 'global'
+      ? join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'AGENTS.md')
+      : join(this.cwd, 'AGENTS.md')
+    await this.editFileInEditor(path, scope === 'global'
+      ? 'changes apply from the next session'
+      : 'changes apply from the next request')
+  }
+
+  /** List persisted sessions, or permanently delete one by id. */
+  private async cmdSessions(raw: string): Promise<void> {
+    const persistence = this.ctx.get('sessionPersistence') as
+      | {
+        list(): Promise<readonly { header: { id: string } }[]>
+        delete(id: string): Promise<boolean>
+      }
+      | undefined
+    if (persistence === undefined) {
+      this.pushNotice('session persistence unavailable in this profile', 'error')
+      return
+    }
+    const [verb, ...rest] = raw.trim().split(/\s+/)
+    const arg = rest.join(' ').trim()
+    if (verb === '' || verb === 'list') {
+      const all = (await persistence.list()).map(snapshot => snapshot.header.id)
+      if (all.length === 0) {
+        this.pushNotice('no persisted sessions', 'info')
+        return
+      }
+      for (const id of all) {
+        const current = id === this.agent.session.id ? ' ← current' : ''
+        this.pushNotice(`${id}${current}`, 'info')
+      }
+      return
+    }
+    if (verb === 'delete') {
+      if (arg === '') {
+        this.pushNotice('usage: /sessions delete <session-id>', 'error')
+        return
+      }
+      if (arg === this.agent.session.id) {
+        this.pushNotice('refusing to delete the current session — /new first', 'error')
+        return
+      }
+      const deleted = await persistence.delete(arg)
+      this.pushNotice(deleted ? `deleted ${arg}` : `no persisted session ${arg}`, deleted ? 'info' : 'error')
+      return
+    }
+    this.pushNotice('usage: /sessions [list|delete <session-id>]', 'error')
+  }
+
+  /** Open one file in $EDITOR/$VISUAL, pausing the TUI like Ctrl+G does. */
+  private async editFileInEditor(path: string, onReturn: string): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot open the editor while work is running', 'error')
+      return
+    }
+    const editor = process.env.VISUAL ?? process.env.EDITOR
+    if (editor === undefined || editor === '') {
+      this.pushNotice('set $EDITOR (or $VISUAL) to use the external editor', 'error')
+      return
+    }
+    const shell = this.ctx.get('shell') as
+      { run(req: unknown): Promise<{ exitCode: number | null }> } | undefined
+    if (shell === undefined) {
+      this.pushNotice('shell service unavailable', 'error')
+      return
+    }
+    await writeFile(path, '', { flag: 'a' }).catch(() => undefined)
+    this.tui.stop()
+    try {
+      await shell.run({
+        command: `${editor} ${JSON.stringify(path)}`,
+        workdir: this.cwd,
+        sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: this.cwd },
+        timeoutMs: 30 * 60 * 1000,
+      })
+    } finally {
+      this.tui.start()
+      this.tui.setFocus(this.editor)
+      this.tui.requestRender()
+    }
+    this.pushNotice(`${path} saved — ${onReturn}`)
   }
 
   private cmdRename(title: string): void {
@@ -2033,7 +2153,7 @@ export class ChatScreen {
   private async modelCompletions(prefix: string) {
     const llm = this.llm()
     if (llm === undefined) return null
-    const routes = await listAllModels(llm)
+    const routes = await listAllModels(llm, await this.profileContexts())
     const items = routes
       .filter(route => route.model.startsWith(prefix))
       .map(route => ({ value: route.model, label: route.model }))
@@ -2405,7 +2525,7 @@ export class ChatScreen {
       this.pushNotice('llm service unavailable', 'error')
       return
     }
-    const picked = await pickModel(this.tui, llm, this.currentRoute())
+    const picked = await pickModel(this.tui, llm, await this.profileContexts(), this.currentRoute())
     if (picked !== undefined) await this.applyModel(picked)
   }
 }

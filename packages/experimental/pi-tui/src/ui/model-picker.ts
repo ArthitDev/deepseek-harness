@@ -12,6 +12,8 @@ import { pickFromListWithSearch, type ListPickItem } from './overlays.js'
 export interface ModelRoute {
   provider: string
   model: string
+  /** Advertised context window in tokens, when the catalog discloses one. */
+  contextWindow?: number
 }
 
 /** Minimal LlmRuntime surface we consume. */
@@ -20,22 +22,44 @@ export interface LlmRuntimeLike {
   listModels(provider: string): Promise<readonly LlmModelInfo[]>
 }
 
-/** Flatten the full provider catalog into provider/model routes. */
-export async function listAllModels(llm: LlmRuntimeLike): Promise<ModelRoute[]> {
+/** Compact token-count form for picker descriptions (1000000 → 1M). */
+function shortTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`
+  if (value >= 1_000) return `${Math.round(value / 1_000)}k`
+  return String(value)
+}
+
+/**
+ * Flatten the full provider catalog into provider/model routes, enriching
+ * context windows from the shared custom-provider profiles: the catalog
+ * itself does not carry sizes, but every /provider registration does.
+ */
+export async function listAllModels(
+  llm: LlmRuntimeLike,
+  profileContexts?: ReadonlyMap<string, number>,
+): Promise<ModelRoute[]> {
   const providers = llm.listProviders()
   const lists = await Promise.all(
     providers.map(provider => llm.listModels(provider.id).catch(() => [])),
   )
-  return lists.flat().map(info => ({ provider: info.provider, model: info.id }))
+  return lists.flat().map((info) => {
+    const contextWindow = profileContexts?.get(`${info.provider}/${info.id}`)
+    return {
+      provider: info.provider,
+      model: info.id,
+      ...(contextWindow === undefined ? {} : { contextWindow }),
+    }
+  })
 }
 
 function toItem(route: ModelRoute, current: ModelRoute | undefined, index: number): ListPickItem {
   const isCurrent =
     current !== undefined && current.provider === route.provider && current.model === route.model
+  const context = route.contextWindow === undefined ? '' : ` · ctx ${shortTokens(route.contextWindow)}`
   return {
     value: `${route.provider}\u0000${route.model}`,
     label: `${isCurrent ? '✓ ' : '  '}${route.model}${route.model !== route.provider ? ` (${route.provider})` : ''}`,
-    description: isCurrent ? `active · #${index}` : `#${index}`,
+    description: isCurrent ? `active · #${index}${context}` : `#${index}${context}`,
   }
 }
 
@@ -49,9 +73,10 @@ export function parseRoute(value: string): ModelRoute | undefined {
 export async function pickModel(
   tui: TUI,
   llm: LlmRuntimeLike,
+  profileContexts?: ReadonlyMap<string, number>,
   current?: ModelRoute,
 ): Promise<ModelRoute | undefined> {
-  const routes = await listAllModels(llm)
+  const routes = await listAllModels(llm, profileContexts)
   if (routes.length === 0) return undefined
   const picked = await pickFromListWithSearch(tui, {
     title: 'Select model',
