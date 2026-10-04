@@ -17,7 +17,7 @@ export interface BannerInfo {
 
 /** Compose the welcome block (pre-colored; the view renders it verbatim). */
 export function buildBanner(info: BannerInfo): string {
-  const version = info.version === undefined ? '' : ` (v${info.version})`
+  const version = info.version === undefined ? '' : ` v${info.version}`
   const lines: string[] = [BLUE(`Shield Break Agent${version}`)]
   const facts: string[] = []
   if (info.model !== undefined) facts.push(`model: ${info.model}`)
