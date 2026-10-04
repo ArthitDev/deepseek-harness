@@ -7530,6 +7530,49 @@ importers:
         specifier: ^4.19.2
         version: 4.22.4
 
+  packages/experimental/pi-tui:
+    dependencies:
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-commands':
+        specifier: workspace:*
+        version: link:../../interaction/commands
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../../skill/skill
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../interaction/user-approval
+      '@deepseek-ai/dsh-user-questions':
+        specifier: workspace:*
+        version: link:../../interaction/user-questions
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@earendil-works/pi-tui':
+        specifier: ~0.84.1
+        version: 0.84.4
+      '@vscode/ripgrep':
+        specifier: ^1.18.0
+        version: 1.18.0
+      chalk:
+        specifier: ^5.5.0
+        version: 5.6.2
+      diff:
+        specifier: ^9.0.0
+        version: 9.0.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+
   packages/experimental/ptc-runtime-python:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -14928,6 +14971,10 @@ packages:
     resolution: {integrity: sha512-Bg/YN6kA7Swja/NQxka8xFdecb4E/auIEGF2G5A25EaQXhRnPj300/7/KpgsDDMYUzHTDAv4RyUxaQPJKW81Rw==}
     engines: {node: '>=22.19.0'}
 
+  '@earendil-works/pi-tui@0.84.4':
+    resolution: {integrity: sha512-nPUnwDkLtupPXnZQYrCwPFcuTydCDqTY6ZbFqhsL4S4kVq0AT418kPa/6uXwtaCD+MjBNBltb7ScTYX65yeE1w==}
+    engines: {node: '>=22.19.0'}
+
   '@electron-internal/extract-zip@1.0.5':
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
     engines: {node: '>=22.12.0'}
@@ -18046,6 +18093,10 @@ packages:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
 
+  chalk@5.6.2:
+    resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
+    engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
+
   character-entities-html4@2.1.0:
     resolution: {integrity: sha512-1v7fgQRj6hnSwFpq1Eu0ynr/CDEw0rXo2B61qXrLNdHZmPKgb7fqS1a2JwF0rISo9q77jDI8VMEHoApn8qDoZA==}
 
@@ -19798,6 +19849,11 @@ packages:
 
   marked@16.4.2:
     resolution: {integrity: sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==}
+    engines: {node: '>= 20'}
+    hasBin: true
+
+  marked@18.0.5:
+    resolution: {integrity: sha512-S6GcvALHg6K4ohtu4E7x0a1AqhAjp6cV8KhLSyN9qVapnzJkusVBxZRcIU9AeYsbe6P1hKDusSbEOzGyyuce6w==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -22481,6 +22537,11 @@ snapshots:
       - zod
 
   '@earendil-works/pi-telemetry@0.85.1': {}
+
+  '@earendil-works/pi-tui@0.84.4':
+    dependencies:
+      get-east-asian-width: 1.6.0
+      marked: 18.0.5
 
   '@electron-internal/extract-zip@1.0.5': {}
 
@@ -25303,6 +25364,8 @@ snapshots:
       ansi-styles: 4.3.0
       supports-color: 7.2.0
 
+  chalk@5.6.2: {}
+
   character-entities-html4@2.1.0: {}
 
   character-entities-legacy@3.0.0: {}
@@ -27224,6 +27287,8 @@ snapshots:
   markdown-table@3.0.4: {}
 
   marked@16.4.2: {}
+
+  marked@18.0.5: {}
 
   matcher@3.0.0:
     dependencies:

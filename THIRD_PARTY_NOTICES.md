@@ -38,6 +38,7 @@ External packages installed for runtime use or distributed inside the prebuilt b
 | [`@browserbasehq/stagehand`](https://github.com/browserbase/stagehand) | MIT |
 | [`@deepseek-ai/libreoffice-kit`](https://github.com/deepseek-harness/libreoffice-kit) | MPL-2.0 |
 | [`@earendil-works/pi-ai`](https://github.com/earendil-works/pi) | MIT |
+| [`@earendil-works/pi-tui`](https://github.com/earendil-works/pi) | MIT |
 | [`@eslint-community/regexpp`](https://github.com/eslint-community/regexpp) | MIT |
 | [`@fontsource/ibm-plex-sans-thai`](https://github.com/fontsource/font-files) | OFL-1.1 |
 | [`@fortune-sheet/core`](https://github.com/ruilisi/fortune-sheet) | MIT |
@@ -79,6 +80,7 @@ External packages installed for runtime use or distributed inside the prebuilt b
 | [`anser`](https://github.com/IonicaBizau/anser) | MIT |
 | [`big.js`](https://github.com/MikeMcl/big.js) | MIT |
 | [`buffer`](https://github.com/feross/buffer) | MIT |
+| [`chalk`](https://github.com/chalk/chalk) | MIT |
 | [`chokidar`](https://github.com/paulmillr/chokidar) | MIT |
 | [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) | Apache-2.0 |
 | [`clsx`](https://github.com/lukeed/clsx) | MIT |

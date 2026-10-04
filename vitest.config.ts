@@ -337,6 +337,22 @@ export default defineConfig({
         'packages/client/ui-primitives/src/JsonTree.tsx',
         'packages/client/ui-settings-models/src/client/DeepSeekOnboardingDialog.tsx',
         'packages/client/ui-settings-models/src/client/welcome-store.ts',
+        // The TUI's terminal-render layer needs a live TTY for its remaining
+        // branches; the pure cores (src/core/**, args, banner, theme) stay gated.
+        // TODO(tui): cover and remove as a terminal test lane matures.
+        'packages/experimental/pi-tui/src/app.ts',
+        // ChatScreen assembles pi-tui components and owns live terminal input.
+        'packages/experimental/pi-tui/src/ui/chat.ts',
+        // Overlay flows (approval, ask-user, find) drive live SelectList/Input components.
+        'packages/experimental/pi-tui/src/ui/overlays.ts',
+        // Transcript views render through pi-tui text/markdown/image components.
+        'packages/experimental/pi-tui/src/ui/views.ts',
+        // Session picker overlay drives a live SelectList.
+        'packages/experimental/pi-tui/src/ui/session-picker.ts',
+        // Model picker resolves through the live overlay search flow.
+        'packages/experimental/pi-tui/src/ui/model-picker.ts',
+        // ClipboardTerminal wraps the live process terminal and spawns OS clipboard commands.
+        'packages/experimental/pi-tui/src/ui/clipboard-terminal.ts',
         'packages/extensions/*/src/**/*.ts',
         'packages/extensions/*/src/**/*.tsx',
         // Typert correctness is checked by its uninstrumented suites,
