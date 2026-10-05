@@ -2,99 +2,95 @@
 
 [English](README.md) | 中文
 
-Shield Break Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
+Shield Break Harness 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）面向安全测试的分支 —— 一个构建于 [Cordis](https://github.com/cordiverse/cordis) 之上的"一切皆插件"智能体框架。
 
-**Important:** 本检出包含自定义 `shield-break-agent-v2` 分支。运行 Recon 或渗透测试工作流之前， 请先阅读 [Shield Break Agent 修改与负责任使用指南](README.SHIELD-BREAK.md)。
-
-它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
-
-文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
-
-## 开发者预览
-
-Shield Break Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
-
-运行本项目前，请阅读[安全说明](SAFETY.zh.md)。
+**Important:** 本检出为自定义 `shield-break-agent-v2` 分支。运行 Recon 或渗透测试工作流之前，请先阅读 [Shield Break Agent 修改与负责任使用指南](README.SHIELD-BREAK.md)；运行项目本身之前，请阅读[安全须知](SAFETY.zh.md)。
 
 <a id="run"></a>
+## 使用界面
 
-## 运行
-
-### 通过 `npm` 运行
-
-安装 `Node.js`，然后运行：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
+| 界面 | 命令 | 说明 |
+|---|---|---|
+| **Web GUI** | `pnpm dsh web` | `http://127.0.0.1:3080`，完整仪表盘（Runs、Recon、设置、Preset） |
+| **TUI** | `pnpm dsh tui` | 全屏终端智能体 —— 命令见下 |
+| **桌面版** | `pnpm dev:desktop` | 同一 Web UI 的 Electron 外壳 |
+| **Headless** | `pnpm dsh --profile headless "task"` | 单次任务，无界面 |
 
 <a id="run-from-source"></a>
-
-### 从源码运行
-
-如需从仓库源码运行：
+## 构建
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
+pnpm install            # node ^22.19 || >=24
+pnpm run build          # dev profile: lib + web bundles (292 artifacts)
+pnpm run build:official # release profile
+pnpm run typecheck      # host + client faces
+pnpm run test           # unit tests
+pnpm run dev:web        # web shell + client-bundle watcher
 ```
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+两个 profile 都会重建所有包的 lib；`dsh` 通过 tsx 从源码启动。
 
-## 社区与支持
+## Web
 
-- 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
-- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
-- 欢迎加入 Shield Break Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
-
-<table>
-  <thead>
-    <tr>
-      <th align="center">企微小助手</th>
-      <th align="center">入群问卷</th>
-      <th align="center">微信公众号</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-assistant.png" alt="Shield Break Harness 企微小助手二维码" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-survey.png" alt="Shield Break Harness 入群问卷二维码" width="180" height="180"></a></td>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wechat-official-account.png" alt="Shield Break Harness 团队微信公众号二维码" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
-
-## 参与贡献
-
-参见 [CONTRIBUTING.md](CONTRIBUTING.zh.md)。
-
-## 开发
-
-请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。
-
-`pnpm run dev:web` 会在一个终端里完成构建、启动，并在源码修改时重建 client bundle；`make help` 列出 Web 与 Desktop 对应的 Make target。完整表格见开发指南的「应用命令」一节。
-
-面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
-
-## 引用
-
-```bibtex
-@misc{deepseek-harness2026,
-  title={Shield Break Harness: Everything is a Plugin},
-  author={DeepSeek-AI},
-  year={2026},
-  publisher={GitHub},
-  howpublished={\url{https://github.com/deepseek-ai/deepseek-harness}},
-}
+```sh
+pnpm dsh web --no-open --trusted-host <host>.ts.net
 ```
 
-## 许可证
+- 服务器绑定 `127.0.0.1:3080`；远程访问经 Tailscale：`tailscale serve --bg http://127.0.0.1:3080`，并配合 `--trusted-host` 声明你的 `*.ts.net` 主机名。打印出的 URL 带一次性 token 门禁。
+- `~/.dsh/cordis.patch.yml` 是 **home patch**：其中的行作用于所有 profile（web/tui/headless）—— 共享的 LLM provider、沙箱姿态以及其他部署级覆盖都放这里。
 
-[MIT](LICENSE)
+## TUI
 
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+```sh
+dsh tui                       # default preset
+dsh tui --preset              # pick from the roster
+dsh tui --machine kali        # run the session on a saved SSH machine
+dsh tui --resume              # reopen a persisted session
+```
+
+命令：`/new` `/fork` `/resume` `/rename` `/export` `/tree` `/agents` `/jobs` `/sessions` `/model` `/preset` `/thinking` `/providers` `/key` `/provider` `/memory` `/queue` `/rewind`（或 **Esc Esc**）`/clear` `/runs` `/recon` `/machines` `/skills` `/copy` `/retry` `/expand-all` `/hotkeys` —— 以及官方 dsh 命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
+
+粘贴经 bracketed paste 生效（Windows Terminal / conhost 中右键，或 Ctrl+V）。空编辑器上按 **Esc Esc** 可回退到更早的 prompt。
+
+## Provider、模型与机器的映射
+
+**Provider 与模型**来自同一份共享文档 —— home patch（`~/.dsh/cordis.patch.yml`）中的 `llm-pi-ai.providers` 段。所有 profile 与两个界面读取相同的路由和凭据引用：
+
+```yaml
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      my-provider:
+        displayName: My Provider
+        apiKeyEnv: MY_PROVIDER_API_KEY   # credential reference, resolved per request
+        api: openai-completions          # or openai-responses / anthropic-messages
+        baseURL: https://host/v1
+        models:
+          - id: model-id
+            name: Display Name
+            contextWindow: 1000000
+            maxTokens: 65536
+```
+
+Key 本体存放在 `~/.dsh/.credentials.yaml`（TUI 中 `/key <REF>`，或 web 的 Models 页），逐请求解析 —— 绝不存进 profile。
+
+**Preset** 是 `~/.dsh/.agent-presets/` 下的目录（`preset.yml` 提供名称）。TUI 隐藏上游自带名册（其 patch 中 `includeShippedRoot: false`）并默认 `shield-break-agent`；web 选择器保留完整名册。
+
+**机器** 是已保存的 SSH profile（web → Remote machines 设置，存于共享设置文档）。TUI 中 `/machines list|probe|open`，或启动时 `--machine <id>`，会把会话工作目录放进 `/__dsh_ssh__/<machine>/…`，shell 与文件工具随即在该机器上运行。
+
+**Antigravity**（Google 账号的 Gemini/Claude 模型）通过内置本地代理接入 —— 见 TUI 包 README 的 [Connect Antigravity](packages/experimental/pi-tui/README.zh.md#connect-antigravity)。
+
+## 渗透测试面
+
+Runs 仪表盘（web）与 `/runs` `/recon`（TUI）驱动同一套有界的 Supervisor/Executor 控制面：确定性 recon 工具、带尝试预算的任务租约、N-loop 台账。范围、授权与负责任使用规则见 [README.SHIELD-BREAK.md](README.SHIELD-BREAK.md)。
+
+## 社区与开发
+
+- 上游文档：<https://deepseek-harness.github.io/deepseek-harness/>
+- 开发指南：[docs/development.md](docs/development.zh.md)，架构：[docs/architecture.md](docs/architecture.zh.md)，agent 规则：[AGENTS.md](AGENTS.md)
+- `pnpm run doc-sync` 把守文档门；`pnpm run test:docs` 运行快速检查。
+
+## 许可
+
+[MIT](LICENSE) —— 第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

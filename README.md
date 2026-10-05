@@ -2,78 +2,95 @@
 
 English | [中文](README.zh.md)
 
-Shield Break Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+Shield Break Harness is a security-testing-focused fork of the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) — an everything-is-a-plugin agent harness built on [Cordis](https://github.com/cordiverse/cordis).
 
-**Important:** This checkout contains the custom `shield-break-agent-v2` branch. Read the [Shield Break Agent modification and responsible-use guide](README.SHIELD-BREAK.md) before running Recon or pentest workflows.
+**Important:** this checkout is the custom `shield-break-agent-v2` branch. Read the [Shield Break Agent modification and responsible-use guide](README.SHIELD-BREAK.md) before running Recon or pentest workflows, and the [safety notice](SAFETY.md) before running the project.
 
-It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
-
-Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
-
-## Developer preview
-
-Shield Break Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
-
-Review the [safety notice](SAFETY.md) before running the project.
-
+<a id="run"></a>
 ## Run
 
-### Run from `npm`
+| Surface | Command | Notes |
+|---|---|---|
+| **Web GUI** | `pnpm dsh web` | `http://127.0.0.1:3080`, full dashboards (Runs, Recon, Settings, Presets) |
+| **TUI** | `pnpm dsh tui` | full-screen terminal agent — commands below |
+| **Desktop** | `pnpm dev:desktop` | Electron shell over the same Web UI |
+| **Headless** | `pnpm dsh --profile headless "task"` | one-shot task, no UI |
 
-Install `Node.js`, then run:
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
-
-### Run from source
-
-To run from a repository checkout:
+<a id="run-from-source"></a>
+## Build
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
+pnpm install            # node ^22.19 || >=24
+pnpm run build          # dev profile: lib + web bundles (292 artifacts)
+pnpm run build:official # release profile
+pnpm run typecheck      # host + client faces
+pnpm run test           # unit tests
+pnpm run dev:web        # web shell + client-bundle watcher
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+Both profiles rebuild every package lib; `dsh` launches from source through tsx.
 
-## Community and support
+## Web
 
-- Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/Ycq5dCaS4">Shield Break Harness Discord community</a>.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development
-
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
-
-`pnpm run dev:web` builds, serves, and rebuilds client bundles on source edits in one terminal, and `make help` lists the matching Make targets for Web and Desktop; the guide's application commands section owns the full table.
-
-For agents, follow [AGENTS.md](AGENTS.md).
-
-## Citation
-
-```bibtex
-@misc{deepseek-harness2026,
-  title={Shield Break Harness: Everything is a Plugin},
-  author={DeepSeek-AI},
-  year={2026},
-  publisher={GitHub},
-  howpublished={\url{https://github.com/deepseek-ai/deepseek-harness}},
-}
+```sh
+pnpm dsh web --no-open --trusted-host <host>.ts.net
 ```
+
+- The server binds `127.0.0.1:3080`; remote access goes through Tailscale: `tailscale serve --bg http://127.0.0.1:3080` plus the `--trusted-host` flag naming your `*.ts.net` host. The printed URL carries a one-time token gate.
+- `~/.dsh/cordis.patch.yml` is the **home patch**: rows there apply to every profile (web/tui/headless) — shared LLM providers, sandbox posture, and other deployment-wide overrides live here.
+
+## TUI
+
+```sh
+dsh tui                       # default preset
+dsh tui --preset              # pick from the roster
+dsh tui --machine kali        # run the session on a saved SSH machine
+dsh tui --resume              # reopen a persisted session
+```
+
+Commands: `/new` `/fork` `/resume` `/rename` `/export` `/tree` `/agents` `/jobs` `/sessions` `/model` `/preset` `/thinking` `/providers` `/key` `/provider` `/memory` `/queue` `/rewind` (or **Esc Esc**) `/clear` `/runs` `/recon` `/machines` `/skills` `/copy` `/retry` `/expand-all` `/hotkeys` — plus the official dsh commands (`/compact`, `/goal`, `/plan`, `/feedback`).
+
+Paste works via bracketed paste (right-click in Windows Terminal / conhost, or Ctrl+V). `Esc Esc` on an empty editor rewinds to an earlier prompt.
+
+## Mapping providers, models, and machines
+
+**Providers and models** resolve from one shared document — the `llm-pi-ai.providers` section of the home patch (`~/.dsh/cordis.patch.yml`). Every profile and both surfaces read the same routes and credential references:
+
+```yaml
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      my-provider:
+        displayName: My Provider
+        apiKeyEnv: MY_PROVIDER_API_KEY   # credential reference, resolved per request
+        api: openai-completions          # or openai-responses / anthropic-messages
+        baseURL: https://host/v1
+        models:
+          - id: model-id
+            name: Display Name
+            contextWindow: 1000000
+            maxTokens: 65536
+```
+
+Keys themselves live in `~/.dsh/.credentials.yaml` (`/key <REF>` from the TUI, or the web Models page) and resolve per request — never stored in the profile.
+
+**Presets** are directories under `~/.dsh/.agent-presets/` (`preset.yml` names them). The TUI hides the shipped upstream roster (`includeShippedRoot: false` in its patch) and defaults to `shield-break-agent`; the web picker keeps the full roster.
+
+**Machines** are saved SSH profiles (web → Remote machines settings, stored in the shared settings document). `/machines list|probe|open` in the TUI, or `--machine <id>` at boot, place the session's working directory in `/__dsh_ssh__/<machine>/…` so shell and file tools run on that machine.
+
+**Antigravity** (Google account Gemini/Claude models) connects through the bundled local proxy — see [Connect Antigravity](packages/experimental/pi-tui/README.md#connect-antigravity) in the TUI package README.
+
+## Pentest surface
+
+The Runs dashboard (web) and `/runs` `/recon` (TUI) drive one bounded Supervisor/Executor control plane: deterministic recon tools, task leases with attempt budgets, and N-loop ledgers. Scope, authorization, and responsible-use rules are covered in [README.SHIELD-BREAK.md](README.SHIELD-BREAK.md).
+
+## Community and development
+
+- Upstream documentation: <https://deepseek-harness.github.io/deepseek-harness/>
+- Development guide: [docs/development.md](docs/development.md), architecture: [docs/architecture.md](docs/architecture.md), agent rules: [AGENTS.md](AGENTS.md)
+- `pnpm run doc-sync` gates documentation; `pnpm run test:docs` runs the quick checks.
 
 ## License
 
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE) — third-party notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
