@@ -24,7 +24,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
-import { boundContextSummary, createDeveloperMessage, createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
@@ -552,6 +552,7 @@ export class ChatScreen {
       { name: 'sessions', description: 'List / delete persisted sessions' },
       { name: 'rewind', description: 'Rewind to an earlier prompt and resend' },
       { name: 'clear', description: 'Clear the conversation (same session, fresh context)' },
+      { name: 'queue', description: 'Pending inbox: list|remove <id>|clear' },
       { name: 'skills', description: 'List user-invocable skills' },
       { name: 'agents', description: 'List live subagents' },
       { name: 'jobs', description: 'List background jobs' },
@@ -821,7 +822,13 @@ export class ChatScreen {
       void this.dispatchSlash(trimmed)
       return
     }
+    const wasWorking = this.isWorking()
     this.followup(trimmed)
+    if (wasWorking) {
+      const pending = this.agent.inbox.nextTurn.length
+      this.pushNotice(`queued — ${pending} pending · /queue to manage`, 'info')
+      this.sync()
+    }
   }
 
   private followup(text: string): void {
@@ -851,6 +858,7 @@ export class ChatScreen {
     if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
     if (parsed.name === 'rewind') return this.cmdRewind()
     if (parsed.name === 'clear') return this.cmdClear()
+    if (parsed.name === 'queue') return this.cmdQueue(parsed.raw.trim())
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1574,6 +1582,53 @@ export class ChatScreen {
     })
     this.sync()
     this.pushNotice('session cleared — same session, fresh context', 'info')
+  }
+
+  /** Inspect and manage the agent's pending inbox: queued turns, steering,
+   * removal by id, and clearing everything pending. */
+  private async cmdQueue(raw: string): Promise<void> {
+    const [verb, ...rest] = raw.trim().split(/\s+/)
+    const arg = rest.join(' ').trim()
+    const inbox = this.agent.inbox
+    const textOf = (message: { content: unknown }): string => {
+      const blocks = message.content as { type: string; text?: string }[]
+      return blocks.filter(block => block.type === 'text').map(block => block.text ?? '').join(' ')
+    }
+    if (verb === '' || verb === 'list') {
+      const turns = inbox.nextTurn
+      const steps = inbox.nextStep
+      if (turns.length === 0 && steps.length === 0) {
+        this.pushNotice('inbox empty — nothing queued', 'info')
+        return
+      }
+      for (const message of turns) {
+        const text = textOf(message).slice(0, 80)
+        this.pushNotice(`[turn] ${String(message.id)} — ${text}`, 'info')
+      }
+      for (const message of steps) {
+        const text = textOf(message).slice(0, 80)
+        this.pushNotice(`[steer] ${String(message.id)} — ${text}`, 'info')
+      }
+      return
+    }
+    if (verb === 'remove') {
+      if (arg === '') {
+        this.pushNotice('usage: /queue remove <id> — ids from /queue', 'error')
+        return
+      }
+      const removed = inbox.remove(MessageId(arg))
+      this.sync()
+      this.pushNotice(removed ? `removed ${arg}` : `no pending message ${arg}`, removed ? 'info' : 'error')
+      return
+    }
+    if (verb === 'clear') {
+      const count = inbox.nextTurn.length + inbox.nextStep.length
+      inbox.clear()
+      this.sync()
+      this.pushNotice(`cleared ${count} pending item(s)`, 'info')
+      return
+    }
+    this.pushNotice('usage: /queue [list|remove <id>|clear]', 'error')
   }
 
   /** Rewind: pick an earlier prompt, shadow everything after it, and put
@@ -2522,6 +2577,7 @@ export class ChatScreen {
       ...(contextTotal !== undefined ? { contextTotal } : {}),
       ...(sandboxMode !== undefined ? { sandboxMode } : {}),
       ...(jobsRunning !== undefined ? { jobsRunning } : {}),
+      queuePending: this.agent.inbox.nextTurn.length + this.agent.inbox.nextStep.length,
     }
     this.statusBar.update(status)
     this.tui.requestRender()

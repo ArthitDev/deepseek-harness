@@ -114,4 +114,5 @@ Commands:
   /memory [global]        edit AGENTS.md (project or harness-home) in   /sessions [delete <id>] list or permanently delete persisted sessions
   /rewind or Esc Esc     rewind to an earlier prompt and resend it
   /clear                  clear the conversation (same session, fresh context)
+  /queue [remove <id>|clear]   manage messages queued while busy
   /compact /goal /plan /feedback   official dsh commands`

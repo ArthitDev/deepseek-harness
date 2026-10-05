@@ -351,6 +351,8 @@ export interface StatusBarData {
   contextTotal?: number
   sandboxMode?: string
   jobsRunning?: number
+  /** Pending inbox items (queued turns + steering) awaiting the agent. */
+  queuePending?: number
 }
 
 /** Single-line status bar; truncates to the terminal width. */
@@ -390,6 +392,7 @@ export class StatusBar implements Component {
       parts.push(`☐ ${data.todos.done}/${data.todos.total}`)
     }
     if (data.jobsRunning !== undefined) parts.push(`⚙ ${data.jobsRunning}`)
+    if (data.queuePending !== undefined && data.queuePending > 0) parts.push(`queue ${data.queuePending}`)
     if (data.title !== undefined) parts.push(data.title)
     this.text = style.statusBar(parts.join(' · '))
   }
