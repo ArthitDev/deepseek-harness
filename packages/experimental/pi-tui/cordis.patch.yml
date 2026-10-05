@@ -58,7 +58,10 @@
     - id: agent-presets
       name: '@deepseek-ai/dsh-agent-presets'
       config:
-        default: standard
+        default: shield-break-agent
+        # This deployment's own presets only: the shipped upstream roster
+        # (standard/ptc/minimal/cordis) stays out of the TUI picker.
+        includeShippedRoot: false
 
     # The pentest control plane, mirroring the web profile's rows so both
     # surfaces drive one run store and one recon cache. The dashboards stay
