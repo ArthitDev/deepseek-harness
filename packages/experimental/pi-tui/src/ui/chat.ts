@@ -819,7 +819,10 @@ export class ChatScreen {
       return
     }
     if (trimmed.startsWith('/')) {
-      void this.dispatchSlash(trimmed)
+      this.dispatchSlash(trimmed).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        this.pushNotice(`command failed: ${message}`, 'error')
+      })
       return
     }
     const wasWorking = this.isWorking()
@@ -1569,6 +1572,8 @@ export class ChatScreen {
       return
     }
     const nextTurn = this.agent.session.snapshotEvents().findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    // The replace op must cite every surface node it shadows.
+    const shadowed = nodes.filter(node => node >= first && node <= tail)
     this.agent.session.append('developer/message', {
       turn: nextTurn + 1,
       step: 1,
@@ -1578,7 +1583,7 @@ export class ChatScreen {
       }),
     }, {
       surfaceOp: { op: 'replace', startSeq: first, endSeq: tail },
-      sourceEventSeqs: [first],
+      sourceEventSeqs: shadowed,
     })
     this.sync()
     this.pushNotice('session cleared — same session, fresh context', 'info')
@@ -1658,12 +1663,15 @@ export class ChatScreen {
     const seq = Number(picked)
     const original = prompts.find(prompt => prompt.seq === seq)
     if (original === undefined) return
-    const tail = this.agent.session.surface.nodes.at(-1)
+    const nodes = this.agent.session.surface.nodes
+    const tail = nodes.at(-1)
     if (tail === undefined || tail < seq) {
       this.pushNotice('that prompt is no longer on the current surface', 'error')
       return
     }
     const nextTurn = this.agent.session.snapshotEvents().findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    // The replace op must cite every surface node it shadows.
+    const shadowed = nodes.filter(node => node >= seq && node <= tail)
     this.agent.session.append('developer/message', {
       turn: nextTurn + 1,
       step: 1,
@@ -1673,7 +1681,7 @@ export class ChatScreen {
       }),
     }, {
       surfaceOp: { op: 'replace', startSeq: SessionSeq(seq), endSeq: tail },
-      sourceEventSeqs: [SessionSeq(seq)],
+      sourceEventSeqs: shadowed,
     })
     this.sync()
     this.editor.setText(original.text)
