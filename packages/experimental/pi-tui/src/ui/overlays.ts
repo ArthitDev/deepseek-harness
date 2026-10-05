@@ -682,15 +682,27 @@ class PromptPanel implements Component {
       this.resolve(undefined)
       return
     }
-    // ANSI escape sequences (arrow keys etc.) arrive as one multi-char chunk
-    // starting with ESC — a masked field has no use for any of them.
-    if (data.startsWith('\x1b')) return
-    for (const ch of data) {
+    // Bracketed paste arrives wrapped in 200~/201~ markers: strip the markers
+    // and feed the inner text through — the printable loop below ingests it,
+    // so a pasted key lands here without echoing anywhere.
+    const unwrapped = data
+      .replace(/\x1b\[200~/g, '')
+      .replace(/\x1b\[201~/g, '')
+    // Other ANSI escape sequences (arrow keys etc.) are multi-char ESC chunks
+    // a masked field has no use for.
+    if (unwrapped.startsWith('\x1b')) return
+    // A lone Enter chunk submits; a newline inside a multi-char chunk is the
+    // trailing one terminals append to pastes and is dropped.
+    const isEnter = unwrapped === '\r' || unwrapped === '\n'
+    for (const ch of unwrapped) {
       if (ch === '\r' || ch === '\n') {
-        this.done = true
-        this.hide()
-        this.resolve(this.value)
-        return
+        if (isEnter) {
+          this.done = true
+          this.hide()
+          this.resolve(this.value)
+          return
+        }
+        continue
       }
       if (ch === '\x7f' || ch === '\b') {
         this.value = this.value.slice(0, -1)
