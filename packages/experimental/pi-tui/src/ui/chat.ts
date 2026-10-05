@@ -19,6 +19,7 @@
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { readFile, rm, writeFile } from 'node:fs/promises'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { basename, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
@@ -1189,7 +1190,8 @@ export class ChatScreen {
 
   /** Register a custom OpenAI/Anthropic-compatible provider: prompts for the
    * endpoint and masked key, discovers the model list live, and writes the
-   * profile into the shared settings namespace the web Models page reads. */
+   * profile into the home patch's llm-pi-ai section (the overriding config
+   * source every profile reads; settings.mutate would refuse it). */
   private async cmdProvider(): Promise<void> {
     const settings = this.ctx.get('settings') as
       | { mutate(ns: string, ops: readonly { op: 'set'; path: readonly string[]; value: unknown }[]): Promise<void> }
@@ -1271,7 +1273,7 @@ export class ChatScreen {
       ...(apiKey === undefined ? {} : { apiKeyEnv: keyRef }),
     }
     try {
-      await settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', route], value: profile }])
+      await saveProviderToHomePatch(route, profile)
       if (apiKey !== undefined) {
         const credentials = this.ctx.get('credentials') as
           | { set(ref: string, value: string): Promise<void> }
@@ -1286,7 +1288,7 @@ export class ChatScreen {
       return
     }
     this.pushNotice(
-      `provider ${route} saved with ${discovered.length} model(s) — /model to switch (key: ${apiKey === undefined ? 'provider-native' : keyRef})`,
+      `provider ${route} saved with ${discovered.length} model(s) — restart dsh to register, then /model (key: ${apiKey === undefined ? 'provider-native' : keyRef})`,
       'info',
     )
   }
@@ -2941,4 +2943,48 @@ interface DiscoveredModelRequest {
   baseURL?: string
   api?: string
   apiKey?: string
+}
+
+/**
+ * Insert one provider profile into the home patch's `llm-pi-ai.providers`
+ * section. The home patch overrides this namespace, so the settings service
+ * refuses mutations — the YAML file is the authoritative document, and the
+ * profile registers on the next dsh boot.
+ * @param route - normalized provider route key.
+ * @param profile - the provider profile fields to write.
+ */
+async function saveProviderToHomePatch(route: string, profile: Record<string, unknown>): Promise<void> {
+  const patchPath = join(homedir(), '.dsh', 'cordis.patch.yml')
+  let content = ''
+  try {
+    content = readFileSync(patchPath, 'utf8')
+  } catch {
+    throw new Error(`home patch not found at ${patchPath}`)
+  }
+  const lines = content.split('\n')
+  const providersLine = lines.findIndex(line => line === '    providers:')
+  if (providersLine === -1) {
+    throw new Error('home patch has no llm-pi-ai providers section to extend (expected "    providers:")')
+  }
+  if (lines.some(line => line === `      ${route}:`)) {
+    throw new Error(`provider "${route}" already exists in the home patch — edit ${patchPath} directly`)
+  }
+  const yamlLines = Object.entries(profile).flatMap(([field, value]) => {
+    if (field === 'models') {
+      const models = value as { id: string; name: string; contextWindow: number; maxTokens: number; input: string[] }[]
+      return [
+        '        models:',
+        ...models.flatMap(model => [
+          `          - id: ${model.id}`,
+          `            name: ${model.name}`,
+          `            contextWindow: ${model.contextWindow}`,
+          `            maxTokens: ${model.maxTokens}`,
+          `            input: [${model.input.join(', ')}]`,
+        ]),
+      ]
+    }
+    return [`        ${field}: ${String(value)}`]
+  })
+  lines.splice(providersLine + 1, 0, `      ${route}:`, ...yamlLines)
+  writeFileSync(patchPath, lines.join('\n'))
 }
