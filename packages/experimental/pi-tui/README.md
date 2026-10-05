@@ -29,7 +29,29 @@ The plugin ships as a bundle row for the `tui` profile: install it once with `ds
 
 ## Commands
 
-`/new`, `/fork`, `/resume`, `/tree`, `/agents`, `/jobs`, `/model`, `/preset`, `/thinking`, `/skills`, `/runs`, `/recon`, `/machines`, `/export`, `/rename`, `/copy`, `/retry`, `/expand-all`, `/hotkeys` — plus the official dsh slash commands (`/compact`, `/goal`, `/plan`, `/feedback`).
+`/new`, `/fork`, `/resume`, `/tree`, `/agents`, `/jobs`, `/model`, `/preset`, `/thinking`, `/skills`, `/runs`, `/recon`, `/machines`, `/key`, `/provider`, `/providers`, `/memory`, `/sessions`, `/rewind`, `/clear`, `/queue`, `/export`, `/rename`, `/copy`, `/retry`, `/expand-all`, `/hotkeys` — plus the official dsh slash commands (`/compact`, `/goal`, `/plan`, `/feedback`).
+
+<a id="connect-antigravity"></a>
+
+## Connect Antigravity
+
+The bundled `tools/antigravity-proxy/` (MIT, vendored) exposes a Google
+Antigravity login as a local OpenAI-compatible endpoint, so the TUI can
+drive its Gemini and Claude models through /provider. One-time setup: run
+the Antigravity CLI once (`agy`) to authenticate, start
+`python tools/antigravity-proxy/antigravity_proxy.py` (or the
+`antigravity-proxy` shim), then register the provider:
+
+```
+/provider
+  name:     antigravity
+  endpoint: http://127.0.0.1:8877/v1
+  protocol: openai-completions
+  key:      any-string
+```
+
+The proxy refreshes its own OAuth token; Antigravity quota and Google ToS
+apply.
 
 <a id="dev-note"></a>
 
