@@ -47,6 +47,8 @@ TUI 配合 CLIProxyAPI（外部下载）使用：它将 Google Antigravity 登�
 
 代理会自行刷新 OAuth 令牌；Antigravity 配额与 Google 服务条款照常适用。
 
+若不想常驻终端窗口，运行一次自带安装器：`node tools/antigravity-proxy/install-autostart.mjs` —— 它会把静默启动器放入 Windows Startup 文件夹，端点随每次登录自动启动。
+
 <a id="dev-note"></a>
 
 ## 开发备注

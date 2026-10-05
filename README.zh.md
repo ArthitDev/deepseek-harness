@@ -79,7 +79,7 @@ Key 本体存放在 `~/.dsh/.credentials.yaml`（TUI 中 `/key <REF>`，或 web 
 
 **机器** 是已保存的 SSH profile（web → Remote machines 设置，存于共享设置文档）。TUI 中 `/machines list|probe|open`，或启动时 `--machine <id>`，会把会话工作目录放进 `/__dsh_ssh__/<machine>/…`，shell 与文件工具随即在该机器上运行。
 
-**Antigravity**（Google 账号的 Gemini/Claude 模型）通过内置本地代理接入 —— 见 TUI 包 README 的 [Connect Antigravity](packages/experimental/pi-tui/README.zh.md#connect-antigravity)。
+**Antigravity**（Google 账号的 Gemini/Claude 模型）通过内置本地代理接入 —— 见 TUI 包 README 的 [Connect Antigravity](packages/experimental/pi-tui/README.zh.md#connect-antigravity)。 端点经 `node packages/experimental/pi-tui/tools/antigravity-proxy/install-autostart.mjs` 于登录时自动启动。
 
 ## 渗透测试面
 

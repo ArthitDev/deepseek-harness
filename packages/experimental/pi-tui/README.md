@@ -47,6 +47,8 @@ The TUI pairs with CLIProxyAPI (external download), which turns a Google Antigra
 
 The proxy refreshes its own OAuth token; Antigravity quota and Google ToS apply.
 
+To keep the endpoint up without a terminal window, run the bundled installer once: `node tools/antigravity-proxy/install-autostart.mjs` — it places a silent launcher in the Windows Startup folder, so the endpoint comes up at every logon.
+
 ## Dev Note
 
 Adapted from the community `dsh-pi-tui` plugin (MIT, see NOTICE); ported to the 0.1.7-alpha.2 harness APIs and integrated as a workspace package. The terminal-render layer is excluded from the per-file coverage gate the same way as the other GUI-debt surfaces; the pure logic under `src/core` is gated.

@@ -79,7 +79,7 @@ Keys themselves live in `~/.dsh/.credentials.yaml` (`/key <REF>` from the TUI, o
 
 **Machines** are saved SSH profiles (web → Remote machines settings, stored in the shared settings document). `/machines list|probe|open` in the TUI, or `--machine <id>` at boot, place the session's working directory in `/__dsh_ssh__/<machine>/…` so shell and file tools run on that machine.
 
-**Antigravity** (Google account Gemini/Claude models) connects through the bundled local proxy — see [Connect Antigravity](packages/experimental/pi-tui/README.md#connect-antigravity) in the TUI package README.
+**Antigravity** (Google account Gemini/Claude models) connects through the bundled local proxy — see [Connect Antigravity](packages/experimental/pi-tui/README.md#connect-antigravity) in the TUI package README. The endpoint autostarts at logon via `node packages/experimental/pi-tui/tools/antigravity-proxy/install-autostart.mjs`.
 
 ## Pentest surface
 
