@@ -35,14 +35,14 @@ The plugin ships as a bundle row for the `tui` profile: install it once with `ds
 
 ## Connect Antigravity
 
-The bundled `tools/antigravity-proxy/` (MIT, vendored) exposes a Google Antigravity login as a local OpenAI-compatible endpoint, so the TUI can drive its Gemini and Claude models through /provider. One-time setup: run the Antigravity CLI once (`agy`) to authenticate, start `python tools/antigravity-proxy/antigravity_proxy.py` (or the `antigravity-proxy` shim), then register the provider:
+The TUI pairs with CLIProxyAPI (external download), which turns a Google Antigravity login into a local OpenAI-compatible endpoint with /v1/models. One-time setup: install it, run `cliproxy --antigravity-login` (opens the browser once), start `cliproxy`, then register the provider in /provider.
 
 ```
 /provider
   name:     antigravity
-  endpoint: http://127.0.0.1:8877/v1
+  endpoint: http://127.0.0.1:8317/v1
   protocol: openai-completions
-  key:      any-string
+  key:      shield-break
 ```
 
 The proxy refreshes its own OAuth token; Antigravity quota and Google ToS apply.

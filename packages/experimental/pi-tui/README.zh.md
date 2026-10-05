@@ -35,14 +35,14 @@ kind: "package-bundle"
 
 ## 连接 Antigravity
 
-内置的 `tools/antigravity-proxy/`（MIT，随包附带）将 Google Antigravity 登录暴露为本地 OpenAI 兼容端点，使 TUI 能通过 /provider 驱动其 Gemini 与 Claude 模型。一次性设置：先运行一次 Antigravity CLI（`agy`）完成认证，然后启动 `python tools/antigravity-proxy/antigravity_proxy.py`（或 `antigravity-proxy` 命令），再注册 provider：
+TUI 配合 CLIProxyAPI（外部下载）使用：它将 Google Antigravity 登录转换为本地 OpenAI 兼容端点并提供 /v1/models。一次性设置：安装后运行 `cliproxy --antigravity-login`（打开浏览器一次），启动 `cliproxy`，再在 /provider 注册 provider：
 
 ```
 /provider
   name:     antigravity
-  endpoint: http://127.0.0.1:8877/v1
+  endpoint: http://127.0.0.1:8317/v1
   protocol: openai-completions
-  key:      any-string
+  key:      shield-break
 ```
 
 代理会自行刷新 OAuth 令牌；Antigravity 配额与 Google 服务条款照常适用。
