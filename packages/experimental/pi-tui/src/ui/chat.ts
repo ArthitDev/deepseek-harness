@@ -1237,7 +1237,8 @@ export class ChatScreen {
       api,
       baseURL: baseURL.trim(),
       models: discovered.map(model => ({
-        name: model.id,
+        id: model.id,
+        name: model.name ?? model.id,
         contextWindow: model.contextWindow ?? 128_000,
         maxTokens: model.maxTokens ?? 8_192,
         input: model.inputModalities === undefined ? ['text'] : [...model.inputModalities],
@@ -1313,12 +1314,13 @@ export class ChatScreen {
     const contexts = new Map<string, number>()
     try {
       const section = settings?.describe().find(row => row.ns === 'llm-pi-ai')?.value as
-        | { providers?: Record<string, { models?: { name?: string; contextWindow?: number }[] }> }
+        | { providers?: Record<string, { models?: { id?: string; name?: string; contextWindow?: number }[] }> }
         | undefined
       for (const [route, profile] of Object.entries(section?.providers ?? {})) {
         for (const model of profile.models ?? []) {
-          if (model.contextWindow !== undefined && model.name !== undefined) {
-            contexts.set(`${route}/${model.name}`, model.contextWindow)
+          const id = model.id ?? model.name
+          if (model.contextWindow !== undefined && id !== undefined) {
+            contexts.set(`${route}/${id}`, model.contextWindow)
           }
         }
       }
