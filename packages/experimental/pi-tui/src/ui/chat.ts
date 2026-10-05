@@ -24,9 +24,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
-import { boundContextSummary, createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createDeveloperMessage, createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
-import { type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   CombinedAutocompleteProvider,
   Container,
@@ -91,6 +91,13 @@ import { pickFromListWithSearch, openFindOverlay, promptSecret, promptText } fro
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** The TUI's own rewind marker, mirroring the session-controller edit face. */
+    'session-edit': { kind: 'session-edit' }
+  }
+}
+
 export interface ChatScreenOptions {
   ctx: Context
   tui: ViewportTUI
@@ -138,6 +145,8 @@ export class ChatScreen {
   /** Per-agent live stream subscription (rebound on every agent switch). */
   private disposeStream: (() => void) | undefined
   private exitArm: ExitArm = { lastPressAt: 0 }
+  /** Previous idle Esc press, for the double-Esc rewind gesture. */
+  private lastEscapeAt: number | undefined
   private workingLoader: Loader | undefined
   private readonly views = new Map<number, ReturnType<typeof createView>>()
   private expandReasoning = false
@@ -247,6 +256,16 @@ export class ChatScreen {
           if (this.searchQuery !== undefined) {
             this.clearFindHighlight()
             return { consume: true }
+          }
+          // Double-Esc on an empty idle editor rewinds to an earlier prompt.
+          if (this.editor.getText() === '') {
+            const now = Date.now()
+            const previous = this.lastEscapeAt
+            this.lastEscapeAt = now
+            if (previous !== undefined && now - previous <= 600) {
+              this.lastEscapeAt = undefined
+              void this.cmdRewind()
+            }
           }
         }
         return undefined // editor cancels autocomplete, overlays close
@@ -811,6 +830,7 @@ export class ChatScreen {
     if (parsed.name === 'provider') return this.cmdProvider()
     if (parsed.name === 'memory') return this.cmdMemory(parsed.raw.trim())
     if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
+    if (parsed.name === 'rewind') return this.cmdRewind()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1501,6 +1521,58 @@ export class ChatScreen {
     }
   }
 
+
+
+  /** Rewind: pick an earlier prompt, shadow everything after it, and put
+   * its text back in the editor to edit and resend. */
+  private async cmdRewind(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot rewind while work is running (Esc to interrupt first)', 'error')
+      return
+    }
+    const prompts = this.model.items
+      .filter(item => item.kind === 'user' && item.seq !== undefined && item.text !== '')
+      .slice(-30)
+      .reverse()
+    if (prompts.length === 0) {
+      this.pushNotice('no prompts to rewind to in this session', 'info')
+      return
+    }
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Rewind to prompt',
+      body: 'the conversation after it is shadowed; its text returns to the editor',
+      items: prompts.map(prompt => ({
+        value: String(prompt.seq),
+        label: prompt.text.length > 90 ? `${prompt.text.slice(0, 90)}…` : prompt.text,
+      })),
+    })
+    if (picked === undefined) return
+    const seq = Number(picked)
+    const original = prompts.find(prompt => prompt.seq === seq)
+    if (original === undefined) return
+    const tail = this.agent.session.surface.nodes.at(-1)
+    if (tail === undefined || tail < seq) {
+      this.pushNotice('that prompt is no longer on the current surface', 'error')
+      return
+    }
+    const nextTurn = this.agent.session.snapshotEvents().findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    this.agent.session.append('developer/message', {
+      turn: nextTurn + 1,
+      step: 1,
+      message: createDeveloperMessage({
+        source: { kind: 'session-edit' },
+        content: [{ type: 'text', text: 'the operator rewound to the question below; its later exchange is shadowed in the log' }],
+      }),
+    }, {
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(seq), endSeq: tail },
+      sourceEventSeqs: [SessionSeq(seq)],
+    })
+    this.sync()
+    this.editor.setText(original.text)
+    this.tui.setFocus(this.editor)
+    this.tui.requestRender()
+    this.pushNotice('rewound — edit the prompt and send', 'info')
+  }
 
   /** Open an instruction file in $EDITOR: project AGENTS.md by default,
    * `global` for the harness-home file. The agent-instructions loader picks

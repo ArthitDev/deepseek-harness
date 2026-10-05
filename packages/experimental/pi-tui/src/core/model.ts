@@ -200,6 +200,27 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
   }
 
   switch (event.type) {
+    case 'developer/message': {
+      // The edit/rewind marker: its surfaceOp replace shadows every item in
+      // [startSeq, endSeq]. The marker's own prose is log bookkeeping, not a
+      // bubble; the notice is what the transcript shows at the rewind point.
+      const surfaceOp = (event as { surfaceOp?: { op?: string; startSeq?: number; endSeq?: number } }).surfaceOp
+      if (surfaceOp?.op === 'replace'
+        && typeof surfaceOp.startSeq === 'number'
+        && typeof surfaceOp.endSeq === 'number') {
+        const start = surfaceOp.startSeq
+        const end = surfaceOp.endSeq
+        model.items = model.items.filter(item => item.seq === undefined || item.seq < start || item.seq > end)
+        push({
+          kind: 'notice',
+          text: 'rewound — the earlier exchange is shadowed in the log',
+          streaming: false,
+          seq: event.seq,
+          notice: 'compact',
+        })
+      }
+      break
+    }
     case 'user/message': {
       // Compaction checkpoint: render as a framed notice, not a bubble. The
       // checkpoint source kind is plugin-merged (dsh-compaction), so read it

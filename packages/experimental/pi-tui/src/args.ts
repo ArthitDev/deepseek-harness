@@ -112,4 +112,5 @@ Commands:
   /key [ref]              save a provider credential (masked entry)
   /provider               register a custom endpoint + key + model list
   /memory [global]        edit AGENTS.md (project or harness-home) in   /sessions [delete <id>] list or permanently delete persisted sessions
+  /rewind or Esc Esc     rewind to an earlier prompt and resend it
   /compact /goal /plan /feedback   official dsh commands`
