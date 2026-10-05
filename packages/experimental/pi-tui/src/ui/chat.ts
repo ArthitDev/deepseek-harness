@@ -19,7 +19,7 @@
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { readFile, rm, writeFile } from 'node:fs/promises'
-import { basename, relative } from 'node:path'
+import { basename, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -495,6 +495,15 @@ export class ChatScreen {
       }),
       'banner',
     )
+    // A home-directory workspace makes every shell-tool sandbox refuse its
+    // own temp root (it must sit outside the workspace), so name the fix.
+    if (resolve(this.cwd) === homedir()) {
+      pushNotice(
+        this.model,
+        'workspace is your home directory — shell sandboxes will refuse their temp root; restart dsh tui from a project folder',
+        'error',
+      )
+    }
   }
 
   /**
