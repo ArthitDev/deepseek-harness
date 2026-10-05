@@ -551,6 +551,7 @@ export class ChatScreen {
       { name: 'memory', description: 'Edit AGENTS.md (project or global)' },
       { name: 'sessions', description: 'List / delete persisted sessions' },
       { name: 'rewind', description: 'Rewind to an earlier prompt and resend' },
+      { name: 'clear', description: 'Clear the conversation (same session, fresh context)' },
       { name: 'skills', description: 'List user-invocable skills' },
       { name: 'agents', description: 'List live subagents' },
       { name: 'jobs', description: 'List background jobs' },
@@ -849,6 +850,7 @@ export class ChatScreen {
     if (parsed.name === 'memory') return this.cmdMemory(parsed.raw.trim())
     if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
     if (parsed.name === 'rewind') return this.cmdRewind()
+    if (parsed.name === 'clear') return this.cmdClear()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1542,6 +1544,37 @@ export class ChatScreen {
   }
 
 
+
+  /** Clear the session's visible conversation: shadow the whole surface in
+   * the SAME session — the id, files, and durable log stay; the context
+   * the model sees starts empty again. */
+  private cmdClear(): void {
+    if (this.isBusy()) {
+      this.pushNotice('cannot clear while work is running (Esc to interrupt first)', 'error')
+      return
+    }
+    const nodes = this.agent.session.surface.nodes
+    const first = nodes[0]
+    const tail = nodes.at(-1)
+    if (first === undefined || tail === undefined) {
+      this.pushNotice('the transcript is already clear', 'info')
+      return
+    }
+    const nextTurn = this.agent.session.snapshotEvents().findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    this.agent.session.append('developer/message', {
+      turn: nextTurn + 1,
+      step: 1,
+      message: createDeveloperMessage({
+        source: { kind: 'session-edit' },
+        content: [{ type: 'text', text: 'the operator cleared the conversation; the earlier surface is shadowed in the log' }],
+      }),
+    }, {
+      surfaceOp: { op: 'replace', startSeq: first, endSeq: tail },
+      sourceEventSeqs: [first],
+    })
+    this.sync()
+    this.pushNotice('session cleared — same session, fresh context', 'info')
+  }
 
   /** Rewind: pick an earlier prompt, shadow everything after it, and put
    * its text back in the editor to edit and resend. */

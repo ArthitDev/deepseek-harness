@@ -113,4 +113,5 @@ Commands:
   /provider               register a custom endpoint + key + model list
   /memory [global]        edit AGENTS.md (project or harness-home) in   /sessions [delete <id>] list or permanently delete persisted sessions
   /rewind or Esc Esc     rewind to an earlier prompt and resend it
+  /clear                  clear the conversation (same session, fresh context)
   /compact /goal /plan /feedback   official dsh commands`
