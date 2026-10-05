@@ -1,4 +1,5 @@
 /** Profile-owned configuration edits, serialized with Loader hot reload. */
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
@@ -140,6 +141,47 @@ export class ConfigEditor extends Service {
     const hmr = this.ownerContext.get('hmr')
     await (hmr === undefined ? run() : hmr.runExclusive(run))
   }
+}
+
+/** js-tag resolver shared by every patch document this package touches. */
+const homePatchYamlOptions = { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }] }
+
+/**
+ * Insert or update one entry's config in the deployment home patch
+ * (`<dshHome>/cordis.patch.yml`) — the layer that overrides every profile,
+ * so a namespace overridden here must be edited here rather than through the
+ * per-profile settings document.
+ * @param dshHome - the deployment home directory that owns the patch.
+ * @param entryId - the overridden entry's id.
+ * @param entryName - the overridden entry's plugin name.
+ * @param merge - maps the row's current config (undefined when absent) to the next one.
+ */
+export function upsertHomePatchEntry(
+  dshHome: string,
+  entryId: string,
+  entryName: string,
+  merge: (current: Record<string, unknown> | undefined) => Record<string, unknown>,
+): void {
+  const path = join(dshHome, 'cordis.patch.yml')
+  const source = existsSync(path) ? readFileSync(path, 'utf8') : '[]\n'
+  const document = parseDocument(source, homePatchYamlOptions)
+  if (document.errors[0] !== undefined) throw document.errors[0]
+  if (!isSeq(document.contents)) throw new Error('Home patch must be a YAML sequence')
+  const index = document.contents.items.findLastIndex((item, itemIndex) => isMap(item)
+    && document.getIn([itemIndex, 'id']) === entryId && !item.has('insert')
+    && (!item.has('name') || document.getIn([itemIndex, 'name']) === entryName))
+  const currentRow = index >= 0 ? document.getIn([index, 'config']) : undefined
+  const current = isMap(currentRow) ? (currentRow.toJSON() as Record<string, unknown>) : undefined
+  const next = merge(current)
+  if (index >= 0) document.setIn([index, 'config'], document.createNode(next))
+  else document.add(document.createNode({ id: entryId, name: entryName, config: next }))
+  visit(document, { Map(_key, node) {
+    if (node.items.length !== 1 || typeof node.get('__jsExpr') !== 'string') return
+    const expression = new Scalar(node.get('__jsExpr'))
+    expression.tag = 'tag:yaml.org,2002:js'
+    return expression
+  } })
+  writeFileSync(path, String(document), { mode: 0o600 })
 }
 
 export default ConfigEditor

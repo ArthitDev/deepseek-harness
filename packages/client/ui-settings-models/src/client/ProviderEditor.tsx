@@ -289,8 +289,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     if (ops.length > 0) {
       const written = await operations.writeSettings(ns, ops, expectedRevision)
       if (written.kind !== 'written') return written.kind === 'conflict' ? t('conflict') : written.message
-      setCommittedOriginal(schema.getPath(written.view.user, settingsPath))
-      setExpectedRevision(written.view.revision)
+      if (written.view !== undefined) {
+        setCommittedOriginal(schema.getPath(written.view.user, settingsPath))
+        setExpectedRevision(written.view.revision)
+      }
       setDraft(next)
     }
     if (keyValue.length > 0) {

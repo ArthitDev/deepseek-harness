@@ -7,6 +7,8 @@
  * @module @deepseek-ai/dsh-api-settings-controller
  */
 
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { upsertHomePatchEntry } from '@deepseek-ai/dsh-config-editor'
 import { dirname } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 // Type-only: resolves the `agentPresets` Context augmentation this controller reads.
@@ -175,6 +177,46 @@ export class SettingsController extends TypertRemoteService {
     expectedRevision: number | undefined,
   ): Promise<SettingsNamespaceView> {
     return this.write(ns, 'mutate', ops, expectedRevision)
+  }
+
+  /**
+   * Insert or update one entry's config in the deployment home patch — the
+   * layer that overrides every profile, which the settings service itself
+   * refuses to mutate. The patch merges over the row's current config
+   * host-side (one level: top-level keys replace, `providers`-style nested
+   * records merge per key).
+   * @param entryId - the overridden entry's id.
+   * @param entryName - the overridden entry's plugin name.
+   * @param patch - JSON-serializable config fields to merge into the row.
+   * @returns confirmation after the patch file is written.
+   * @throws RemoteError when the request is invalid or the patch refuses the write.
+   */
+  @Remote
+  upsertHomePatchEntry(
+    entryId: string,
+    entryName: string,
+    patch: JsonValue,
+  ): void {
+    if (z.string().min(1).safeParse(entryId).success === false) {
+      throw new RemoteError('gateway/bad-request', `invalid entry id ${JSON.stringify(entryId)}`, {})
+    }
+    if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new RemoteError('gateway/bad-request', 'home patch merge expects an object', {})
+    }
+    try {
+      upsertHomePatchEntry(resolveDshHome(), entryId, entryName, (current) => {
+        const merged: Record<string, unknown> = { ...current }
+        for (const [key, value] of Object.entries(patch)) {
+          merged[key] = key === 'providers' && value !== null && typeof value === 'object' && !Array.isArray(value)
+            && current?.providers !== null && typeof current?.providers === 'object' && !Array.isArray(current.providers)
+            ? { ...current.providers, ...(value as Record<string, unknown>) }
+            : value
+        }
+        return merged
+      })
+    } catch (error: unknown) {
+      throw new RemoteError('gateway/internal', `home patch write failed: ${messageOf(error)}`, {}, { cause: error })
+    }
   }
 
   /**

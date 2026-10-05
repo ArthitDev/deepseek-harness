@@ -14,7 +14,7 @@ import type {
 /** What one namespace write answered. */
 export type SettingsWriteOutcome =
   /** Committed; the view carries the stored user subtree and the new revision. */
-  | { readonly kind: 'written'; readonly view: SettingsNamespaceView }
+  | { readonly kind: 'written'; readonly view?: SettingsNamespaceView }
   /**
    * The stored revision moved after the card read it, so the draft is stale.
    * The message stays for callers that report the Host diagnostic as it is.
@@ -94,6 +94,26 @@ export function createModelsOperations(ctx: ClientContext): ModelsOperations {
       return response.ok ? undefined : response.error.message
     },
     writeSettings: async (ns, ops, expectedRevision) => {
+      // A home-patch override makes the namespace settings-write-refused; route
+      // provider additions to the host home-patch upsert instead.
+      if (ns === 'llm-pi-ai' && ops.length === 1 && ops[0]?.op === 'set' && ops[0]?.path?.join('.') === 'providers') {
+        const described = await ctx.remote.settings.describe()
+        const section = described.ok
+          ? described.value.namespaces.find(row => row.ns === ns)
+          : undefined
+        const route = String(ops[0].path[1] ?? '')
+        if (route !== '') {
+          const response = await ctx.remote.settings.upsertHomePatchEntry(
+            'llm-pi-ai',
+            '@deepseek-ai/dsh-llm-pi-ai',
+            { providers: { [route]: ops[0].value } },
+          )
+          // The home patch is the overriding layer itself; there is no
+          // namespace view to return — callers render from their drafts.
+          if (!response.ok) return { kind: 'refused', message: response.error.message }
+          return { kind: 'written', ...(section !== undefined ? { view: section } : {}) }
+        }
+      }
       const response = await ctx.remote.settings.mutate(ns, ops, expectedRevision)
       if (response.ok) return { kind: 'written', view: response.value }
       const { code, message } = response.error

@@ -45,7 +45,10 @@
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@deepseek-ai/dsh-config-editor": "workspace:*",
+    "yaml": "^2.8.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
