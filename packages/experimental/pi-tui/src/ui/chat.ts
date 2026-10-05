@@ -116,6 +116,7 @@ export interface ChatScreenOptions {
 }
 
 interface LlmRuntime extends LlmRuntimeLike {
+  listProviders(): readonly { id: string; name: string }[]
   resolveModelInfo(
     provider: string,
     model: string,
@@ -553,6 +554,7 @@ export class ChatScreen {
       { name: 'rewind', description: 'Rewind to an earlier prompt and resend' },
       { name: 'clear', description: 'Clear the conversation (same session, fresh context)' },
       { name: 'queue', description: 'Pending inbox: list|remove <id>|clear' },
+      { name: 'providers', description: 'List provider routes with model counts and key state' },
       { name: 'skills', description: 'List user-invocable skills' },
       { name: 'agents', description: 'List live subagents' },
       { name: 'jobs', description: 'List background jobs' },
@@ -862,6 +864,7 @@ export class ChatScreen {
     if (parsed.name === 'rewind') return this.cmdRewind()
     if (parsed.name === 'clear') return this.cmdClear()
     if (parsed.name === 'queue') return this.cmdQueue(parsed.raw.trim())
+    if (parsed.name === 'providers') return this.cmdProviders()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1360,9 +1363,13 @@ export class ChatScreen {
     }
     if (query !== '') {
       const routes = await listAllModels(llm, await this.profileContexts())
+      const queryLower = query.toLowerCase()
       const match =
+        routes.find(route => `${route.provider}/${route.model}` === query) ??
+        routes.find(route => route.provider === query) ??
         routes.find(route => route.model === query) ??
-        routes.find(route => route.model.toLowerCase().includes(query.toLowerCase()))
+        routes.find(route => `${route.provider}/${route.model}`.toLowerCase().includes(queryLower)) ??
+        routes.find(route => route.provider.toLowerCase().includes(queryLower))
       if (match !== undefined) {
         await this.applyModel(match)
         return
@@ -1634,6 +1641,43 @@ export class ChatScreen {
       return
     }
     this.pushNotice('usage: /queue [list|remove <id>|clear]', 'error')
+  }
+
+  /** List every registered provider route with its model count, display
+   * name, and credential state — the provider face the web Models page shows. */
+  private async cmdProviders(): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) {
+      this.pushNotice('llm service unavailable', 'error')
+      return
+    }
+    const settings = this.ctx.get('settings') as
+      | { describe(): readonly { ns: string; value: unknown }[] }
+      | undefined
+    const credentials = this.ctx.get('credentials') as
+      | { describe(refs: string[]): Promise<Record<string, { configured: boolean }>> }
+      | undefined
+    const profiles = (settings?.describe().find(row => row.ns === 'llm-pi-ai')?.value as
+      | { providers?: Record<string, { displayName?: string; apiKeyEnv?: string; models?: unknown[] }> }
+      | undefined)?.providers ?? {}
+    const current = this.currentRoute().provider
+    for (const provider of llm.listProviders()) {
+      const models = await llm.listModels(provider.id).catch(() => [])
+      const profile = profiles[provider.id]
+      const keyRef = profile?.apiKeyEnv
+      let keyState = 'provider-native auth'
+      if (keyRef !== undefined) {
+        const described = credentials === undefined
+          ? {}
+          : await credentials.describe([keyRef]).catch(() => ({}) as Record<string, { configured: boolean }>)
+        keyState = described[keyRef]?.configured === true ? `key ✓ (${keyRef})` : `key ✗ — /key ${keyRef}`
+      }
+      const marker = provider.id === current ? ' ← current' : ''
+      this.pushNotice(
+        `${provider.id}${marker} — ${provider.name} · ${models.length} model(s) · ${keyState}`,
+        'info',
+      )
+    }
   }
 
   /** Rewind: pick an earlier prompt, shadow everything after it, and put

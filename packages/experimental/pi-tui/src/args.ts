@@ -115,4 +115,5 @@ Commands:
   /rewind or Esc Esc     rewind to an earlier prompt and resend it
   /clear                  clear the conversation (same session, fresh context)
   /queue [remove <id>|clear]   manage messages queued while busy
+  /providers              list provider routes, model counts, and key state
   /compact /goal /plan /feedback   official dsh commands`
