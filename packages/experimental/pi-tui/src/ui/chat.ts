@@ -1574,9 +1574,11 @@ export class ChatScreen {
       return
     }
     const nodes = this.agent.session.surface.nodes
-    const first = nodes[0]
+    // Leading system/message nodes hold the system prompt — a replace may not
+    // touch them, so the cleared range starts at the first non-system node.
+    const first = nodes.find(node => this.agent.session.eventAt(node)?.type !== 'system/message')
     const tail = nodes.at(-1)
-    if (first === undefined || tail === undefined) {
+    if (first === undefined || tail === undefined || first > tail) {
       this.pushNotice('the transcript is already clear', 'info')
       return
     }
