@@ -18,7 +18,6 @@ import {
 import type { ChatItem } from '../core/model.js'
 import { markdownTheme, reasoningMarkdownTheme, style } from './theme.js'
 import {
-  gitLabel,
   highlightMatches,
   renderContextBar,
   sandboxShort,
@@ -364,21 +363,23 @@ export class StatusBar implements Component {
   }
 
   update(data: StatusBarData): void {
-    const parts: string[] = ['dsh-pi-tui']
-    if (data.model !== undefined) parts.push(data.model)
-    if (data.preset !== undefined) parts.push(data.preset)
+    const parts: string[] = [chalk.bold.cyan('◆ Shield Break')]
+    if (data.model !== undefined) parts.push(chalk.cyan(`⚙ ${data.model}`))
+    if (data.preset !== undefined) parts.push(chalk.magenta(`◫ ${data.preset}`))
     // Explicit mode indicator: plan when active, normal otherwise.
-    parts.push(data.planActive === true ? '⌘plan' : 'normal')
+    parts.push(data.planActive === true ? chalk.yellow('⌘plan') : chalk.dim('normal'))
     const modeShort = sandboxShort(data.sandboxMode)
-    if (modeShort !== undefined) parts.push(modeShort)
-    if (data.goalPhase !== undefined) parts.push(`◈${data.goalPhase}`)
-    if (data.sessionId !== undefined) parts.push(data.sessionId.slice(0, 8))
-    if (data.cwd !== undefined) parts.push(data.cwd)
+    if (modeShort !== undefined) parts.push(chalk.dim(modeShort))
+    if (data.goalPhase !== undefined) parts.push(chalk.magenta(`◈${data.goalPhase}`))
+    if (data.sessionId !== undefined) parts.push(chalk.dim(data.sessionId.slice(0, 8)))
+    if (data.cwd !== undefined) parts.push(chalk.blue(`▾ ${data.cwd}`))
     if (data.git !== undefined) {
-      parts.push(gitLabel(data.git.branch, data.git.dirty))
+      parts.push(data.git.dirty
+        ? chalk.yellow(`⑂ ${data.git.branch}*`)
+        : chalk.green(`⑂ ${data.git.branch}`))
     }
     if (data.tokens !== undefined) {
-      parts.push(`in ${shortTokens(data.tokens.input)} out ${shortTokens(data.tokens.output)}`)
+      parts.push(chalk.dim(`±${shortTokens(data.tokens.input + data.tokens.output)} tok`))
     }
     if (data.contextPct !== undefined) {
       const bar = renderContextBar(data.contextUsed, data.contextTotal)
@@ -386,15 +387,16 @@ export class StatusBar implements Component {
         data.contextUsed !== undefined && data.contextTotal !== undefined
           ? ` ${shortTokens(data.contextUsed)}/${shortTokens(data.contextTotal)}`
           : ''
-      parts.push(`ctx ${bar !== undefined ? `${bar} ` : ''}${data.contextPct}%${totals}`)
+      const pressure = data.contextPct >= 85 ? chalk.red : data.contextPct >= 70 ? chalk.yellow : chalk.green
+      parts.push(pressure(`ctx ${bar !== undefined ? `${bar} ` : ''}${data.contextPct}%${totals}`))
     }
     if (data.todos !== undefined && data.todos.total > 0) {
-      parts.push(`☐ ${data.todos.done}/${data.todos.total}`)
+      parts.push(chalk.dim(`☐ ${data.todos.done}/${data.todos.total}`))
     }
-    if (data.jobsRunning !== undefined) parts.push(`⚙ ${data.jobsRunning}`)
-    if (data.queuePending !== undefined && data.queuePending > 0) parts.push(`queue ${data.queuePending}`)
-    if (data.title !== undefined) parts.push(data.title)
-    this.text = style.statusBar(parts.join(' · '))
+    if (data.jobsRunning !== undefined) parts.push(chalk.cyan(`⚙ ${data.jobsRunning}`))
+    if (data.queuePending !== undefined && data.queuePending > 0) parts.push(chalk.yellow(`⏳ ${data.queuePending}`))
+    if (data.title !== undefined) parts.push(chalk.bold(data.title))
+    this.text = parts.join(chalk.dim(' │ '))
   }
 
   render(width: number): string[] {

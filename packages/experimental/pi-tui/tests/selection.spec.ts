@@ -29,7 +29,7 @@ describe('seedModelSelection', () => {
     const seeded = seedModelSelection({
       agentOptions: { provider: 'antigravity', model: 'gemini-3-flash' },
       defaults: { provider: 'antigravity', model: 'gemini-3-flash' },
-      prior: { provider: 'b-ai', model: 'glm-5.3-flash' } as ModelSelection,
+      prior: { provider: 'b-ai', model: 'glm-5.3-flash' },
     })
     expect(seeded.provider).toBe('b-ai')
     expect(seeded.model).toBe('glm-5.3-flash')

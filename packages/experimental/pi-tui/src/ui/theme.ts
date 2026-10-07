@@ -5,6 +5,7 @@
  */
 import chalk from 'chalk'
 import type { EditorTheme, MarkdownTheme, SelectListTheme } from '@earendil-works/pi-tui'
+import { highlightCode } from './highlight.js'
 
 const accent = chalk.hex('#4fc1ff')
 const muted = chalk.hex('#8899aa')
@@ -24,6 +25,7 @@ export const markdownTheme: MarkdownTheme = {
   italic: text => chalk.italic(text),
   strikethrough: text => chalk.strikethrough(text),
   underline: text => chalk.underline(text),
+  highlightCode: (code, lang) => highlightCode(code, lang),
 }
 
 /** Dim italic pass for streamed reasoning text. */

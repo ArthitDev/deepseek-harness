@@ -825,7 +825,7 @@ export class ChatScreen {
       return
     }
     if (trimmed.startsWith('/')) {
-      this.dispatchSlash(trimmed).catch((error) => {
+      this.dispatchSlash(trimmed).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
         this.pushNotice(`command failed: ${message}`, 'error')
       })
@@ -863,13 +863,34 @@ export class ChatScreen {
     if (parsed.name === 'machines') return this.cmdMachines(parsed.raw.trim())
     if (parsed.name === 'key') return this.cmdKey(parsed.raw.trim())
     if (parsed.name === 'provider') return this.cmdProvider()
-    if (parsed.name === 'memory') return this.cmdMemory(parsed.raw.trim())
-    if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
-    if (parsed.name === 'rewind') return this.cmdRewind()
-    if (parsed.name === 'clear') return this.cmdClear()
-    if (parsed.name === 'queue') return this.cmdQueue(parsed.raw.trim())
-    if (parsed.name === 'preset-create') return this.cmdPresetCreate()
-    if (parsed.name === 'providers') return this.cmdProviders()
+    if (parsed.name === 'memory') {
+      void this.cmdMemory(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'sessions') {
+      void this.cmdSessions(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'rewind') {
+      void this.cmdRewind()
+      return
+    }
+    if (parsed.name === 'clear') {
+      this.cmdClear()
+      return
+    }
+    if (parsed.name === 'queue') {
+      this.cmdQueue(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'preset-create') {
+      void this.cmdPresetCreate()
+      return
+    }
+    if (parsed.name === 'providers') {
+      void this.cmdProviders()
+      return
+    }
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1293,7 +1314,7 @@ export class ChatScreen {
       ...(apiKey === undefined ? {} : { apiKeyEnv: keyRef }),
     }
     try {
-      await saveProviderToHomePatch(route, profile)
+      saveProviderToHomePatch(route, profile)
       if (apiKey !== undefined) {
         const credentials = this.ctx.get('credentials') as
           | { set(ref: string, value: string): Promise<void> }
@@ -1441,7 +1462,7 @@ export class ChatScreen {
 
   /** Context windows the shared custom-provider profiles declare, keyed
    * by 'provider/model' — the catalog itself carries no sizes. */
-  private async profileContexts(): Promise<Map<string, number>> {
+  private profileContexts(): Map<string, number> {
     const settings = this.ctx.get('settings') as
       | { describe(): readonly { ns: string; value: unknown }[] }
       | undefined
@@ -1505,7 +1526,7 @@ export class ChatScreen {
       return
     }
     if (query !== '') {
-      const routes = await listAllModels(llm, await this.profileContexts())
+      const routes = await listAllModels(llm, this.profileContexts())
       const queryLower = query.toLowerCase()
       const match =
         routes.find(route => `${route.provider}/${route.model}` === query) ??
@@ -1518,7 +1539,7 @@ export class ChatScreen {
         return
       }
     }
-    const picked = await pickModel(this.tui, llm, await this.profileContexts(), this.currentRoute())
+    const picked = await pickModel(this.tui, llm, this.profileContexts(), this.currentRoute())
     if (picked !== undefined) await this.applyModel(picked)
   }
 
@@ -1712,15 +1733,16 @@ export class ChatScreen {
       return
     }
     const nodes = this.agent.session.surface.nodes
-    // Leading system/message nodes hold the system prompt — a replace may not
-    // touch them, so the cleared range starts at the first non-system node.
-    const first = nodes.find(node => this.agent.session.eventAt(node)?.type !== 'system/message')
+    // The system prompt occupies the leading surface node(s) and a replace
+    // may not touch them; the first transcript item's seq is the first
+    // conversation node, so the cleared range starts there.
+    const first = this.model.items.find(item => item.seq !== undefined)?.seq
     const tail = nodes.at(-1)
     if (first === undefined || tail === undefined || first > tail) {
       this.pushNotice('the transcript is already clear', 'info')
       return
     }
-    const nextTurn = this.agent.session.snapshotEvents().findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    const nextTurn = replayEvents(this.agent.session).findLast(event => event.type === 'turn/start')?.data.turn ?? 0
     // The replace op must cite every surface node it shadows.
     const shadowed = nodes.filter(node => node >= first && node <= tail)
     this.agent.session.append('developer/message', {
@@ -1740,7 +1762,7 @@ export class ChatScreen {
 
   /** Inspect and manage the agent's pending inbox: queued turns, steering,
    * removal by id, and clearing everything pending. */
-  private async cmdQueue(raw: string): Promise<void> {
+  private cmdQueue(raw: string): void {
     const [verb, ...rest] = raw.trim().split(/\s+/)
     const arg = rest.join(' ').trim()
     const inbox = this.agent.inbox
@@ -1811,7 +1833,7 @@ export class ChatScreen {
       if (keyRef !== undefined) {
         const described = credentials === undefined
           ? {}
-          : await credentials.describe([keyRef]).catch(() => ({}) as Record<string, { configured: boolean }>)
+          : await credentials.describe([keyRef]).catch(() => ({}))
         keyState = described[keyRef]?.configured === true ? `key ✓ (${keyRef})` : `key ✗ — /key ${keyRef}`
       }
       const marker = provider.id === current ? ' ← current' : ''
@@ -1855,7 +1877,7 @@ export class ChatScreen {
       this.pushNotice('that prompt is no longer on the current surface', 'error')
       return
     }
-    const nextTurn = this.agent.session.snapshotEvents().findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    const nextTurn = replayEvents(this.agent.session).findLast(event => event.type === 'turn/start')?.data.turn ?? 0
     // The replace op must cite every surface node it shadows.
     const shadowed = nodes.filter(node => node >= seq && node <= tail)
     this.agent.session.append('developer/message', {
@@ -2527,7 +2549,7 @@ export class ChatScreen {
   private async modelCompletions(prefix: string) {
     const llm = this.llm()
     if (llm === undefined) return null
-    const routes = await listAllModels(llm, await this.profileContexts())
+    const routes = await listAllModels(llm, this.profileContexts())
     const items = routes
       .filter(route => route.model.startsWith(prefix))
       .map(route => ({ value: route.model, label: route.model }))
@@ -2900,7 +2922,7 @@ export class ChatScreen {
       this.pushNotice('llm service unavailable', 'error')
       return
     }
-    const picked = await pickModel(this.tui, llm, await this.profileContexts(), this.currentRoute())
+    const picked = await pickModel(this.tui, llm, this.profileContexts(), this.currentRoute())
     if (picked !== undefined) await this.applyModel(picked)
   }
 }
@@ -3093,7 +3115,7 @@ interface DiscoveredModelRequest {
  * @param route - normalized provider route key.
  * @param profile - the provider profile fields to write.
  */
-async function saveProviderToHomePatch(route: string, profile: Record<string, unknown>): Promise<void> {
+function saveProviderToHomePatch(route: string, profile: Record<string, unknown>): void {
   const patchPath = join(homedir(), '.dsh', 'cordis.patch.yml')
   let content = ''
   try {
