@@ -1004,6 +1004,22 @@ export class ChatScreen {
     try {
       const id = await presets?.select(this.agent, pickedId)
       this.pushNotice(`preset switched to ${id ?? pickedId}`, 'info')
+      // Make the choice the deployment default: write selectedDefault into
+      // the home patch row so new sessions open on this preset too.
+      try {
+        const patchPath = join(homedir(), '.dsh', 'cordis.patch.yml')
+        const lines = readFileSync(patchPath, 'utf8').split('\n')
+        const row = lines.findIndex(line => line === '    - id: agent-presets')
+        if (row !== -1) {
+          const selected = '        selectedDefault: ' + pickedId
+          const existing = lines.findIndex(line => line.startsWith('        selectedDefault:'))
+          if (existing === -1) lines.splice(row + 1, 0, selected)
+          else lines[existing] = selected
+          writeFileSync(patchPath, lines.join('\n'))
+        }
+      } catch {
+        // Best effort; the session switch already applied.
+      }
     } catch (error) {
       this.pushNotice(
         `preset switch failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -1440,6 +1456,13 @@ export class ChatScreen {
         provider: route.provider,
         model: route.model,
         reasoningEffort: ReasoningEffortId(effort),
+      }
+      // Persist like /model does, so the effort survives restarts and resumes.
+      try {
+        const defaults = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
+        await defaults?.saveSelection(this.selection.current)
+      } catch {
+        // Best effort; session selection already applied.
       }
       this.pushNotice(`thinking → ${effort} · from the next step`)
       this.sync()
