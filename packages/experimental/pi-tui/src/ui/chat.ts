@@ -1753,7 +1753,7 @@ export class ChatScreen {
         content: [{ type: 'text', text: 'the operator cleared the conversation; the earlier surface is shadowed in the log' }],
       }),
     }, {
-      surfaceOp: { op: 'replace', startSeq: first, endSeq: tail },
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(first), endSeq: tail },
       sourceEventSeqs: shadowed,
     })
     this.sync()
