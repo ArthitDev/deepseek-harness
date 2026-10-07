@@ -87,6 +87,7 @@ import {
   sessionTitles,
   type ResolvedAgent,
 } from '../core/session.js'
+import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromListWithSearch, openFindOverlay, pickFromSlider, promptSecret, promptText } from './overlays.js'
 import { buildBanner } from './banner.js'
@@ -544,6 +545,8 @@ export class ChatScreen {
         getArgumentCompletions: prefix => this.modelCompletions(prefix),
       },
       { name: 'preset', description: 'Switch the session preset' },
+      { name: 'preset-create', description: 'Create a new preset from pasted text' },
+      { name: 'preset-create', description: 'Create a new preset from pasted text' },
       { name: 'thinking', description: 'Set thinking effort (off/high/max)' },
       { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
       { name: 'recon', description: 'Scan a target / list recon runs' },
@@ -865,6 +868,7 @@ export class ChatScreen {
     if (parsed.name === 'rewind') return this.cmdRewind()
     if (parsed.name === 'clear') return this.cmdClear()
     if (parsed.name === 'queue') return this.cmdQueue(parsed.raw.trim())
+    if (parsed.name === 'preset-create') return this.cmdPresetCreate()
     if (parsed.name === 'providers') return this.cmdProviders()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
@@ -1307,6 +1311,93 @@ export class ChatScreen {
       `provider ${route} saved with ${discovered.length} model(s) — restart dsh to register, then /model (key: ${apiKey === undefined ? 'provider-native' : keyRef})`,
       'info',
     )
+  }
+
+  /** Create a new preset by pasting text: pick a base preset, edit the
+   * persona text in $EDITOR, and store the result as a fresh user preset
+   * through the host authoring API (tools and skills carry over). */
+  private async cmdPresetCreate(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot create a preset while work is running', 'error')
+      return
+    }
+    const presets = this.ctx.get('agentPresets') as
+      | {
+        list(): Promise<readonly { id: string; name?: string; description?: string; broken?: string; path: string }[]>
+        create(from: string, id: string, name: string | undefined, content: string): Promise<void>
+      }
+      | undefined
+    if (presets === undefined) {
+      this.pushNotice('agent presets service unavailable in this profile', 'error')
+      return
+    }
+    const name = await promptText(this.tui, { title: 'New preset name', body: 'e.g. My Pentest Persona' })
+    if (name === undefined || name.trim() === '') {
+      this.pushNotice('preset creation cancelled', 'info')
+      return
+    }
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (id === '') {
+      this.pushNotice('name has no usable id characters', 'error')
+      return
+    }
+    const roster = await presets.list()
+    if (roster.some(entry => entry.id === id)) {
+      this.pushNotice(`preset id "${id}" already exists — pick another name`, 'error')
+      return
+    }
+    const base = await pickFromListWithSearch(this.tui, {
+      title: 'Base preset (tools and composition carry over)',
+      items: roster.map(entry => ({
+        value: entry.id,
+        label: entry.name ?? entry.id,
+        ...(entry.description !== undefined ? { description: entry.description } : {}),
+      })),
+    })
+    if (base === undefined) {
+      this.pushNotice('preset creation cancelled', 'info')
+      return
+    }
+    // Seed the editor with the base preset's persona text, if it carries one.
+    let seedText = `You are ${name.trim()}.`
+    const source = roster.find(entry => entry.id === base)
+    const parseComposition = (path: string): { rows: { id: string; config?: { prefix?: string } }[]; doc: string } => {
+      const doc = parseDocument(readFileSync(path, 'utf8'), {
+        customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (v: string) => v }],
+      })
+      return { rows: doc.toJS() as { id: string; config?: { prefix?: string } }[], doc: String(doc) }
+    }
+    try {
+      if (source?.path !== undefined) {
+        const prefix = parseComposition(source.path).rows.find(row => row.id === 'persona')?.config?.prefix
+        if (typeof prefix === 'string' && prefix.trim() !== '') seedText = prefix
+      }
+    } catch {
+      // A readable base persona is a nicety; an empty template works too.
+    }
+    const tmp = join(tmpdir(), `preset-create-${id}-${Date.now()}.md`)
+    writeFileSync(tmp, seedText, 'utf8')
+    await this.editFileInEditor(tmp, 'persona text saved — creating the preset')
+    const text = (await readFile(tmp, 'utf8')).trim()
+    await rm(tmp, { force: true }).catch(() => undefined)
+    if (text === '') {
+      this.pushNotice('preset creation cancelled — persona text was empty', 'info')
+      return
+    }
+    try {
+      if (source === undefined) throw new Error('base preset vanished from the roster')
+      const parsed = parseComposition(source.path)
+      const personaRow = parsed.rows.find(row => row.id === 'persona')
+      if (personaRow?.config !== undefined) personaRow.config.prefix = text
+      await presets.create(base, id, name.trim(), parsed.doc)
+    } catch (error) {
+      this.pushNotice(
+        `preset creation failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+      return
+    }
+    this.pushNotice(`preset ${id} created — /preset to switch to it`, 'info')
   }
 
   /** Save a provider credential through the host credentials service: the

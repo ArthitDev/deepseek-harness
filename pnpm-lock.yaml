@@ -7577,6 +7577,9 @@ importers:
       diff:
         specifier: ^9.0.0
         version: 9.0.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

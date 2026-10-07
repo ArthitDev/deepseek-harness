@@ -113,6 +113,7 @@ Commands:
   /provider               register a custom endpoint + key + model list
   /memory [global]        edit AGENTS.md (project or harness-home) in   /sessions [delete <id>] list or permanently delete persisted sessions
   /rewind or Esc Esc     rewind to an earlier prompt and resend it
+  /preset-create          create a new preset from pasted text
   /clear                  clear the conversation (same session, fresh context)
   /queue [remove <id>|clear]   manage messages queued while busy
   /providers              list provider routes, model counts, and key state
