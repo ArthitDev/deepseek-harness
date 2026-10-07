@@ -88,7 +88,7 @@ import {
   type ResolvedAgent,
 } from '../core/session.js'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
-import { pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
+import { pickFromListWithSearch, openFindOverlay, pickFromSlider, promptSecret, promptText } from './overlays.js'
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 
@@ -1373,6 +1373,40 @@ export class ChatScreen {
     return contexts
   }
 
+  /** Validate and apply one reasoning effort: resolve the call config, carry
+   * the selection across the session, and persist it like /model does. */
+  private async applyThinking(effort: string): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) return
+    const route = this.currentRoute()
+    try {
+      await llm.resolveCallConfig({
+        provider: route.provider,
+        model: route.model,
+        reasoningEffort: ReasoningEffortId(effort),
+      })
+      this.selection.current = {
+        provider: route.provider,
+        model: route.model,
+        reasoningEffort: ReasoningEffortId(effort),
+      }
+      // Persist like /model does, so the effort survives restarts and resumes.
+      try {
+        const defaults = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
+        await defaults?.saveSelection(this.selection.current)
+      } catch {
+        // Best effort; session selection already applied.
+      }
+      this.pushNotice(`thinking → ${effort} · from the next step`)
+      this.sync()
+    } catch (error) {
+      this.pushNotice(
+        `thinking switch failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
   private async cmdModel(query: string): Promise<void> {
     const llm = this.llm()
     if (llm === undefined) {
@@ -1439,39 +1473,29 @@ export class ChatScreen {
     const route = this.currentRoute()
     const info = await llm.resolveModelInfo(route.provider, route.model)
     const efforts = info.reasoning?.efforts ?? []
-    if (effort === '' || !efforts.some(entry => entry.id === effort)) {
-      const list = efforts.map(entry => entry.id).join('|') || 'off|high|max'
+    const stops = (efforts.length > 0
+      ? efforts.map(entry => ({ value: entry.id, label: entry.name || entry.id }))
+      : ['off', 'low', 'high', 'max'].map(value => ({ value, label: value })))
+    if (effort === '') {
+      const initial = this.currentEffort()
+      const picked = await pickFromSlider(this.tui, {
+        title: 'Thinking effort',
+        stops,
+        ...(initial !== undefined ? { initial } : {}),
+      })
+      if (picked === undefined) return
+      await this.applyThinking(picked)
+      return
+    }
+    if (!stops.some(entry => entry.value === effort)) {
+      const list = stops.map(entry => entry.value).join('|')
       this.pushNotice(
         `thinking: ${list} · current: ${this.currentEffort() ?? info.reasoning?.defaultEffort ?? 'default'}`,
       )
       return
     }
-    try {
-      await llm.resolveCallConfig({
-        provider: route.provider,
-        model: route.model,
-        reasoningEffort: ReasoningEffortId(effort),
-      })
-      this.selection.current = {
-        provider: route.provider,
-        model: route.model,
-        reasoningEffort: ReasoningEffortId(effort),
-      }
-      // Persist like /model does, so the effort survives restarts and resumes.
-      try {
-        const defaults = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
-        await defaults?.saveSelection(this.selection.current)
-      } catch {
-        // Best effort; session selection already applied.
-      }
-      this.pushNotice(`thinking → ${effort} · from the next step`)
-      this.sync()
-    } catch (error) {
-      this.pushNotice(
-        `thinking switch failed: ${error instanceof Error ? error.message : String(error)}`,
-        'error',
-      )
-    }
+    await this.applyThinking(effort)
+    await this.applyThinking(effort)
   }
 
   private async cycleThinking(): Promise<void> {

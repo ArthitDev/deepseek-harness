@@ -13,13 +13,14 @@ export interface SelectionSeed {
   config?: { provider?: string; model?: string }
   agentOptions?: { provider?: string; model?: string }
   defaults?: { provider?: string; model?: string; reasoningEffort?: string }
-  /** The prior selection — its reasoning effort carries across a session switch. */
+  /** The prior selection — its provider/model/reasoning effort carry across a session switch. */
   prior?: ModelSelection
 }
 
 /**
  * Fold the selection sources into the next-step model selection.
- * Precedence: persisted request header → row config → agent options →
+ * Precedence: persisted request header → row config → prior selection (the
+ * model currently in use — /new and /clear keep it) → agent options →
  * harness default → hard-coded route. Reasoning effort additionally falls
  * back to the prior selection so a /thinking choice survives new/fork/
  * resume (which never see the prior agent's options).
@@ -28,12 +29,14 @@ export function seedModelSelection(input: SelectionSeed): ModelSelection {
   const provider =
     input.header?.provider ??
     input.config?.provider ??
+    input.prior?.provider ??
     input.agentOptions?.provider ??
     input.defaults?.provider ??
     DEFAULT_PROVIDER
   const model =
     input.header?.model ??
     input.config?.model ??
+    input.prior?.model ??
     input.agentOptions?.model ??
     input.defaults?.model ??
     DEFAULT_MODEL

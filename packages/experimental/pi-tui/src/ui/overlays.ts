@@ -758,3 +758,87 @@ export function promptSecret(tui: TUI, options: { title: string; body?: string }
 export function promptText(tui: TUI, options: { title: string; body?: string }): Promise<string | undefined> {
   return promptField(tui, { ...options, masked: false })
 }
+
+/** One discrete slider row: stops rendered inline, the active one highlighted. */
+class SliderPanel implements Component {
+  private index: number
+  private done = false
+
+  constructor(
+    private readonly title: string,
+    private readonly stops: readonly { value: string; label: string }[],
+    initial: string | undefined,
+    private readonly requestRender: () => void,
+    private readonly resolve: (value: string | undefined) => void,
+    private readonly hide: () => void,
+  ) {
+    const found = stops.findIndex(stop => stop.value === initial)
+    this.index = found === -1 ? 0 : found
+  }
+
+  render(width: number): string[] {
+    if (this.done) return []
+    const cells = this.stops.map((stop, i) =>
+      i === this.index ? style.accent(`▮${stop.label}▮`) : style.muted(stop.label),
+    )
+    return [
+      style.accent(this.title),
+      '',
+      '  ' + cells.join('  '),
+      style.muted('←/→ move · Enter select · Esc cancel'),
+    ].map(line => line.slice(0, Math.max(width - 2, 1)))
+  }
+
+  /** State lives in plain fields; every render recomputes from them. */
+  invalidate(): void {}
+
+  handleInput(data: string): void {
+    if (this.done) return
+    if (matchesKey(data, 'escape')) {
+      this.done = true
+      this.hide()
+      this.resolve(undefined)
+      return
+    }
+    if (matchesKey(data, 'return') || data === '\r' || data === '\n') {
+      this.done = true
+      this.hide()
+      this.resolve(this.stops[this.index]?.value)
+      return
+    }
+    if (matchesKey(data, 'left') && this.index > 0) {
+      this.index -= 1
+      this.requestRender()
+      return
+    }
+    if (matchesKey(data, 'right') && this.index < this.stops.length - 1) {
+      this.index += 1
+      this.requestRender()
+      return
+    }
+  }
+}
+
+/**
+ * Prompt for one value from a fixed ordered set with a slider-style overlay:
+ * ←/→ moves between stops, Enter commits, Esc cancels.
+ * @param tui - the live TUI; the slider shows as a focused overlay.
+ * @param options - the panel title, the ordered stops, and the current value to start at.
+ * @returns the picked stop's value, or undefined when the operator cancelled.
+ */
+export function pickFromSlider(
+  tui: TUI,
+  options: { title: string; stops: readonly { value: string; label: string }[]; initial?: string },
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const overlay: { handle?: ReturnType<TUI['showOverlay']> } = {}
+    const panel = new SliderPanel(options.title, options.stops, options.initial, tui.requestRender.bind(tui), (value) => {
+      resolve(value)
+    }, () => {
+      overlay.handle?.hide()
+      tui.requestRender()
+    })
+    overlay.handle = tui.showOverlay(panel, { width: '70%' })
+    tui.requestRender()
+  })
+}

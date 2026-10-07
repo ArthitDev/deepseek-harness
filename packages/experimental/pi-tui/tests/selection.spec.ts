@@ -25,6 +25,16 @@ describe('seedModelSelection', () => {
     ).toEqual({ provider: 'header-p', model: 'header-m' })
   })
 
+  it('carries the prior provider/model over agent options and defaults', () => {
+    const seeded = seedModelSelection({
+      agentOptions: { provider: 'antigravity', model: 'gemini-3-flash' },
+      defaults: { provider: 'antigravity', model: 'gemini-3-flash' },
+      prior: { provider: 'b-ai', model: 'glm-5.3-flash' } as ModelSelection,
+    })
+    expect(seeded.provider).toBe('b-ai')
+    expect(seeded.model).toBe('glm-5.3-flash')
+  })
+
   it('walks config, agent options, then defaults per field', () => {
     expect(seedModelSelection({ config: { model: 'config-m' } })).toEqual({
       provider: DEFAULT_PROVIDER,
@@ -44,12 +54,12 @@ describe('seedModelSelection', () => {
     expect(seeded.reasoningEffort).toBe(ReasoningEffortId('high'))
   })
 
-  it('carries the prior selection effort when the header has none', () => {
+  it('carries the prior selection model and effort when the header has neither', () => {
     const seeded = seedModelSelection({
       header: { provider: 'header-p' },
       prior: selection('p', 'm', 'max'),
     })
-    expect(seeded).toMatchObject({ provider: 'header-p', model: DEFAULT_MODEL, reasoningEffort: ReasoningEffortId('max') })
+    expect(seeded).toMatchObject({ provider: 'header-p', model: 'm', reasoningEffort: ReasoningEffortId('max') })
   })
 
   it('omits the reasoning effort when neither header nor prior has one', () => {
