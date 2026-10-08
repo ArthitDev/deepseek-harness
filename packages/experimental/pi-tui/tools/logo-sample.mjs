@@ -72,8 +72,8 @@ for (let y = 0; y < height; y++) {
 }
 
 // ── box-downsample to COLS×COLS grid ─────────────────────────────────────
-const COLS = 30
-const ROWS = 30
+const COLS = 20
+const ROWS = 20
 const grid = []
 for (let gy = 0; gy < ROWS; gy++) {
   const row = []
