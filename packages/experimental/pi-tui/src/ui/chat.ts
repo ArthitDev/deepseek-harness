@@ -1756,8 +1756,9 @@ export class ChatScreen {
       surfaceOp: { op: 'replace', startSeq: SessionSeq(first), endSeq: tail },
       sourceEventSeqs: shadowed,
     })
+    // The marker event folds back through handleEvent: it prunes the items,
+    // posts the "session cleared" notice, and rebuilds the transcript pane.
     this.sync()
-    this.pushNotice('session cleared — same session, fresh context', 'info')
   }
 
   /** Inspect and manage the agent's pending inbox: queued turns, steering,
@@ -2566,7 +2567,14 @@ export class ChatScreen {
 
   /** Fold one session event and reconcile the component tree. */
   handleEvent(event: SessionEvent): void {
+    const before = this.model.items.length
     applyEvent(this.model, event)
+    if (this.model.items.length < before) {
+      // A surface replace pruned items and re-densified ids: stale views and
+      // container children must go before sync rebuilds from the new list.
+      this.views.clear()
+      this.lastFoldKey = ''
+    }
     if (event.type === 'tool/result') void this.resolveImages(event)
     this.sync()
   }

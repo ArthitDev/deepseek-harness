@@ -6,6 +6,7 @@ import {
   MessageId,
   ReasoningEffortId,
   ToolCallId,
+  createDeveloperMessage,
   type AssistantStreamRecord,
   type ContentBlock,
   type ModelMessageSource,
@@ -16,6 +17,7 @@ import {
   SessionSeq,
   type SessionEvent,
   type SessionEventMap,
+  type SurfaceOp,
 } from '@deepseek-ai/dsh-session'
 // Type-only import: merges `session/title` into SessionEventMap so the fixture
 // below stays fully typed.
@@ -44,6 +46,19 @@ const assistantMessageEvent = (data: SessionEventMap['assistant/message']): Sess
 
 const toolResultEvent = (data: SessionEventMap['tool/result']): SessionEvent<'tool/result'> =>
   ({ type: 'tool/result', seq: nextSeq(), time: 0, data, surfaceOp: 'append' })
+
+const developerMessageEvent = (text: string, surfaceOp: SurfaceOp): SessionEvent<'developer/message'> =>
+  ({
+    type: 'developer/message',
+    seq: nextSeq(),
+    time: 0,
+    data: {
+      turn: 1,
+      step: 1,
+      message: createDeveloperMessage({ source: { kind: 'session-edit' }, content: blocks(text) }),
+    },
+    surfaceOp,
+  })
 
 const attemptEvent = (data: SessionEventMap['assistant/attempt']): SessionEvent<'assistant/attempt'> =>
   ({ type: 'assistant/attempt', seq: nextSeq(), time: 0, data })
@@ -178,6 +193,70 @@ describe('user/message folding', () => {
     } as CompactionCheckpointSource
     applyEvent(model, userMessageEvent({ ...userMessage(''), source }))
     expect(model.items.map(item => item.text)).toEqual(['Conversation compacted'])
+  })
+})
+
+describe('surface replace folding (rewind/clear markers)', () => {
+  it('prunes shadowed items, re-densifies ids, and posts the rewound notice', () => {
+    const model = createModel()
+    const one = userMessageEvent(userMessage('one'))
+    const two = userMessageEvent(userMessage('two'))
+    const three = userMessageEvent(userMessage('three'))
+    applyEvent(model, one)
+    applyEvent(model, two)
+    applyEvent(model, three)
+    applyEvent(
+      model,
+      developerMessageEvent(
+        'the operator rewound to the question below; its later exchange is shadowed in the log',
+        { op: 'replace', startSeq: two.seq, endSeq: two.seq },
+      ),
+    )
+    expect(model.items.map(item => [item.id, item.kind, item.text])).toEqual([
+      [0, 'user', 'one'],
+      [1, 'user', 'three'],
+      [2, 'notice', 'rewound — the earlier exchange is shadowed in the log'],
+    ])
+    expect(model.items[2]?.notice).toBe('compact')
+    expect(model.items[2]?.seq).toBe(three.seq + 1)
+  })
+
+  it('posts the cleared notice for a /clear marker and keeps the head plus unsequenced items', () => {
+    const model = createModel()
+    pushNotice(model, 'banner')
+    const one = userMessageEvent(userMessage('one'))
+    const two = userMessageEvent(userMessage('two'))
+    applyEvent(model, one)
+    applyEvent(model, two)
+    applyEvent(
+      model,
+      developerMessageEvent(
+        'the operator cleared the conversation; the earlier surface is shadowed in the log',
+        { op: 'replace', startSeq: two.seq, endSeq: two.seq },
+      ),
+    )
+    expect(model.items.map(item => [item.id, item.text])).toEqual([
+      [0, 'banner'],
+      [1, 'one'],
+      [2, 'session cleared — same session, fresh context'],
+    ])
+  })
+
+  it('ignores an append developer/message, and a replace matching nothing still posts its notice', () => {
+    const model = createModel()
+    applyEvent(model, userMessageEvent(userMessage('kept')))
+    applyEvent(model, developerMessageEvent('session edit', 'append'))
+    applyEvent(
+      model,
+      developerMessageEvent(
+        'the operator rewound to the question below; its later exchange is shadowed in the log',
+        { op: 'replace', startSeq: SessionSeq(90), endSeq: SessionSeq(91) },
+      ),
+    )
+    expect(model.items.map(item => item.text)).toEqual([
+      'kept',
+      'rewound — the earlier exchange is shadowed in the log',
+    ])
   })
 })
 

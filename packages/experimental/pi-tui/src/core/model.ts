@@ -185,6 +185,16 @@ function exitPlanNotApproved(text: string): string | undefined {
   return undefined
 }
 
+/** Transcript notice for a surface-replace marker. The /rewind and /clear
+ * commands write distinguishing marker prose; live folding and replay must
+ * render the same wording. */
+function replaceMarkerNotice(content: readonly ContentBlock[] | undefined): string {
+  if (textOf(content).startsWith('the operator cleared')) {
+    return 'session cleared — same session, fresh context'
+  }
+  return 'rewound — the earlier exchange is shadowed in the log'
+}
+
 /**
  * Fold one session event into the model. Stateful in place; returns the
  * model for chaining.
@@ -201,19 +211,25 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
 
   switch (event.type) {
     case 'developer/message': {
-      // The edit/rewind marker: its surfaceOp replace shadows every item in
+      // The rewind/clear marker: its surfaceOp replace shadows every item in
       // [startSeq, endSeq]. The marker's own prose is log bookkeeping, not a
-      // bubble; the notice is what the transcript shows at the rewind point.
+      // bubble; the notice is what the transcript shows at the shadow point,
+      // live and on replay. Ids re-densify after the prune because the fold
+      // window reads them as positions.
       const surfaceOp = (event as { surfaceOp?: { op?: string; startSeq?: number; endSeq?: number } }).surfaceOp
       if (surfaceOp?.op === 'replace'
         && typeof surfaceOp.startSeq === 'number'
         && typeof surfaceOp.endSeq === 'number') {
         const start = surfaceOp.startSeq
         const end = surfaceOp.endSeq
-        model.items = model.items.filter(item => item.seq === undefined || item.seq < start || item.seq > end)
+        model.items = model.items
+          .filter(item => item.seq === undefined || item.seq < start || item.seq > end)
+          .map((item, index) => item.id === index ? item : { ...item, id: index })
+        // nextId was captured before the prune; rebase it on the densified list.
+        nextId = model.items.length
         push({
           kind: 'notice',
-          text: 'rewound — the earlier exchange is shadowed in the log',
+          text: replaceMarkerNotice(event.data.message.content),
           streaming: false,
           seq: event.seq,
           notice: 'compact',
