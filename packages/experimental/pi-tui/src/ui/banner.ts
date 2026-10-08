@@ -1,10 +1,8 @@
 /**
- * Startup banner: the Shield Break logo (the official brand mark, sampled to
- * half-block rows) over the red product line, session facts, and key hints.
- * Shown on boot and on every session switch.
+ * Startup banner: the red Shield Break product line, session facts, and key
+ * hints. Shown on boot and on every session switch.
  */
 import chalk from 'chalk'
-import { logoLines } from './logo.ts'
 
 const MUTED = chalk.dim
 
@@ -19,11 +17,7 @@ export interface BannerInfo {
 /** Compose the welcome block (pre-colored; the view renders it verbatim). */
 export function buildBanner(info: BannerInfo): string {
   const version = info.version === undefined ? '' : ` v${info.version}`
-  const lines: string[] = [
-    ...logoLines(),
-    '',
-    chalk.redBright(`Shield Break Agent${version}`),
-  ]
+  const lines: string[] = [chalk.redBright(`Shield Break Agent${version}`)]
   const facts: string[] = []
   if (info.model !== undefined) facts.push(`model: ${info.model}`)
   if (info.preset !== undefined) facts.push(`preset: ${info.preset}`)

@@ -1,15 +1,13 @@
 import chalk from 'chalk'
 import { describe, expect, it } from 'vitest'
 import { buildBanner } from '../src/ui/banner.ts'
-import { logoLines } from '../src/ui/logo.ts'
 
 chalk.level = 1
 
 describe('buildBanner', () => {
-  it('opens with the logo over the red product line', () => {
+  it('opens with the red product line and session facts', () => {
     const banner = buildBanner({ version: '0.4.1', model: 'deepseek-v4-flash', preset: 'standard', cwd: 'proj' })
-    expect(banner.startsWith(logoLines().join('\n'))).toBe(true)
-    expect(banner).toContain('Shield Break Agent v0.4.1')
+    expect(banner.startsWith('\u001b[91mShield Break Agent v0.4.1')).toBe(true)
     expect(banner).toContain('model: deepseek-v4-flash')
     expect(banner).toContain('preset: standard')
     expect(banner).toContain('cwd: proj')

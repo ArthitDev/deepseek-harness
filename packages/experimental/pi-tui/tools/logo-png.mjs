@@ -1,5 +1,5 @@
-// Shared decoder for the 8-bit RGBA, non-interlaced brand PNG. Both logo
-// generators (logo-sample.mjs, logo-icon.mjs) start from this.
+// Shared decoder for the 8-bit RGBA, non-interlaced brand PNG. The icon
+// generator (logo-icon.mjs) starts from this.
 import { inflateSync } from 'node:zlib'
 
 /**
