@@ -3,60 +3,15 @@
 // Run from anywhere: `node packages/experimental/pi-tui/tools/logo-sample.mjs`.
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { inflateSync } from 'node:zlib'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { decodeLogoPng } from './logo-png.mjs'
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 // tools/.. is the package dir; the repo root is three levels above it.
-const png = readFileSync(join(packageRoot, '../../../apps/web/public/new-logo.png'))
-
-// ── decode PNG (8-bit RGBA, non-interlaced) ──────────────────────────────
-let off = 8
-let width = 0
-let height = 0
-const idat = []
-while (off < png.length) {
-  const len = png.readUInt32BE(off)
-  const type = png.subarray(off + 4, off + 8).toString()
-  if (type === 'IHDR') {
-    width = png.readUInt32BE(off + 8)
-    height = png.readUInt32BE(off + 12)
-    if (png[off + 16] !== 8 || png[off + 17] !== 6 || png[off + 20] !== 0) {
-      throw new Error(`unsupported PNG: depth=${png[off + 16]} color=${png[off + 17]} interlace=${png[off + 20]}`)
-    }
-  } else if (type === 'IDAT') {
-    idat.push(png.subarray(off + 8, off + 8 + len))
-  } else if (type === 'IEND') break
-  off += 12 + len
-}
-const raw = inflateSync(Buffer.concat(idat))
+const { width, height, pixels } = decodeLogoPng(
+  readFileSync(join(packageRoot, '../../../apps/web/public/new-logo.png')),
+)
 const stride = width * 4
-const pixels = Buffer.alloc(height * stride)
-const paeth = (a, b, c) => {
-  const p = a + b - c
-  const pa = Math.abs(p - a)
-  const pb = Math.abs(p - b)
-  const pc = Math.abs(p - c)
-  return pa <= pb && pa <= pc ? a : pb <= pc ? b : c
-}
-for (let y = 0; y < height; y++) {
-  const filter = raw[y * (stride + 1)]
-  const src = y * (stride + 1) + 1
-  const dst = y * stride
-  for (let x = 0; x < stride; x++) {
-    const rawByte = raw[src + x]
-    const left = x >= 4 ? pixels[dst + x - 4] : 0
-    const up = y > 0 ? pixels[dst + x - stride] : 0
-    const upLeft = x >= 4 && y > 0 ? pixels[dst + x - stride - 4] : 0
-    let value
-    if (filter === 0) value = rawByte
-    else if (filter === 1) value = rawByte + left
-    else if (filter === 2) value = rawByte + up
-    else if (filter === 3) value = rawByte + ((left + up) >> 1)
-    else value = rawByte + paeth(left, up, upLeft)
-    pixels[dst + x] = value & 0xff
-  }
-}
 
 // ── content bbox ─────────────────────────────────────────────────────────
 let minX = width; let minY = height; let maxX = 0; let maxY = 0
