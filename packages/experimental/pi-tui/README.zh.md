@@ -35,19 +35,15 @@ kind: "package-bundle"
 
 ## 连接 Antigravity
 
-TUI 配合 CLIProxyAPI（外部下载）使用：它将 Google Antigravity 登录转换为本地 OpenAI 兼容端点并提供 /v1/models。一次性设置：安装后运行 `cliproxy --antigravity-login`（打开浏览器一次），启动 `cliproxy`，再在 /provider 注册 provider：
+TUI 自带 Antigravity 代理（零依赖，就在本仓库内），全新克隆无需其他下载。前提：Antigravity CLI 完成一次认证（`agy` —— 它写入 OAuth 令牌，之后由代理自行刷新）。之后只需一条命令：
 
 ```
-/provider
-  name:     antigravity
-  endpoint: http://127.0.0.1:8317/v1
-  protocol: openai-completions
-  key:      shield-break
+node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
 ```
 
-代理会自行刷新 OAuth 令牌；Antigravity 配额与 Google 服务条款照常适用。
+脚本会校验令牌、安装静默自启动器、启动端点并做健康检查。Antigravity provider 已内置于 TUI bundle，`dsh tui` → `/model` 直接列出其模型（Gemini、Claude），无需 `/provider` 步骤。代理自行刷新 OAuth 令牌；Antigravity 配额与 Google 服务条款照常适用。
 
-若不想常驻终端窗口，运行一次自带安装器：`node tools/antigravity-proxy/install-autostart.mjs` —— 它会把静默启动器放入 Windows Startup 文件夹，端点随每次登录自动启动。
+若部署偏好外部 CLIProxyAPI 网关：下载后运行 `cliproxy --antigravity-login`（打开浏览器一次），在 `/provider` 注册 provider（`name: antigravity`、`endpoint: http://127.0.0.1:8317/v1`、`protocol: openai-completions`、`key: shield-break`），再用 `node tools/antigravity-proxy/install-autostart.mjs` 随登录常驻 —— 在 home patch 中命名 `llm-pi-ai` 行会按 id 替换本 bundle 的代理 roster。
 
 <a id="dev-note"></a>
 

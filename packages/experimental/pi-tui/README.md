@@ -35,19 +35,15 @@ The plugin ships as a bundle row for the `tui` profile: install it once with `ds
 
 ## Connect Antigravity
 
-The TUI pairs with CLIProxyAPI (external download), which turns a Google Antigravity login into a local OpenAI-compatible endpoint with /v1/models. One-time setup: install it, run `cliproxy --antigravity-login` (opens the browser once), start `cliproxy`, then register the provider in /provider.
+The TUI ships its own Antigravity proxy (zero dependencies, in this repo), so a fresh clone needs no other download. Prerequisite: the Antigravity CLI authenticated once (`agy` — it writes the OAuth token the proxy then refreshes on its own). After that, one command:
 
 ```
-/provider
-  name:     antigravity
-  endpoint: http://127.0.0.1:8317/v1
-  protocol: openai-completions
-  key:      shield-break
+node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
 ```
 
-The proxy refreshes its own OAuth token; Antigravity quota and Google ToS apply.
+The script verifies the token, installs a silent autostart launcher, starts the endpoint, and health-checks it. The Antigravity provider is already part of the TUI bundle, so `dsh tui` → `/model` lists its models (Gemini, Claude) with no `/provider` step. The proxy refreshes its own OAuth token; Antigravity quota and Google ToS apply.
 
-To keep the endpoint up without a terminal window, run the bundled installer once: `node tools/antigravity-proxy/install-autostart.mjs` — it places a silent launcher in the Windows Startup folder, so the endpoint comes up at every logon.
+Deployments preferring the external CLIProxyAPI gateway instead: download it, run `cliproxy --antigravity-login` (opens the browser once), register the provider in `/provider` (`name: antigravity`, `endpoint: http://127.0.0.1:8317/v1`, `protocol: openai-completions`, `key: shield-break`), and keep it up at logon with `node tools/antigravity-proxy/install-autostart.mjs` — a home patch naming the `llm-pi-ai` row replaces this bundle's proxy roster by id.
 
 ## Dev Note
 
