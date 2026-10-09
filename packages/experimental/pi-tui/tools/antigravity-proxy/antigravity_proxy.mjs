@@ -8,24 +8,30 @@
  *   GET  /v1/models
  *   POST /v1/chat/completions   (streaming + non-streaming)
  *
- * Auth: reads the OAuth token file (default
- * ~/.gemini/antigravity-cli/antigravity-oauth-token, override with
- * ANTIGRAVITY_TOKEN_FILE), refreshes via Google's token endpoint when
- * expired, and persists rotated refresh tokens back to its own file so the
- * chain stays separate from the Antigravity CLI's.
+ * Auth: the proxy owns its Google OAuth chain end to end. `GET /auth/login`
+ * starts a loopback flow with the public Gemini CLI client (the same client
+ * the open-source gemini-cli embeds) and `GET /oauth/callback` exchanges the
+ * code; rotated tokens persist only to the proxy's own state file
+ * (~/.gemini/antigravity-proxy-token.json, override with ANTIGRAVITY_TOKEN_FILE).
+ * No Antigravity CLI installation or seed file is involved.
+ *
+ * Endpoints: GET /health, /v1/models, POST /v1/chat/completions (streaming
+ * accepted, folded to one JSON response), GET /auth/login, /auth/status,
+ * GET /oauth/callback.
  *
  * Env: PORT (8877), HOST (127.0.0.1), ANTIGRAVITY_TOKEN_FILE,
  *      ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET
  */
 import http from 'node:http'
+import { randomBytes } from 'node:crypto'
 import { readFileSync, writeFileSync, renameSync, chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 
 const PORT = Number(process.env.PORT ?? 8877)
 const HOST = process.env.HOST ?? '127.0.0.1'
-const TOKEN_FILE = process.env.ANTIGRAVITY_TOKEN_FILE
-  ?? join(homedir(), '.gemini', 'antigravity-cli', 'antigravity-oauth-token')
+const TOKEN_STATE_FILE = process.env.ANTIGRAVITY_TOKEN_FILE
+  ?? join(homedir(), '.gemini', 'antigravity-proxy-token.json')
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 // The Antigravity CLI's own embedded OAuth client (present in every agy
 // binary, not a per-user credential); stored split-encoded to match how the
@@ -52,33 +58,82 @@ function expiryToMs(raw) {
 
 /** Token chain state: one file owned exclusively by this proxy. */
 let tokenState
-function loadToken() {
+/** Live auth health for /auth/status and the request-time hint. */
+const auth = { ok: false, error: undefined }
+
+function initToken() {
+  if (!existsSync(TOKEN_STATE_FILE)) return
   try {
-    const raw = JSON.parse(readFileSync(TOKEN_FILE, 'utf8'))
+    const raw = JSON.parse(readFileSync(TOKEN_STATE_FILE, 'utf8'))
     tokenState = raw.token ?? raw
+    tokenState.expiry = expiryToMs(tokenState.expiry)
   } catch (error) {
-    log(`ERROR: could not read token file ${TOKEN_FILE}:`, error.message)
-    log('Run the Antigravity CLI (`agy`) to authenticate first.')
+    log(`ERROR: could not read state file ${TOKEN_STATE_FILE}:`, error.message)
+    log(`Delete it and re-run; then open /auth/login to re-authenticate.`)
     process.exit(1)
   }
   if (!tokenState.refresh_token) {
-    log('ERROR: no refresh_token in the token file. Re-run `agy` to authenticate.')
+    log(`ERROR: no refresh_token in ${TOKEN_STATE_FILE}. Delete it and re-run to re-authenticate.`)
     process.exit(1)
   }
-  log(`token file OK (auth_method=${raw.auth_method ?? 'unknown'})`)
+  auth.ok = Boolean(tokenState.access_token) && Date.now() < tokenState.expiry - REFRESH_SKEW_MS
+  log(`state file OK: ${TOKEN_STATE_FILE}${auth.ok ? '' : ' (access expired — it refreshes on the next request)'}`)
 }
 
 function persistToken() {
   const wrapped = { token: tokenState, auth_method: 'oauth' }
   try {
-    mkdirSync(dirname(TOKEN_FILE), { recursive: true })
-    const tmp = `${TOKEN_FILE}.tmp`
+    mkdirSync(dirname(TOKEN_STATE_FILE), { recursive: true })
+    const tmp = `${TOKEN_STATE_FILE}.tmp`
     writeFileSync(tmp, JSON.stringify(wrapped))
-    renameSync(tmp, TOKEN_FILE)
-    try { chmodSync(TOKEN_FILE, 0o600) } catch { /* best effort on Windows */ }
+    renameSync(tmp, TOKEN_STATE_FILE)
+    try { chmodSync(TOKEN_STATE_FILE, 0o600) } catch { /* best effort on Windows */ }
   } catch (error) {
     log('WARNING: could not persist token:', error.message)
   }
+}
+
+// One loopback login at a time; the state parameter rejects forged callbacks.
+let pendingAuth
+
+function buildAuthUrl(state) {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: `http://127.0.0.1:${PORT}/oauth/callback`,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+}
+
+async function exchangeAuthCode(code) {
+  const response = await fetch(OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      redirect_uri: `http://127.0.0.1:${PORT}/oauth/callback`,
+      grant_type: 'authorization_code',
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || !payload.access_token || !payload.refresh_token) {
+    throw new Error(`authorization exchange failed (HTTP ${response.status}): ${payload.error ?? 'no token payload'}`)
+  }
+  tokenState = {
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+    expiry: Date.now() + (payload.expires_in ?? 3600) * 1000,
+  }
+  persistToken()
+  auth.ok = true
+  auth.error = undefined
+  log('authenticated; token chain saved to', TOKEN_STATE_FILE)
 }
 
 let refreshInFlight
@@ -103,7 +158,10 @@ async function ensureAccessToken() {
     if (!response.ok) {
       const detail = await response.text().catch(() => '')
       refreshInFlight = undefined
-      throw new Error(`OAuth refresh failed (HTTP ${response.status}): ${detail}`)
+      auth.ok = false
+      auth.error = `OAuth refresh failed (HTTP ${response.status}) — open http://127.0.0.1:${PORT}/auth/login to re-authenticate`
+      log('ERROR:', auth.error, detail.slice(0, 200))
+      throw new Error(auth.error)
     }
     const payload = await response.json()
     tokenState.access_token = payload.access_token
@@ -111,6 +169,8 @@ async function ensureAccessToken() {
     tokenState.expiry = Date.now() + (payload.expires_in ?? 3600) * 1000
     persistToken()
     refreshInFlight = undefined
+    auth.ok = true
+    auth.error = undefined
     return tokenState.access_token
   })()
   return refreshInFlight
@@ -189,8 +249,6 @@ const KNOWN_MODELS = [
   { id: 'gemini-3.5-flash', owned_by: 'google' },
   { id: 'gemini-2.5-pro', owned_by: 'google' },
   { id: 'gemini-2.5-flash', owned_by: 'google' },
-  { id: 'claude-sonnet-4.6', owned_by: 'anthropic' },
-  { id: 'claude-opus-4.6', owned_by: 'anthropic' },
 ]
 
 const server = http.createServer(async (request, response) => {
@@ -198,7 +256,49 @@ const server = http.createServer(async (request, response) => {
   try {
     if (url.pathname === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' })
-      response.end(JSON.stringify({ status: 'ok', service: 'antigravity-proxy' }))
+      response.end(JSON.stringify({ status: 'ok', service: 'antigravity-proxy', authenticated: auth.ok }))
+      return
+    }
+    if (url.pathname === '/auth/login') {
+      pendingAuth = { state: randomBytes(16).toString('hex') }
+      response.writeHead(302, { Location: buildAuthUrl(pendingAuth.state) })
+      response.end()
+      return
+    }
+    if (url.pathname === '/oauth/callback') {
+      const problem = url.searchParams.get('error')
+      const code = url.searchParams.get('code')
+      const state = url.searchParams.get('state')
+      const page = (title, body) => {
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        response.end(`<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font-family:sans-serif;background:#111;color:#eee;text-align:center;padding-top:15vh"><h1>${title}</h1><p>${body}</p></body>`)
+      }
+      if (problem) {
+        pendingAuth = undefined
+        page('Antigravity proxy — sign-in failed', `Google returned: ${problem}. Close this tab and try again.`)
+        return
+      }
+      if (!code || !pendingAuth || state !== pendingAuth.state) {
+        page('Antigravity proxy — invalid callback', 'Missing or mismatched OAuth state. Start again from /auth/login.')
+        return
+      }
+      try {
+        await exchangeAuthCode(code)
+        pendingAuth = undefined
+        page('Antigravity proxy — authenticated', 'Token chain saved. You can close this tab and use the proxy.')
+      } catch (error) {
+        pendingAuth = undefined
+        page('Antigravity proxy — exchange failed', String(error.message ?? error))
+      }
+      return
+    }
+    if (url.pathname === '/auth/status') {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({
+        authenticated: auth.ok,
+        ...(auth.error !== undefined ? { error: auth.error } : {}),
+        loginUrl: `http://127.0.0.1:${PORT}/auth/login`,
+      }))
       return
     }
     if (url.pathname === '/v1/models') {
@@ -207,6 +307,17 @@ const server = http.createServer(async (request, response) => {
       return
     }
     if (url.pathname === '/v1/chat/completions' && request.method === 'POST') {
+      if (!auth.ok || !tokenState) {
+        response.writeHead(503, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({
+          error: {
+            message: `not authenticated — open http://127.0.0.1:${PORT}/auth/login once in a browser`,
+            type: 'proxy_error',
+            code: 'PROXY_UNAUTHENTICATED',
+          },
+        }))
+        return
+      }
       let body = ''
       for await (const chunk of request) body += chunk
       const { model = 'gemini-3-flash', messages = [], stream = false } = JSON.parse(body)
@@ -230,8 +341,9 @@ const server = http.createServer(async (request, response) => {
   }
 })
 
-loadToken()
+initToken()
 server.listen(PORT, HOST, () => {
   log(`listening on http://${HOST}:${PORT}`)
-  log(`token file: ${TOKEN_FILE}`)
+  log(`token state: ${TOKEN_STATE_FILE}`)
+  if (!auth.ok) log(`not authenticated yet — open http://127.0.0.1:${PORT}/auth/login in a browser once`)
 })

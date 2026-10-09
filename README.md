@@ -79,7 +79,7 @@ Keys themselves live in `~/.dsh/.credentials.yaml` (`/key <REF>` from the TUI, o
 
 **Machines** are saved SSH profiles (web → Remote machines settings, stored in the shared settings document). `/machines list|probe|open` in the TUI, or `--machine <id>` at boot, place the session's working directory in `/__dsh_ssh__/<machine>/…` so shell and file tools run on that machine.
 
-**Antigravity** (Google account Gemini/Claude models) connects through the bundled in-repo proxy — see [Connect Antigravity](packages/experimental/pi-tui/README.md#connect-antigravity) in the TUI package README. A fresh clone needs no other download: authenticate the Antigravity CLI once (`agy`), then run `node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs` — it installs the logon autostart, starts the endpoint, and the provider is already registered in the TUI.
+**Antigravity** (Google account Gemini models) connects through the bundled in-repo proxy — see [Connect Antigravity](packages/experimental/pi-tui/README.md#connect-antigravity) in the TUI package README. A fresh clone needs no other download and no Antigravity CLI: run `node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs`, approve the Google sign-in it opens, and the provider is already registered in the TUI with logon autostart.
 
 ## Pentest surface
 

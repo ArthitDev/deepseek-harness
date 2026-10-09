@@ -35,13 +35,13 @@ kind: "package-bundle"
 
 ## 连接 Antigravity
 
-TUI 自带 Antigravity 代理（零依赖，就在本仓库内），全新克隆无需其他下载。前提：Antigravity CLI 完成一次认证（`agy` —— 它写入 OAuth 令牌，之后由代理自行刷新）。之后只需一条命令：
+TUI 自带 Antigravity 代理（零依赖，就在本仓库内），全新克隆无需其他下载，也不需要 Antigravity CLI —— 只需一个 Google 账号。一条命令：
 
 ```
 node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
 ```
 
-脚本会校验令牌、安装静默自启动器、启动端点并做健康检查。Antigravity provider 已内置于 TUI bundle，`dsh tui` → `/model` 直接列出其模型（Gemini、Claude），无需 `/provider` 步骤。代理自行刷新 OAuth 令牌；Antigravity 配额与 Google 服务条款照常适用。
+脚本会安装静默自启动器、启动端点，并在浏览器中打开一次 Google 登录；轮换后的令牌保存在代理自己的状态文件中，之后自动刷新。Antigravity provider 已内置于 TUI bundle，`dsh tui` → `/model` 直接列出其 Gemini 模型，无需 `/provider` 步骤。Antigravity 配额与 Google 服务条款照常适用。登录过期时重跑脚本（或打开 `http://127.0.0.1:8877/auth/login`）即可。
 
 若部署偏好外部 CLIProxyAPI 网关：下载后运行 `cliproxy --antigravity-login`（打开浏览器一次），在 `/provider` 注册 provider（`name: antigravity`、`endpoint: http://127.0.0.1:8317/v1`、`protocol: openai-completions`、`key: shield-break`），再用 `node tools/antigravity-proxy/install-autostart.mjs` 随登录常驻 —— 在 home patch 中命名 `llm-pi-ai` 行会按 id 替换本 bundle 的代理 roster。
 

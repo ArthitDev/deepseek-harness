@@ -97,10 +97,10 @@
 
     # Antigravity through the in-repo proxy (tools/antigravity-proxy): the
     # zero-download default. `setup.mjs` starts the proxy on 127.0.0.1:8877
-    # from the Antigravity CLI's own OAuth token. A deployment preferring the
-    # external CLIProxyAPI gateway overrides this row by id — a home patch
-    # replaces the whole config, so such a row restates its own roster (see
-    # the TUI README's Connect Antigravity section).
+    # and walks the Google sign-in in the browser once. A deployment
+    # preferring the external CLIProxyAPI gateway overrides this row by id —
+    # a home patch replaces the whole config, so such a row restates its own
+    # roster (see the TUI README's Connect Antigravity section).
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
       config:
@@ -129,14 +129,6 @@
               - id: gemini-2.5-flash
                 name: Gemini 2.5 Flash
                 contextWindow: 1000000
-                maxTokens: 8192
-              - id: claude-sonnet-4.6
-                name: Claude Sonnet 4.6
-                contextWindow: 200000
-                maxTokens: 8192
-              - id: claude-opus-4.6
-                name: Claude Opus 4.6
-                contextWindow: 200000
                 maxTokens: 8192
 
     - id: storage-domain
