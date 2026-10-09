@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-pi-tui` is the Shield Break Harness terminal front door: a full-screen interactive TUI over the same agent runtime the Web profile drives. Sessions persist in the shared `~/.dsh/sessions` store, so a session started here reopens in the Web GUI and vice versa. The TUI renders streaming Markdown, collapsible thinking, and tool cards, and mounts the deployment's agent presets, pentest control plane (`/runs`, `/recon`), and saved SSH machines (`/machines`) in-process. Boot it with `dsh tui`; flags `--resume`, `--preset`, and `--machine` select the session, preset, and remote execution target. It requires an interactive terminal and exits loudly without one.
+`dsh-pi-tui` is the Shield Break Harness terminal front door: a full-screen TUI over the Web profile's agent runtime. Sessions persist in the shared `~/.dsh/sessions` store, so a session started here reopens in the Web GUI and vice versa. The TUI renders streaming Markdown, collapsible thinking, and tool cards, and mounts agent presets, the pentest control plane (`/runs`, `/recon`), and saved SSH machines (`/machines`) in-process. Boot it with `dsh tui` — a source checkout runs `tools/antigravity-proxy/setup.mjs` first, which creates the `tui` profile. Flags `--resume`, `--preset`, `--machine` select session, preset, and execution target. Requires an interactive terminal.
 
 ## Table of Contents
 
@@ -41,7 +41,7 @@ The TUI ships its own Antigravity proxy (zero dependencies, in this repo), so a 
 node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
 ```
 
-The script installs a silent autostart launcher, starts the endpoint, and opens the Google sign-in in the browser once; rotated tokens persist in the proxy's own state file and refresh on their own afterwards. The Antigravity provider is already part of the TUI bundle, so `dsh tui` → `/model` lists its Gemini models with no `/provider` step. Antigravity quota and Google ToS apply. Re-run the script (or open `http://127.0.0.1:8877/auth/login`) if sign-in ever expires.
+The script creates the `tui` profile when absent, installs a silent autostart launcher, starts the endpoint, and opens the Google sign-in in the browser once; rotated tokens persist in the proxy's own state file and refresh on their own afterwards. The Antigravity provider is already part of the TUI bundle, so `dsh tui` → `/model` lists its Gemini models with no `/provider` step (from a source checkout, boot with `node --import tsx/esm apps/cli/src/bin.ts tui`). Antigravity quota and Google ToS apply. Re-run the script (or open `http://127.0.0.1:8877/auth/login`) if sign-in ever expires.
 
 Deployments preferring the external CLIProxyAPI gateway instead: download it, run `cliproxy --antigravity-login` (opens the browser once), register the provider in `/provider` (`name: antigravity`, `endpoint: http://127.0.0.1:8317/v1`, `protocol: openai-completions`, `key: shield-break`), and keep it up at logon with `node tools/antigravity-proxy/install-autostart.mjs` — a home patch naming the `llm-pi-ai` row replaces this bundle's proxy roster by id.
 

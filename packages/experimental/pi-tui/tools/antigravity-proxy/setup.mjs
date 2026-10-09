@@ -10,15 +10,17 @@
  * Windows installs a Startup-folder VBS; other platforms print the manual
  * background command instead.
  */
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const dryRun = process.argv.includes('--dry-run')
 const here = dirname(fileURLToPath(import.meta.url))
+const repoRoot = resolve(here, '..', '..', '..', '..')
 const proxyScript = join(here, 'antigravity_proxy.mjs')
+const profileDir = join(homedir(), '.dsh', 'profiles', 'tui')
 const endpoint = 'http://127.0.0.1:8877'
 const vbsPath = join(homedir(), '.dsh', 'start-antigravity-proxy.vbs')
 const startup = join(homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
@@ -31,6 +33,26 @@ const fail = (message) => {
 const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
 
 if (!existsSync(proxyScript)) fail(`proxy script missing at ${proxyScript}`)
+
+/** Create the `tui` profile on first run — it lives under ~/.dsh, not the repo. */
+function ensureTuiProfile() {
+  if (existsSync(join(profileDir, 'package.json'))) {
+    console.log(`profile ok: ${profileDir}`)
+    return
+  }
+  const bootstrap = [
+    process.execPath, '--import', 'tsx/esm',
+    join(repoRoot, 'apps', 'cli', 'src', 'bin.ts'),
+    'plugin', '--profile', 'tui', 'add',
+    join(repoRoot, 'packages', 'experimental', 'pi-tui'),
+  ]
+  if (dryRun) {
+    console.log(`dry-run: would create the tui profile via:\n  ${bootstrap.join(' ')}`)
+    return
+  }
+  console.log('creating the `tui` profile (first run only)…')
+  execFileSync(bootstrap[0], bootstrap.slice(1), { stdio: 'inherit', cwd: repoRoot })
+}
 
 // Silent launcher: no console window; the proxy keeps its own token chain.
 const vbs = [
@@ -45,10 +67,13 @@ if (process.platform !== 'win32') {
 }
 
 if (dryRun) {
+  ensureTuiProfile()
   console.log(`dry-run: would write ${vbsPath} and copy it to ${join(startup, 'antigravity-proxy.vbs')}`)
   console.log(`dry-run: would start ${endpoint} and open the Google sign-in if not yet authenticated`)
   process.exit(0)
 }
+
+ensureTuiProfile()
 
 mkdirSync(dirname(vbsPath), { recursive: true })
 writeFileSync(vbsPath, vbs)
