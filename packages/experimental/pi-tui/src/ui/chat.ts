@@ -169,6 +169,8 @@ export class ChatScreen {
   private focusedToolId: number | undefined
   /** Preset the live agent currently composes; `agent-preset/selected` replays and switches keep it current. */
   private activePresetId: string | undefined
+  /** The in-place /clear marker whose live fold the command already applied locally. */
+  private handledMarkerSeq: SessionSeq | undefined
   /** Per-card expand override toggled by Enter in browse mode. */
   private expandedToolId: number | undefined
   /** Long-session fold: render only the newest items above this line. */
@@ -468,6 +470,7 @@ export class ChatScreen {
     this.searchQuery = undefined
     this.focusedToolId = undefined
     this.activePresetId = undefined
+    this.handledMarkerSeq = undefined
     this.expandedToolId = undefined
     this.expandedAll = false
     this.showBanner()
@@ -885,7 +888,7 @@ export class ChatScreen {
       return
     }
     if (parsed.name === 'clear') {
-      void this.cmdClear()
+      this.cmdClear()
       return
     }
     if (parsed.name === 'queue') {
@@ -1784,15 +1787,52 @@ export class ChatScreen {
 
 
 
-  /** Clear the conversation: a fresh session through the proven /new path —
-   * the transcript and context start empty, and the notice names the old
-   * session's resume command so nothing is lost. */
-  private async cmdClear(): Promise<void> {
+  /** Clear the conversation in place: the SAME session (id, files, resume
+   * history) stays, the surface replace empties the context the model sees,
+   * and the transcript prunes immediately — delivery timing never decides
+   * whether the pane clears. */
+  private cmdClear(): void {
     if (this.isBusy()) {
       this.pushNotice('cannot clear while work is running (Esc to interrupt first)', 'error')
       return
     }
-    await this.cmdNew()
+    const nodes = this.agent.session.surface.nodes
+    // The system prompt occupies the leading surface node(s) and a replace
+    // may not touch them; the first transcript item's seq is the first
+    // conversation node, so the cleared range starts there.
+    const first = this.model.items.find(item => item.seq !== undefined)?.seq
+    const tail = nodes.at(-1)
+    if (first === undefined || tail === undefined || first > tail) {
+      this.pushNotice('the transcript is already clear', 'info')
+      return
+    }
+    const nextTurn = replayEvents(this.agent.session).findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    // The replace op must cite every surface node it shadows.
+    const shadowed = nodes.filter(node => node >= first && node <= tail)
+    const marker = this.agent.session.append('developer/message', {
+      turn: nextTurn + 1,
+      step: 1,
+      message: createDeveloperMessage({
+        source: { kind: 'session-edit' },
+        content: [{ type: 'text', text: 'the operator cleared the conversation; the earlier surface is shadowed in the log' }],
+      }),
+    }, {
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(first), endSeq: tail },
+      sourceEventSeqs: shadowed,
+    })
+    // Immediate local prune of the same fold the marker's round trip would
+    // run; the round trip itself is skipped through handledMarkerSeq.
+    const before = this.model.items.length
+    this.model.items = this.model.items
+      .filter(item => item.seq === undefined || item.seq < first)
+      .map((item, index) => item.id === index ? item : { ...item, id: index })
+    if (this.model.items.length < before) {
+      this.views.clear()
+      this.lastFoldKey = ''
+    }
+    this.handledMarkerSeq = marker.seq
+    this.sync()
+    this.pushNotice('session cleared — same session, fresh context', 'info')
   }
 
   /** Inspect and manage the agent's pending inbox: queued turns, steering,
@@ -2601,6 +2641,12 @@ export class ChatScreen {
 
   /** Fold one session event and reconcile the component tree. */
   handleEvent(event: SessionEvent): void {
+    if (this.handledMarkerSeq !== undefined && event.seq === this.handledMarkerSeq) {
+      // The in-place /clear already pruned and noticed locally; the live fold
+      // would only duplicate the notice. Replay after a restart folds again.
+      this.handledMarkerSeq = undefined
+      return
+    }
     const before = this.model.items.length
     applyEvent(this.model, event)
     if (this.model.items.length < before) {
