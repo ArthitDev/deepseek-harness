@@ -167,6 +167,8 @@ export class ChatScreen {
   private gitState: GitState | undefined
   /** Browse-mode focus ring: the tool card id Tab focuses (empty editor). */
   private focusedToolId: number | undefined
+  /** Preset the live agent currently composes; `agent-preset/selected` replays and switches keep it current. */
+  private activePresetId: string | undefined
   /** Per-card expand override toggled by Enter in browse mode. */
   private expandedToolId: number | undefined
   /** Long-session fold: render only the newest items above this line. */
@@ -465,6 +467,7 @@ export class ChatScreen {
     this.lastFoldKey = ''
     this.searchQuery = undefined
     this.focusedToolId = undefined
+    this.activePresetId = undefined
     this.expandedToolId = undefined
     this.expandedAll = false
     this.showBanner()
@@ -477,6 +480,11 @@ export class ChatScreen {
     this.listenStream()
     for (const event of replayEvents(next.session)) {
       this.handleEvent(event)
+      // `agent-preset/selected` is plugin-merged; read it structurally.
+      const raw = event as { type?: string; data?: { agentPreset?: string } }
+      if (raw.type === 'agent-preset/selected' && raw.data?.agentPreset !== undefined) {
+        this.activePresetId = raw.data.agentPreset
+      }
     }
     this.seedHistory()
     this.rebuildAutocomplete()
@@ -1028,6 +1036,7 @@ export class ChatScreen {
     }
     try {
       const id = await presets?.select(this.agent, pickedId)
+      this.activePresetId = id ?? pickedId
       this.pushNotice(`preset switched to ${id ?? pickedId}`, 'info')
       // Make the choice the deployment default: write selectedDefault into
       // the home patch row so new sessions open on this preset too.
@@ -1566,11 +1575,52 @@ export class ChatScreen {
       } catch {
         // Best effort; session selection already applied.
       }
+      // The per-model preset binding moves the live composition with the
+      // model: a model bound to another preset replaces the standing mount
+      // right away (a turn in progress rejects with agent-preset/locked and
+      // stays, mirroring the web session-controller).
+      await this.followModelPreset(resolved.provider, resolved.model)
       this.pushNotice(`model → ${resolved.model} (${resolved.provider}) · from the next step`)
       this.sync()
     } catch (error) {
       this.pushNotice(
         `model switch failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  /** Move the live composition to the preset bound to this model route: the
+   * newest binding replaces the standing mount at once. Locked presets (a
+   * turn in progress) keep the old composition and say so. */
+  private async followModelPreset(provider: string, model: string): Promise<void> {
+    const presets = this.ctx.get('agentPresets') as
+      | {
+        readonly defaultId: string
+        presetIdForModel(provider: string, model: string): string
+        select(agent: Agent, agentPreset: string): Promise<string>
+      }
+      | undefined
+    if (presets === undefined) return
+    const target = presets.presetIdForModel(provider, model)
+    if (target === this.activePresetId) return
+    // A fresh transcript has no marker yet; without a binding the composed
+    // default already matches, so re-mounting it would only churn.
+    if (this.activePresetId === undefined && target === presets.defaultId) return
+    try {
+      const id = await presets.select(this.agent, target)
+      this.activePresetId = id ?? target
+      this.pushNotice(`preset → ${this.activePresetId} (bound to ${provider}/${model})`, 'info')
+    } catch (error) {
+      if ((error as { code?: string }).code === 'agent-preset/locked') {
+        this.pushNotice(
+          `preset ${target} follows ${provider}/${model} but a turn is in progress — switch again when it ends`,
+          'info',
+        )
+        return
+      }
+      this.pushNotice(
+        `preset follow failed: ${error instanceof Error ? error.message : String(error)}`,
         'error',
       )
     }
