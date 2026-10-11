@@ -1,13 +1,14 @@
 import chalk from 'chalk'
 import { describe, expect, it } from 'vitest'
 import { buildBanner } from '../src/ui/banner.ts'
+import { gradient } from '../src/ui/theme.ts'
 
 chalk.level = 1
 
 describe('buildBanner', () => {
-  it('opens with the red product line and session facts', () => {
+  it('opens with the gradient wordmark over the session facts', () => {
     const banner = buildBanner({ version: '0.4.1', model: 'deepseek-v4-flash', preset: 'standard', cwd: 'proj' })
-    expect(banner.startsWith('\u001b[91mShield Break Agent v0.4.1')).toBe(true)
+    expect(banner).toContain('Shield Break Agent v0.4.1')
     expect(banner).toContain('model: deepseek-v4-flash')
     expect(banner).toContain('preset: standard')
     expect(banner).toContain('cwd: proj')
@@ -22,9 +23,9 @@ describe('buildBanner', () => {
     expect(banner).not.toContain('cwd:')
   })
 
-  it('paints the product line red, never the deepseek blue', () => {
+  it('paints the wordmark with the brand gradient, never the deepseek blue', () => {
     const banner = buildBanner({ version: '0.4.1' })
-    expect(banner).toContain('\u001b[91mShield Break Agent v0.4.1\u001b[39m')
+    expect(banner).toContain(gradient('Shield Break Agent v0.4.1', '#ff4655', '#ff9a3d'))
     expect(banner).not.toContain('#4fc1ff')
   })
 })

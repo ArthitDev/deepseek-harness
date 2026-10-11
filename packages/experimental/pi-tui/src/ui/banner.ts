@@ -3,6 +3,7 @@
  * hints. Shown on boot and on every session switch.
  */
 import chalk from 'chalk'
+import { gradient } from './theme.ts'
 
 const MUTED = chalk.dim
 
@@ -17,7 +18,7 @@ export interface BannerInfo {
 /** Compose the welcome block (pre-colored; the view renders it verbatim). */
 export function buildBanner(info: BannerInfo): string {
   const version = info.version === undefined ? '' : ` v${info.version}`
-  const lines: string[] = [chalk.redBright(`Shield Break Agent${version}`)]
+  const lines: string[] = [gradient(`Shield Break Agent${version}`, '#ff4655', '#ff9a3d')]
   const facts: string[] = []
   if (info.model !== undefined) facts.push(`model: ${info.model}`)
   if (info.preset !== undefined) facts.push(`preset: ${info.preset}`)

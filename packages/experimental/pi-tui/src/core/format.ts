@@ -74,8 +74,8 @@ export function renderContextBar(
   if (used === undefined || total === undefined || total <= 0) return undefined
   const pct = Math.min(100, (100 * used) / total)
   const filled = Math.round(pct / 10)
-  const fill = pct >= 90 ? chalk.red('▓') : pct >= 70 ? chalk.yellow('▓') : chalk.green('▓')
-  const empty = chalk.dim('░')
+  const fill = pct >= 90 ? chalk.red('▰') : pct >= 70 ? chalk.yellow('▰') : chalk.green('▰')
+  const empty = chalk.dim('▱')
   return `${fill.repeat(filled)}${empty.repeat(10 - filled)}`
 }
 

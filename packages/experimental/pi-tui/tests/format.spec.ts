@@ -100,17 +100,17 @@ describe('renderContextBar', () => {
 
   it('renders a full red bar at 100 percent', () => {
     const bar = renderContextBar(100, 100)
-    expect(bar).toBe(chalk.red('▓').repeat(10))
+    expect(bar).toBe(chalk.red('▰').repeat(10))
   })
 
   it('renders a yellow bar in the 70-89 percent band', () => {
     const bar = renderContextBar(75, 100)
-    expect(bar).toBe(chalk.yellow('▓').repeat(8) + chalk.dim('░').repeat(2))
+    expect(bar).toBe(chalk.yellow('▰').repeat(8) + chalk.dim('▱').repeat(2))
   })
 
   it('renders a green bar below 70 percent', () => {
     const bar = renderContextBar(50, 100)
-    expect(bar).toBe(chalk.green('▓').repeat(5) + chalk.dim('░').repeat(5))
+    expect(bar).toBe(chalk.green('▰').repeat(5) + chalk.dim('▱').repeat(5))
   })
 })
 

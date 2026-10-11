@@ -16,13 +16,43 @@ import {
   type Component,
 } from '@earendil-works/pi-tui'
 import type { ChatItem } from '../core/model.js'
-import { markdownTheme, reasoningMarkdownTheme, style } from './theme.js'
+import { BRAND_RED, gradient, markdownTheme, reasoningMarkdownTheme, style } from './theme.js'
 import {
   highlightMatches,
   renderContextBar,
   sandboxShort,
   shortTokens,
 } from '../core/format.js'
+
+/** One identifying glyph per tool family; unknown tools keep the dot. */
+const TOOL_GLYPHS: Record<string, string> = {
+  bash: '$',
+  read: '▤',
+  write: '✎',
+  edit: '✎',
+  multi_edit: '✎',
+  apply_patch: '⚒',
+  grep: '⌕',
+  list: '≡',
+  todo_write: '☰',
+  write_todos: '☰',
+  skill: '✦',
+  web_search: '⌕',
+  web_fetch: '⇣',
+  browser: '⬒',
+  computer: '▣',
+  task: '⚙',
+  exit_plan_mode: '⌘',
+}
+
+/** The tool's identifying glyph, or the classic dot for unknown tools. */
+function toolGlyph(name: string): string {
+  return TOOL_GLYPHS[name] ?? '⏺'
+}
+
+/** GitHub-dark diff styling: tinted line backgrounds behind the +/- text. */
+const DIFF_ADDED = (text: string) => chalk.bgHex('#12261e').hex('#7ee787')(text)
+const DIFF_REMOVED = (text: string) => chalk.bgHex('#3d1b20').hex('#ffa198')(text)
 
 /**
  * Collapsed reasoning label; expanded renders the markdown body. While the
@@ -211,17 +241,18 @@ export class ToolCardView implements Component {
     const inner = Math.max(10, width - 4)
     const border = this.focused ? style.accent('│') : style.toolBorder('│')
     const lines: string[] = []
+    const glyph = chalk.cyan(toolGlyph(tool.name))
     const statusLine = (() => {
       if (tool.status === 'running') {
-        return `${chalk.blue('⏺')} ${style.toolName(tool.name)} ${style.toolArgs(tool.argsPreview)}`
+        return `${chalk.hex(BRAND_RED)('◆')} ${glyph} ${style.toolName(tool.name)} ${style.toolArgs(tool.argsPreview)}`
       }
       if (tool.status === 'error') {
-        return `${style.toolError('✗')} ${style.toolName(tool.name)} ${style.toolError(tool.errorText ?? 'error')}`
+        return `${style.toolError('✗')} ${glyph} ${style.toolName(tool.name)} ${style.toolError(tool.errorText ?? 'error')}`
       }
       if (tool.status === 'rejected') {
-        return `${style.muted('↩')} ${style.toolName(tool.name)} ${style.toolArgs(tool.argsPreview)} — ${style.muted(tool.resultPreview ?? 'not approved')}`
+        return `${style.muted('↩')} ${glyph} ${style.toolName(tool.name)} ${style.toolArgs(tool.argsPreview)} — ${style.muted(tool.resultPreview ?? 'not approved')}`
       }
-      return `${style.toolOk('✓')} ${style.toolName(tool.name)} ${style.toolArgs(tool.argsPreview)}`
+      return `${style.toolOk('✔')} ${glyph} ${style.toolName(tool.name)} ${style.toolArgs(tool.argsPreview)}`
     })()
     // Display-width-aware truncation: CJK glyphs occupy two columns, so
     // plain string slicing lets lines overflow the terminal and trip
@@ -302,7 +333,7 @@ export class ToolCardView implements Component {
       if (file.oldText === null) {
         // New file: every line added.
         for (const line of file.newText.split('\n').slice(0, MAX)) {
-          lines.push(`${border} ${truncate(chalk.green(`+ ${line}`))}`)
+          lines.push(`${border} ${truncate(DIFF_ADDED(`+ ${line}`))}`)
         }
         continue
       }
@@ -313,9 +344,9 @@ export class ToolCardView implements Component {
           if (count++ >= MAX) break
           const prefix = part.added ? '+ ' : part.removed ? '- ' : '  '
           const styled = part.added
-            ? chalk.green(prefix + line)
+            ? DIFF_ADDED(prefix + line)
             : part.removed
-              ? chalk.red(prefix + line)
+              ? DIFF_REMOVED(prefix + line)
               : chalk.dim(prefix + line)
           lines.push(`${border} ${truncate(styled)}`)
         }
@@ -363,7 +394,7 @@ export class StatusBar implements Component {
   }
 
   update(data: StatusBarData): void {
-    const parts: string[] = [chalk.bold.cyan('◆ Shield Break')]
+    const parts: string[] = [gradient('◆ Shield Break', '#ff4655', '#ff9a3d')]
     if (data.model !== undefined) parts.push(chalk.cyan(`⚙ ${data.model}`))
     if (data.preset !== undefined) parts.push(chalk.magenta(`◫ ${data.preset}`))
     // Explicit mode indicator: plan when active, normal otherwise.

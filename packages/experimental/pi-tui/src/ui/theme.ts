@@ -1,17 +1,42 @@
 /**
- * pi-flavoured chalk theme. pi coding-agent renders the assistant in plain
- * terminal text with accent-blue prompts, dim reasoning, and compact tool
- * cards — reproduced here with pi-tui's theme functions.
+ * Shield Break theme: brand-red accents with truecolor gradients, dim
+ * reasoning, and compact tool cards over pi-tui's theme functions.
  */
 import chalk from 'chalk'
 import type { EditorTheme, MarkdownTheme, SelectListTheme } from '@earendil-works/pi-tui'
 import { highlightCode } from './highlight.js'
 
-const accent = chalk.hex('#4fc1ff')
+/** Brand red — the accent every selection and prompt glyph carries. */
+export const BRAND_RED = '#ff4655'
+
 const muted = chalk.hex('#8899aa')
+const accent = chalk.hex(BRAND_RED)
+
+/**
+ * Truecolor per-character gradient for short brand strings. Identity below
+ * the truecolor level (terminals without 24-bit color keep plain text).
+ * @param text - the string to paint.
+ * @param from - starting `#rrggbb` color.
+ * @param to - ending `#rrggbb` color.
+ * @returns the gradient-painted string.
+ */
+export function gradient(text: string, from: string, to: string): string {
+  if (chalk.level < 3 || text.length === 0) return text
+  const channel = (hex: string, shift: number) => Number.parseInt(hex.slice(shift, shift + 2), 16)
+  const [r0, g0, b0] = [channel(from, 1), channel(from, 3), channel(from, 5)]
+  const [r1, g1, b1] = [channel(to, 1), channel(to, 3), channel(to, 5)]
+  const last = text.length - 1
+  let out = ''
+  for (let index = 0; index < text.length; index++) {
+    const t = last === 0 ? 0 : index / last
+    const mix = (a: number, b: number) => Math.round(a + (b - a) * t)
+    out += chalk.rgb(mix(r0, r1), mix(g0, g1), mix(b0, b1))(text[index])
+  }
+  return out
+}
 
 export const markdownTheme: MarkdownTheme = {
-  heading: text => chalk.bold.blue(text),
+  heading: text => chalk.bold.hex('#ff6b7a')(text),
   link: text => chalk.underline.blue(text),
   linkUrl: text => chalk.dim(text),
   code: text => chalk.cyan(text),
@@ -20,7 +45,7 @@ export const markdownTheme: MarkdownTheme = {
   quote: text => chalk.dim(text),
   quoteBorder: text => chalk.dim(text),
   hr: text => chalk.dim(text),
-  listBullet: text => chalk.blue(text),
+  listBullet: text => accent(text),
   bold: text => chalk.bold(text),
   italic: text => chalk.italic(text),
   strikethrough: text => chalk.strikethrough(text),
@@ -36,7 +61,7 @@ export const reasoningMarkdownTheme: MarkdownTheme = {
 
 export const selectListTheme: SelectListTheme = {
   selectedPrefix: _text => accent('❯ '),
-  selectedText: text => chalk.bold.blue(text),
+  selectedText: text => chalk.bold.white(text),
   description: text => chalk.dim(text),
   scrollInfo: text => chalk.dim(text),
   noMatch: text => chalk.dim(text),
@@ -52,7 +77,7 @@ export const style = {
   muted,
   userPrefix: (_text: string) => accent('❯ '),
   userText: (text: string) => chalk.bold(text),
-  thinkingLabel: (text: string) => chalk.dim.italic(text),
+  thinkingLabel: (text: string) => chalk.dim.italic(`✻ ${text}`),
   toolName: (text: string) => chalk.cyan.bold(text),
   toolOk: (text: string) => chalk.green(text),
   toolError: (text: string) => chalk.red(text),
@@ -60,6 +85,6 @@ export const style = {
   toolArgs: (text: string) => chalk.dim(text),
   toolResult: (text: string) => muted(text),
   statusBar: (text: string) => chalk.dim(text),
-  spinner: (text: string) => chalk.blue(text),
+  spinner: (text: string) => chalk.hex(BRAND_RED)(text),
   workingLabel: (text: string) => chalk.dim(text),
 }
