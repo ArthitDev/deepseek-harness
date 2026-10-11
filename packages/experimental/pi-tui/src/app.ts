@@ -170,8 +170,13 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
 
   // Replay the durable log first so the transcript paints on the first
   // frame; only then subscribe, so no event is folded twice.
-  for (const event of replayEvents(agent.session)) {
-    screen.handleEvent(event)
+  screen.replaying = true
+  try {
+    for (const event of replayEvents(agent.session)) {
+      screen.handleEvent(event)
+    }
+  } finally {
+    screen.replaying = false
   }
   // ↑/↓ history: seed the editor from the replayed session transcript.
   screen.seedHistory()

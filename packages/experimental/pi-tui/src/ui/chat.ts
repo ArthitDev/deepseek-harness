@@ -53,6 +53,7 @@ import {
   type ChatModel,
 } from '../core/model.js'
 import { seedModelSelection } from '../core/selection.js'
+import { shortTokens } from '../core/format.js'
 import { osc52Encode } from '../core/clipboard.js'
 import { readGitState, type GitState } from '../core/git.js'
 import { buildSearchIndex } from '../core/search.js'
@@ -171,6 +172,11 @@ export class ChatScreen {
   private activePresetId: string | undefined
   /** The in-place /clear marker whose live fold the command already applied locally. */
   private handledMarkerSeq: SessionSeq | undefined
+  /** Wall-clock start and token baseline of the live turn, for the done summary. */
+  private turnStartedAt: number | undefined
+  private turnStartTokens = 0
+  /** Replay guard: log folds during boot and switches must not emit live summaries. */
+  replaying = false
   /** Per-card expand override toggled by Enter in browse mode. */
   private expandedToolId: number | undefined
   /** Long-session fold: render only the newest items above this line. */
@@ -481,13 +487,18 @@ export class ChatScreen {
     this.seedSelection()
     this.disposeSelection = installModelSelection(this.agent.ctx, this.selection)
     this.listenStream()
-    for (const event of replayEvents(next.session)) {
-      this.handleEvent(event)
-      // `agent-preset/selected` is plugin-merged; read it structurally.
-      const raw = event as { type?: string; data?: { agentPreset?: string } }
-      if (raw.type === 'agent-preset/selected' && raw.data?.agentPreset !== undefined) {
-        this.activePresetId = raw.data.agentPreset
+    this.replaying = true
+    try {
+      for (const event of replayEvents(next.session)) {
+        this.handleEvent(event)
+        // `agent-preset/selected` is plugin-merged; read it structurally.
+        const raw = event as { type?: string; data?: { agentPreset?: string } }
+        if (raw.type === 'agent-preset/selected' && raw.data?.agentPreset !== undefined) {
+          this.activePresetId = raw.data.agentPreset
+        }
       }
+    } finally {
+      this.replaying = false
     }
     this.seedHistory()
     this.rebuildAutocomplete()
@@ -2641,6 +2652,10 @@ export class ChatScreen {
 
   /** Fold one session event and reconcile the component tree. */
   handleEvent(event: SessionEvent): void {
+    if (event.type === 'turn/start') {
+      this.turnStartedAt = Date.now()
+      this.turnStartTokens = this.model.tokens.input + this.model.tokens.output
+    }
     if (this.handledMarkerSeq !== undefined && event.seq === this.handledMarkerSeq) {
       // The in-place /clear already pruned and noticed locally; the live fold
       // would only duplicate the notice. Replay after a restart folds again.
@@ -2656,6 +2671,16 @@ export class ChatScreen {
       this.lastFoldKey = ''
     }
     if (event.type === 'tool/result') void this.resolveImages(event)
+    if (event.type === 'turn/end' && !this.replaying) {
+      const reason = (event.data as { reason?: { kind?: string } }).reason
+      const startedAt = this.turnStartedAt
+      this.turnStartedAt = undefined
+      if (reason?.kind === 'completed' && startedAt !== undefined) {
+        const seconds = (Date.now() - startedAt) / 1000
+        const delta = this.model.tokens.input + this.model.tokens.output - this.turnStartTokens
+        this.pushNotice(`✓ done in ${seconds.toFixed(1)}s · +${shortTokens(delta)} tok`, 'compact')
+      }
+    }
     this.sync()
   }
 
@@ -2774,7 +2799,14 @@ export class ChatScreen {
     // Working loader between messages and the status bar (before the fold
     // reconcile so a rebuilt container includes it).
     if (this.model.working && this.workingLoader === undefined) {
-      const loader = new Loader(this.tui, style.spinner, style.workingLabel, 'Working…')
+      // Shield-pulse indicator with a per-mission verb: the loader frames
+      // render at 120ms so the pulse reads as a sweep, not a flicker.
+      const verbs = ['working', 'forging', 'breaching', 'scanning', 'cracking', 'sweeping']
+      const label = `✻ ${verbs[Math.floor(Math.random() * verbs.length)]}…`
+      const loader = new Loader(this.tui, style.spinner, style.workingLabel, label, {
+        frames: ['◐', '◓', '◑', '◒'],
+        intervalMs: 120,
+      })
       loader.start()
       this.workingLoader = loader
       this.messages.addChild(loader)
