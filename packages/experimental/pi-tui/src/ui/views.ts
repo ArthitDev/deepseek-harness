@@ -262,7 +262,14 @@ export class ToolCardView implements Component {
       if (visible <= inner) return line
       return `${truncateToWidth(line, Math.max(0, inner - 1))}…`
     }
-    lines.push(`${border} ${truncate(statusLine)}`)
+    lines.push(this.expand
+      ? this.frameTop(statusLine, inner)
+      : `${border} ${truncate(statusLine)}`)
+    // One body line: framed panels use a red rule while focused, dim
+    // otherwise; collapsed cards keep the plain left border.
+    const pushBody = (text: string): void => {
+      lines.push(this.expand ? `${this.frameRule()} ${truncate(text)}` : `${border} ${truncate(text)}`)
+    }
     // exit_plan_mode carries the full plan in its arguments; render it as the
     // card body so the scrollable transcript (not the overlay) holds the plan.
     if (tool.planText !== undefined && tool.planText !== '') {
@@ -270,7 +277,7 @@ export class ToolCardView implements Component {
         this.planMarkdown = new Markdown(tool.planText, 0, 0, markdownTheme)
       }
       for (const line of this.planMarkdown.render(inner)) {
-        lines.push(`${border} ${truncate(line)}`)
+        pushBody(line)
       }
     }
     // Only successful results get a body; running/error/rejected cards carry
@@ -289,7 +296,7 @@ export class ToolCardView implements Component {
         // capped at a generous height for very large results.
         const fullLines = body.split('\n').slice(0, 50)
         for (const line of fullLines) {
-          lines.push(`${border} ${truncate(style.toolResult(highlightMatches(line, this.query)))}`)
+          pushBody(style.toolResult(highlightMatches(line, this.query)))
         }
       }
     }
@@ -316,12 +323,26 @@ export class ToolCardView implements Component {
           }
         }
       } else {
-        lines.push(
-          `${border} ${truncate(chalk.dim(`(image: ${this.images.map(image => image.mediaType).join(', ')} — run in a kitty/iTerm2 terminal to view inline)`))}`,
-        )
+        pushBody(chalk.dim(`(image: ${this.images.map(image => image.mediaType).join(', ')} — run in a kitty/iTerm2 terminal to view inline)`))
       }
     }
+    if (this.expand) lines.push(this.frameBottom(inner))
     return lines
+  }
+
+  /** The panel's top rule with the status line inlaid. */
+  private frameTop(statusLine: string, inner: number): string {
+    const rule = this.focused ? style.accent : style.toolBorder
+    const pad = Math.max(0, inner - 4 - visibleWidth(statusLine))
+    return rule(`╭─ ${statusLine} ─ ${'─'.repeat(pad)}`)
+  }
+
+  private frameRule(): string {
+    return (this.focused ? style.accent : style.toolBorder)('│')
+  }
+
+  private frameBottom(inner: number): string {
+    return (this.focused ? style.accent : style.toolBorder)(`╰${'─'.repeat(inner)}╯`)
   }
 
   /** Colored unified diff per changed file (adapts pi's diff rendering). */
@@ -367,6 +388,8 @@ export class ToolCardView implements Component {
 
 export interface StatusBarData {
   model?: string
+  /** Reasoning effort for the live route; colored by level. */
+  effort?: string
   sessionId?: string
   cwd?: string
   git?: { branch: string; dirty: boolean }
@@ -396,6 +419,16 @@ export class StatusBar implements Component {
   update(data: StatusBarData): void {
     const parts: string[] = [gradient('◆ Shield Break', '#ff4655', '#ff9a3d')]
     if (data.model !== undefined) parts.push(chalk.cyan(`⚙ ${data.model}`))
+    if (data.effort !== undefined) {
+      const level = data.effort === 'off'
+        ? chalk.dim
+        : data.effort === 'max' || data.effort === 'xhigh'
+          ? chalk.red
+          : data.effort === 'high' || data.effort === 'medium'
+            ? chalk.magenta
+            : chalk.cyan
+      parts.push(level(`⚡ ${data.effort}`))
+    }
     if (data.preset !== undefined) parts.push(chalk.magenta(`◫ ${data.preset}`))
     // Explicit mode indicator: plan when active, normal otherwise.
     parts.push(data.planActive === true ? chalk.yellow('⌘plan') : chalk.dim('normal'))

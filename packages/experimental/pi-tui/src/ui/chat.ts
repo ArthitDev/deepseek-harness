@@ -152,6 +152,9 @@ export class ChatScreen {
   /** Previous idle Esc press, for the double-Esc rewind gesture. */
   private lastEscapeAt: number | undefined
   private workingLoader: Loader | undefined
+  /** The mission verb label and last rendered text of the live loader. */
+  private loaderLabel = '✻ working…'
+  private loaderText = ''
   private readonly views = new Map<number, ReturnType<typeof createView>>()
   private expandReasoning = false
   private expandTools = false
@@ -369,7 +372,7 @@ export class ChatScreen {
     })
 
     this.showBanner()
-    this.tui.terminal.setTitle(`Shield Break TUI · ${basename(this.cwd)}`)
+    this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
     this.sync()
     this.refreshGitState()
     // NOTE: the app layer already started the TUI (it must be live for the
@@ -502,7 +505,7 @@ export class ChatScreen {
     }
     this.seedHistory()
     this.rebuildAutocomplete()
-    this.tui.terminal.setTitle(`Shield Break TUI · ${basename(this.cwd)}`)
+    this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
     this.sync()
     this.refreshGitState()
   }
@@ -2802,8 +2805,8 @@ export class ChatScreen {
       // Shield-pulse indicator with a per-mission verb: the loader frames
       // render at 120ms so the pulse reads as a sweep, not a flicker.
       const verbs = ['working', 'forging', 'breaching', 'scanning', 'cracking', 'sweeping']
-      const label = `✻ ${verbs[Math.floor(Math.random() * verbs.length)]}…`
-      const loader = new Loader(this.tui, style.spinner, style.workingLabel, label, {
+      this.loaderLabel = `✻ ${verbs[Math.floor(Math.random() * verbs.length)]}…`
+      const loader = new Loader(this.tui, style.spinner, style.workingLabel, this.loaderLabel, {
         frames: ['◐', '◓', '◑', '◒'],
         intervalMs: 120,
       })
@@ -2814,6 +2817,16 @@ export class ChatScreen {
       this.workingLoader.stop()
       this.messages.removeChild(this.workingLoader)
       this.workingLoader = undefined
+    }
+    // Live mission clock: the loader's text gains elapsed seconds on every
+    // tick that flips the second ( setMessage is cheap; renders are already
+    // driven by the chunk stream).
+    if (this.workingLoader !== undefined && this.turnStartedAt !== undefined) {
+      const text = `${this.loaderLabel} · ${Math.floor((Date.now() - this.turnStartedAt) / 1000)}s`
+      if (text !== this.loaderText) {
+        this.loaderText = text
+        this.workingLoader.setMessage(text)
+      }
     }
 
     // Long-session fold: rebuild the visible child list only when the fold
@@ -2899,7 +2912,8 @@ export class ChatScreen {
     const effort = this.currentEffort()
     const preset = this.currentPresetId()
     const status: StatusBarData = {
-      model: effort !== undefined ? `${route.model}·${effort}` : route.model,
+      model: route.model,
+      ...(effort !== undefined ? { effort } : {}),
       sessionId: String(this.agent.session.id),
       cwd: basename(this.cwd),
       tokens,
