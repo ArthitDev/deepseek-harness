@@ -885,7 +885,7 @@ export class ChatScreen {
       return
     }
     if (parsed.name === 'clear') {
-      this.cmdClear()
+      void this.cmdClear()
       return
     }
     if (parsed.name === 'queue') {
@@ -1784,41 +1784,15 @@ export class ChatScreen {
 
 
 
-  /** Clear the session's visible conversation: shadow the whole surface in
-   * the SAME session — the id, files, and durable log stay; the context
-   * the model sees starts empty again. */
-  private cmdClear(): void {
+  /** Clear the conversation: a fresh session through the proven /new path —
+   * the transcript and context start empty, and the notice names the old
+   * session's resume command so nothing is lost. */
+  private async cmdClear(): Promise<void> {
     if (this.isBusy()) {
       this.pushNotice('cannot clear while work is running (Esc to interrupt first)', 'error')
       return
     }
-    const nodes = this.agent.session.surface.nodes
-    // The system prompt occupies the leading surface node(s) and a replace
-    // may not touch them; the first transcript item's seq is the first
-    // conversation node, so the cleared range starts there.
-    const first = this.model.items.find(item => item.seq !== undefined)?.seq
-    const tail = nodes.at(-1)
-    if (first === undefined || tail === undefined || first > tail) {
-      this.pushNotice('the transcript is already clear', 'info')
-      return
-    }
-    const nextTurn = replayEvents(this.agent.session).findLast(event => event.type === 'turn/start')?.data.turn ?? 0
-    // The replace op must cite every surface node it shadows.
-    const shadowed = nodes.filter(node => node >= first && node <= tail)
-    this.agent.session.append('developer/message', {
-      turn: nextTurn + 1,
-      step: 1,
-      message: createDeveloperMessage({
-        source: { kind: 'session-edit' },
-        content: [{ type: 'text', text: 'the operator cleared the conversation; the earlier surface is shadowed in the log' }],
-      }),
-    }, {
-      surfaceOp: { op: 'replace', startSeq: SessionSeq(first), endSeq: tail },
-      sourceEventSeqs: shadowed,
-    })
-    // The marker event folds back through handleEvent: it prunes the items,
-    // posts the "session cleared" notice, and rebuilds the transcript pane.
-    this.sync()
+    await this.cmdNew()
   }
 
   /** Inspect and manage the agent's pending inbox: queued turns, steering,
