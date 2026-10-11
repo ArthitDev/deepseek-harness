@@ -67,4 +67,32 @@ describe('seedModelSelection', () => {
     expect(seeded.reasoningEffort).toBeUndefined()
     expect(Object.hasOwn(seeded, 'reasoningEffort')).toBe(false)
   })
+
+  it('applies the saved default effort on a fresh start when the route matches', () => {
+    const seeded = seedModelSelection({
+      defaults: { provider: 'antigravity', model: 'gemini-3-flash', reasoningEffort: 'high' },
+    })
+    expect(seeded).toEqual({
+      provider: 'antigravity',
+      model: 'gemini-3-flash',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+  })
+
+  it('keeps the saved default effort behind the prior selection', () => {
+    const seeded = seedModelSelection({
+      prior: selection('p', 'm', 'low'),
+      defaults: { provider: 'p', model: 'm', reasoningEffort: 'high' },
+    })
+    expect(seeded.reasoningEffort).toBe(ReasoningEffortId('low'))
+  })
+
+  it('does not apply the saved default effort to a different resolved route', () => {
+    const seeded = seedModelSelection({
+      config: { provider: 'other-p', model: 'other-m' },
+      defaults: { provider: 'p', model: 'm', reasoningEffort: 'high' },
+    })
+    expect(seeded).toEqual({ provider: 'other-p', model: 'other-m' })
+    expect(Object.hasOwn(seeded, 'reasoningEffort')).toBe(false)
+  })
 })
