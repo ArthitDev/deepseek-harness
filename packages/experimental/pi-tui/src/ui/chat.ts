@@ -496,12 +496,13 @@ export class ChatScreen {
   /** Welcome block at the top of the transcript (boot and every switch). */
   showBanner(): void {
     const route = this.currentRoute()
+    const preset = this.currentPresetId()
     pushNotice(
       this.model,
       buildBanner({
         ...(this.config.version !== undefined ? { version: this.config.version } : {}),
         cwd: basename(this.cwd),
-        ...(this.config.preset !== undefined ? { preset: this.config.preset } : {}),
+        ...(preset !== undefined ? { preset } : {}),
         model: route.model,
       }),
       'banner',
@@ -999,6 +1000,15 @@ export class ChatScreen {
 
   private currentEffort(): string | undefined {
     return this.selection.current?.reasoningEffort ?? this.model.effort
+  }
+
+  /** The preset the visible session actually runs: the live mount, else the
+   * `--preset` flag, else the deployment default. Banner and status bar both
+   * read this so startup shows the truth without waiting for a switch. */
+  private currentPresetId(): string | undefined {
+    if (this.activePresetId !== undefined) return this.activePresetId
+    const presets = this.ctx.get('agentPresets') as { readonly defaultId: string } | undefined
+    return this.config.preset ?? presets?.defaultId
   }
 
   private async cmdPreset(query: string): Promise<void> {
@@ -2835,6 +2845,7 @@ export class ChatScreen {
 
     const route = this.currentRoute()
     const effort = this.currentEffort()
+    const preset = this.currentPresetId()
     const status: StatusBarData = {
       model: effort !== undefined ? `${route.model}·${effort}` : route.model,
       sessionId: String(this.agent.session.id),
@@ -2843,7 +2854,7 @@ export class ChatScreen {
       ...(this.gitState !== undefined ? { git: this.gitState } : {}),
       ...(todos !== undefined ? { todos } : {}),
       ...(this.model.title !== undefined ? { title: this.model.title } : {}),
-      ...(this.config.preset !== undefined ? { preset: this.config.preset } : {}),
+      ...(preset !== undefined ? { preset } : {}),
       ...(planActive !== undefined ? { planActive } : {}),
       ...(goalPhase !== undefined ? { goalPhase } : {}),
       ...(contextPct !== undefined ? { contextPct } : {}),
