@@ -120,7 +120,7 @@ describe('global prompt-context suppression', () => {
       expect(textOf(suppressed)).toContain('preset contribution')
       expect(textOf(suppressed)).toContain('mode contribution')
       expect(textOf(suppressed)).toContain(quoted)
-      expect(suppressed.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+      expect(suppressed.messages.some(message => message.source?.kind === 'skill-invocation')).toBe(false)
       expect(suppressed.tools).toEqual(original.tools)
       // The completed mock response is appended after the captured request.
       expect(suppressed.messages).toEqual(agent.session.deriveMessages().slice(0, -1))
@@ -130,7 +130,7 @@ describe('global prompt-context suppression', () => {
         seed: agent.session.snapshotEvents(), meta: { cwd: root },
       })
       expect(replay.deriveMessages()).toEqual(agent.session.deriveMessages())
-      expect(suppressed.messages.map(message => ({ role: message.role, source: message.source.kind }))).toMatchInlineSnapshot(`
+      expect(suppressed.messages.map(message => ({ role: message.role, source: message.source?.kind }))).toMatchInlineSnapshot(`
         [
           {
             "role": "system",
@@ -156,7 +156,7 @@ describe('global prompt-context suppression', () => {
       const freshRequest = adapter.requests.at(-1)!
       expect(textOf(freshRequest)).not.toContain('workspace rule')
       expect(textOf(freshRequest)).not.toContain('Current runtime context')
-      expect(freshRequest.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+      expect(freshRequest.messages.some(message => message.source?.kind === 'skill-invocation')).toBe(false)
       expect(fresh.session.snapshotEvents().some(event => event.type === 'user/message'
         && event.data.source.kind === 'agent-instructions')).toBe(false)
       await send(ctx, agent, 'still suppressed')
@@ -170,7 +170,7 @@ describe('global prompt-context suppression', () => {
       expect(restored).toContain('Current runtime context.')
       expect(restored).toContain('built-in guidance')
       expect(restored).toContain('Mandatory Jev-first browser and computer actions')
-      expect(adapter.requests.at(-1)!.messages.some(message => message.source.kind === 'skill-invocation')).toBe(true)
+      expect(adapter.requests.at(-1)!.messages.some(message => message.source?.kind === 'skill-invocation')).toBe(true)
     } finally {
       await ctx.fiber.dispose()
       await rm(root, { recursive: true, force: true })

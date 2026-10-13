@@ -304,7 +304,7 @@ export interface SettingsControllerInternals {
 }
 ```
 
-来源： [`packages/api/settings-controller/src/index.ts:38`](../packages/api/settings-controller/src/index.ts)
+来源： [`packages/api/settings-controller/src/index.ts:40`](../packages/api/settings-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-terminal-controller"></a>
 
@@ -2153,14 +2153,14 @@ interface PentestModeConfig {
   blackPrompt: Volatile<string>
   /** Dead Mode policy text injected for ordinary Web sessions. */
   deadPrompt: Volatile<string>
-  /** Whether built-in global prompt sections are withheld from assembly. */
+  /** Whether built-in sections and workspace/runtime/deployment-policy context are withheld. */
   suppressSections: Volatile<boolean>
 }
 ```
 
 依赖： [`PentestMode`](subsystems/../../packages/pentest/pentest-executor/README.zh.md) · `Volatile` (`@deepseek-ai/cordis`)
 
-来源： [`packages/pentest/pentest-executor/src/index.ts:318`](../packages/pentest/pentest-executor/src/index.ts)
+来源： [`packages/pentest/pentest-executor/src/index.ts:301`](../packages/pentest/pentest-executor/src/index.ts)
 
 <a id="deepseek-aidsh-pentest-run"></a>
 
@@ -4340,6 +4340,28 @@ export interface Config {
 ```
 
 来源： [`packages/deliverables/workspace-changes/src/index.ts:33`](../packages/deliverables/workspace-changes/src/index.ts)
+
+<a id="dsh-pi-tui"></a>
+
+## `dsh-pi-tui`
+
+需要： `agents` · `cmdlineArgs` · `workspaceRegistry`
+
+```ts config-catalog
+/** dsh-pi-tui plugin configuration (row config in cordis.patch.yml). */
+export interface Config {
+  /** Existing session to attach; a fresh session is created when absent. */
+  sessionId?: string
+  /** LLM provider route; the harness deepseek-official route by default. */
+  provider?: string
+  /** Model override passed to the agent (adapter default when absent). */
+  model?: string
+  /** Session working directory; defaults to the invoking directory. */
+  cwd?: string
+}
+```
+
+来源： [`packages/experimental/pi-tui/src/index.ts:23`](../packages/experimental/pi-tui/src/index.ts)
 
 ## Loadable plugins with no config
 

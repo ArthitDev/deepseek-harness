@@ -1,22 +1,20 @@
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent, AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
+import type { AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
 import { createMessage, LlmAttemptId, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
+import { fixtureAgent } from './fixture-agent.ts'
 
 async function fixture() {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   const snapshot = vi.fn(() => ({ values: {} }))
   ctx.provide('sessionProjections', { snapshot })
-  const makeAgent = (id: string): Agent => ({
-    id: SessionId(id), ctx, session: ctx.sessions.create(SessionId(id)), options: {}, status: 'idle',
-    inbox: { nextTurn: [], nextStep: [] },
-  }) as Agent
+  const makeAgent = (id: string) => fixtureAgent(ctx, ctx.sessions.create(SessionId(id)))
   const agent = makeAgent('stream-render')
   const start = vi.fn<Terminal['start']>()
   const terminal: Terminal = {

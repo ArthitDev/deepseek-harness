@@ -8,6 +8,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
 import { StatusBar } from '../src/ui/views.ts'
+import { fixtureAgent } from './fixture-agent.ts'
 
 /** Wait for the fake terminal's scheduled render and read its visible text. */
 async function renderScreen(tui: TuiAltScreen): Promise<string> {
@@ -22,11 +23,7 @@ describe('running subagents in the status bar', () => {
     await ctx.plugin(SessionStore)
     const makeAgent = async (id: string): Promise<Agent> => {
       const owner = await ctx.plugin(() => {})
-      return {
-        id: SessionId(id), ctx: owner.ctx.extend({ testParent: id }),
-        session: ctx.sessions.create(SessionId(id)), options: {}, status: 'idle',
-        inbox: { nextTurn: [], nextStep: [] },
-      } as Agent
+      return fixtureAgent(owner.ctx.extend({ testParent: id }), ctx.sessions.create(SessionId(id)))
     }
     const first = await makeAgent('first-parent')
     const second = await makeAgent('second-parent')
@@ -107,10 +104,7 @@ describe('/new model selection', () => {
       listModels: async () => [{ id: selected.model, provider: selected.provider }],
       resolveCallConfig: async () => selected,
     })
-    const makeAgent = (id: SessionId, options = startup): Agent => ({
-      id, ctx, options, session: ctx.sessions.create(id), status: 'idle',
-      inbox: { nextTurn: [], nextStep: [] },
-    }) as Agent
+    const makeAgent = (id: SessionId, options = startup): Agent => fixtureAgent(ctx, ctx.sessions.create(id), options)
     const create = vi.fn(async (input: { sessionId: SessionId; agentOptions: typeof selected }) => ({
       agent: makeAgent(input.sessionId, input.agentOptions),
     }))
@@ -164,10 +158,7 @@ describe('/clear transcript', () => {
         composedPreset: () => preset,
       })
       const session = ctx.sessions.create(SessionId(`clear-${delivery}`))
-      const agent = {
-        id: session.id, ctx, session, options: {}, status: 'idle',
-        inbox: { nextTurn: [], nextStep: [] },
-      } as Agent
+      const agent = fixtureAgent(ctx, session)
       const terminal: Terminal = {
         columns: 100, rows: 80, kittyProtocolActive: false,
         start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
@@ -178,7 +169,7 @@ describe('/clear transcript', () => {
       const screen = new ChatScreen({ ctx, tui, agent, config: { version: 'test' }, onQuit: vi.fn() })
       tui.start()
       try {
-        session.append('system/message', createSystemMessage({ content: [{ type: 'text', text: 'system' }] }), { surfaceOp: 'append' })
+        session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('system') }, { surfaceOp: 'append' })
         const question = session.append('user/message', createUserMessage({
           content: [{ type: 'text', text: 'old question' }], source: { kind: 'user' },
         }), { surfaceOp: 'append' })

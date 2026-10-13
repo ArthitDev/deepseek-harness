@@ -77,10 +77,15 @@ export class ReasoningView extends Container {
     this.plain = new Text('', 3, 0)
   }
 
+  /** Whether the current reasoning body is visible. */
   get isExpanded(): boolean {
     return this.expandedOverride ?? this.expandAll ?? this.item.streaming
   }
 
+  /**
+   * Preserve an explicit expansion choice during subsequent stream updates.
+   * @param expanded - whether to show the reasoning body.
+   */
   setExpanded(expanded: boolean): void {
     this.expandedOverride = expanded
     this.updateFromItem(this.expandAll, this.lastQuery)
@@ -100,6 +105,11 @@ export class ReasoningView extends Container {
     return super.handleMouse(event)
   }
 
+  /**
+   * Refresh the live body or folded header from the current item.
+   * @param expanded - shared expansion preference, or undefined for the streaming default.
+   * @param query - optional source-text search to highlight.
+   */
   updateFromItem(expanded: boolean | undefined, query?: string): void {
     this.expandAll = expanded
     const activeQuery = query ?? ''
