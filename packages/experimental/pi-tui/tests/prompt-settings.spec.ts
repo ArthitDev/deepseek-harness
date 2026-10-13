@@ -1,8 +1,10 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, FiberState } from '@deepseek-ai/cordis'
+import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -46,6 +48,7 @@ describe('TUI Web prompt settings', () => {
       await ctx.plugin(LocalFileSystem, { cwd: root })
       ctx.provide('profileContext', { name: 'tui', home: root })
       await ctx.plugin(Loader)
+      ctx.loader.builtins['include-test'] = Include
       ctx.loader.builtins['mode-test'] = PentestModePolicy
       ctx.loader.builtins['instructions-test'] = AgentInstructions
       ctx.loader.builtins['tui-settings-test'] = {
@@ -58,11 +61,9 @@ describe('TUI Web prompt settings', () => {
         { id: 'tui-settings', name: 'cordis:tui-settings-test' },
       ]))
       const originalComposition = await readFile(composition, 'utf8')
-      const rows = JSON.parse(await readFile(composition, 'utf8')) as { id: string; name: string; config?: object }[]
-      for (const row of rows) {
-        const id = await ctx.loader.create(row)
-        await ctx.loader.resolve(id).fiber?.await()
-      }
+      await ctx.loader.root.update([{ id: 'include', name: 'cordis:include-test', config: { path: pathToFileURL(composition).href } }])
+      await ctx.loader.await()
+      expect(ctx.loader.resolve('include:tui-settings').fiber?.state).toBe(FiberState.ACTIVE)
       expect(ctx.pentestModePolicy.current().suppressSections).toBe(initial)
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'built-in guidance' })
       ctx.systemPrompt.context({ name: 'runtime:test', order: 1, text: 'Current DSH file policy: danger-full-access. Approval prompts are disabled.' })

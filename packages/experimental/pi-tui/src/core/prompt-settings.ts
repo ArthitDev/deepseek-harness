@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import { type Context, FiberState } from '@deepseek-ai/cordis'
 import { readWebProfileConfig } from './web-settings.js'
 
 function isSupplementalContext(source: { kind: string; name?: string }): boolean {
@@ -12,14 +12,16 @@ function isSupplementalContext(source: { kind: string; name?: string }): boolean
  */
 export async function installWebPromptSettings(ctx: Context): Promise<void> {
   const loader = ctx.get('loader') as {
-    resolve(id: string): {
-      options: { config?: Record<string, unknown> }
+    entries(): IterableIterator<{
+      options: { id?: string; config?: Record<string, unknown> }
+      fiber?: { state: FiberState }
       update(options: { config: Record<string, unknown> }): Promise<void>
-    }
+    }>
   } | undefined
   const policy = ctx.get('pentestModePolicy') as { current(): { suppressSections: boolean } } | undefined
   if (loader === undefined || policy === undefined) return
-  const entry = loader.resolve('pentest-mode')
+  const entry = [...loader.entries()].find(entry => entry.options.id === 'pentest-mode' && entry.fiber?.state === FiberState.ACTIVE)
+  if (entry === undefined) throw new Error('pi-tui: active pentest-mode entry not found')
   const fallback = entry.options.config?.suppressSections ?? false
   const sync = async (): Promise<boolean> => {
     const suppressSections = readWebProfileConfig(ctx, 'pentest-mode')?.get('suppressSections') ?? fallback
