@@ -47,6 +47,8 @@ The TUI reads preset overrides from the Web profile's patch when selecting a mod
 
 The Web's Suppress built-in prompt sections switch also applies to the TUI. The TUI reads the saved switch at startup and before each prompt assembly, withholding built-in guidance, workspace instructions, runtime context, and Jev-first context while retaining preset contributions. Changes apply to the next request, including resumed sessions. When the Web has no saved switch, the TUI uses its own setting; this synchronization does not edit either profile file.
 
+When the switch is off, workspace instructions, runtime context, and Jev-first context begin on the second conversation turn. The entire first turn, including subsequent steps, retains the preset prompt and user input without these contexts. Resuming an existing conversation retains its turn count. Deferral changes when the context arrives; it does not prevent the context from influencing later answers.
+
 The `/preset` and `--preset` pickers hide system presets and list healthy user presets. System presets remain available to model bindings and resumed sessions.
 
 ## Commands

@@ -15,11 +15,13 @@ import { installWebPromptSettings } from '../src/core/prompt-settings.ts'
 
 class RecordingAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
+  onFirstRequest?: () => void
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({ provider, id: model, name: model })
   }
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
+    if (this.requests.length === 1) this.onFirstRequest?.()
     yield { type: 'text-delta', index: 0, text: 'done' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: 'done' } }
     yield { type: 'finish', reason: { kind: 'stop' } }
@@ -27,7 +29,7 @@ class RecordingAdapter extends LlmAdapter {
 }
 
 describe('TUI Web prompt settings', () => {
-  it.each([true, false])('follows the saved Web switch at boot and each request, initially %s', async (initial) => {
+  it.each([true, false])('defers first-turn context and follows the saved Web switch, initially %s', async (initial) => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-prompt-settings-'))
     const ctx = new Context()
     try {
@@ -79,23 +81,50 @@ describe('TUI Web prompt settings', () => {
       ctx.llm.registerAdapter(['mock'], adapter)
       const agent = await ctx.agentLoop.create(SessionId('tui-prompt-settings'), { provider: 'mock', model: 'mock' }, { cwd: root })
       agent.ctx.systemPrompt.section({ name: 'preset:test', order: 2, text: 'preset contribution' })
-      const send = async (suppressed: boolean) => {
+      adapter.onFirstRequest = () => {
+        agent.inject(createUserMessage({ content: [{ type: 'text', text: 'another step in the first turn' }], source: { kind: 'user' } }))
+      }
+      const question = 'User quote: workspace rule; Current runtime context.; Mandatory Jev-first browser and computer actions'
+      const send = async (suppressed: boolean, firstTurn = false) => {
         const before = await readFile(web, 'utf8')
-        agent.followup(createUserMessage({ content: [{ type: 'text', text: 'question' }], source: { kind: 'user' } }))
+        const count = adapter.requests.length
+        agent.followup(createUserMessage({ content: [{ type: 'text', text: question }], source: { kind: 'user' } }))
         await agent.whenIdle()
         expect(errors).toEqual([])
-        const request = adapter.requests.at(-1)!
-        const text = request.messages.flatMap(message => message.content)
-          .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+        const requests = adapter.requests.slice(count)
+        expect(requests).toHaveLength(firstTurn ? 2 : 1)
         expect(ctx.pentestModePolicy.current().suppressSections).toBe(suppressed)
-        for (const context of ['workspace rule', 'Current runtime context.', 'Mandatory Jev-first browser and computer actions', 'built-in guidance']) {
-          expect(text.includes(context), context).toBe(!suppressed)
+        for (const request of requests) {
+          const text = request.messages.flatMap(message => message.content)
+            .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+          const contexts = request.messages.filter(({ source }) =>
+            source?.kind === 'agent-instructions' || source?.kind === 'runtime-context'
+            || (source?.kind === 'skill-invocation' && source.name === 'jev-first-policy'))
+          expect(contexts).toHaveLength(!suppressed && !firstTurn ? 3 : 0)
+          expect(text).toContain(question)
+          expect(text.includes('built-in guidance')).toBe(!suppressed)
+          expect(text).toContain('preset contribution')
+          expect(text).toContain('mode contribution')
         }
-        expect(text).toContain('preset contribution')
-        expect(text).toContain('mode contribution')
+        if (firstTurn) {
+          expect(requests[0]!.messages.map(message => message.role)).toEqual(['system', 'user'])
+          expect(requests[0]!.messages[1]!.content).toEqual([{ type: 'text', text: question }])
+          expect(requests[1]!.messages.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'user'])
+          expect(requests[1]!.messages[0]).toEqual(requests[0]!.messages[0])
+        }
         expect(await readFile(web, 'utf8')).toBe(before)
         expect(await readFile(composition, 'utf8')).toBe(originalComposition)
       }
+      await send(initial, true)
+      const restored = await ctx.agents.create({
+        sessionId: SessionId('restored-tui-prompt-settings'), seed: agent.session.snapshotEvents(),
+        agentOptions: { provider: 'mock', model: 'mock' }, meta: { cwd: root },
+      })
+      restored.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'restored second turn' }], source: { kind: 'user' } }))
+      await restored.agent.whenIdle()
+      expect(errors).toEqual([])
+      expect(adapter.requests.at(-1)!.messages.some(message => message.source?.kind === 'agent-instructions')).toBe(!initial)
+      await restored.dispose()
       await send(initial)
       for (const suppressed of [true, false, true]) {
         await save(suppressed)

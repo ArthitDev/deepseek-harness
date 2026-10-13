@@ -1,8 +1,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { readWebProfileConfig } from './web-settings.js'
 
+function isSupplementalContext(source: { kind: string; name?: string }): boolean {
+  return source.kind === 'agent-instructions' || source.kind === 'runtime-context'
+    || (source.kind === 'skill-invocation' && source.name === 'jev-first-policy')
+}
+
 /**
- * Follow the Web suppression switch through the TUI's existing volatile policy.
+ * Follow the Web suppression switch and defer supplemental context until the second TUI turn.
  * @param ctx - TUI context with its Loader and pentest mode policy.
  */
 export async function installWebPromptSettings(ctx: Context): Promise<void> {
@@ -24,6 +29,11 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
     return true
   }
   await sync()
+  ctx.on('agent/pre-step', async ({ turn }, next) => {
+    const decision = await next()
+    if (decision.kind === 'reject' || turn !== 1) return decision
+    return { ...decision, messages: decision.messages.filter(message => !isSupplementalContext(message.source)) }
+  }, { prepend: true })
   const refreshing = new WeakSet<object>()
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     if (refreshing.has(context) || !await sync()) return next()
