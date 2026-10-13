@@ -31,7 +31,12 @@ class RecordingAdapter extends LlmAdapter {
 }
 
 describe('TUI Web prompt settings', () => {
-  it.each([true, false])('defers first-turn context and follows the saved Web switch, initially %s', async (initial) => {
+  it.each([
+    { initial: true, savedWeb: true },
+    { initial: false, savedWeb: true },
+    { initial: true, savedWeb: false },
+    { initial: false, savedWeb: false },
+  ])('defers first-turn context with suppression $initial and saved Web settings $savedWeb', async ({ initial, savedWeb }) => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-prompt-settings-'))
     const ctx = new Context()
     try {
@@ -43,7 +48,12 @@ describe('TUI Web prompt settings', () => {
       await writeFile(join(root, 'AGENTS.md'), 'project workspace rule')
       await writeFile(join(home, 'AGENTS.md'), 'global workspace rule')
       const save = (suppressSections: boolean) => writeFile(web, JSON.stringify([{ id: 'pentest-mode', config: { suppressSections } }]))
-      await save(initial)
+      const readSaved = async () => {
+        try { return await readFile(web, 'utf8') }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error }
+      }
+      if (savedWeb) await save(initial)
+      const fallback = savedWeb ? false : initial
       await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(LocalFileSystem, { cwd: root })
       ctx.provide('profileContext', { name: 'tui', home: root })
@@ -56,7 +66,7 @@ describe('TUI Web prompt settings', () => {
       }
       const composition = join(root, 'cordis.yml')
       await writeFile(composition, JSON.stringify([
-        { id: 'pentest-mode', name: 'cordis:mode-test', config: { suppressSections: false, redPrompt: 'mode contribution' } },
+        { id: 'pentest-mode', name: 'cordis:mode-test', config: { suppressSections: fallback, redPrompt: 'mode contribution' } },
         { id: 'instructions', name: 'cordis:instructions-test', config: { dshHome: home, maxBytes: 65536 } },
         { id: 'tui-settings', name: 'cordis:tui-settings-test' },
       ]))
@@ -86,8 +96,9 @@ describe('TUI Web prompt settings', () => {
         agent.inject(createUserMessage({ content: [{ type: 'text', text: 'another step in the first turn' }], source: { kind: 'user' } }))
       }
       const question = 'User quote: workspace rule; Current runtime context.; Mandatory Jev-first browser and computer actions'
+      const systemPrompts = new Map<boolean, unknown>()
       const send = async (suppressed: boolean, firstTurn = false) => {
-        const before = await readFile(web, 'utf8')
+        const before = await readSaved()
         const count = adapter.requests.length
         agent.followup(createUserMessage({ content: [{ type: 'text', text: question }], source: { kind: 'user' } }))
         await agent.whenIdle()
@@ -96,6 +107,9 @@ describe('TUI Web prompt settings', () => {
         expect(requests).toHaveLength(firstTurn ? 2 : 1)
         expect(ctx.pentestModePolicy.current().suppressSections).toBe(suppressed)
         for (const request of requests) {
+          expect(request.messages[0]?.role).toBe('system')
+          if (systemPrompts.has(suppressed)) expect(request.messages[0]!.content).toEqual(systemPrompts.get(suppressed))
+          else systemPrompts.set(suppressed, request.messages[0]!.content)
           const text = request.messages.flatMap(message => message.content)
             .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
           const contexts = request.messages.filter(({ source }) =>
@@ -113,7 +127,7 @@ describe('TUI Web prompt settings', () => {
           expect(requests[1]!.messages.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'user'])
           expect(requests[1]!.messages[0]).toEqual(requests[0]!.messages[0])
         }
-        expect(await readFile(web, 'utf8')).toBe(before)
+        expect(await readSaved()).toBe(before)
         expect(await readFile(composition, 'utf8')).toBe(originalComposition)
       }
       await send(initial, true)
@@ -134,7 +148,7 @@ describe('TUI Web prompt settings', () => {
       await unlink(web)
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'fallback' }], source: { kind: 'user' } }))
       await agent.whenIdle()
-      expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
+      expect(ctx.pentestModePolicy.current().suppressSections).toBe(fallback)
       expect(ctx.pentestModePolicy.current().redPrompt).toBe('mode contribution')
       const count = adapter.requests.length
       await writeFile(web, JSON.stringify([{ id: 'pentest-mode', config: { suppressSections: 'yes' } }]))
