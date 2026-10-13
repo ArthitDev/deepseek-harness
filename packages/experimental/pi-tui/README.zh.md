@@ -45,7 +45,7 @@ kind: "package-bundle"
 
 TUI 在选择模型或创建会话时读取 Web 配置档补丁中的预设覆盖值，因此 Web 绑定修改也会在这里生效。横幅和状态栏显示已挂载的预设；预设缺失时拒绝创建会话，不会在缺少其插件组合的情况下启动。
 
-Web 的 Suppress built-in prompt sections 开关也适用于 TUI。TUI 在启动时及每次组装提示词前读取已保存的开关。启用后，提供方收到的系统提示词仅包含预设贡献：全局指导和模式策略被隐藏，工作区指令、运行时上下文、Jev-first 上下文及 `/clear`、`/rewind` 标记等纯文本 developer 消息也不再发送。原始消息保留在持久日志中。修改从下一次请求生效，包括恢复的会话。Web 未保存开关值时，TUI 使用自身设置；该同步不会编辑任一配置档文件。
+Web 的 Suppress built-in prompt sections 开关也适用于 TUI。TUI 在启动时及每次组装提示词前读取已保存的开关。启用后，提供方收到的系统提示词仅包含预设贡献：全局指导和模式策略被隐藏，工作区指令、运行时上下文、Jev-first 上下文及纯文本 developer 消息也不再发送。原始消息保留在持久日志中。修改从下一次请求生效，包括恢复的会话。Web 未保存开关值时，TUI 使用自身设置；该同步不会编辑任一配置档文件。
 
 开关关闭时，工作区指令、运行时上下文和 Jev-first 上下文从第二轮对话开始注入。整个第一轮，包括后续步骤，保留预设提示词和用户输入，不包含这些上下文。恢复现有对话时保留其轮次计数。延后注入改变上下文到达的时间，不能防止上下文影响后续回答。
 
@@ -55,7 +55,7 @@ Web 的 Suppress built-in prompt sections 开关也适用于 TUI。TUI 在启动
 
 `/new`、`/fork`、`/resume`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/skills`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
 
-`/clear` 立即移除对话文本、思考内容、工具卡片和旧的 UI 提示，仅保留欢迎横幅和一条清空提示。会话 id 和持久化历史仍保留，可供恢复。
+`/clear` 立即移除对话文本、思考内容、工具卡片和旧的 UI 提示，仅保留欢迎横幅和一条清空提示。会话 id 和持久化历史仍保留，可供恢复。`/clear` 和 `/rewind` 标记保留在日志中供 UI 回放，但无论 Suppress 开关状态如何都不成为模型输入；恢复会话中的标记和压缩输入也遵循此规则。
 
 <a id="connect-antigravity"></a>
 

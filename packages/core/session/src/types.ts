@@ -16,6 +16,13 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** Session-edit bookkeeping stays in the log and never derives model input. */
+    'session-edit': { kind: 'session-edit' }
+  }
+}
+
 /** Identifies one session in the store (and its persistence artifacts). */
 export type SessionId = Branded<'SessionId'>
 

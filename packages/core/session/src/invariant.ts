@@ -105,7 +105,9 @@ function validateEvent(
       break
     }
     case 'developer/message': {
-      requireOpenStep(trace, 'developer/message', event.data.turn, event.data.step, fail)
+      if (event.data.message.source.kind !== 'session-edit') {
+        requireOpenStep(trace, 'developer/message', event.data.turn, event.data.step, fail)
+      }
       break
     }
     case 'step/end': {

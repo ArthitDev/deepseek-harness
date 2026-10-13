@@ -169,7 +169,8 @@ describe('/clear transcript', () => {
       const screen = new ChatScreen({ ctx, tui, agent, config: { version: 'test' }, onQuit: vi.fn() })
       tui.start()
       try {
-        session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('system') }, { surfaceOp: 'append' })
+        const system = createSystemMessage('system')
+        session.append('system/message', { turn: 1, step: 1, message: system }, { surfaceOp: 'append' })
         const question = session.append('user/message', createUserMessage({
           content: [{ type: 'text', text: 'old question' }], source: { kind: 'user' },
         }), { surfaceOp: 'append' })
@@ -201,6 +202,7 @@ describe('/clear transcript', () => {
         expect(cleared.match(/session cleared/g)).toHaveLength(1)
         expect(screen.currentSessionId).toBe(session.id)
         expect(session.snapshotEvents()).toContainEqual(answer)
+        expect(session.deriveMessages()).toEqual([system])
 
         // One cleared notice becomes one replacement notice, leaving the item count unchanged.
         screen.submit('/clear')

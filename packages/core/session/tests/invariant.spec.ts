@@ -38,6 +38,35 @@ describe('session-log invariants', () => {
     }).not.toThrow()
   })
 
+  it('allows session-edit bookkeeping between turns without advancing the execution trace', async () => {
+    const { ctx } = await setup()
+    try {
+      const session = ctx.sessions.create()
+      const question = session.append('user/message', createUserMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'earlier question' }],
+      }), { surfaceOp: 'append' })
+      const marker = session.append('developer/message', {
+        turn: 1, step: 1,
+        message: createDeveloperMessage({
+          source: { kind: 'session-edit' }, content: [{ type: 'text', text: 'the operator cleared the conversation' }],
+        }),
+      }, {
+        surfaceOp: { op: 'replace', startSeq: question.seq, endSeq: question.seq },
+        sourceEventSeqs: [question.seq],
+      })
+      expect(session.deriveMessages()).toEqual([])
+      expect(session.snapshotEvents()).toContainEqual(marker)
+      expect(() => {
+        session.append('turn/start', { turn: 1 })
+        session.append('step/start', { turn: 1, step: 1 })
+        session.append('step/end', { turn: 1, step: 1 })
+        session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      }).not.toThrow()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('requires developer messages to belong to the open turn and step', async () => {
     const { ctx } = await setup()
     try {

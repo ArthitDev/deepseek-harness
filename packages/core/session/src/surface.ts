@@ -108,7 +108,8 @@ export function isReplacementSurfaceEvent(
 /**
  * Project a single event into the LLM message it derives to, or null when it
  * produces none — a non-surface event (attempt, boundary, log-only record) or an
- * empty-content system, developer, or assistant message. A caller
+ * empty-content system, developer, or assistant message, or a session-edit
+ * developer marker. A caller
  * reconstructing model input supplies the same prefix's `projectedMessages`
  * from {@link foldSurface}; without that map this function reads original
  * event content. Session instance methods apply the live projection. Messages
@@ -121,6 +122,7 @@ export function deriveEventMessage(
   event: SessionEvent,
   projectedMessages?: ReadonlyMap<SessionSeq, Message>,
 ): Message | null {
+  if (event.type === 'developer/message' && event.data.message.source.kind === 'session-edit') return null
   const projected = projectedMessages?.get(event.seq)
   if (projected !== undefined) return projected
   // Intentionally non-exhaustive: only message-producing events derive

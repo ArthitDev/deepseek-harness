@@ -95,13 +95,6 @@ import { pickFromListWithSearch, openFindOverlay, pickFromSlider, promptSecret, 
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    /** The TUI's own rewind marker, mirroring the session-controller edit face. */
-    'session-edit': { kind: 'session-edit' }
-  }
-}
-
 export interface ChatScreenOptions {
   ctx: Context
   tui: ViewportTUI

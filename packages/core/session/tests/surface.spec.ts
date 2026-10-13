@@ -6,6 +6,7 @@ import {
   SessionLogOffset,
   SessionSeq,
   foldSurface,
+  deriveEventMessage,
   snapshotSessionEvent,
   isAppendSurfaceEvent,
   isReplacementSurfaceEvent,
@@ -650,6 +651,36 @@ describe('SurfaceManager', () => {
 })
 
 describe('deriveMessages with surface', () => {
+  it.each(['cleared the conversation', 'rewound to the question below'])(
+    'keeps session-edit bookkeeping out of model history when the operator %s', (action) => {
+      const session = Session.create(SessionId('session-edit'))
+      const system = createSystemMessage('preset')
+      session.append('system/message', { turn: 1, step: 1, message: system }, { surfaceOp: 'append' })
+      const question = session.append('user/message', createUserMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'earlier question' }],
+      }), { surfaceOp: 'append' })
+      const marker = session.append('developer/message', {
+        turn: 2, step: 1,
+        message: createDeveloperMessage({
+          source: { kind: 'session-edit' }, content: [{ type: 'text', text: `the operator ${action}` }],
+        }),
+      }, {
+        surfaceOp: { op: 'replace', startSeq: question.seq, endSeq: question.seq },
+        sourceEventSeqs: [question.seq],
+      })
+      expect(session.surface.nodes).toContain(marker.seq)
+      expect(session.deriveMessages()).toEqual([system])
+      expect(session.deriveEventMessage(marker)).toBeNull()
+      expect(deriveEventMessage(marker, new Map([[marker.seq, marker.data.message]]))).toBeNull()
+      const restored = Session.create(SessionId('restored-session-edit'), session.snapshotEvents())
+      expect(restored.deriveMessages()).toEqual([system])
+      expect(restored.snapshotEvents()).toContainEqual(marker)
+      const guidance = createDeveloperMessage({ source: { kind: 'test' }, content: [{ type: 'text', text: 'developer guidance' }] })
+      session.append('developer/message', { turn: 2, step: 1, message: guidance }, { surfaceOp: 'append' })
+      expect(session.deriveMessages()).toEqual([system, guidance])
+    },
+  )
+
   it('uses the surface path when surface markers are present', () => {
     const s = surfaceSession()
     const messages = s.deriveMessages()

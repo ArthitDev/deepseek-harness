@@ -156,6 +156,7 @@ describe('TUI Web prompt settings', () => {
           expect(text.includes('built-in guidance')).toBe(!suppressed)
           expect(text).toContain('preset contribution')
           expect(text.includes('mode contribution')).toBe(!suppressed)
+          expect(JSON.stringify(wireRequests[count + index])).not.toContain('developer marker')
           if (suppressed) {
             expect(request.messages[0]!.content).toEqual([{ type: 'text', text: 'preset contribution' }])
             const wire = wireRequests[count + index]!
@@ -189,6 +190,7 @@ describe('TUI Web prompt settings', () => {
       await restored.agent.whenIdle()
       expect(errors).toEqual([])
       expect(adapter.requests.at(-1)!.messages.some(message => message.source?.kind === 'agent-instructions')).toBe(!initial)
+      expect(JSON.stringify(wireRequests.at(-1))).not.toContain('developer marker')
       if (initial) expect(wireRequests.at(-1)!.messages.filter(message => message.role === 'system'))
         .toEqual([{ role: 'system', content: 'preset contribution' }])
       await restored.dispose()

@@ -14,6 +14,7 @@ import { CompactionId, isCompactCheckpointSource, ManualCompactionError } from '
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import {
   createAssistantMessage,
+  createDeveloperMessage,
   createUserMessage,
   LlmAdapter,
 } from '@deepseek-ai/dsh-llm'
@@ -249,6 +250,37 @@ function compactEvents(session: Session): SessionEvent[] {
 }
 
 describe('compactNow through the real loop', () => {
+  it('omits logged session-edit markers from summary input without a suppression policy', async () => {
+    const harness = await loopHarness()
+    const { ctx, agent, compact, adapter } = harness
+    try {
+      await seedHistory(harness)
+      const dispose = ctx.on('agent/request', ({ turn, step }, next) => {
+        agent.session.append('developer/message', {
+          turn, step,
+          message: createDeveloperMessage({
+            source: { kind: 'session-edit' },
+            content: [{ type: 'text', text: 'the operator rewound to the question below' }],
+          }),
+        }, { surfaceOp: 'append' })
+        return next()
+      })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: PROMPT }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+      dispose()
+      const marker = agent.session.snapshotEvents().find(event => event.type === 'developer/message')
+      expect(marker).toBeDefined()
+      expect(adapter.requests.at(-1)?.some(message => message.source?.kind === 'session-edit')).toBe(false)
+      const result = await compact.compactNow(agent, SIGNAL)
+      expect(result?.shadowedSeqs).toContain(marker?.seq)
+      expect(compact.calls).toHaveLength(1)
+      expect(compact.calls[0]?.messages.some(message => message.source.kind === 'session-edit')).toBe(false)
+      expect(agent.session.snapshotEvents()).toContainEqual(marker)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('passes logged image omissions to the summarizer without changing the original message', async () => {
     const { ctx, agent, compact } = await loopHarness()
     try {

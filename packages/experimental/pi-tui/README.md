@@ -45,7 +45,7 @@ Answers and expanded reasoning render Markdown during streaming and after comple
 
 The TUI reads preset overrides from the Web profile's patch when selecting a model or creating a session, so Web binding edits also apply here. The banner and status bar show the mounted preset; a missing preset refuses creation instead of starting without its composition.
 
-The Web's Suppress built-in prompt sections switch also applies to the TUI. The TUI reads the saved switch at startup and before each prompt assembly. When enabled, the provider receives only preset contributions in the system prompt: global guidance and mode policy are withheld, as are workspace instructions, runtime context, Jev-first context, and text-only developer messages such as `/clear` and `/rewind` markers. Original messages remain in the durable log. Changes apply to the next request, including resumed sessions. When the Web has no saved switch, the TUI uses its own setting; this synchronization does not edit either profile file.
+The Web's Suppress built-in prompt sections switch also applies to the TUI. The TUI reads the saved switch at startup and before each prompt assembly. When enabled, the provider receives only preset contributions in the system prompt: global guidance and mode policy are withheld, as are workspace instructions, runtime context, Jev-first context, and text-only developer messages. Original messages remain in the durable log. Changes apply to the next request, including resumed sessions. When the Web has no saved switch, the TUI uses its own setting; this synchronization does not edit either profile file.
 
 When the switch is off, workspace instructions, runtime context, and Jev-first context begin on the second conversation turn. The entire first turn, including subsequent steps, retains the preset prompt and user input without these contexts. Resuming an existing conversation retains its turn count. Deferral changes when the context arrives; it does not prevent the context from influencing later answers.
 
@@ -55,7 +55,7 @@ The `/preset` and `--preset` pickers hide system presets and list healthy user p
 
 `/new`, `/fork`, `/resume`, `/tree`, `/agents`, `/jobs`, `/model`, `/preset`, `/thinking`, `/skills`, `/runs`, `/recon`, `/machines`, `/key`, `/provider`, `/providers`, `/memory`, `/sessions`, `/rewind`, `/clear`, `/queue`, `/export`, `/rename`, `/copy`, `/retry`, `/expand-all`, `/hotkeys` — plus the official dsh slash commands (`/compact`, `/goal`, `/plan`, `/feedback`).
 
-`/clear` removes conversation text, thinking, tool cards, and old UI notices immediately, retaining the welcome banner and one cleared notice. The session id and durable history remain available for resume.
+`/clear` removes conversation text, thinking, tool cards, and old UI notices immediately, retaining the welcome banner and one cleared notice. The session id and durable history remain available for resume. `/clear` and `/rewind` markers remain in the log for UI replay but never become model input, regardless of the Suppress switch; this also applies to markers in restored sessions and compaction input.
 
 <a id="connect-antigravity"></a>
 
