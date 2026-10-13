@@ -5,9 +5,6 @@
  */
 import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { isMap, isSeq, parseDocument } from 'yaml'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
 import {
@@ -19,6 +16,7 @@ import {
   type SessionHeader,
 } from '@deepseek-ai/dsh-session'
 import type { WorkspaceRegistryService } from './services.js'
+import { readWebProfileConfig } from './web-settings.js'
 
 /**
  * Synchronous snapshot of a live session's durable log for transcript replay.
@@ -54,33 +52,15 @@ export interface SessionMeta {
 export function resolveModelPreset(ctx: Context, provider: string, model: string): string | undefined {
   const presets = ctx.get('agentPresets') as
     { presetIdForModel(provider: string, model: string): string } | undefined
-  const profile = ctx.get('profileContext') as { home: string } | undefined
-  if (profile !== undefined) {
-    const path = join(profile.home, 'profiles', 'web', 'cordis.patch.yml')
-    let source: string | undefined
-    try { source = readFileSync(path, 'utf8') }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-    if (source !== undefined) {
-      const document = parseDocument(source, {
-        customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }],
-      })
-      if (document.errors[0] !== undefined) throw document.errors[0]
-      if (!isSeq(document.contents)) throw new Error(`pi-tui: ${path} must contain a patch sequence`)
-      const index = document.contents.items.findLastIndex((item, index) =>
-        isMap(item) && document.getIn([index, 'id']) === 'agent-presets')
-      if (index >= 0) {
-        const config = document.getIn([index, 'config'], true)
-        if (!isMap(config)) throw new Error(`pi-tui: agent-presets config in ${path} must be a mapping`)
-        const selected = document.getIn([index, 'config', 'modeSelectionEnabled']) === false
-          ? document.getIn([index, 'config', 'default'])
-          : document.getIn([index, 'config', 'models', provider, model])
-            ?? document.getIn([index, 'config', 'selectedDefault']) ?? document.getIn([index, 'config', 'default'])
-        if (typeof selected !== 'string' || selected.trim() === '') {
-          throw new Error(`pi-tui: agent-presets selection in ${path} must be a preset id`)
-        }
-        return selected
-      }
+  const config = readWebProfileConfig(ctx, 'agent-presets')
+  if (config !== undefined) {
+    const selected = config.get('modeSelectionEnabled') === false
+      ? config.get('default')
+      : config.getIn(['models', provider, model]) ?? config.get('selectedDefault') ?? config.get('default')
+    if (typeof selected !== 'string' || selected.trim() === '') {
+      throw new Error('pi-tui: agent-presets selection in the Web profile must be a preset id')
     }
+    return selected
   }
   return presets?.presetIdForModel(provider, model)
 }

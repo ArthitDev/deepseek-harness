@@ -4343,7 +4343,7 @@ Source: [`packages/deliverables/workspace-changes/src/index.ts:33`](../packages/
 
 ## `dsh-pi-tui`
 
-Requires: `agents` · `cmdlineArgs` · `workspaceRegistry`
+Requires: `agents` · `cmdlineArgs` · `workspaceRegistry` · `loader` · `profileContext` · `pentestModePolicy` · `systemPrompt`
 
 ```ts config-catalog
 /** dsh-pi-tui plugin configuration (row config in cordis.patch.yml). */

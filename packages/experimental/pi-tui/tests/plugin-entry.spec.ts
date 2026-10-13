@@ -8,7 +8,7 @@ import * as piTui from '../src/index.ts'
 describe('plugin entry', () => {
   it('declares the canonical plugin identity and required injections', () => {
     expect(piTui.name).toBe('pi-tui')
-    expect(piTui.inject).toEqual(['agents', 'cmdlineArgs', 'workspaceRegistry'])
+    expect(piTui.inject).toEqual(['agents', 'cmdlineArgs', 'workspaceRegistry', 'loader', 'profileContext', 'pentestModePolicy', 'systemPrompt'])
   })
 
   it('exposes the row-config schema', () => {

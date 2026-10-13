@@ -23,6 +23,7 @@ import {
   type ResolvedAgent,
 } from './core/session.js'
 import { AgentDefaultModelService } from './core/services.js'
+import { installWebPromptSettings } from './core/prompt-settings.js'
 import { ClipboardTerminal } from './ui/clipboard-terminal.js'
 import { pickSession } from './ui/session-picker.js'
 import { pickFromListWithSearch } from './ui/overlays.js'
@@ -71,6 +72,8 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   if (!process.stdout.isTTY) {
     throw new Error('dsh-pi-tui needs an interactive terminal (stdout is not a TTY)')
   }
+
+  await installWebPromptSettings(ctx)
 
   const terminal = new ClipboardTerminal()
   const tui: ViewportTUI = new TuiAltScreen(terminal)

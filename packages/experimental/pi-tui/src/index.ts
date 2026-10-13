@@ -17,7 +17,7 @@ export const name = 'pi-tui'
 // registry. The hard dependency is safe only because the plugin ships as a
 // bundle with that patch — a bare plugin row without those rows would fail
 // activation waiting for this service.
-export const inject = ['agents', 'cmdlineArgs', 'workspaceRegistry']
+export const inject = ['agents', 'cmdlineArgs', 'workspaceRegistry', 'loader', 'profileContext', 'pentestModePolicy', 'systemPrompt']
 
 /** dsh-pi-tui plugin configuration (row config in cordis.patch.yml). */
 export interface Config {

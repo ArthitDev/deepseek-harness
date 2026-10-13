@@ -4345,7 +4345,7 @@ export interface Config {
 
 ## `dsh-pi-tui`
 
-需要： `agents` · `cmdlineArgs` · `workspaceRegistry`
+需要： `agents` · `cmdlineArgs` · `workspaceRegistry` · `loader` · `profileContext` · `pentestModePolicy` · `systemPrompt`
 
 ```ts config-catalog
 /** dsh-pi-tui plugin configuration (row config in cordis.patch.yml). */

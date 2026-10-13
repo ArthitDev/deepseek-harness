@@ -45,6 +45,8 @@ Answers and expanded reasoning render Markdown during streaming and after comple
 
 The TUI reads preset overrides from the Web profile's patch when selecting a model or creating a session, so Web binding edits also apply here. The banner and status bar show the mounted preset; a missing preset refuses creation instead of starting without its composition.
 
+The Web's Suppress built-in prompt sections switch also applies to the TUI. The TUI reads the saved switch at startup and before each prompt assembly, withholding built-in guidance, workspace instructions, runtime context, and Jev-first context while retaining preset contributions. Changes apply to the next request, including resumed sessions. When the Web has no saved switch, the TUI uses its own setting; this synchronization does not edit either profile file.
+
 The `/preset` and `--preset` pickers hide system presets and list healthy user presets. System presets remain available to model bindings and resumed sessions.
 
 ## Commands
