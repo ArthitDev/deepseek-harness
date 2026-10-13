@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -22,6 +22,7 @@ import {
   remoteCwd,
   replayEvents,
   resolveAgent,
+  resolveModelPreset,
   resumeCommand,
   sessionTitles,
   type SessionMeta,
@@ -372,7 +373,61 @@ describe('reconcileWorkspaceAttachments', () => {
   })
 })
 
+describe('resolveModelPreset', () => {
+  it.each([
+    { model: 'gemini-3.1-pro-low', enabled: true, expected: 'gemini-pro' },
+    { model: 'unbound', enabled: true, expected: 'gemini-preset-lite' },
+    { model: 'gemini-3.1-pro-low', enabled: false, expected: 'standard' },
+  ])('reads Web settings for $model with mode selection $enabled', async ({ model, enabled, expected }) => {
+    const root = await mkdtemp(join(tmpdir(), 'pi-tui-web-preset-'))
+    const web = join(root, 'profiles', 'web')
+    const presetIdForModel = vi.fn(() => 'shield-break-agent')
+    const ctx = harness({ profileContext: { home: root }, agentPresets: { presetIdForModel } })
+    try {
+      expect(resolveModelPreset(ctx, 'antigravity', model)).toBe('shield-break-agent')
+      presetIdForModel.mockClear()
+      await mkdir(web, { recursive: true })
+      await writeFile(join(web, 'cordis.patch.yml'), JSON.stringify([{ id: 'agent-presets', config: {
+        default: 'standard', selectedDefault: 'gemini-preset-lite', modeSelectionEnabled: enabled,
+        models: { antigravity: { 'gemini-3.1-pro-low': 'gemini-pro' } },
+      } }]))
+      expect(resolveModelPreset(ctx, 'antigravity', model)).toBe(expected)
+      expect(presetIdForModel).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('resolveAgent', () => {
+  it.each([
+    { requested: undefined, bound: 'model-preset', expected: 'model-preset' },
+    { requested: undefined, bound: 'standard', expected: 'standard' },
+    { requested: 'explicit-preset', bound: 'model-preset', expected: 'explicit-preset' },
+  ])('creates a session with $expected for the selected model and explicit preset $requested', async ({ requested, bound, expected }) => {
+    const agents = agentsService()
+    const mounted: string[] = []
+    const presetIdForModel = vi.fn(() => bound)
+    const ctx = harness({
+      agents: agents.service,
+      agentPresets: {
+        presetIdForModel,
+        resolve: async (id = 'standard') => ({ id }),
+        mount: async (_agentCtx: unknown, id: string) => { mounted.push(id) },
+      },
+    })
+    await resolveAgent(ctx, undefined, { provider: 'test-provider', model: 'test-model' }, {
+      cwd: '/tmp/preset-session',
+      ...(requested === undefined ? {} : { agentPreset: requested }),
+    })
+    expect(agents.calls.create[0]).toMatchObject({ meta: { agentPreset: expected } })
+    expect(mounted).toEqual([expected])
+    if (requested === undefined) expect(presetIdForModel).toHaveBeenCalledWith('test-provider', 'test-model')
+    else expect(presetIdForModel).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
   it('attaches to a live agent without resuming', async () => {
     const agents = agentsService()
     const ctx = harness({ agents: agents.service })
@@ -386,15 +441,20 @@ describe('resolveAgent', () => {
   it('resumes a persisted session and mounts its recorded preset', async () => {
     const agents = agentsService()
     const mounted: string[] = []
+    const presetIdForModel = vi.fn(() => 'model-preset')
     const ctx = harness({
       agents: agents.service,
       sessionPersistence: persistenceWith({
         'preset-session': {
           header: { id: 'preset-session', createdAt: 1 },
-          events: [{ type: 'agent-preset/selected', data: { agentPreset: 'raw-preset' } }],
+          events: [
+            { type: 'agent-preset/selected', data: { agentPreset: 'deleted-preset' } },
+            { type: 'agent-preset/selected', data: { agentPreset: 'raw-preset' } },
+          ],
         },
       }),
       agentPresets: {
+        presetIdForModel,
         resolve: async (id: string) => ({ id: `resolved-${id}` }),
         mount: async (_agentCtx: unknown, id: string) => {
           mounted.push(id)
@@ -402,14 +462,15 @@ describe('resolveAgent', () => {
       },
     })
     silence(ctx)
-    const resolved = await resolveAgent(ctx, 'preset-session', { model: 'm1' }, meta())
+    const resolved = await resolveAgent(ctx, 'preset-session', { provider: 'p1', model: 'm1' }, meta())
     expect(resolved.agent.id).toBe(SessionId('resumed-session'))
     expect(mounted).toEqual(['resolved-raw-preset'])
     expect(agents.calls.resume[0]).toMatchObject({
       resumeSessionId: SessionId('preset-session'),
-      agentOptions: { model: 'm1' },
+      agentOptions: { provider: 'p1', model: 'm1' },
     })
     expect(agents.calls.create).toEqual([])
+    expect(presetIdForModel).not.toHaveBeenCalled()
   })
 
   it('resumes without composing when the session records no preset', async () => {
@@ -545,7 +606,7 @@ describe('resolveAgent', () => {
     )
   })
 
-  it('keeps composing when the preset resolver refuses (best effort)', async () => {
+  it('refuses to create a session when its requested preset is missing', async () => {
     const agents = agentsService()
     const ctx = harness({
       agents: agents.service,
@@ -557,10 +618,9 @@ describe('resolveAgent', () => {
       },
     })
     silence(ctx)
-    const resolved = await resolveAgent(ctx, undefined, {}, { cwd: '/tmp/x', agentPreset: 'gone' })
-    expect(agents.calls.create[0]).toMatchObject({ meta: { cwd: '/tmp/x' } })
-    expect(agents.calls.create[0]).not.toHaveProperty('setup')
-    expect(resolved.handle).toBeDefined()
+    await expect(resolveAgent(ctx, undefined, {}, { cwd: '/tmp/x', agentPreset: 'gone' }))
+      .rejects.toThrow('preset gone')
+    expect(agents.calls.create).toEqual([])
   })
 })
 
@@ -712,11 +772,15 @@ describe('sessionTitles', () => {
 })
 
 describe('listPresets', () => {
-  it('sorts the roster by name and drops broken presets', async () => {
+  it('sorts the roster by name and hides system and broken presets', async () => {
     const ctx = harness({
       agentPresets: {
         list: async () => [
-          { id: 'zeta', name: 'Zeta' },
+          { id: 'zeta', name: 'Zeta', trust: 'user' },
+          { id: 'standard', trust: 'system' },
+          { id: 'minimal', trust: 'system' },
+          { id: 'ptc', trust: 'system' },
+          { id: 'cordis', trust: 'system' },
           { id: 'broken-one', broken: 'unloadable' },
           { id: 'alpha', name: 'Alpha' },
           { id: 'mid' },

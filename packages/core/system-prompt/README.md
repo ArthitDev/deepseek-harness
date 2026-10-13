@@ -81,6 +81,8 @@ Tool-schema providers are evaluated per assembly and contribute the model-visibl
 
 `suppressRuntimeContext()` removes every dynamic runtime-context contribution for the calling scope without disabling the services that own the underlying facts; multiple suppressors compose and the effect restores context when none remains.
 
+`suppressSections()` re-evaluates live allowlists at each assembly. An undefined allowlist disables that suppressor; an empty list withholds every gated section. With `globalOnly: true`, preset-scoped contributions remain visible.
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -3,9 +3,13 @@
  * hints. Shown on boot and on every session switch.
  */
 import chalk from 'chalk'
-import { gradient } from './theme.ts'
+import { BRAND_RED } from './theme.ts'
 
 const MUTED = chalk.dim
+const BOLD_RED = chalk.hex(BRAND_RED).bold
+
+/** Shield glyph + letter-spaced wordmark, brand-red on boot. */
+const LOGO = `⧉  ${'SHIELD BREAK AGENT'.split('').join(' ')}`
 
 export interface BannerInfo {
   /** The running TUI release, rendered in parentheses after the product name. */
@@ -18,7 +22,8 @@ export interface BannerInfo {
 /** Compose the welcome block (pre-colored; the view renders it verbatim). */
 export function buildBanner(info: BannerInfo): string {
   const version = info.version === undefined ? '' : ` v${info.version}`
-  const lines: string[] = [gradient(`Shield Break Agent${version}`, '#ff4655', '#ff9a3d')]
+  const lines: string[] = [BOLD_RED(LOGO)]
+  if (version !== '') lines.push(MUTED(version.trim()))
   const facts: string[] = []
   if (info.model !== undefined) facts.push(`model: ${info.model}`)
   if (info.preset !== undefined) facts.push(`preset: ${info.preset}`)

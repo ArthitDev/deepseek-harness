@@ -53,7 +53,7 @@ export const markdownTheme: MarkdownTheme = {
   highlightCode: (code, lang) => highlightCode(code, lang),
 }
 
-/** Dim italic pass for streamed reasoning text. */
+/** Markdown formatting for reasoning; its view supplies the muted base color. */
 export const reasoningMarkdownTheme: MarkdownTheme = {
   ...markdownTheme,
   italic: text => chalk.italic.dim(text),
@@ -75,9 +75,9 @@ export const editorTheme: EditorTheme = {
 export const style = {
   accent,
   muted,
-  userPrefix: (_text: string) => accent('❯ '),
+  userPrefix: (_text: string) => accent('› '),
   userText: (text: string) => chalk.bold(text),
-  thinkingLabel: (text: string) => chalk.dim.italic(`✻ ${text}`),
+  thinkingLabel: (text: string) => chalk.dim.italic(text),
   toolName: (text: string) => chalk.cyan.bold(text),
   toolOk: (text: string) => chalk.green(text),
   toolError: (text: string) => chalk.red(text),
@@ -85,6 +85,8 @@ export const style = {
   toolArgs: (text: string) => chalk.dim(text),
   toolResult: (text: string) => muted(text),
   statusBar: (text: string) => chalk.dim(text),
+  queueHeader: (text: string) => chalk.yellow(text),
+  queueItem: (text: string) => chalk.italic(text),
   spinner: (text: string) => chalk.hex(BRAND_RED)(text),
   workingLabel: (text: string) => chalk.dim(text),
 }

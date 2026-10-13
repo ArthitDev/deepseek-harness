@@ -27,6 +27,8 @@ English | [中文](README.zh.md)
 
 Mount this plugin when agents should work from the workspace's own instruction files. `dsh-base` already includes it with a 65,536-byte budget, so base-backed profiles only need to replace the row when they want another `maxBytes`; providerless trees load nothing until a filesystem provider is present.
 
+When the global `pentest-mode.suppressSections` switch is enabled, this loader skips instruction discovery and removes queued workspace-instruction contributions. Turning it off allows instructions to load again; the [mode policy](../../pentest/pentest-executor/README.md) also removes previously admitted instruction messages from model context without deleting their history.
+
 ### What the agent gets
 
 The first request includes one durable baseline message with the user-global `$DSH_HOME/AGENTS.md` followed by the project chain — every existing candidate file from the project root down to the session working directory, in broad-to-specific order. Sibling files whose content matches after trimming render once, so a `CLAUDE.md` that duplicates its `AGENTS.md` is not repeated. After a successful `read`, `write`, or `edit` call reaches a deeper directory, the next request includes the newly applicable instruction file; a changed file replaces its content, and a file that disappears or duplicates an earlier candidate produces a removal notice.

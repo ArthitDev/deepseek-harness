@@ -20,8 +20,8 @@ import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { basename, relative, resolve } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import { basename, relative } from 'node:path'
+import { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
@@ -74,7 +74,7 @@ import {
 } from '../core/keys.js'
 import { collectProjection } from '../core/projection.js'
 import { editorTheme, style } from './theme.js'
-import { createView, StatusBar, ToolCardView, updateView, type StatusBarData } from './views.js'
+import { createView, ReasoningView, StatusBar, ToolCardView, updateView, type StatusBarData } from './views.js'
 import { listAllModels, pickModel, type LlmRuntimeLike, type ModelRoute } from './model-picker.js'
 import {
   forkSession,
@@ -84,6 +84,7 @@ import {
   remoteCwd,
   replayEvents,
   resolveAgent,
+  resolveModelPreset,
   resumeCommand,
   sessionTitles,
   type ResolvedAgent,
@@ -141,28 +142,28 @@ export class ChatScreen {
   private readonly onAgentSwitch: ((resolved: ResolvedAgent) => void) | undefined
   private model: ChatModel = createModel()
   private readonly messages = new Container()
-  private readonly statusBar = new StatusBar()
+  private readonly statusBar: StatusBar
   private readonly editor: Editor
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
   private readonly selection: ModelSelectionRef = { current: undefined, assembled: undefined }
   private disposeSelection: (() => void) | undefined
   /** Per-agent live stream subscription (rebound on every agent switch). */
   private disposeStream: (() => void) | undefined
+  private streamSyncTimer: ReturnType<typeof setTimeout> | undefined
   private exitArm: ExitArm = { lastPressAt: 0 }
   /** Previous idle Esc press, for the double-Esc rewind gesture. */
   private lastEscapeAt: number | undefined
   private workingLoader: Loader | undefined
-  /** The mission verb label and last rendered text of the live loader. */
-  private loaderLabel = '✻ working…'
-  private loaderText = ''
   private readonly views = new Map<number, ReturnType<typeof createView>>()
-  private expandReasoning = false
+  private expandReasoning: boolean | undefined
   private expandTools = false
   private atPickerOpen = false
   /** In-flight official slash command's abort signal (Esc interrupts it). */
   private slashAbort: AbortController | undefined
   /** Last counted running background jobs (refreshed outside the chunk hot path). */
   private cachedJobsRunning: number | undefined
+  /** Running delegation ids and the parent-scope filters carried by their lifecycle events. */
+  private readonly subagentRuns = new Map<string, (agentCtx: Context) => boolean>()
   /** ScrollView over the transcript (Ctrl+F jump target). */
   private transcriptScroll: ScrollView | undefined
   /** Active find query — views highlight its matches while set. */
@@ -171,9 +172,7 @@ export class ChatScreen {
   private gitState: GitState | undefined
   /** Browse-mode focus ring: the tool card id Tab focuses (empty editor). */
   private focusedToolId: number | undefined
-  /** Preset the live agent currently composes; `agent-preset/selected` replays and switches keep it current. */
-  private activePresetId: string | undefined
-  /** The in-place /clear marker whose live fold the command already applied locally. */
+  /** Last folded replacement marker, shared by command dispatch and live delivery. */
   private handledMarkerSeq: SessionSeq | undefined
   /** Wall-clock start and token baseline of the live turn, for the done summary. */
   private turnStartedAt: number | undefined
@@ -187,10 +186,20 @@ export class ChatScreen {
   private expandedAll = false
   private foldNotice: Text | undefined
   private lastFoldKey = ''
+  /** Banner above the editor listing messages queued for after the turn. */
+  private readonly queueBanner = new Text('', 0, 1)
+  private lastQueueKey = ''
 
   constructor(options: ChatScreenOptions) {
     this.ctx = options.ctx
     this.tui = options.tui
+    this.statusBar = new StatusBar(this.tui)
+    this.ctx.effect(() => () => {
+      this.statusBar.stop()
+      this.workingLoader?.stop()
+      this.cancelStreamSync()
+      this.disposeStream?.()
+    })
     this.agent = options.agent
     this.config = options.config
     this.commands = this.ctx.get('commands')
@@ -199,6 +208,7 @@ export class ChatScreen {
     this.seedSelection()
     this.disposeSelection = installModelSelection(this.agent.ctx, this.selection)
     this.listenStream()
+    this.listenSubagents()
 
     this.editor = new Editor(this.tui, editorTheme, { paddingX: 1 })
     this.editor.onSubmit = (text) => {
@@ -233,7 +243,7 @@ export class ChatScreen {
           minSize: 1,
         },
         {
-          component: new VStack([this.editor, this.statusBar]),
+          component: new VStack([this.queueBanner, this.editor, this.statusBar]),
           basis: 'auto',
           shrink: 1,
           minSize: 1,
@@ -308,7 +318,11 @@ export class ChatScreen {
         return undefined // editor handles delete-forward
       }
       if (matchesKey(data, 'ctrl+t')) {
-        this.expandReasoning = !this.expandReasoning
+        const views = [...this.views.values()].filter(view => view instanceof ReasoningView)
+        this.expandReasoning = !(views.length > 0
+          ? views.some(view => view.isExpanded)
+          : this.expandReasoning ?? this.model.working)
+        for (const view of views) view.setExpanded(this.expandReasoning)
         this.sync()
         return { consume: true }
       }
@@ -420,7 +434,7 @@ export class ChatScreen {
   /**
    * Seed the model selection so every step has a route, including RESUMED
    * agents (whose creation never saw our agentOptions): the persisted
-   * request header wins, then the row config, then the harness defaults.
+   * request header wins, then the live selection, then startup fallbacks.
    */
   private seedSelection(): void {
     const header = this.agent.session.requestHeader()?.config
@@ -449,13 +463,24 @@ export class ChatScreen {
    * session events still seal the items authoritatively.
    */
   private listenStream(): void {
+    this.cancelStreamSync()
     this.disposeStream?.()
     this.disposeStream = this.agent.ctx.on('agent/assistant-stream', ({ frame }) => {
+      if (frame.type === 'end' && this.streamSyncTimer !== undefined) this.sync(false)
       if (frame.type !== 'chunk') return
+      const chunk = frame.chunk
+      if ((chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') || chunk.text === '') return
       applyStreamChunk(this.model, frame.chunk)
-      // Chunk frames are the streaming hot path; skip the jobs re-count.
-      this.sync(false)
+      // Coalesce UI work at the renderer's 16 ms cadence without postponing it on each delta.
+      this.streamSyncTimer ??= setTimeout(() => {
+        this.sync(false)
+      }, 16)
     })
+  }
+
+  private cancelStreamSync(): void {
+    clearTimeout(this.streamSyncTimer)
+    this.streamSyncTimer = undefined
   }
 
   /**
@@ -478,7 +503,6 @@ export class ChatScreen {
     this.lastFoldKey = ''
     this.searchQuery = undefined
     this.focusedToolId = undefined
-    this.activePresetId = undefined
     this.handledMarkerSeq = undefined
     this.expandedToolId = undefined
     this.expandedAll = false
@@ -494,11 +518,6 @@ export class ChatScreen {
     try {
       for (const event of replayEvents(next.session)) {
         this.handleEvent(event)
-        // `agent-preset/selected` is plugin-merged; read it structurally.
-        const raw = event as { type?: string; data?: { agentPreset?: string } }
-        if (raw.type === 'agent-preset/selected' && raw.data?.agentPreset !== undefined) {
-          this.activePresetId = raw.data.agentPreset
-        }
       }
     } finally {
       this.replaying = false
@@ -524,15 +543,6 @@ export class ChatScreen {
       }),
       'banner',
     )
-    // A home-directory workspace makes every shell-tool sandbox refuse its
-    // own temp root (it must sit outside the workspace), so name the fix.
-    if (resolve(this.cwd) === homedir()) {
-      pushNotice(
-        this.model,
-        'workspace is your home directory — shell sandboxes will refuse their temp root; restart dsh tui from a project folder',
-        'error',
-      )
-    }
   }
 
   /**
@@ -1019,13 +1029,11 @@ export class ChatScreen {
     return this.selection.current?.reasoningEffort ?? this.model.effort
   }
 
-  /** The preset the visible session actually runs: the live mount, else the
-   * `--preset` flag, else the deployment default. Banner and status bar both
-   * read this so startup shows the truth without waiting for a switch. */
+  /** The mounted preset of the visible agent, shared by the banner and status bar. */
   private currentPresetId(): string | undefined {
-    if (this.activePresetId !== undefined) return this.activePresetId
-    const presets = this.ctx.get('agentPresets') as { readonly defaultId: string } | undefined
-    return this.config.preset ?? presets?.defaultId
+    const presets = this.ctx.get('agentPresets') as
+      { composedPreset(agentCtx: Context): string | undefined } | undefined
+    return presets?.composedPreset(this.agent.ctx)
   }
 
   private async cmdPreset(query: string): Promise<void> {
@@ -1063,7 +1071,6 @@ export class ChatScreen {
     }
     try {
       const id = await presets?.select(this.agent, pickedId)
-      this.activePresetId = id ?? pickedId
       this.pushNotice(`preset switched to ${id ?? pickedId}`, 'info')
       // Make the choice the deployment default: write selectedDefault into
       // the home patch row so new sessions open on this preset too.
@@ -1623,21 +1630,15 @@ export class ChatScreen {
   private async followModelPreset(provider: string, model: string): Promise<void> {
     const presets = this.ctx.get('agentPresets') as
       | {
-        readonly defaultId: string
-        presetIdForModel(provider: string, model: string): string
         select(agent: Agent, agentPreset: string): Promise<string>
       }
       | undefined
     if (presets === undefined) return
-    const target = presets.presetIdForModel(provider, model)
-    if (target === this.activePresetId) return
-    // A fresh transcript has no marker yet; without a binding the composed
-    // default already matches, so re-mounting it would only churn.
-    if (this.activePresetId === undefined && target === presets.defaultId) return
+    const target = resolveModelPreset(this.ctx, provider, model)
+    if (target === undefined || target === this.currentPresetId()) return
     try {
       const id = await presets.select(this.agent, target)
-      this.activePresetId = id ?? target
-      this.pushNotice(`preset → ${this.activePresetId} (bound to ${provider}/${model})`, 'info')
+      this.pushNotice(`preset → ${id} (bound to ${provider}/${model})`, 'info')
     } catch (error) {
       if ((error as { code?: string }).code === 'agent-preset/locked') {
         this.pushNotice(
@@ -1834,19 +1835,35 @@ export class ChatScreen {
       surfaceOp: { op: 'replace', startSeq: SessionSeq(first), endSeq: tail },
       sourceEventSeqs: shadowed,
     })
-    // Immediate local prune of the same fold the marker's round trip would
-    // run; the round trip itself is skipped through handledMarkerSeq.
-    const before = this.model.items.length
-    this.model.items = this.model.items
-      .filter(item => item.seq === undefined || item.seq < first)
-      .map((item, index) => item.id === index ? item : { ...item, id: index })
-    if (this.model.items.length < before) {
-      this.views.clear()
-      this.lastFoldKey = ''
+    this.handleEvent(marker)
+  }
+
+  /** Refresh the above-editor banner that lists messages queued for after
+   * the current turn (Codex-style), so a waiting user sees exactly what is
+   * pending without running /queue. Empty inbox clears the banner. */
+  private updateQueueBanner(): void {
+    const inbox = this.agent.inbox
+    const queued = [...inbox.nextStep, ...inbox.nextTurn]
+    const key = queued.map(message => String(message.id)).join(',')
+    if (key === this.lastQueueKey) return
+    this.lastQueueKey = key
+    if (queued.length === 0) {
+      this.queueBanner.setText('')
+      return
     }
-    this.handledMarkerSeq = marker.seq
-    this.sync()
-    this.pushNotice('session cleared — same session, fresh context', 'info')
+    const textOf = (message: { content: unknown }): string =>
+      (message.content as { type: string; text?: string }[])
+        .filter(block => block.type === 'text')
+        .map(block => block.text ?? '')
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    const header = style.queueHeader(
+      `⏳ ${queued.length} message${queued.length > 1 ? 's' : ''} to send after this turn`,
+    )
+    const hint = style.muted(' (Esc to send now)')
+    const rows = queued.map(message => `${style.muted('└')} ${style.queueItem(textOf(message).slice(0, 120))}`)
+    this.queueBanner.setText([header + hint, ...rows].join('\n'))
   }
 
   /** Inspect and manage the agent's pending inbox: queued turns, steering,
@@ -2660,14 +2677,12 @@ export class ChatScreen {
       this.turnStartTokens = this.model.tokens.input + this.model.tokens.output
     }
     if (this.handledMarkerSeq !== undefined && event.seq === this.handledMarkerSeq) {
-      // The in-place /clear already pruned and noticed locally; the live fold
-      // would only duplicate the notice. Replay after a restart folds again.
-      this.handledMarkerSeq = undefined
       return
     }
-    const before = this.model.items.length
+    const before = this.model.items
     applyEvent(this.model, event)
-    if (this.model.items.length < before) {
+    if (this.model.items !== before) {
+      this.handledMarkerSeq = event.seq
       // A surface replace pruned items and re-densified ids: stale views and
       // container children must go before sync rebuilds from the new list.
       this.views.clear()
@@ -2685,6 +2700,25 @@ export class ChatScreen {
       }
     }
     this.sync()
+  }
+
+  /** Observe all runs; their Cordis carrier filters select the visible agent's descendants. */
+  private listenSubagents(): void {
+    const runs = this.subagentRuns
+    const refresh = () => { this.sync(false) }
+    this.ctx.events.on('subagent/start', function (
+      this: { [Context.filter]?: (ctx: Context) => boolean } | null,
+      info: { runId: string },
+    ) {
+      const filter = this?.[Context.filter]
+      if (filter === undefined) return
+      runs.set(info.runId, agentCtx => filter.call(this, agentCtx))
+      refresh()
+    }, { global: true })
+    this.ctx.events.on('subagent/end', (info: { runId: string }) => {
+      this.subagentRuns.delete(info.runId)
+      this.sync(false)
+    }, { global: true })
   }
 
   /** Count the agent's running background jobs (process-local snapshot). */
@@ -2790,6 +2824,7 @@ export class ChatScreen {
 
   /** Create views for new items, refresh changed ones, fix the chrome. */
   private sync(refreshJobs = true): void {
+    this.cancelStreamSync()
     const { items } = this.model
     // Views for every item (the map stays complete even for folded ones, so
     // un-folding / /expand-all is instant; only the container prunes).
@@ -2802,31 +2837,28 @@ export class ChatScreen {
     // Working loader between messages and the status bar (before the fold
     // reconcile so a rebuilt container includes it).
     if (this.model.working && this.workingLoader === undefined) {
-      // Shield-pulse indicator with a per-mission verb: the loader frames
-      // render at 120ms so the pulse reads as a sweep, not a flicker.
-      const verbs = ['working', 'forging', 'breaching', 'scanning', 'cracking', 'sweeping']
-      this.loaderLabel = `✻ ${verbs[Math.floor(Math.random() * verbs.length)]}…`
-      const loader = new Loader(this.tui, style.spinner, style.workingLabel, this.loaderLabel, {
-        frames: ['◐', '◓', '◑', '◒'],
-        intervalMs: 120,
-      })
-      loader.start()
+      const startedAt = this.turnStartedAt ?? Date.now()
+      const loader = new Loader(
+        this.tui,
+        style.spinner,
+        text => style.workingLabel(`${text} ${Math.floor((Date.now() - startedAt) / 1000)}s`),
+        'Working…',
+        {
+          frames: [
+            '⟦█▓░·····⟧', '⟦▓█▓░····⟧', '⟦░▓█▓░···⟧', '⟦·░▓█▓░··⟧',
+            '⟦··░▓█▓░·⟧', '⟦···░▓█▓░⟧', '⟦····░▓█▓⟧', '⟦·····░▓█⟧',
+            '⟦····░▓█▓⟧', '⟦···░▓█▓░⟧', '⟦··░▓█▓░·⟧', '⟦·░▓█▓░··⟧',
+            '⟦░▓█▓░···⟧', '⟦▓█▓░····⟧',
+          ].map(style.spinner),
+          intervalMs: 80,
+        },
+      )
       this.workingLoader = loader
       this.messages.addChild(loader)
     } else if (!this.model.working && this.workingLoader !== undefined) {
       this.workingLoader.stop()
       this.messages.removeChild(this.workingLoader)
       this.workingLoader = undefined
-    }
-    // Live mission clock: the loader's text gains elapsed seconds on every
-    // tick that flips the second ( setMessage is cheap; renders are already
-    // driven by the chunk stream).
-    if (this.workingLoader !== undefined && this.turnStartedAt !== undefined) {
-      const text = `${this.loaderLabel} · ${Math.floor((Date.now() - this.turnStartedAt) / 1000)}s`
-      if (text !== this.loaderText) {
-        this.loaderText = text
-        this.workingLoader.setMessage(text)
-      }
     }
 
     // Long-session fold: rebuild the visible child list only when the fold
@@ -2911,15 +2943,16 @@ export class ChatScreen {
     const route = this.currentRoute()
     const effort = this.currentEffort()
     const preset = this.currentPresetId()
+    this.updateQueueBanner()
     const status: StatusBarData = {
       model: route.model,
+      working: this.isBusy(),
       ...(effort !== undefined ? { effort } : {}),
       sessionId: String(this.agent.session.id),
       cwd: basename(this.cwd),
       tokens,
       ...(this.gitState !== undefined ? { git: this.gitState } : {}),
       ...(todos !== undefined ? { todos } : {}),
-      ...(this.model.title !== undefined ? { title: this.model.title } : {}),
       ...(preset !== undefined ? { preset } : {}),
       ...(planActive !== undefined ? { planActive } : {}),
       ...(goalPhase !== undefined ? { goalPhase } : {}),
@@ -2928,6 +2961,7 @@ export class ChatScreen {
       ...(contextTotal !== undefined ? { contextTotal } : {}),
       ...(sandboxMode !== undefined ? { sandboxMode } : {}),
       ...(jobsRunning !== undefined ? { jobsRunning } : {}),
+      subagentsRunning: [...this.subagentRuns.values()].filter(admits => admits(this.agent.ctx)).length,
       queuePending: this.agent.inbox.nextTurn.length + this.agent.inbox.nextStep.length,
     }
     this.statusBar.update(status)

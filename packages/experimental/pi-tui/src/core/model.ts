@@ -222,8 +222,11 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
         && typeof surfaceOp.endSeq === 'number') {
         const start = surfaceOp.startSeq
         const end = surfaceOp.endSeq
+        const clearing = textOf(event.data.message.content).startsWith('the operator cleared')
         model.items = model.items
-          .filter(item => item.seq === undefined || item.seq < start || item.seq > end)
+          .filter(item => item.seq === undefined
+            ? !clearing || item.notice === 'banner'
+            : item.seq < start || item.seq > end)
           .map((item, index) => item.id === index ? item : { ...item, id: index })
         // nextId was captured before the prune; rebase it on the densified list.
         nextId = model.items.length
@@ -290,7 +293,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       if (text) item.text = text
       item.streaming = false
       model.openAssistant = undefined
-      sealReasoning(model)
+      sealReasoning(model, event.seq)
       const usage = event.data.usage
       if (usage !== undefined) {
         model.tokens.input += usage.inputTokens
@@ -431,8 +434,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
 
 /**
  * Fold plugin-merged session events the local dsh-session types do not
- * declare. Current surface: `session/title` feeds the status bar's title
- * segment (official auto-titles and `/rename` both land here on replay).
+ * declare. `session/title` retains auto-titles and `/rename` on replay.
  */
 function foldPluginEvent(model: ChatModel, event: SessionEvent): void {
   const raw = event as unknown as { type?: string; data?: { title?: unknown } }
@@ -512,7 +514,10 @@ function currentStreaming(
   seq?: number,
 ): ChatItem {
   const existing = kind === 'assistant' ? model.openAssistant : model.openReasoning
-  if (existing !== undefined) return existing
+  if (existing !== undefined) {
+    if (seq !== undefined) existing.seq = seq
+    return existing
+  }
   const item: ChatItem = {
     id: model.items.length,
     kind,
@@ -527,9 +532,10 @@ function currentStreaming(
 }
 
 /** Seal the open reasoning item for the step (collapse to a label). */
-function sealReasoning(model: ChatModel): void {
+function sealReasoning(model: ChatModel, seq: number): void {
   const item = model.openReasoning
   if (item !== undefined) {
+    item.seq = seq
     item.streaming = false
     model.openReasoning = undefined
   }

@@ -81,6 +81,8 @@ ctx.systemPrompt.variable('cwd', ({ agent }) => agent?.session.header.cwd)
 
 `suppressRuntimeContext()` 移除调用作用域的所有动态运行时上下文贡献，但不禁用拥有底层事实的服务；多个抑制器独立组合，当不再存在抑制器时该 effect 会恢复上下文。
 
+`suppressSections()` 在每次组装时重新计算动态允许列表。未定义的允许列表停用对应抑制器；空列表隐藏所有受过滤的段落。使用 `globalOnly: true` 时，预设作用域中的贡献仍然可见。
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -19,14 +19,16 @@ describe('seedModelSelection', () => {
       seedModelSelection({
         header: { provider: 'header-p', model: 'header-m' },
         config: { provider: 'config-p', model: 'config-m' },
+        prior: { provider: 'prior-p', model: 'prior-m' },
         agentOptions: { provider: 'option-p', model: 'option-m' },
         defaults: { provider: 'default-p', model: 'default-m' },
       }),
     ).toEqual({ provider: 'header-p', model: 'header-m' })
   })
 
-  it('carries the prior provider/model over agent options and defaults', () => {
+  it('carries the prior provider/model over startup config, agent options and defaults', () => {
     const seeded = seedModelSelection({
+      config: { provider: 'antigravity', model: 'gemini-3.1-pro-low' },
       agentOptions: { provider: 'antigravity', model: 'gemini-3-flash' },
       defaults: { provider: 'antigravity', model: 'gemini-3-flash' },
       prior: { provider: 'b-ai', model: 'glm-5.3-flash' },

@@ -83,6 +83,10 @@ function filePathFromExecution(exec: ToolExecution): string | undefined {
 
 export function apply(ctx: Context, config: Config): void {
   const resolved: ResolvedConfig = resolveConfig(config)
+  const suppressed = (): boolean => {
+    const policy = ctx.get('pentestModePolicy') as { current(): { suppressSections: boolean } } | undefined
+    return policy?.current().suppressSections === true
+  }
   const instructionVersions: InstructionVersionCache = new WeakMap()
   const baselinePreparations = new WeakMap<Session, {
     identity: string
@@ -113,7 +117,7 @@ export function apply(ctx: Context, config: Config): void {
     touchedPaths: readonly string[] = [],
   ): Promise<UserMessage | undefined> => {
     signal.throwIfAborted()
-    if (resolved.maxBytes <= 0 || !Number.isFinite(resolved.maxBytes)) {
+    if (suppressed() || resolved.maxBytes <= 0 || !Number.isFinite(resolved.maxBytes)) {
       return undefined
     }
     const fileSystem = ctx.get('fs')
@@ -319,6 +323,12 @@ export function apply(ctx: Context, config: Config): void {
     const decision = await next()
     await waitForProjections(agent)
     const pending = agent.inbox.nextStep.filter(isAgentInstructionsMessage)
+    if (suppressed()) {
+      for (const message of pending) agent.inbox.remove(message.id)
+      return decision.kind === 'reject' ? decision : {
+        ...decision, messages: decision.messages.filter(message => !isAgentInstructionsMessage(message)),
+      }
+    }
     const desired = await compose(agent, signal, messages, pending)
     signal.throwIfAborted()
     // An empty first entry owns a no-step turn; keep context pending instead

@@ -9,7 +9,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createDeveloperMessage, createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -73,6 +73,24 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('sends developer text through a gateway that only accepts the system role', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, { compat: { supportsDeveloperRole: false } })
+    const result = await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      system: 'base instructions',
+      messages: [
+        createDeveloperMessage({ content: [{ type: 'text', text: 'the operator cleared the conversation' }], source: { kind: 'test' } }),
+        createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }),
+      ],
+    })
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(server.requests[0]).toMatchObject({ messages: [
+      { role: 'system', content: 'base instructions\n\nthe operator cleared the conversation' },
+      { role: 'user', content: 'hi' },
+    ] })
+  })
+
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)

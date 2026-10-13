@@ -540,6 +540,7 @@ export class SystemPrompt extends Service {
    * withheld.
    * @param options - `except` names the sections that remain visible, as a
    *   static list or a provider re-evaluated at every assembly for live toggles.
+   *   An undefined provider result disables suppression; an empty list permits no gated sections.
    * @returns the exact Cordis effect disposer.
    */
   suppressSections(options?: {
@@ -616,8 +617,10 @@ export class SystemPrompt extends Service {
       ...this.layers.global.sectionSuppressors.values(),
       ...scopeLayers.flatMap(layer => [...layer.sectionSuppressors.values()]),
     ]
-      .map(entry => ({ allow: new Set(entry.allow() ?? []), globalOnly: entry.globalOnly }))
-      .filter(entry => entry.allow.size > 0 || entry.globalOnly)
+      .flatMap((entry) => {
+        const allow = entry.allow()
+        return allow === undefined ? [] : [{ allow: new Set(allow), globalOnly: entry.globalOnly }]
+      })
     // Scoped variables shadow globals.
     const variables: Record<string, string | undefined> = {}
     for (const [name, provider] of this.layers.global.variables.entries()) {

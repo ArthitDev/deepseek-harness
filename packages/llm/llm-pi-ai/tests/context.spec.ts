@@ -114,12 +114,43 @@ describe('pi-ai request context conversion', () => {
     expect(withImage).not.toHaveProperty('source')
   })
 
-  it('rejects developer history before reading image attachments', async () => {
+  it.each([true, false])('preserves developer text in the system prompt with explicit system=%s', async (explicitSystem) => {
+    const options = request([
+      ...explicitSystem ? [] : [history('system', [{ type: 'text', text: 'system prompt' }])],
+      user([{ type: 'text', text: 'question' }]),
+      createDeveloperMessage({ content: [{ type: 'text', text: 'first instruction' }], source: { kind: 'test' } }),
+      history('assistant', [{ type: 'text', text: 'answer' }]),
+      createDeveloperMessage({ content: [{ type: 'text', text: 'latest instruction' }], source: { kind: 'test' } }),
+    ])
+    if (!explicitSystem) delete options.system
+    const expected = {
+      systemPrompt: 'system prompt\n\nfirst instruction\n\nlatest instruction',
+      messages: [{ role: 'user', content: 'question', timestamp: 0 }, expect.objectContaining({ role: 'assistant' })],
+    }
+    expect(toPiContext(options)).toMatchObject(expected)
+    expect(await toPiContext(options, imageContext(attachments))).toMatchObject(expected)
+    expect(options.messages.filter(message => message.role === 'developer')).toHaveLength(2)
+  })
+
+  it('omits empty developer messages and supports developer-only text', () => {
+    const empty = createDeveloperMessage({ content: [], source: { kind: 'test' } })
+    const text = createDeveloperMessage({ content: [{ type: 'text', text: 'instruction' }], source: { kind: 'test' } })
+    expect(toPiContext({ provider: 'openai', model: 'm', messages: [empty] })).toEqual({ messages: [] })
+    expect(toPiContext({ provider: 'openai', model: 'm', messages: [empty, text] }))
+      .toEqual({ systemPrompt: 'instruction', messages: [] })
+  })
+
+  it.each([
+    { type: 'tool-addition', toolName: 'search' },
+    { type: 'tool-removal', toolName: 'search' },
+    { type: 'image', attachment: ref },
+  ] satisfies ContentBlock[])('rejects unsupported developer block $type before reading image attachments', async (block) => {
     const read = vi.fn((value: ImageAttachmentRef) => Promise.resolve(requestImage(value, Uint8Array.of(1))))
-    const message = createDeveloperMessage({ content: [{ type: 'tool-addition', toolName: 'search' }], source: { kind: 'test' } })
-    const failure = { code: 'UNSUPPORTED_CONTENT', message: 'Developer messages are not supported yet' }
-    expect(() => toPiContext(request([message]))).toThrow(expect.objectContaining(failure))
-    await expect(toPiContext(request([message]), imageContext(projectionStore(read)))).rejects.toMatchObject(failure)
+    const message = createDeveloperMessage({ content: [block], source: { kind: 'test' } })
+    const options = request([message, user([{ type: 'image', attachment: ref }])])
+    const failure = { code: 'UNSUPPORTED_CONTENT' }
+    expect(() => toPiContext(options)).toThrow(expect.objectContaining(failure))
+    await expect(toPiContext(options, imageContext(projectionStore(read)))).rejects.toMatchObject(failure)
     expect(read).not.toHaveBeenCalled()
   })
 
@@ -162,6 +193,7 @@ describe('pi-ai request context conversion', () => {
     const callId = ToolCallId('missing-call')
     const knownCallId = ToolCallId('known-call')
     const context = await toPiContext(request([
+      createDeveloperMessage({ content: [{ type: 'text', text: 'inspect the image' }], source: { kind: 'test' } }),
       user([{ type: 'text', text: '' }]),
       history('assistant', [
         { type: 'text', text: 'calling' },
@@ -180,6 +212,7 @@ describe('pi-ai request context conversion', () => {
       }),
     ]), imageContext(attachments))
 
+    expect(context.systemPrompt).toBe('system prompt\n\ninspect the image')
     expect(context.messages).toEqual([
       { role: 'user', content: '', timestamp: 0 },
       expect.objectContaining({ role: 'assistant' }),

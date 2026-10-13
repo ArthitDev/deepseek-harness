@@ -1,22 +1,25 @@
 /**
  * Transcript views: one component per ChatItem kind plus the status bar.
  * Each view holds its ChatItem and refreshes from it on `updateFromItem()`;
- * rendering is stateless so `invalidate()` is a no-op.
+ * unchanged message bodies retain pi-tui's Markdown render cache.
  */
 import { diffLines } from 'diff'
 import chalk from 'chalk'
 import {
   Container,
   Image,
+  Loader,
   Markdown,
   Text,
   getCapabilities,
   truncateToWidth,
   visibleWidth,
   type Component,
+  type TuiMouseEvent,
+  type ViewportTUI,
 } from '@earendil-works/pi-tui'
 import type { ChatItem } from '../core/model.js'
-import { BRAND_RED, gradient, markdownTheme, reasoningMarkdownTheme, style } from './theme.js'
+import { BRAND_RED, markdownTheme, reasoningMarkdownTheme, style } from './theme.js'
 import {
   highlightMatches,
   renderContextBar,
@@ -54,14 +57,7 @@ function toolGlyph(name: string): string {
 const DIFF_ADDED = (text: string) => chalk.bgHex('#12261e').hex('#7ee787')(text)
 const DIFF_REMOVED = (text: string) => chalk.bgHex('#3d1b20').hex('#ffa198')(text)
 
-/**
- * Collapsed reasoning label; expanded renders the markdown body. While the
- * text is still streaming it renders as plain wrapped text instead of
- * markdown: partial markdown re-parses on every delta and structures like
- * tables re-flow their columns, churning the transcript and re-rendering
- * the whole body O(n) per delta. Plain wrapped text grows monotonically, so
- * only the tail ever changes.
- */
+/** Collapsible reasoning with live Markdown; find results use highlighted source text. */
 export class ReasoningView extends Container {
   private body: Markdown
   private label: Text
@@ -70,40 +66,62 @@ export class ReasoningView extends Container {
   private lastMode: 'label' | 'markdown' | 'plain' | undefined
   private lastQuery = ''
   private item: ChatItem
+  private expandAll: boolean | undefined
+  private expandedOverride: boolean | undefined
 
   constructor(item: ChatItem) {
     super()
     this.item = item
-    this.body = new Markdown('', 1, 0, reasoningMarkdownTheme)
+    this.body = new Markdown('', 3, 0, reasoningMarkdownTheme, { color: style.muted })
     this.label = new Text('', 1, 0)
-    this.plain = new Text('', 1, 0)
+    this.plain = new Text('', 3, 0)
   }
 
-  updateFromItem(expanded: boolean, query?: string): void {
-    const mode: 'label' | 'markdown' | 'plain' = this.item.streaming
-      ? 'plain'
-      : expanded
-        ? 'markdown'
-        : 'label'
+  get isExpanded(): boolean {
+    return this.expandedOverride ?? this.expandAll ?? this.item.streaming
+  }
+
+  setExpanded(expanded: boolean): void {
+    this.expandedOverride = expanded
+    this.updateFromItem(this.expandAll, this.lastQuery)
+  }
+
+  override handleMouse(event: TuiMouseEvent): ReturnType<Container['handleMouse']> {
+    if ((event.type === 'press' || event.type === 'click') && event.button === 'left' && event.y === 0 && !event.shift) {
+      if (event.type === 'click') this.setExpanded(!this.isExpanded)
+      return {
+        handled: true,
+        target: {
+          component: this, originX: event.screenX - event.x, originY: event.screenY - event.y,
+          width: event.width, height: event.height,
+        },
+      }
+    }
+    return super.handleMouse(event)
+  }
+
+  updateFromItem(expanded: boolean | undefined, query?: string): void {
+    this.expandAll = expanded
     const activeQuery = query ?? ''
-    // Streamed (plain) reasoning highlights matches; collapsed labels stay
-    // labels and expanded markdown cannot highlight — a find does not change
-    // the reasoning layout.
+    const mode: 'label' | 'markdown' | 'plain' = !this.isExpanded
+      ? 'label'
+      : activeQuery !== '' ? 'plain' : 'markdown'
     if (
       this.lastMode !== mode ||
       this.lastText !== this.item.text ||
       this.lastQuery !== activeQuery
     ) {
       this.clear()
+      this.label.setText(style.thinkingLabel(
+        `${mode === 'label' ? '▸' : '▾'} Thinking · ${this.item.text.length} chars · Ctrl+T`,
+      ))
+      this.addChild(this.label)
       if (mode === 'plain') {
-        this.plain.setText(highlightMatches(this.item.text, activeQuery))
+        this.plain.setText(style.muted(highlightMatches(this.item.text, activeQuery)))
         this.addChild(this.plain)
       } else if (mode === 'markdown') {
         this.body.setText(this.item.text)
         this.addChild(this.body)
-      } else {
-        this.label.setText(style.thinkingLabel(`∴ Thinking · ${this.item.text.length} chars`))
-        this.addChild(this.label)
       }
       this.lastMode = mode
       this.lastText = this.item.text
@@ -125,7 +143,7 @@ export class UserMessageView extends Text {
     const key = `${this.item.text}:${query ?? ''}`
     if (key !== this.lastKey) {
       this.setText(
-        `${style.userPrefix('❯')} ${style.userText(highlightMatches(this.item.text, query ?? ''))}`,
+        `${style.userPrefix('›')}${style.userText(highlightMatches(this.item.text, query ?? ''))}`,
       )
       this.lastKey = key
     }
@@ -136,7 +154,8 @@ export class AssistantMessageView extends Container {
   private markdown: Markdown
   private plain: Text
   private item: ChatItem
-  private lastKey = ''
+  private lastText: string | undefined
+  private lastQuery: string | undefined
 
   constructor(item: ChatItem) {
     super()
@@ -146,22 +165,19 @@ export class AssistantMessageView extends Container {
   }
 
   updateFromItem(query?: string): void {
-    // Stream as plain wrapped text (stable, monotonic growth); apply markdown
-    // only once sealed — unless a find is active, which highlights matches in
-    // plain text instead. See ReasoningView for the flicker rationale.
+    // pi-tui handles incomplete fences; keep the same renderer through sealing.
     const activeQuery = query ?? ''
-    const usePlain = this.item.streaming || activeQuery !== ''
-    const key = `${this.item.text}:${this.item.streaming}:${activeQuery}`
-    if (key !== this.lastKey) {
+    if (this.item.text !== this.lastText || activeQuery !== this.lastQuery) {
       this.clear()
-      if (usePlain) {
+      if (activeQuery !== '') {
         this.plain.setText(highlightMatches(this.item.text, activeQuery))
         this.addChild(this.plain)
       } else {
         this.markdown.setText(this.item.text)
         this.addChild(this.markdown)
       }
-      this.lastKey = key
+      this.lastText = this.item.text
+      this.lastQuery = activeQuery
     }
   }
 }
@@ -388,6 +404,8 @@ export class ToolCardView implements Component {
 
 export interface StatusBarData {
   model?: string
+  /** The visible agent or operator shell is currently working. */
+  working?: boolean
   /** Reasoning effort for the live route; colored by level. */
   effort?: string
   sessionId?: string
@@ -395,7 +413,6 @@ export interface StatusBarData {
   git?: { branch: string; dirty: boolean }
   tokens?: { input: number; output: number }
   todos?: { done: number; total: number }
-  title?: string
   preset?: string
   planActive?: boolean
   goalPhase?: string
@@ -404,38 +421,58 @@ export interface StatusBarData {
   contextTotal?: number
   sandboxMode?: string
   jobsRunning?: number
+  /** Delegation runs currently active under the visible agent. */
+  subagentsRunning?: number
   /** Pending inbox items (queued turns + steering) awaiting the agent. */
   queuePending?: number
 }
 
-/** Single-line status bar; truncates to the terminal width. */
-export class StatusBar implements Component {
-  private text = ''
+/** Status bar that wraps segments to the terminal width. */
+export class StatusBar extends Loader {
+  private data: StatusBarData = {}
+  private animating = false
 
-  constructor() {
-    this.text = ''
+  constructor(tui: ViewportTUI) {
+    super(tui, style.spinner, style.workingLabel, '', {
+      frames: ['◐', '◓', '◑', '◒'], intervalMs: 120,
+    })
+    this.stop()
   }
 
   update(data: StatusBarData): void {
-    const parts: string[] = [gradient('◆ Shield Break', '#ff4655', '#ff9a3d')]
-    if (data.model !== undefined) parts.push(chalk.cyan(`⚙ ${data.model}`))
+    this.data = data
+    const active = (data.jobsRunning ?? 0) > 0 || (data.subagentsRunning ?? 0) > 0
+    if (active === this.animating) return
+    this.animating = active
+    if (active) this.start()
+    else this.stop()
+  }
+
+  override render(width: number): string[] {
+    if (width <= 1) return ['']
+    const data = this.data
+    const spinner = this.getRenderedIndicator()
+    // Each segment owns a hue keyed to its meaning: model cyan, preset
+    // violet, location blue, VCS green, cost grey, and genuine warnings
+    // (plan, danger, pressure, dirty tree) in amber/red. The icon rides the
+    // same color as its value so each reads as one chip.
+    const text = chalk.hex('#c7d0da')
+    const parts: string[] = [chalk.hex(BRAND_RED).bold('⧉ Shield Break')]
+    if (data.model !== undefined) parts.push(`🤖 ${chalk.cyan(data.model)}`)
     if (data.effort !== undefined) {
-      const level = data.effort === 'off'
-        ? chalk.dim
-        : data.effort === 'max' || data.effort === 'xhigh'
-          ? chalk.red
-          : data.effort === 'high' || data.effort === 'medium'
-            ? chalk.magenta
-            : chalk.cyan
-      parts.push(level(`⚡ ${data.effort}`))
+      const hot = data.effort === 'max' || data.effort === 'xhigh'
+      parts.push((hot ? chalk.red : chalk.hex('#ff9a3d'))(`⚡ ${data.effort}`))
     }
-    if (data.preset !== undefined) parts.push(chalk.magenta(`◫ ${data.preset}`))
-    // Explicit mode indicator: plan when active, normal otherwise.
-    parts.push(data.planActive === true ? chalk.yellow('⌘plan') : chalk.dim('normal'))
+    if (data.preset !== undefined) parts.push(chalk.hex('#b588f7')(`❖ ${data.preset}`))
+    // Explicit mode indicator: plan when active (warn hue), normal otherwise.
+    parts.push(data.planActive === true ? chalk.yellow('⌘ plan') : chalk.dim('◌ normal'))
     const modeShort = sandboxShort(data.sandboxMode)
-    if (modeShort !== undefined) parts.push(chalk.dim(modeShort))
-    if (data.goalPhase !== undefined) parts.push(chalk.magenta(`◈${data.goalPhase}`))
-    if (data.sessionId !== undefined) parts.push(chalk.dim(data.sessionId.slice(0, 8)))
+    if (modeShort !== undefined) {
+      // danger posture must stand out; a confined mode reads calm green.
+      parts.push((modeShort === 'danger' ? chalk.red.bold : chalk.green)(`⛉ ${modeShort}`))
+    }
+    if (data.goalPhase !== undefined) parts.push(chalk.hex('#b588f7')(`◈ ${data.goalPhase}`))
+    if (data.sessionId !== undefined) parts.push(chalk.dim(`◌ ${data.sessionId.slice(0, 8)}`))
     if (data.cwd !== undefined) parts.push(chalk.blue(`▾ ${data.cwd}`))
     if (data.git !== undefined) {
       parts.push(data.git.dirty
@@ -443,7 +480,7 @@ export class StatusBar implements Component {
         : chalk.green(`⑂ ${data.git.branch}`))
     }
     if (data.tokens !== undefined) {
-      parts.push(chalk.dim(`±${shortTokens(data.tokens.input + data.tokens.output)} tok`))
+      parts.push(chalk.dim(`Σ ${shortTokens(data.tokens.input + data.tokens.output)} tok`))
     }
     if (data.contextPct !== undefined) {
       const bar = renderContextBar(data.contextUsed, data.contextTotal)
@@ -451,24 +488,45 @@ export class StatusBar implements Component {
         data.contextUsed !== undefined && data.contextTotal !== undefined
           ? ` ${shortTokens(data.contextUsed)}/${shortTokens(data.contextTotal)}`
           : ''
-      const pressure = data.contextPct >= 85 ? chalk.red : data.contextPct >= 70 ? chalk.yellow : chalk.green
-      parts.push(pressure(`ctx ${bar !== undefined ? `${bar} ` : ''}${data.contextPct}%${totals}`))
+      const pressure = data.contextPct >= 85 ? chalk.red : data.contextPct >= 70 ? chalk.yellow : text
+      parts.push(`${bar !== undefined ? `${bar} ` : ''}${pressure(`◔ ${data.contextPct}%${totals}`)}`)
     }
     if (data.todos !== undefined && data.todos.total > 0) {
-      parts.push(chalk.dim(`☐ ${data.todos.done}/${data.todos.total}`))
+      const done = data.todos.done === data.todos.total
+      parts.push((done ? chalk.green : chalk.hex('#ffb340'))(`☑ ${data.todos.done}/${data.todos.total}`))
     }
-    if (data.jobsRunning !== undefined) parts.push(chalk.cyan(`⚙ ${data.jobsRunning}`))
+    if (data.jobsRunning !== undefined && data.jobsRunning > 0) parts.push(chalk.cyan(`${spinner} ${data.jobsRunning} jobs`))
+    if (data.subagentsRunning !== undefined && data.subagentsRunning > 0) {
+      parts.push(chalk.cyan(`${spinner} ${data.subagentsRunning} agents`))
+    }
     if (data.queuePending !== undefined && data.queuePending > 0) parts.push(chalk.yellow(`⏳ ${data.queuePending}`))
-    if (data.title !== undefined) parts.push(chalk.bold(data.title))
-    this.text = parts.join(chalk.dim(' │ '))
+    // Greedy-pack segments across lines on the thin ` · ` separator; wrap
+    // instead of truncating so a long status bar stays fully readable.
+    const sep = chalk.dim(' · ')
+    const sepWidth = 3 // visibleWidth(' · ')
+    const lines: string[] = []
+    let current = ''
+    let currentWidth = 0
+    for (const part of parts) {
+      const partWidth = visibleWidth(part)
+      if (current === '') {
+        current = part
+        currentWidth = partWidth
+      } else if (currentWidth + sepWidth + partWidth <= width) {
+        current += sep + part
+        currentWidth += sepWidth + partWidth
+      } else {
+        lines.push(current)
+        current = part
+        currentWidth = partWidth
+      }
+    }
+    if (current !== '') lines.push(current)
+    // A single segment wider than the terminal still needs a hard cut.
+    return lines.map(line => truncateToWidth(line, width))
   }
 
-  render(width: number): string[] {
-    if (width <= 1) return ['']
-    return [truncateToWidth(this.text, width)]
-  }
-
-  invalidate(): void {
+  override invalidate(): void {
     // Stateless.
   }
 }
@@ -490,7 +548,7 @@ export function createView(item: ChatItem): Component {
 
 export function updateView(
   view: Component,
-  expandReasoning: boolean,
+  expandReasoning: boolean | undefined,
   expandTools: boolean,
   query?: string,
 ): void {

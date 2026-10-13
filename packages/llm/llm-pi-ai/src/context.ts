@@ -46,11 +46,12 @@ function toolResultOf(
   }
 }
 
-/** Reject unsupported roles, tool-change blocks, and image roles before replay or image offloading. */
+/** Reject unsupported developer blocks, tool-change blocks, and image roles before replay or image offloading. */
 function assertSupportedHistory(messages: readonly RequestMessage[]): void {
   for (const message of messages) {
-    // Developer history is persisted for V4; provider serialization is intentionally deferred.
-    if (message.role === 'developer') throw new LlmError('Developer messages are not supported yet', 'UNSUPPORTED_CONTENT')
+    if (message.role === 'developer' && message.content.some(block => block.type !== 'text')) {
+      throw new LlmError('pi-ai developer messages support text only', 'UNSUPPORTED_CONTENT')
+    }
     if (message.content.some(block => block.type === 'tool-addition' || block.type === 'tool-removal')) {
       throw new LlmError('Tool-change blocks require developer role', 'UNSUPPORTED_CONTENT')
     }
@@ -154,13 +155,27 @@ interface SystemPromptSplit {
  * including a leading `system` message, which then folds into a `user`
  * message. Otherwise a leading `system` history message supplies the prompt
  * and leaves the converted history; empty leading text sends no prompt.
+ * Developer text appends to the system prompt in history order because pi-ai
+ * has no developer history role; empty developer messages are omitted.
  */
 function splitSystemPrompt(options: GenerateOptions): SystemPromptSplit {
-  if (options.system !== undefined) return { systemPrompt: options.system, messages: options.messages }
-  const [first, ...rest] = options.messages
-  if (first?.role !== 'system') return { systemPrompt: undefined, messages: options.messages }
-  const text = flattenText(first)
-  return { systemPrompt: text.length > 0 ? text : undefined, messages: rest }
+  let systemPrompt = options.system
+  let messages = options.messages
+  if (systemPrompt === undefined) {
+    const [first, ...rest] = messages
+    if (first?.role === 'system') {
+      const text = flattenText(first)
+      systemPrompt = text.length > 0 ? text : undefined
+      messages = rest
+    }
+  }
+  const developerText = messages.filter(message => message.role === 'developer')
+    .map(flattenText).filter(text => text.length > 0)
+  if (developerText.length > 0) {
+    systemPrompt = [systemPrompt, ...developerText]
+      .filter(text => text !== undefined && text.length > 0).join('\n\n')
+  }
+  return { systemPrompt, messages: messages.filter(message => message.role !== 'developer') }
 }
 
 /** Assemble the request-level pi-ai context envelope shared by both conversion paths. */

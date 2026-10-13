@@ -113,15 +113,13 @@ describe('renderContextBar', () => {
     expect(bar).toBe(chalk.green('▰').repeat(5) + chalk.dim('▱').repeat(5))
   })
 
-  it('gradients the filled cells in truecolor above level 2', () => {
+  it('uses brand red for the filled cells in truecolor above level 2', () => {
     const previous = chalk.level
     try {
       chalk.level = 3
       const bar = renderContextBar(50, 100)
-      const cell = (r: number, g: number, b: number) => chalk.rgb(r, g, b)('▰')
       expect(bar).toBe(
-        cell(89, 202, 89) + cell(130, 196, 83) + cell(172, 191, 76) + cell(213, 185, 70)
-          + cell(255, 179, 64) + chalk.dim('▱').repeat(5),
+        chalk.rgb(255, 70, 85)('▰').repeat(5) + chalk.dim('▱').repeat(5),
       )
     } finally {
       chalk.level = previous

@@ -50,9 +50,9 @@ describe('theme tables', () => {
   it('defines the transcript style helpers', () => {
     callEvery(style)
     expect(style.accent('a')).toBe(chalk.hex('#ff4655')('a'))
-    expect(style.userPrefix('❯')).toBe(chalk.hex('#ff4655')('❯ '))
+    expect(style.userPrefix('›')).toBe(chalk.hex('#ff4655')('› '))
     expect(style.userText('u')).toBe(chalk.bold('u'))
-    expect(style.thinkingLabel('t')).toBe(chalk.dim.italic('✻ t'))
+    expect(style.thinkingLabel('t')).toBe(chalk.dim.italic('t'))
     expect(style.toolName('t')).toBe(chalk.cyan.bold('t'))
     expect(style.toolOk('t')).toBe(chalk.green('t'))
     expect(style.toolError('t')).toBe(chalk.red('t'))

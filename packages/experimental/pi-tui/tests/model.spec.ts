@@ -221,9 +221,10 @@ describe('surface replace folding (rewind/clear markers)', () => {
     expect(model.items[2]?.seq).toBe(three.seq + 1)
   })
 
-  it('posts the cleared notice for a /clear marker and keeps the head plus unsequenced items', () => {
+  it('posts the cleared notice for a /clear marker and keeps the head plus the banner', () => {
     const model = createModel()
-    pushNotice(model, 'banner')
+    pushNotice(model, 'banner', 'banner')
+    pushNotice(model, 'old command output')
     const one = userMessageEvent(userMessage('one'))
     const two = userMessageEvent(userMessage('two'))
     applyEvent(model, one)
@@ -239,6 +240,33 @@ describe('surface replace folding (rewind/clear markers)', () => {
       [0, 'banner'],
       [1, 'one'],
       [2, 'session cleared — same session, fresh context'],
+    ])
+  })
+
+  it('clears settled live text, thinking, and UI notices', () => {
+    const model = createModel()
+    pushNotice(model, 'banner', 'banner')
+    const prompt = userMessageEvent(userMessage('old question'))
+    applyEvent(model, prompt)
+    applyStreamChunk(model, { type: 'text-delta', index: 0, text: 'old answer' })
+    applyStreamChunk(model, { type: 'reasoning-delta', index: 0, text: 'old thinking' })
+    const answer = assistantMessageEvent({
+      turn: 1,
+      step: 1,
+      message: { role: 'assistant', id: MessageId('old-answer'), content: blocks('old answer'), source: modelSource },
+      stream: [],
+    })
+    applyEvent(model, answer)
+    expect(model.items.filter(item => item.kind === 'assistant' || item.kind === 'reasoning')
+      .map(item => item.seq)).toEqual([answer.seq, answer.seq])
+    pushNotice(model, 'done')
+    applyEvent(model, developerMessageEvent(
+      'the operator cleared the conversation; the earlier surface is shadowed in the log',
+      { op: 'replace', startSeq: prompt.seq, endSeq: answer.seq },
+    ))
+    expect(model.items.map(item => [item.id, item.kind, item.text])).toEqual([
+      [0, 'notice', 'banner'],
+      [1, 'notice', 'session cleared — same session, fresh context'],
     ])
   })
 

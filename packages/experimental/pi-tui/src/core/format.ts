@@ -63,16 +63,13 @@ export function shortTokens(tokens: number): string {
   return String(tokens)
 }
 
-/** Gradient stops for the context bar's filled cells. */
-const BAR_GREEN = '#2fd05f'
-const BAR_AMBER = '#ffb340'
+/** Brand red for the context bar's filled cells. */
 const BAR_RED = '#ff4655'
 
 /**
- * 10-cell context bar: filled cells run a truecolor green→amber→red gradient
- * across the bar; below the truecolor level they fall back to threshold
- * solids (green <70%, yellow 70-90%, red ≥90%). Empty when the total is
- * unknown.
+ * 10-cell context bar: filled cells in brand red, empty cells dim. The
+ * number beside it already carries the pressure hue, so the bar stays one
+ * color and reads as a clean fill gauge. Empty when the total is unknown.
  */
 export function renderContextBar(
   used: number | undefined,
@@ -81,30 +78,9 @@ export function renderContextBar(
   if (used === undefined || total === undefined || total <= 0) return undefined
   const pct = Math.min(100, (100 * used) / total)
   const filled = Math.round(pct / 10)
+  const fill = chalk.hex(BAR_RED)
   const empty = chalk.dim('▱')
-  if (chalk.level < 3) {
-    const solid = pct >= 90 ? chalk.red : pct >= 70 ? chalk.yellow : chalk.green
-    return `${solid('▰').repeat(filled)}${empty.repeat(10 - filled)}`
-  }
-  const channels = (hex: string): readonly [number, number, number] => [
-    Number.parseInt(hex.slice(1, 3), 16),
-    Number.parseInt(hex.slice(3, 5), 16),
-    Number.parseInt(hex.slice(5, 7), 16),
-  ]
-  const green = channels(BAR_GREEN)
-  const amber = channels(BAR_AMBER)
-  const red = channels(BAR_RED)
-  let out = ''
-  for (let index = 0; index < filled; index++) {
-    // Position across the FULL bar, so the amber midpoint sits at 50%.
-    const t = Math.min(1, (index + 1) / 10)
-    const [from, to, k] = t <= 0.5 ? [green, amber, t / 0.5] : [amber, red, (t - 0.5) / 0.5]
-    const r = Math.round(from[0] + (to[0] - from[0]) * k)
-    const g = Math.round(from[1] + (to[1] - from[1]) * k)
-    const b = Math.round(from[2] + (to[2] - from[2]) * k)
-    out += chalk.rgb(r, g, b)('▰')
-  }
-  return `${out}${empty.repeat(10 - filled)}`
+  return `${fill('▰').repeat(filled)}${empty.repeat(10 - filled)}`
 }
 
 /** Context pressure percentage (0-100), or undefined when unknown. */

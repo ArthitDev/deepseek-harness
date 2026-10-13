@@ -113,6 +113,22 @@ describe('SystemPrompt', () => {
     expect(await visible()).toEqual(['preset:persona', 'tool:read'])
   })
 
+  it('deactivates globalOnly suppression when its live allowlist is undefined', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, {})
+    ctx.systemPrompt.section({ name: 'tool:test', order: 1, text: 'tool guidance' })
+    let allow: readonly string[] | undefined
+    const dispose = ctx.systemPrompt.suppressSections({ except: () => allow, globalOnly: true })
+    const visible = async () => (await ctx.systemPrompt.assemble()).sections.map(section => section.name)
+    expect(await visible()).toContain('tool:test')
+    allow = []
+    expect(await visible()).toEqual([])
+    allow = undefined
+    expect(await visible()).toContain('tool:test')
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('globalOnly suppression spares a scoped section that shadows a global name', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, { personaPrefix: 'deployment persona' })

@@ -19,8 +19,8 @@ export interface SelectionSeed {
 
 /**
  * Fold the selection sources into the next-step model selection.
- * Precedence: persisted request header → row config → prior selection (the
- * model currently in use — /new and /clear keep it) → agent options →
+ * Precedence: persisted request header → prior selection (the model currently
+ * in use — /new and /clear keep it) → row config → agent options →
  * harness default → hard-coded route. Reasoning effort falls back prior →
  * saved default (the `agentDefaultModel` store, applied when the resolved
  * route is the saved route — /thinking survives new/fork/resume/restart).
@@ -28,15 +28,15 @@ export interface SelectionSeed {
 export function seedModelSelection(input: SelectionSeed): ModelSelection {
   const provider =
     input.header?.provider ??
-    input.config?.provider ??
     input.prior?.provider ??
+    input.config?.provider ??
     input.agentOptions?.provider ??
     input.defaults?.provider ??
     DEFAULT_PROVIDER
   const model =
     input.header?.model ??
-    input.config?.model ??
     input.prior?.model ??
+    input.config?.model ??
     input.agentOptions?.model ??
     input.defaults?.model ??
     DEFAULT_MODEL
@@ -48,7 +48,7 @@ export function seedModelSelection(input: SelectionSeed): ModelSelection {
         ? input.prior.reasoningEffort
         : savedEffort !== undefined
           && provider === input.defaults?.provider
-          && model === input.defaults?.model
+          && model === input.defaults.model
           ? ReasoningEffortId(savedEffort)
           : undefined
   return {

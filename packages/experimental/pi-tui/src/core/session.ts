@@ -5,6 +5,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { isMap, isSeq, parseDocument } from 'yaml'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
 import {
@@ -41,6 +44,47 @@ export interface SessionMeta {
   agentPreset?: string
 }
 
+/** Resolve the Web profile's model binding for the TUI without editing its settings.
+ * Missing Web overrides use the TUI registry's policy.
+ * @param ctx - TUI context with profile and preset services.
+ * @param provider - Selected provider route.
+ * @param model - Selected model id.
+ * @returns Selected preset id, or undefined without a preset registry.
+ */
+export function resolveModelPreset(ctx: Context, provider: string, model: string): string | undefined {
+  const presets = ctx.get('agentPresets') as
+    { presetIdForModel(provider: string, model: string): string } | undefined
+  const profile = ctx.get('profileContext') as { home: string } | undefined
+  if (profile !== undefined) {
+    const path = join(profile.home, 'profiles', 'web', 'cordis.patch.yml')
+    let source: string | undefined
+    try { source = readFileSync(path, 'utf8') }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+    if (source !== undefined) {
+      const document = parseDocument(source, {
+        customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }],
+      })
+      if (document.errors[0] !== undefined) throw document.errors[0]
+      if (!isSeq(document.contents)) throw new Error(`pi-tui: ${path} must contain a patch sequence`)
+      const index = document.contents.items.findLastIndex((item, index) =>
+        isMap(item) && document.getIn([index, 'id']) === 'agent-presets')
+      if (index >= 0) {
+        const config = document.getIn([index, 'config'], true)
+        if (!isMap(config)) throw new Error(`pi-tui: agent-presets config in ${path} must be a mapping`)
+        const selected = document.getIn([index, 'config', 'modeSelectionEnabled']) === false
+          ? document.getIn([index, 'config', 'default'])
+          : document.getIn([index, 'config', 'models', provider, model])
+            ?? document.getIn([index, 'config', 'selectedDefault']) ?? document.getIn([index, 'config', 'default'])
+        if (typeof selected !== 'string' || selected.trim() === '') {
+          throw new Error(`pi-tui: agent-presets selection in ${path} must be a preset id`)
+        }
+        return selected
+      }
+    }
+  }
+  return presets?.presetIdForModel(provider, model)
+}
+
 /**
  * Attach to an existing agent, resume a persisted session, or create a
  * fresh one.
@@ -61,16 +105,12 @@ async function composeSetup(
     }
     | undefined
   if (presets === undefined) return {}
-  try {
-    const resolvedId = (await presets.resolve(presetId)).id
-    return {
-      agentPreset: resolvedId,
-      setup: async (agentCtx) => {
-        await presets.mount(agentCtx, resolvedId)
-      },
-    }
-  } catch {
-    return {}
+  const resolvedId = (await presets.resolve(presetId)).id
+  return {
+    agentPreset: resolvedId,
+    setup: async (agentCtx) => {
+      await presets.mount(agentCtx, resolvedId)
+    },
   }
 }
 
@@ -197,7 +237,7 @@ async function persistedPreset(ctx: Context, id: string): Promise<string | undef
   try {
     const loaded = await loadPersistedSession(ctx, id)
     if (loaded === undefined) return undefined
-    for (const event of loaded.events) {
+    for (const event of loaded.events.toReversed()) {
       // `agent-preset/selected` is plugin-merged; read it structurally.
       const raw = event as { type?: string; data?: { agentPreset?: string } }
       if (raw.type === 'agent-preset/selected' && raw.data?.agentPreset !== undefined) {
@@ -210,6 +250,8 @@ async function persistedPreset(ctx: Context, id: string): Promise<string | undef
   }
 }
 
+/** Resolve a live or persisted session, or create one with the explicit preset
+ * or the preset bound to its model. Resumed sessions retain their recorded preset. */
 export async function resolveAgent(
   ctx: Context,
   requestedSessionId: string | undefined,
@@ -240,7 +282,11 @@ export async function resolveAgent(
       )
     }
   }
-  const composition = await composeSetup(ctx, meta.agentPreset)
+  let presetId = meta.agentPreset
+  if (presetId === undefined && agentOptions.provider !== undefined && agentOptions.model !== undefined) {
+    presetId = resolveModelPreset(ctx, agentOptions.provider, agentOptions.model)
+  }
+  const composition = await composeSetup(ctx, presetId)
   const sessionId = SessionId(randomUUID())
   let created: AgentHandle
   try {
@@ -411,19 +457,20 @@ export async function sessionTitles(
 
 export interface PresetInfo {
   id: string
+  trust?: 'system' | 'user'
   name?: string
   description?: string
   broken?: string
 }
 
-/** The agent-preset roster (标准/PTC 模式/极简/…), name-sorted. */
+/** User presets for the TUI pickers, name-sorted. */
 export async function listPresets(ctx: Context): Promise<PresetInfo[]> {
   const presets = ctx.get('agentPresets') as { list(): Promise<readonly PresetInfo[]> } | undefined
   if (presets === undefined) return []
   try {
     const all = await presets.list()
     return [...all]
-      .filter(preset => preset.broken === undefined)
+      .filter(preset => preset.broken === undefined && preset.trust !== 'system')
       .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id))
   } catch {
     return []
