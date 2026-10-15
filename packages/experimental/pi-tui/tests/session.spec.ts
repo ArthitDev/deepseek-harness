@@ -641,7 +641,7 @@ describe('forkSession', () => {
     session.append('developer/message', { turn: 1, step: 1, message: createDeveloperMessage({ source: { kind: 'pi-tui' }, content: [{ type: 'text', text: 'OLD_DEVELOPER' }] }) }, { surfaceOp: 'append' })
     session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
     const readCallId = ToolCallId('read-call')
-    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({ source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'tool-call', id: readCallId, name: 'read', arguments: '{}' }] }) }, { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: [{ type: 'tool-call', id: readCallId, name: 'read', arguments: '{}' }] }) }, { surfaceOp: 'append' })
     session.append('tool/call', { turn: 1, step: 1, callId: readCallId, name: 'read', arguments: '{}' })
     const result = createToolResultMessage({ callId: readCallId, content: [{ type: 'text', text: 'retained file contents' }], isError: false })
     session.append('tool/result', { turn: 1, step: 1, message: result }, { surfaceOp: 'append' })
