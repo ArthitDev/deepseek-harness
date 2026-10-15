@@ -71,13 +71,13 @@ export function parseArgs(argv: readonly string[]): PiTuiArgs {
 export const USAGE = `Shield Break TUI — terminal front door for Shield Break Harness
 
 Usage:
-  dsh --profile pi-tui                 start a fresh session
-  dsh --profile pi-tui --resume <id>   reopen a persisted session
-  dsh --profile pi-tui --resume        pick a persisted session from a list
-  dsh --profile pi-tui --preset <id>   choose an agent preset (standard/minimal/code…)
-  dsh --profile pi-tui --preset        pick a preset from the roster
-  dsh --profile pi-tui --machine <id>  run the session on a saved SSH machine
-  dsh --profile pi-tui --help          this help
+  dsh tui                            start a fresh session
+  dsh tui --resume <id>               reopen a persisted session
+  dsh tui --resume                    pick a persisted session from a list
+  dsh tui --preset <id>               choose an agent preset
+  dsh tui --preset                    pick a preset from the roster
+  dsh tui --machine <id>              run the session on a saved SSH machine
+  dsh tui --help                      this help
 
 Keys:
   Esc        interrupt · cancel autocomplete · exit card browse
@@ -86,7 +86,7 @@ Keys:
   Ctrl+T     toggle thinking display
   Ctrl+O     toggle full tool output
   Ctrl+F     find in transcript · Alt+C copy last assistant
-  Ctrl+L     model picker · Ctrl+X cycle thinking
+  Ctrl+L     model picker · Ctrl+X reasoning picker
   Ctrl+R     search message history · Shift+Tab cycle mode
   Ctrl+Z     suspend to background
   Ctrl+G     edit input in $EDITOR
@@ -94,12 +94,15 @@ Keys:
              (empty editor: cycle tool-card focus · Enter expand)
 
 Commands:
+  /exit                   exit and show the session resume command
   /new                    start a fresh session
   /fork                   fork this session at its current end
   /resume [query]         list sessions / reopen one
   /tree                   subagent session tree
   /model [query]          switch model (picker without a query)
-  /thinking off|high|max  set thinking effort (next step)
+  /thinking [level]       choose reasoning level (next step)
+  /suppress-prompt [on|off|toggle|status]   choose prompt suppression (ON/OFF picker)
+  /team-mode [blue|red|black|dead]   choose the team mode (numbered picker)
   /skills                 list user-invocable skills
   /agents                 list live subagents
   /jobs                   list background jobs

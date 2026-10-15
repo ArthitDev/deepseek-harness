@@ -7,6 +7,7 @@
  */
 
 import { writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { boot, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 
@@ -57,7 +58,8 @@ try {
 
   await writeFile('./pwsh-loader-report.json', JSON.stringify({
     schemaHasRunInBackground: Object.hasOwn(schema.parameters.properties as object, 'run_in_background'),
-    promptHasMarkerSection: prompt?.text.includes('Non-zero exits are reported as `[exit code: N]` markers') === true,
+    promptHasSection: prompt !== undefined && prompt.text.length > 0,
+    promptTextHash: createHash('sha256').update(prompt?.text ?? '').digest('hex'),
     // Normalize PowerShell's platform line endings (CRLF on Windows, LF elsewhere).
     foregroundText: foregroundText.replace(/\r\n/g, '\n'),
     backgroundText: backgroundText.replace(/\r\n/g, '\n'),

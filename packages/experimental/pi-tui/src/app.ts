@@ -22,7 +22,7 @@ import {
   sessionTitles,
   type ResolvedAgent,
 } from './core/session.js'
-import { AgentDefaultModelService } from './core/services.js'
+import { defaultModelSelection } from './core/web-settings.js'
 import { installWebPromptSettings } from './core/prompt-settings.js'
 import { ClipboardTerminal } from './ui/clipboard-terminal.js'
 import { pickSession } from './ui/session-picker.js'
@@ -57,8 +57,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
 
   // Provider/model route: explicit row config wins; otherwise inherit the
   // harness's default-model selection (settings.yaml), matching the web app.
-  const agentDefaultModel = ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
-  const defaultSelection = agentDefaultModel?.currentSelection()
+  const defaultSelection = defaultModelSelection(ctx)
   const effectiveProvider = provider ?? defaultSelection?.provider
   const effectiveModel = model ?? defaultSelection?.model
   if (args.help) {
@@ -157,6 +156,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
       ...(preset !== undefined ? { preset } : {}),
     },
     onQuit: (hint) => {
+      tui.stop()
       disposeRootAndExit(ctx, 0, hint)
     },
     onAgentSwitch: (next: ResolvedAgent) => {
@@ -213,9 +213,13 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
  * fallback (mirrors cc-tui's disposeRootAndExit semantics).
  */
 function disposeRootAndExit(ctx: Context, code: number, exitMessage?: string): void {
+  let finished = false
   const finish = (): void => {
+    if (finished) return
+    finished = true
     if (exitMessage !== undefined && exitMessage !== '') {
-      process.stdout.write(`\n${exitMessage}\n`)
+      process.stdout.write(`\n${exitMessage}\n`, () => process.exit(code))
+      return
     }
     process.exit(code)
   }

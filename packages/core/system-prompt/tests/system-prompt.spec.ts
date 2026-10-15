@@ -13,7 +13,7 @@ import type { PromptContextOrderName, PromptSectionOrderName } from '@deepseek-a
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
 const BUILT_IN = ['harness:identity', 'deployment:persona-prefix', 'deployment:persona-suffix']
-const IDENTITY = 'You are an AI agent powered by Shield Break Harness.'
+const IDENTITY = 'Runtime host: Shield Break Harness.'
 const SECTION_ORDER_NAMES = [
   'HARNESS_IDENTITY', 'DEPLOYMENT_PERSONA_PREFIX',
   'PLAN_POLICY', 'TEAM_POLICY', 'PTC_ONLY', 'FILE_REFERENCE', 'TOOL_BASH',
@@ -32,6 +32,18 @@ function contributed(assembly: PromptAssembly): PromptAssembly['sections'] {
 }
 
 describe('SystemPrompt', () => {
+  it('keeps the runtime label factual and preserves the configured persona', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SystemPrompt, { personaPrefix: 'CUSTOM_PERSONA_SENTINEL' })
+      const text = renderPrompt(await ctx.systemPrompt.assemble())
+      expect(text).toBe('Runtime host: Shield Break Harness.\n\nCUSTOM_PERSONA_SENTINEL')
+      expect(text).not.toContain('You are an AI agent')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('keeps repository section placements unique, integral, and at least ten apart', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})

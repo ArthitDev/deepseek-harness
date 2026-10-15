@@ -31,7 +31,8 @@ const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.m
 
 interface PwshLoaderReport {
   schemaHasRunInBackground: boolean
-  promptHasMarkerSection: boolean
+  promptHasSection: boolean
+  promptTextHash: string
   foregroundText: string
   backgroundText: string
 }
@@ -60,8 +61,9 @@ describe.skipIf(!hasPwsh)('tool-pwsh through a real Loader composition', () => {
     expect(report).toBeDefined()
     expect(report).toMatchObject({
       schemaHasRunInBackground: true,
-      promptHasMarkerSection: true,
+      promptHasSection: true,
     })
+    expect(report?.promptTextHash).toMatchInlineSnapshot('"7668d91500220f8f1c6c85a0b94072fcc521e09f8f666fe1c0a1fbb68de95219"')
     expect(report?.foregroundText).toBe('loader-ok\n')
     expect(report?.backgroundText).toContain('loader-bg-ok')
     expect(report?.backgroundText).toContain('[status: completed, exit code: 0]')

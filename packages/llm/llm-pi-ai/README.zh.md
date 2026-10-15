@@ -29,7 +29,7 @@ kind: "package-reference"
 
 适配器接受 LLM 服务的[仅供请求使用的 user 输入](../llm/README.zh.md#use-this-package)，并可将其与持久历史混用。user 身份与来源不会进入 pi-ai 内容；assistant 回放元数据和工具调用关联仍由持久消息携带。
 
-纯文本 `developer` 消息按历史顺序追加到 pi-ai 的系统提示词。空 developer 消息被省略；工具变更块和其他非文本 developer 内容仍以 `UNSUPPORTED_CONTENT` 失败。
+适配器在回放和图片校验前从提供方请求中省略所有 `developer` 消息，包括文本、图片和工具变更内容。系统提示词、用户/助手历史、工具结果及当前工具 schema 保持正常转换。原始 developer 消息仍保留在持久历史中；其文本不会进入提供方系统提示词。
 
 ### 何时选择
 
@@ -112,9 +112,26 @@ profile 的 `models` 列表会替换而非扩展路由的已安装目录；每�
 
 ### 从端点发现模型
 
-插件会回答“该提供方可以提供哪些模型？”，供配置界面正在编辑或起草的路由使用。已安装目录提供的路由直接由目录回答，不发网络请求；只有目录未描述的路由才会经网络询问。`openai-completions` 与 `openai-responses` 使用带 bearer 鉴权的 `GET {baseURL}/models`，`anthropic-messages` 则以 `x-api-key` 和 `anthropic-version` 使用原生 `GET /v1/models?limit=1000` 语义；其列表 URL 接受带或不带末尾 `/v1` 的 API 根地址，因为网关文档两种写法都会发布，且只有该列表 URL 会归一化这一段，模型请求收到的仍是配置原样的 `baseURL`。已配置且具名的路由会在 Host 内部提供已存凭据与 profile `headers`，因此通过 `settings.yaml` 或 Cordis 配置设置的部署标头可以到达模型发现请求，但不会成为发现请求或 Models 页面的字段；表单中新键入的密钥仍优先于已存凭据。解析器接受标准 `data` 数组或富信息 `models` 对象，并归一化每个候选的 id、显示名、上下文窗口、最大输出 token 数以及端点明确公布的推理等级。它读取 OpenRouter 的 `reasoning.supported_efforts`，也读取 LiteLLM 与 Codex 公布的 `supported_reasoning_efforts` 列表，包括对象条目；`none` 会成为 profile 的 `off` 等级，未知值则被忽略而不会靠猜测补全。Anthropic 的 `max_input_tokens` 与 `max_tokens` 会进入相同容量字段，即使对象条目点名了另一个规范 id，对象键仍是请求 id，原始类型的对象属性会被忽略，缺失的显示名则回退到该请求 id。回答是界面可以提供给用户采纳的候选元数据——不存储任何内容，`settings.yaml` 仍然是决定路由服务内容的唯一事实。
+插件会回答“该提供方可以提供哪些模型？”，供配置界面正在编辑或起草的路由使用。已安装目录提供的路由直接由目录回答，不发网络请求；只有目录未描述的路由才会经网络询问。`openai-completions` 与 `openai-responses` 使用带 bearer 鉴权的 `GET {baseURL}/models`，`anthropic-messages` 则以 `x-api-key` 和 `anthropic-version` 使用原生 `GET /v1/models?limit=1000` 语义；其列表 URL 接受带或不带末尾 `/v1` 的 API 根地址，因为网关文档两种写法都会发布，且只有该列表 URL 会归一化这一段，模型请求收到的仍是配置原样的 `baseURL`。已配置且具名的路由会在 Host 内部提供已存凭据与 profile `headers`，因此通过 `settings.yaml` 或 Cordis 配置设置的部署标头可以到达模型发现请求，但不会成为发现请求或 Models 页面的字段；表单中新键入的密钥仍优先于已存凭据。解析器接受标准 `data` 数组或富信息 `models` 对象，并归一化每个候选的 id、显示名、上下文窗口、最大输出 token 数以及端点明确公布的推理等级。它读取 OpenRouter 的 `reasoning.supported_efforts`，也读取 LiteLLM 与 Codex 公布的 `supported_reasoning_efforts` 列表，包括对象条目；它还读取 xKiro 等端点公布的 `reasoning_efforts.levels`。`none`、`off` 与 `disabled` 映射为 profile 的 `off` 等级；对于二态控制，`on` 与 `adaptive` 映射为 `high`。每种映射都保留端点公布的 wire 拼写。未知值被忽略，公布的默认值不会成为请求默认值。这些格式不依赖提供方名称。Anthropic 的 `max_input_tokens` 与 `max_tokens` 会进入相同容量字段，即使对象条目点名了另一个规范 id，对象键仍是请求 id，原始类型的对象属性会被忽略，缺失的显示名则回退到该请求 id。回答是界面可以提供给用户采纳的候选元数据——不存储任何内容，`settings.yaml` 仍然是决定路由服务内容的唯一事实。
 
 ### 失败与恢复
+
+兼容的 `/models` 端点可能仅列出模型 id，不提供推理元数据。此时发现操作不设置 `reasoningEfforts`；它不会根据模型名称推断等级或请求参数。应按照该网关的文档声明每个模型的 `reasoningEfforts` 与 `compat`。Web 与 TUI 读取相同的已声明能力。对于 B.AI Chat Completions，[GLM-5.3-Flash 文档](https://docs.b.ai/llmservice/models/glm-5-3-flash/) 说明了 `low/high/max`，[Qwen3.8-Flash 文档](https://docs.b.ai/llmservice/models/qwen3-8-flash/) 说明了 `enable_thinking`，[MiMo-V2.5 文档](https://docs.b.ai/llmservice/models/mimo-v2.5/) 说明了 `thinking.type`。这些模型条目使用现有配置字段：
+
+```yaml
+models:
+  - id: glm-5.3-flash
+    reasoningEfforts: { low: low, high: high, max: max }
+    compat: { thinkingFormat: deepseek, supportsReasoningEffort: true }
+  - id: qwen3.8-flash
+    reasoningEfforts: { off: null, high: high }
+    compat: { thinkingFormat: qwen, supportsReasoningEffort: false }
+  - id: mimo-v2.5
+    reasoningEfforts: { off: disabled, high: high }
+    compat: { thinkingFormat: deepseek, supportsReasoningEffort: false }
+```
+
+对于这两个二态控制，`High` 选择器表示启用思考，并不选择分级 effort。请求与 profile 均未指定 effort 时，pi-ai 发送禁用控制。GLM 的声明不提供 `Off`；未选择 effort 时，它省略思考与 effort 参数，保留端点默认值。当路由的 Chat Completions 模型要求系统提示使用 `system` 角色时，将路由的 `compat.supportsDeveloperRole` 设置为 `false`。
 
 pi-ai 不提供的路由需要 `api`、`baseURL` 与非空 `models` 列表；无法服务的 profile 会在写入处被拒绝，并点名路由与模型。失败携带稳定 code：无法使用的凭据以 `INVALID_CREDENTIAL` 失败并点名路由与引用，`apiKeyEnv` 引用解析为空的路由以 `MISSING_CREDENTIAL` 失败，未配置模型以 `UNKNOWN_MODEL` 失败，终止性提供方失败则区分 `QUOTA` 与暂时性 `RATE_LIMIT`。`GenerateOptions.stop` 以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式 UI 无法跨提供方保证它。
 
@@ -228,7 +245,7 @@ pi-ai 事件变成 harness 的推理、文本、工具调用、用量与 finish 
 - **模态声明不受校验**——声明 `image` 而其网关不支持的模型会在提示词准入后被提供方拒绝。持久图片仍留在历史中，同一误声明模型可能再次失败；切换到纯文本模型仍然可行，因为共享 LLM 运行时会针对该请求把图片引用投影为稳定文本。
 - **未认证路由取决于其协议**——不点名凭据的路由解析为已配置但无密钥，但 pi-ai 的 OpenAI 兼容实现仍要求 API 密钥或 `Authorization` 标头，因此无密钥本地服务器需要由 `apiKeyEnv` 引用或 `headers` 中的 `Authorization` 条目提供的占位凭据。
 - **不支持 `GenerateOptions.stop`**——pi-ai 的通用流式选项无法跨提供方保证停止序列行为。
-- **pi-ai 只有一个系统提示词槽位**——developer 文本追加到该提示词，不保留其在对话消息中的位置。只有历史中首条 `system` 消息提供基础提示词；后续的 system 消息，或在同时设置了 `GenerateOptions.system` 时的首条消息，会在原位置折叠为 `user` 消息。提供方专属放置遵循 pi-ai。system、developer 或 assistant 历史中的图片在两条转换路径上都会以 `UNSUPPORTED_CONTENT` 失败。
+- **pi-ai 只有一个系统提示词槽位**——developer 消息在转换前被排除。过滤后只有历史中首条 `system` 消息提供基础提示词；后续的 system 消息，或在同时设置了 `GenerateOptions.system` 时的首条消息，会在原位置折叠为 `user` 消息。提供方专属放置遵循 pi-ai。保留的 system 或 assistant 历史中的图片在两条转换路径上都会以 `UNSUPPORTED_CONTENT` 失败。
 - **提供方 HTTP 状态不可用**——pi-ai 错误事件不跨提供方暴露稳定 HTTP 状态。
 - **重试策略由提供方自有，而非 SDK 重试**——pi-ai SDK 重试保持禁用，因此持久 agent（智能体）步骤与 `llm/retry` 事件拥有每个可见尝试，直接 `ctx.llm.stream()` 调用仍是单次尝试。
 - **流式工具调用参数只在调用结束时解析一次**——安装的 pi-ai 带有 [`patches/@earendil-works__pi-ai@0.85.1.patch`](../../../patches/@earendil-works__pi-ai@0.85.1.patch)，它移除了每个流适配器中对整段累计参数 JSON 的逐 delta 重新解析（上游 [earendil-works/pi#9265](https://github.com/earendil-works/pi/issues/9265)）；未打补丁时，数 MB 的参数流会在事件循环上消耗 O(n²) CPU，并使进程内所有会话停滞。在 `toolcall_end` 之前，pi-ai partial 的工具调用 `arguments` 保持为 `{}`；本适配器只读取 delta 字符串与最终参数。每次升级 pi-ai 时都要重新应用或撤销该补丁。

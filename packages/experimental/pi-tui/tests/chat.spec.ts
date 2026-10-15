@@ -1,9 +1,12 @@
 import { stripVTControlCharacters } from 'node:util'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { AssistantStreamAccumulator, boundContextSummary, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
@@ -91,6 +94,65 @@ describe('running subagents in the status bar', () => {
   })
 })
 
+describe('exit and resume hints', () => {
+  it.each(['slash', 'ctrl-d', 'ctrl-c'] as const)('exits through %s with the currently visible saved session', async (entry) => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const original = fixtureAgent(ctx, ctx.sessions.create(SessionId('previous-session')))
+    const resumed = fixtureAgent(ctx, ctx.sessions.create(SessionId('00000000-0000-4000-8000-000000000001')))
+    const originalFollowup = vi.spyOn(original, 'followup')
+    const resumedFollowup = vi.spyOn(resumed, 'followup')
+    resumed.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'saved conversation' }] }), { surfaceOp: 'append' })
+    const start = vi.fn<Terminal['start']>()
+    const terminal: Terminal = {
+      columns: 100, rows: 40, kittyProtocolActive: false,
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const onQuit = vi.fn()
+    const screen = new ChatScreen({ ctx, tui, agent: original, config: {}, onQuit })
+    tui.start()
+    try {
+      screen.switchAgent(resumed)
+      const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
+      if (entry === 'slash') {
+        screen.handleEvent(resumed.session.append('turn/start', { turn: 1 }))
+        screen.submit('/exit')
+      } else if (entry === 'ctrl-d') input('\x04')
+      else { input('\x03'); input('\x03') }
+      expect(onQuit).toHaveBeenCalledExactlyOnceWith(`session: ${resumed.id}\nresume: dsh tui --resume ${resumed.id}`)
+      screen.submit('/exit')
+      screen.submit('do not send after exit')
+      expect(onQuit).toHaveBeenCalledOnce()
+      expect(originalFollowup).not.toHaveBeenCalled()
+      expect(resumedFollowup).not.toHaveBeenCalled()
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
+  it('exits an empty session without advertising unsaved history', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('empty-exit')))
+    const followup = vi.spyOn(agent, 'followup')
+    const terminal: Terminal = {
+      columns: 100, rows: 40, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const onQuit = vi.fn()
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit })
+    try {
+      screen.submit('/exit')
+      expect(onQuit).toHaveBeenCalledExactlyOnceWith(undefined)
+      expect(followup).not.toHaveBeenCalled()
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+})
+
 describe('/new model selection', () => {
   it('keeps the latest selected provider and model across repeated new sessions', async () => {
     const ctx = new Context()
@@ -142,7 +204,292 @@ describe('/new model selection', () => {
   })
 })
 
+describe('preset switches with conversation history', () => {
+  it.each(['preset', 'model'] as const)('opens an independent session through /%s and keeps its model and preset', async (command) => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-tui-preset-command-'))
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    ctx.provide('profileContext', { home })
+    const oldRoute = { provider: 'mock', model: 'old-model' }
+    const newRoute = command === 'model' ? { provider: 'mock', model: 'new-model' } : oldRoute
+    let saved = oldRoute
+    ctx.provide('agentDefaultModel', { currentSelection: () => saved, saveSelection: async (route: typeof saved) => { saved = route } })
+    ctx.provide('llm', {
+      listProviders: () => [{ id: 'mock' }], listModels: async () => [{ id: 'new-model', provider: 'mock' }],
+      resolveCallConfig: async (route: typeof oldRoute) => route,
+    })
+    const mounted = new WeakMap<Context, string>()
+    const source = fixtureAgent(ctx.extend({ testParent: 'preset-source' }), ctx.sessions.create(SessionId(`switch-${command}`)), oldRoute)
+    mounted.set(source.ctx, 'old-preset')
+    const session = source.session
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('OLD_PRESET') }, { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'retained question' }] }), { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', ...oldRoute }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const original = session.snapshotEvents()
+    const select = vi.fn(async (agent: Agent, id: string) => { mounted.set(agent.ctx, id); return id })
+    ctx.provide('agentPresets', {
+      list: async () => ['old-preset', 'new-preset'].map(id => ({ id, name: id, trust: 'user' })),
+      resolve: async (id: string) => ({ id }), mount: async (agentCtx: Context, id: string) => { mounted.set(agentCtx, id) },
+      composedPreset: (agentCtx: Context) => mounted.get(agentCtx), presetIdForModel: () => 'new-preset', select,
+    })
+    const create = vi.fn(async (input: Parameters<typeof ctx.agents.create>[0]) => {
+      const agent = fixtureAgent(ctx.extend({ testParent: String(input.sessionId) }), ctx.sessions.create(input.sessionId, {
+        ...input.seed === undefined ? {} : { seed: input.seed },
+        ...input.meta === undefined ? {} : { meta: input.meta },
+        ...input.inheritedEventCount === undefined ? {} : { inheritedEventCount: input.inheritedEventCount },
+      }), input.agentOptions)
+      await input.setup?.(agent.ctx)
+      return { agent, dispose: vi.fn() }
+    })
+    ctx.provide('agents', { create })
+    const terminal: Terminal = {
+      columns: 120, rows: 80, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const onAgentSwitch = vi.fn()
+    const screen = new ChatScreen({ ctx, tui, agent: source, config: { ...oldRoute, preset: 'old-preset' }, onQuit: vi.fn(), onAgentSwitch })
+    tui.start()
+    try {
+      screen.submit(command === 'preset' ? '/preset new-preset' : '/model mock/new-model')
+      await vi.waitFor(() => { expect(onAgentSwitch).toHaveBeenCalledOnce() })
+      const child = (onAgentSwitch.mock.calls[0]![0] as { agent: Agent }).agent
+      expect(child.id).not.toBe(source.id)
+      expect(child.session.inheritedEventCount).toBe(0)
+      expect(create.mock.calls[0]![0].meta).toMatchObject({ agentPreset: 'new-preset', parentSession: source.id })
+      expect(select).toHaveBeenCalledWith(child, 'new-preset')
+      expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_PRESET')
+      expect(source.session.snapshotEvents()).toEqual(original)
+      const rendered = await renderScreen(tui)
+      expect(rendered).toContain('retained question')
+      expect(rendered).toContain('retained answer')
+      expect(rendered).toContain('new-preset')
+      expect(rendered).toContain(newRoute.model)
+      screen.submit('/preset new-preset')
+      await renderScreen(tui)
+      expect(create).toHaveBeenCalledOnce()
+      screen.submit('/new')
+      await vi.waitFor(() => { expect(onAgentSwitch).toHaveBeenCalledTimes(2) })
+      expect(create.mock.calls[1]![0]).toMatchObject({ agentOptions: newRoute, meta: { agentPreset: 'new-preset' } })
+      const currentId = screen.currentSessionId
+      create.mockRejectedValueOnce(new Error('unavailable preset'))
+      screen.submit('/preset old-preset')
+      await vi.waitFor(async () => { expect(await renderScreen(tui)).toContain('unavailable preset') })
+      expect(screen.currentSessionId).toBe(currentId)
+      expect(onAgentSwitch).toHaveBeenCalledTimes(2)
+      const current = (onAgentSwitch.mock.calls[1]![0] as { agent: Agent }).agent
+      screen.handleEvent(current.session.append('turn/start', { turn: 1 }))
+      screen.submit('/preset old-preset')
+      expect(await renderScreen(tui)).toContain('cannot switch presets while work is running')
+      expect(create).toHaveBeenCalledTimes(3)
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('reasoning picker commands', () => {
+  it.each(['slash', 'shortcut'] as const)('opens via %s, applies once, and cancels while working', async (entry) => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const route = { provider: 'gateway', model: 'test-model' }
+    const saveSelection = vi.fn()
+    const resolveCallConfig = vi.fn(async (config: LlmCallConfig) => config)
+    ctx.provide('agentDefaultModel', { currentSelection: () => route, saveSelection })
+    ctx.provide('llm', {
+      resolveCallConfig,
+      resolveModelInfo: async () => ({
+        provider: route.provider, id: route.model, name: 'Test Model',
+        reasoning: { efforts: ['low', 'high', 'max'].map(id => ({ id: ReasoningEffortId(id), name: id })) },
+      }),
+    })
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId(`reasoning-${entry}`)), route)
+    const start = vi.fn<Terminal['start']>()
+    const terminal: Terminal = {
+      columns: 120, rows: 50, kittyProtocolActive: false,
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const show = vi.spyOn(tui, 'showOverlay')
+    const screen = new ChatScreen({ ctx, tui, agent, config: route, onQuit: vi.fn() })
+    tui.start()
+    const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
+    const open = (): void => { if (entry === 'slash') screen.submit('/thinking'); else input('\x18') }
+    try {
+      open()
+      open()
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      expect(show).toHaveBeenCalledOnce()
+      expect(await renderScreen(tui)).toContain('Select Reasoning Level for Test Model')
+      input('2')
+      expect(saveSelection).not.toHaveBeenCalled()
+      input('\r')
+      await vi.waitFor(() => { expect(saveSelection).toHaveBeenCalledOnce() })
+      expect(saveSelection).toHaveBeenLastCalledWith({ ...route, reasoningEffort: ReasoningEffortId('high') })
+      expect(resolveCallConfig).toHaveBeenCalledOnce()
+      expect(tui.hasOverlay()).toBe(false)
+
+      open()
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      expect(await renderScreen(tui)).toContain('high (current)')
+      const cancel = vi.spyOn(agent, 'cancel')
+      screen.handleEvent(agent.session.append('turn/start', { turn: 1 }))
+      input('\x1b')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
+      expect(cancel).not.toHaveBeenCalled()
+      expect(saveSelection).toHaveBeenCalledOnce()
+      screen.submit('/thinking low')
+      await vi.waitFor(() => { expect(saveSelection).toHaveBeenCalledTimes(2) })
+      expect(saveSelection).toHaveBeenLastCalledWith({ ...route, reasoningEffort: ReasoningEffortId('low') })
+      expect(resolveCallConfig).toHaveBeenCalledTimes(2)
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
+describe('/providers', () => {
+  it('lists routes and key status using one credential reference per call', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const route = { provider: 'gateway', model: 'model' }
+    ctx.provide('llm', {
+      listProviders: () => [
+        { id: 'gateway', name: 'Gateway' }, { id: 'missing', name: 'Missing Key' }, { id: 'native', name: 'Native Auth' },
+      ],
+      listModels: async (id: string) => id === 'gateway' ? [{ id: 'model' }, { id: 'other-model' }] : [],
+    })
+    const describeSettings = vi.fn(() => [{ ns: 'llm-pi-ai', value: { providers: {
+      gateway: { apiKeyEnv: 'TEST_GATEWAY_KEY' }, missing: { apiKeyEnv: 'TEST_MISSING_KEY' },
+    } } }])
+    ctx.provide('settings', { describe: describeSettings })
+    const describe = vi.fn((ref: string) => Promise.resolve({ configured: ref.toUpperCase() === 'TEST_GATEWAY_KEY' }))
+    const resolve = vi.fn()
+    ctx.provide('credentials', { describe, resolve })
+    const terminal: Terminal = {
+      columns: 140, rows: 50, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('providers')), route)
+    const followup = vi.spyOn(agent, 'followup')
+    const onQuit = vi.fn()
+    const screen = new ChatScreen({ ctx, tui, agent, config: route, onQuit })
+    tui.start()
+    try {
+      screen.submit('/providers')
+      await vi.waitFor(() => { expect(describe).toHaveBeenCalledTimes(2) }, { timeout: 500 })
+      const rendered = await renderScreen(tui)
+      expect(rendered).toContain('gateway ← current — Gateway · 2 model(s) · key ✓ (TEST_GATEWAY_KEY)')
+      expect(rendered).toContain('missing — Missing Key · 0 model(s) · key ✗ — /key TEST_MISSING_KEY')
+      expect(rendered).toContain('native — Native Auth · 0 model(s) · provider-native auth')
+      expect(describe.mock.calls).toEqual([['TEST_GATEWAY_KEY'], ['TEST_MISSING_KEY']])
+      expect(rendered.split('\n').filter(line => line.includes(' model(s)')).map(line => line.trimEnd())).toMatchInlineSnapshot(`
+        [
+          " ℹ gateway ← current — Gateway · 2 model(s) · key ✓ (TEST_GATEWAY_KEY)",
+          " ℹ missing — Missing Key · 0 model(s) · key ✗ — /key TEST_MISSING_KEY",
+          " ℹ native — Native Auth · 0 model(s) · provider-native auth",
+        ]
+      `)
+      expect(resolve).not.toHaveBeenCalled()
+      expect(onQuit).not.toHaveBeenCalled()
+      expect(followup).not.toHaveBeenCalled()
+
+      describeSettings.mockImplementationOnce(() => { throw new Error('settings unavailable') })
+      screen.submit('/providers')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('command failed: settings unavailable')
+      })
+      expect(onQuit).not.toHaveBeenCalled()
+
+      describe.mockImplementationOnce(() => { throw new Error('credential metadata unavailable') })
+      screen.submit('/providers')
+      await vi.waitFor(() => { expect(describe).toHaveBeenCalledTimes(4) })
+      expect(await renderScreen(tui)).toContain('key status unavailable (TEST_GATEWAY_KEY)')
+      expect(onQuit).not.toHaveBeenCalled()
+      expect(resolve).not.toHaveBeenCalled()
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
 describe('/clear transcript', () => {
+  it.each(['empty', 'system-only', 'failed-attempt', 'hidden-context'] as const)(
+    'clears visible command output and stale text with %s model history', async (history) => {
+      const ctx = new Context()
+      await ctx.plugin(SessionStore)
+      const session = ctx.sessions.create(SessionId(`clear-notices-${history}`))
+      const agent = fixtureAgent(ctx, session)
+      const terminal: Terminal = {
+        columns: 100, rows: 60, kittyProtocolActive: false,
+        start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+        moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+        clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      }
+      const tui = new TuiAltScreen(terminal)
+      const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+      tui.start()
+      try {
+        const system = createSystemMessage('PRESET_SENTINEL')
+        if (history !== 'empty') session.append('system/message', { turn: 1, step: 1, message: system }, { surfaceOp: 'append' })
+        if (history === 'hidden-context') {
+          const hidden = session.append('user/message', createUserMessage({
+            content: [{ type: 'text', text: 'hidden shell context' }],
+            source: { kind: 'pi-tui', form: 'notice', summary: boundContextSummary('test shell command') },
+          }), { surfaceOp: 'append' })
+          screen.handleEvent(hidden)
+        }
+        if (history === 'failed-attempt') {
+          screen.handleEvent(session.append('turn/start', { turn: 1 }))
+          const stream = new AssistantStreamAccumulator()
+          stream.push({ time: 0, chunk: { type: 'text-delta', index: 0, text: 'old failed answer' } })
+          stream.push({ time: 1, chunk: { type: 'reasoning-delta', index: 1, text: 'old failed thinking' } })
+          screen.handleEvent(session.append('assistant/attempt', { turn: 1, step: 1, stream: [...stream.snapshot()] }))
+          screen.handleEvent(session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } }))
+        }
+        screen.pushNotice('old command output')
+        expect(await renderScreen(tui)).toContain('old command output')
+        const before = session.snapshotEvents()
+        screen.submit('/clear')
+        const cleared = await renderScreen(tui)
+        expect(cleared).not.toContain('old command output')
+        expect(cleared).not.toContain('old failed answer')
+        expect(cleared).not.toContain('old failed thinking')
+        expect(cleared).not.toContain('turn aborted')
+        expect(cleared).not.toContain('already clear')
+        expect(cleared.match(/session cleared/g)).toHaveLength(1)
+        expect(cleared.split('\n').filter(line => line.includes('session cleared')).map(line => line.trim())).toMatchInlineSnapshot(`
+          [
+            "» session cleared — same session, fresh context",
+          ]
+        `)
+        expect(screen.currentSessionId).toBe(session.id)
+        expect(session.deriveMessages()).toEqual(history === 'empty' ? [] : [system])
+        if (history !== 'hidden-context') expect(session.snapshotEvents()).toEqual(before)
+        screen.submit('/clear')
+        expect((await renderScreen(tui)).match(/session cleared/g)).toHaveLength(1)
+      } finally {
+        tui.stop()
+        await ctx.fiber.dispose()
+      }
+    },
+  )
+
   it.each([
     { delivery: 'synchronous', preset: 'gemini-pro' },
     { delivery: 'deferred', preset: 'gemini-pro' },

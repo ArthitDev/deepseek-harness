@@ -114,7 +114,7 @@ describe('pi-ai request context conversion', () => {
     expect(withImage).not.toHaveProperty('source')
   })
 
-  it.each([true, false])('preserves developer text in the system prompt with explicit system=%s', async (explicitSystem) => {
+  it.each([true, false])('omits developer text without changing the system prompt with explicit system=%s', async (explicitSystem) => {
     const options = request([
       ...explicitSystem ? [] : [history('system', [{ type: 'text', text: 'system prompt' }])],
       user([{ type: 'text', text: 'question' }]),
@@ -124,7 +124,7 @@ describe('pi-ai request context conversion', () => {
     ])
     if (!explicitSystem) delete options.system
     const expected = {
-      systemPrompt: 'system prompt\n\nfirst instruction\n\nlatest instruction',
+      systemPrompt: 'system prompt',
       messages: [{ role: 'user', content: 'question', timestamp: 0 }, expect.objectContaining({ role: 'assistant' })],
     }
     expect(toPiContext(options)).toMatchObject(expected)
@@ -132,25 +132,37 @@ describe('pi-ai request context conversion', () => {
     expect(options.messages.filter(message => message.role === 'developer')).toHaveLength(2)
   })
 
-  it('omits empty developer messages and supports developer-only text', () => {
+  it('omits all developer-only history without creating a system prompt', () => {
     const empty = createDeveloperMessage({ content: [], source: { kind: 'test' } })
     const text = createDeveloperMessage({ content: [{ type: 'text', text: 'instruction' }], source: { kind: 'test' } })
     expect(toPiContext({ provider: 'openai', model: 'm', messages: [empty] })).toEqual({ messages: [] })
     expect(toPiContext({ provider: 'openai', model: 'm', messages: [empty, text] }))
-      .toEqual({ systemPrompt: 'instruction', messages: [] })
+      .toEqual({ messages: [] })
+  })
+
+  it('finds the leading system prompt after discarding an earlier developer message', async () => {
+    const options = { provider: 'openai', model: 'm', messages: [
+      createDeveloperMessage({ content: [{ type: 'text', text: 'discarded instruction' }], source: { kind: 'test' } }),
+      history('system', [{ type: 'text', text: 'preset prompt' }]),
+      user([{ type: 'text', text: 'question' }]),
+    ] }
+    const expected = { systemPrompt: 'preset prompt', messages: [{ role: 'user', content: 'question', timestamp: 0 }] }
+    expect(toPiContext(options)).toEqual(expected)
+    expect(await toPiContext(options, imageContext(attachments))).toEqual(expected)
+    expect(options.messages).toHaveLength(3)
   })
 
   it.each([
     { type: 'tool-addition', toolName: 'search' },
     { type: 'tool-removal', toolName: 'search' },
     { type: 'image', attachment: ref },
-  ] satisfies ContentBlock[])('rejects unsupported developer block $type before reading image attachments', async (block) => {
+  ] satisfies ContentBlock[])('discards developer block $type without reading its image attachments', async (block) => {
     const read = vi.fn((value: ImageAttachmentRef) => Promise.resolve(requestImage(value, Uint8Array.of(1))))
     const message = createDeveloperMessage({ content: [block], source: { kind: 'test' } })
-    const options = request([message, user([{ type: 'image', attachment: ref }])])
-    const failure = { code: 'UNSUPPORTED_CONTENT' }
-    expect(() => toPiContext(options)).toThrow(expect.objectContaining(failure))
-    await expect(toPiContext(options, imageContext(projectionStore(read)))).rejects.toMatchObject(failure)
+    const options = request([message, user([{ type: 'text', text: 'question' }])])
+    const expected = { systemPrompt: 'system prompt', messages: [{ role: 'user', content: 'question', timestamp: 0 }] }
+    expect(toPiContext(options)).toMatchObject(expected)
+    await expect(toPiContext(options, imageContext(projectionStore(read)))).resolves.toMatchObject(expected)
     expect(read).not.toHaveBeenCalled()
   })
 
@@ -212,7 +224,7 @@ describe('pi-ai request context conversion', () => {
       }),
     ]), imageContext(attachments))
 
-    expect(context.systemPrompt).toBe('system prompt\n\ninspect the image')
+    expect(context.systemPrompt).toBe('system prompt')
     expect(context.messages).toEqual([
       { role: 'user', content: '', timestamp: 0 },
       expect.objectContaining({ role: 'assistant' }),

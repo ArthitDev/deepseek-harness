@@ -39,6 +39,7 @@
     "@vscode/ripgrep": "^1.18.0",
     "chalk": "^5.5.0",
     "diff": "^9.0.0",
+    "highlight.js": "11.12.0",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
@@ -53,7 +54,7 @@
     "@deepseek-ai/dsh-agent-loop-testkit": "workspace:*",
     "@deepseek-ai/dsh-fs-local": "workspace:*",
     "@deepseek-ai/dsh-llm-pi-ai": "workspace:*",
-    "@deepseek-ai/dsh-persona": "workspace:*",
-    "@deepseek-ai/dsh-pentest-executor": "workspace:*"
+    "@deepseek-ai/dsh-pentest-executor": "workspace:*",
+    "@deepseek-ai/dsh-persona": "workspace:*"
   }
 }

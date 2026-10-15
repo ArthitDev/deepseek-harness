@@ -4,6 +4,9 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { createDeveloperMessage, createMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import SessionStore from '@deepseek-ai/dsh-session'
+import { fixtureAgent } from './fixture-agent.ts'
 import {
   SESSION_FORMAT_VERSION,
   SessionId,
@@ -183,7 +186,7 @@ describe('replayEvents', () => {
 
 describe('resumeCommand', () => {
   it('renders the copy-pasteable resume invocation', () => {
-    expect(resumeCommand('abc')).toBe('dsh --profile pi-tui --resume abc')
+    expect(resumeCommand('abc')).toBe('dsh tui --resume abc')
   })
 })
 
@@ -625,6 +628,69 @@ describe('resolveAgent', () => {
 })
 
 describe('forkSession', () => {
+  it('opens the new preset with retained conversation and no inherited instructions', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const source = fixtureAgent(ctx, ctx.sessions.create(SessionId('preset-source')))
+    const session = source.session
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('OLD_PRESET') }, { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'retained question' }] }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ source: { kind: 'skill-invocation', name: 'ponytail', form: 'instructions' }, content: [{ type: 'text', text: 'OLD_SKILL' }] }), { surfaceOp: 'append' })
+    session.append('developer/message', { turn: 1, step: 1, message: createDeveloperMessage({ source: { kind: 'pi-tui' }, content: [{ type: 'text', text: 'OLD_DEVELOPER' }] }) }, { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'tool-call', id: 'read-call', name: 'read', arguments: '{}' }] }) }, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 1, callId: 'read-call', name: 'read', arguments: {} })
+    const result = createMessage({ role: 'tool', source: { kind: 'tool', callId: 'read-call' }, toolCallId: 'read-call', content: [{ type: 'text', text: 'retained file contents' }] })
+    session.append('tool/result', { turn: 1, step: 1, message: result }, { surfaceOp: 'append' })
+    const shell = createUserMessage({ source: { kind: 'pi-tui', form: 'notice', summary: 'shell output' }, content: [{ type: 'text', text: 'retained shell output' }] })
+    session.append('user/message', shell, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    session.append('agent-preset/selected', { agentPreset: 'old-preset' })
+    const original = session.snapshotEvents()
+    const select = vi.fn(async (agent: Agent, id: string) => {
+      agent.session.append('agent-preset/selected', { agentPreset: id })
+      return id
+    })
+    ctx.provide('agentPresets', { resolve: async (id: string) => ({ id }), mount: vi.fn(), composedPreset: () => 'old-preset', select })
+    const dispose = vi.fn()
+    ctx.provide('agents', { create: async (input: Parameters<typeof ctx.agents.create>[0]) => ({
+      agent: fixtureAgent(ctx, ctx.sessions.create(input.sessionId, {
+        seed: input.seed, meta: input.meta, inheritedEventCount: input.inheritedEventCount,
+      })), dispose,
+    }) })
+    try {
+      const child = await forkSession(ctx, source, {}, { cwd: tmpdir(), agentPreset: 'new-preset' }, true)
+      expect(child.agent.id).not.toBe(source.id)
+      expect(child.agent.session.deriveMessages().map(message => message.content)).toEqual([
+        [{ type: 'text', text: 'retained question' }], [{ type: 'text', text: 'retained answer' }],
+        [{ type: 'tool-call', id: 'read-call', name: 'read', arguments: '{}' }], result.content, shell.content,
+      ])
+      expect(child.agent.session.deriveMessages().find(message => message.role === 'tool')).toEqual(result)
+      expect(JSON.stringify(child.agent.session.snapshotEvents())).not.toMatch(/OLD_PRESET|OLD_SKILL|OLD_DEVELOPER/)
+      expect(select).toHaveBeenCalledWith(child.agent, 'new-preset')
+      const resumed = agentsService()
+      const mount = vi.fn()
+      const resumeCtx = harness({
+        agents: resumed.service,
+        sessionPersistence: persistenceWith({ [String(child.agent.id)]: {
+          header: child.agent.session.header, events: child.agent.session.snapshotEvents(),
+        } }),
+        agentPresets: { resolve: async (id: string) => ({ id }), mount },
+      })
+      try {
+        await resolveAgent(resumeCtx, String(child.agent.id), {}, { cwd: tmpdir() })
+        expect(mount).toHaveBeenCalledWith({}, 'new-preset')
+      } finally { await resumeCtx.fiber.dispose() }
+      expect(source.session.snapshotEvents()).toEqual(original)
+      expect(JSON.stringify(source.session.deriveMessages())).toContain('OLD_PRESET')
+      select.mockRejectedValueOnce(new Error('selection failed'))
+      await expect(forkSession(ctx, source, {}, { cwd: tmpdir(), agentPreset: 'new-preset' }, true)).rejects.toThrow('selection failed')
+      expect(dispose).toHaveBeenCalledOnce()
+    } finally { await ctx.fiber.dispose() }
+  })
   it('forks an empty session without a seed', async () => {
     const agents = agentsService()
     const ctx = harness({ agents: agents.service })

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -1228,8 +1229,8 @@ describe('dsh-tool-subagent continuable background mode', () => {
     expect(properties.run_in_background?.description).toContain('Defaults to true')
     const assembly = await ctx.systemPrompt.assemble(assembleContextFor(parent))
     const guidance = assembly.sections.find(section => section.name === 'tool:subagent')
-    expect(guidance?.text).toContain('Use subagent in the background by default')
-    expect(guidance?.text).toContain('runtime sends you a notice containing its outcome')
+    expect(guidance?.text.length).toBeGreaterThan(0)
+    expect(createHash('sha256').update(guidance!.text).digest('hex')).toMatchInlineSnapshot('"c6e133344836fe00823a83f100665ed9ca10c3a15ab1c135f98e8ae98f32ec16"')
 
     const started = await callSubagent(
       ctx,

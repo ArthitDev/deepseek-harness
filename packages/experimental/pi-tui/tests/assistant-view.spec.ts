@@ -1,4 +1,5 @@
 import { stripVTControlCharacters } from 'node:util'
+import chalk from 'chalk'
 import { describe, expect, it, vi } from 'vitest'
 import { Markdown, visibleWidth } from '@earendil-works/pi-tui'
 import type { ChatItem } from '../src/core/model.ts'
@@ -10,6 +11,25 @@ const text = (view: AssistantMessageView): string => stripVTControlCharacters(
 )
 
 describe('live assistant Markdown', () => {
+  it.each([
+    ['cpp', 'class Widget { public: int value = 42; };'],
+    ['csharp', 'public class Widget { string text = "hello"; }'],
+    ['java', 'public class Widget { String text = "hello"; }'],
+  ])('renders colored %s code before and after the final answer', (language, code) => {
+    const previousLevel = chalk.level
+    chalk.level = 1
+    try {
+      const item: ChatItem = { id: 0, kind: 'assistant', text: ['```' + language, code, '```'].join('\n'), streaming: true }
+      const view = new AssistantMessageView(item)
+      view.updateFromItem()
+      const live = view.render(120)
+      expect(live.join('\n')).toContain('\x1b[35m')
+      expect(stripVTControlCharacters(live.join('\n'))).toContain(code)
+      item.streaming = false
+      view.updateFromItem()
+      expect(view.render(120)).toEqual(live)
+    } finally { chalk.level = previousLevel }
+  })
   it('retains the Markdown cache across unchanged updates and completion', () => {
     const item: ChatItem = { id: 0, kind: 'assistant', text: '**cached**', streaming: true }
     const view = new AssistantMessageView(item)

@@ -18,6 +18,7 @@ import PentestModePolicy from '@deepseek-ai/dsh-pentest-executor'
 import * as Persona from '@deepseek-ai/dsh-persona'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { installWebPromptSettings } from '../src/core/prompt-settings.ts'
+import { forkSession } from '../src/core/session.ts'
 
 class RecordingAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
@@ -40,7 +41,7 @@ describe('TUI Web prompt settings', () => {
     { initial: false, savedWeb: true },
     { initial: true, savedWeb: false },
     { initial: false, savedWeb: false },
-  ])('defers first-turn context with suppression $initial and saved Web settings $savedWeb', async ({ initial, savedWeb }) => {
+  ])('matches Web context from the first turn with suppression $initial and saved Web settings $savedWeb', async ({ initial, savedWeb }) => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-prompt-settings-'))
     const ctx = new Context()
     const wireRequests: { messages: { role: string; content: string }[] }[] = []
@@ -132,9 +133,9 @@ describe('TUI Web prompt settings', () => {
       const send = async (suppressed: boolean, firstTurn = false) => {
         const before = await readSaved()
         const count = adapter.requests.length
-        adapter.inHistory = suppressed
-        if (suppressed) agent.session.append('system/message', {
-          turn: 2, step: 1, message: createSystemMessage('historical system update'),
+        adapter.inHistory = true
+        if (count > 0) agent.session.append('system/message', {
+          turn: 2, step: 1, message: createSystemMessage('historical system update\n\nmode contribution'),
         }, { surfaceOp: 'append' })
         agent.followup(createUserMessage({ content: [{ type: 'text', text: question }], source: { kind: 'user' } }))
         await agent.whenIdle()
@@ -151,11 +152,16 @@ describe('TUI Web prompt settings', () => {
           const contexts = request.messages.filter(({ source }) =>
             source?.kind === 'agent-instructions' || source?.kind === 'runtime-context'
             || (source?.kind === 'skill-invocation' && source.name === 'jev-first-policy'))
-          expect(contexts).toHaveLength(!suppressed && !firstTurn ? 3 : 0)
+          expect(contexts.filter(message => message.source.kind === 'agent-instructions')).toHaveLength(suppressed ? 0 : 1)
+          expect(contexts.some(message => message.source.kind === 'runtime-context')).toBe(!suppressed)
+          expect(contexts.some(message => message.source.kind === 'skill-invocation' && message.source.name === 'jev-first-policy')).toBe(!suppressed)
           expect(text).toContain(question)
           expect(text.includes('built-in guidance')).toBe(!suppressed)
           expect(text).toContain('preset contribution')
           expect(text.includes('mode contribution')).toBe(!suppressed)
+          expect(request.messages.filter(message => message.role === 'system')).toHaveLength(1)
+          expect(JSON.stringify(wireRequests[count + index]).includes('mode contribution')).toBe(!suppressed)
+          expect(JSON.stringify(wireRequests[count + index])).not.toContain('historical system update')
           expect(JSON.stringify(wireRequests[count + index])).not.toContain('developer marker')
           if (suppressed) {
             expect(request.messages[0]!.content).toEqual([{ type: 'text', text: 'preset contribution' }])
@@ -168,9 +174,12 @@ describe('TUI Web prompt settings', () => {
           }
         }
         if (firstTurn) {
-          expect(requests[0]!.messages.map(message => message.role)).toEqual(['system', 'user'])
+          const withoutContexts = (request: GenerateOptions) => request.messages.filter(({ source }) =>
+            source?.kind !== 'agent-instructions' && source?.kind !== 'runtime-context'
+            && !(source?.kind === 'skill-invocation' && source.name === 'jev-first-policy'))
+          expect(withoutContexts(requests[0]!).map(message => message.role)).toEqual(['system', 'user'])
           expect(requests[0]!.messages[1]!.content).toEqual([{ type: 'text', text: question }])
-          expect(requests[1]!.messages.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'user'])
+          expect(withoutContexts(requests[1]!).map(message => message.role)).toEqual(['system', 'user', 'assistant', 'user'])
           expect(requests[1]!.messages[0]).toEqual(requests[0]!.messages[0])
         }
         expect(await readSaved()).toBe(before)
@@ -180,6 +189,9 @@ describe('TUI Web prompt settings', () => {
       agent.session.append('developer/message', {
         turn: 2, step: 1,
         message: createDeveloperMessage({ content: [{ type: 'text', text: 'developer marker' }], source: { kind: 'session-edit' } }),
+      }, { surfaceOp: 'append' })
+      agent.session.append('system/message', {
+        turn: 2, step: 1, message: createSystemMessage('historical system update\n\nmode contribution'),
       }, { surfaceOp: 'append' })
       const restored = await ctx.agents.create({
         sessionId: SessionId('restored-tui-prompt-settings'), seed: agent.session.snapshotEvents(),
@@ -191,6 +203,8 @@ describe('TUI Web prompt settings', () => {
       expect(errors).toEqual([])
       expect(adapter.requests.at(-1)!.messages.some(message => message.source?.kind === 'agent-instructions')).toBe(!initial)
       expect(JSON.stringify(wireRequests.at(-1))).not.toContain('developer marker')
+      expect(JSON.stringify(wireRequests.at(-1)).includes('mode contribution')).toBe(!initial)
+      expect(JSON.stringify(wireRequests.at(-1))).not.toContain('historical system update')
       if (initial) expect(wireRequests.at(-1)!.messages.filter(message => message.role === 'system'))
         .toEqual([{ role: 'system', content: 'preset contribution' }])
       await restored.dispose()
@@ -201,6 +215,66 @@ describe('TUI Web prompt settings', () => {
       }
       expect(agent.session.snapshotEvents().some(event => event.type === 'developer/message'
         && event.data.message.content.some(block => block.type === 'text' && block.text === 'developer marker'))).toBe(true)
+      const originalHistory = agent.session.snapshotEvents()
+      const selected: string[] = []
+      ctx.provide('agentPresets', {
+        resolve: async (id: string) => ({ id }), composedPreset: () => 'old-preset',
+        mount: async (agentCtx: Context, id: string) => { await agentCtx.plugin(Persona, { prefix: `NEW_PRESET_${id}` }) },
+        select: async (_agent: unknown, id: string) => { selected.push(id); return id },
+      })
+      await save(initial)
+      for (const id of ['second', 'third']) {
+        const child = await forkSession(ctx, agent, { provider: 'mock', model: 'mock' }, { cwd: root, agentPreset: id }, true)
+        let active = child
+        if (id === 'third') {
+          const seed = child.agent.session.snapshotEvents()
+          await child.handle?.dispose()
+          const reopened = await ctx.agents.create({
+            sessionId: SessionId('restored-pending-preset'), seed,
+            inheritedEventCount: 0, meta: { cwd: root, parentSession: agent.id, agentPreset: id },
+            agentOptions: { provider: 'mock', model: 'mock' },
+            setup: async (agentCtx) => { await agentCtx.plugin(Persona, { prefix: `NEW_PRESET_${id}` }) },
+          })
+          active = { agent: reopened.agent, handle: reopened }
+        }
+        try {
+          active.agent.followup(createUserMessage({ content: [{ type: 'text', text: `continue ${id}` }], source: { kind: 'user' } }))
+          await active.agent.whenIdle()
+          expect(errors).toEqual([])
+          const wire = wireRequests.at(-1)!
+          expect(wire.messages[0]?.role).toBe('system')
+          const systems = wire.messages.filter(message => message.role === 'system')
+          expect(systems).toHaveLength(1)
+          expect(systems[0]!.content).toContain(`NEW_PRESET_${id}`)
+          if (initial) expect(systems[0]!.content).toBe(`NEW_PRESET_${id}`)
+          expect(JSON.stringify(wire)).not.toContain('preset contribution')
+          expect(JSON.stringify(wire)).not.toContain('historical system update')
+          expect(JSON.stringify(wire)).not.toContain('developer marker')
+          expect(JSON.stringify(wire)).not.toContain('scoped built-in guidance')
+          expect(JSON.stringify(wire).includes('mode contribution')).toBe(!initial)
+          expect(wire.messages.some(message => message.role === 'user' && message.content === question)).toBe(true)
+          expect(wire.messages.some(message => message.role === 'assistant' && message.content === 'done')).toBe(true)
+          expect(selected.at(-1)).toBe(id)
+          expect(agent.session.snapshotEvents()).toEqual(originalHistory)
+        } finally { await active.handle?.dispose() }
+      }
+      for (const mode of ['blue', 'black', 'dead', 'red'] as const) {
+        await writeFile(web, JSON.stringify([{ id: 'pentest-mode', config: {
+          mode, suppressSections: false, bluePrompt: 'TEAM_BLUE', redPrompt: 'TEAM_RED',
+          blackPrompt: 'TEAM_BLACK', deadPrompt: 'TEAM_DEAD',
+        } }]))
+        agent.followup(createUserMessage({ content: [{ type: 'text', text: 'continue after a team change' }], source: { kind: 'user' } }))
+        await agent.whenIdle()
+        expect(errors).toEqual([])
+        const systems = wireRequests.at(-1)!.messages.filter(message => message.role === 'system')
+        expect(systems).toHaveLength(1)
+        expect(systems[0]!.content).toContain(`TEAM_${mode.toUpperCase()}`)
+        for (const other of ['blue', 'red', 'black', 'dead']) {
+          if (other !== mode) expect(systems[0]!.content).not.toContain(`TEAM_${other.toUpperCase()}`)
+        }
+        expect(systems[0]!.content).toContain('preset contribution')
+        expect(systems[0]!.content).not.toContain('historical system update')
+      }
       await unlink(web)
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'fallback' }], source: { kind: 'user' } }))
       await agent.whenIdle()
@@ -210,13 +284,60 @@ describe('TUI Web prompt settings', () => {
       await writeFile(web, JSON.stringify([{ id: 'pentest-mode', config: { suppressSections: 'yes' } }]))
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'invalid' }], source: { kind: 'user' } }))
       await agent.whenIdle()
-      expect(errors).toContainEqual(new Error('pi-tui: Web suppressSections must be a boolean'))
+      expect(errors).toContainEqual(new Error('pi-tui: suppressSections must be a boolean'))
       expect(adapter.requests).toHaveLength(count)
     } finally {
       await ctx.fiber.dispose()
       if (gateway.listening) await new Promise<void>((resolve, reject) => {
         gateway.close((error) => { if (error) reject(error); else resolve() })
       })
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each(['tui', 'web'] as const)('applies team prompts in %s assemblies', async (surface) => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-team-prompt-surface-'))
+    const ctx = new Context()
+    try {
+      await mountAgentLoopTestDependencies(ctx)
+      ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'other built-in guidance' })
+      const patchPath = join(root, 'profile.patch.yml')
+      ctx.provide('profileContext', { name: surface, home: root, patchPath })
+      await ctx.plugin(Loader)
+      Object.assign(ctx.loader.builtins, {
+        'include-test': Include, 'mode-test': PentestModePolicy,
+        'tui-settings-test': {
+          name: 'tui-settings-test', inject: ['pentestModePolicy', 'systemPrompt'], apply: installWebPromptSettings,
+        },
+      })
+      const composition = join(root, 'cordis.yml')
+      await writeFile(composition, JSON.stringify([
+        { id: 'pentest-mode', name: 'cordis:mode-test' },
+        ...surface === 'tui' ? [{ id: 'tui-settings', name: 'cordis:tui-settings-test' }] : [],
+      ]))
+      await ctx.loader.root.update([{ id: 'include', name: 'cordis:include-test', config: { path: pathToFileURL(composition).href } }])
+      await ctx.loader.await()
+      const entry = ctx.loader.resolve('include:pentest-mode')
+      for (const mode of ['blue', 'red', 'black', 'dead'] as const) {
+        for (const prompt of ['-', `${mode} team contribution`]) {
+          if (surface === 'tui') await writeFile(patchPath, JSON.stringify([
+            { id: 'pentest-mode', config: { mode, [`${mode}Prompt`]: prompt, suppressSections: false } },
+          ]))
+          await entry.update({ config: { mode, [`${mode}Prompt`]: prompt, suppressSections: false } })
+          await ctx.loader.await()
+          const assembly = await ctx.systemPrompt.assemble()
+          expect(assembly.sections.find(section => section.name === 'pentest:mode-policy')?.text)
+            .toBe(prompt)
+          expect(assembly.sections.some(section => section.text === 'other built-in guidance')).toBe(true)
+          expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
+        }
+      }
+      expect(JSON.parse(await readFile(composition, 'utf8'))).toEqual([
+        { id: 'pentest-mode', name: 'cordis:mode-test' },
+        ...surface === 'tui' ? [{ id: 'tui-settings', name: 'cordis:tui-settings-test' }] : [],
+      ])
+    } finally {
+      await ctx.fiber.dispose()
       await rm(root, { recursive: true, force: true })
     }
   })

@@ -1,13 +1,9 @@
 import { type Context, FiberState } from '@deepseek-ai/cordis'
-import { readWebProfileConfig } from './web-settings.js'
-
-function isSupplementalContext(source: { kind: string; name?: string }): boolean {
-  return source.kind === 'agent-instructions' || source.kind === 'runtime-context'
-    || (source.kind === 'skill-invocation' && source.name === 'jev-first-policy')
-}
+import { readProfileConfig, readWebProfileConfig } from './web-settings.js'
+import { TEAM_MODE_OPTIONS } from './team-mode.js'
 
 /**
- * Follow the Web suppression switch and defer supplemental context until the second TUI turn.
+ * Apply saved TUI team settings and suppression, falling back to Web, with current system prompts.
  * @param ctx - TUI context with its Loader and pentest mode policy.
  */
 export async function installWebPromptSettings(ctx: Context): Promise<void> {
@@ -18,28 +14,49 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
       update(options: { config: Record<string, unknown> }): Promise<void>
     }>
   } | undefined
-  const policy = ctx.get('pentestModePolicy') as { current(): { suppressSections: boolean } } | undefined
+  const policy = ctx.get('pentestModePolicy') as { current(): Record<string, unknown> & { suppressSections: boolean } } | undefined
   if (loader === undefined || policy === undefined) return
   const entry = [...loader.entries()].find(entry => entry.options.id === 'pentest-mode' && entry.fiber?.state === FiberState.ACTIVE)
   if (entry === undefined) throw new Error('pi-tui: active pentest-mode entry not found')
-  const fallback = entry.options.config?.suppressSections ?? false
+  const fallback = { ...entry.options.config }
   const sync = async (): Promise<boolean> => {
-    const suppressSections = readWebProfileConfig(ctx, 'pentest-mode')?.get('suppressSections') ?? fallback
-    if (typeof suppressSections !== 'boolean') throw new Error('pi-tui: Web suppressSections must be a boolean')
-    if (suppressSections === policy.current().suppressSections) return false
-    await entry.update({ config: { ...entry.options.config, suppressSections } })
+    const local = readProfileConfig(ctx, 'pentest-mode')
+    const web = readWebProfileConfig(ctx, 'pentest-mode')
+    const suppressSections = local?.get('suppressSections') ?? web?.get('suppressSections') ?? fallback.suppressSections ?? false
+    if (typeof suppressSections !== 'boolean') throw new Error('pi-tui: suppressSections must be a boolean')
+    const mode = local?.get('mode') ?? web?.get('mode') ?? fallback.mode ?? 'red'
+    if (!TEAM_MODE_OPTIONS.some(option => option.value === mode)) {
+      throw new Error('pi-tui: mode must be blue, red, black, or dead')
+    }
+    const updates: Record<string, unknown> = { suppressSections, mode }
+    for (const option of TEAM_MODE_OPTIONS) {
+      const key = `${option.value}Prompt`
+      const value = web?.get(key) ?? fallback[key]
+      if (value === undefined) continue
+      if (typeof value !== 'string') throw new Error(`pi-tui: ${key} must be a string`)
+      updates[key] = value
+    }
+    const current = policy.current()
+    if (Object.entries(updates).every(([key, value]) => current[key] === value)) return false
+    await entry.update({ config: { ...entry.options.config, ...updates } })
     return true
   }
   await sync()
-  ctx.on('agent/pre-step', async ({ turn }, next) => {
-    const decision = await next()
-    if (decision.kind === 'reject' || turn !== 1) return decision
-    return { ...decision, messages: decision.messages.filter(message => !isSupplementalContext(message.source)) }
+  ctx.on('agent/pre-step', async ({ agent }, next) => {
+    let decision = await next()
+    if (decision.kind === 'reject') return decision
+    // In-history updates must not retain a prior preset or team policy, including after resume.
+    if (agent.session.requestContext()?.systemPromptUpdate === 'in-history'
+      || (agent.session.header.parentSession !== undefined && !agent.session.header.isSeeded
+        && !agent.session.deriveMessages().some(message => message.role === 'system'))) {
+      decision = { ...decision, startsRequestSeries: true }
+    }
+    return decision
   }, { prepend: true })
   const refreshing = new WeakSet<object>()
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     if (refreshing.has(context) || !await sync()) return next()
-    // The assembly waterfall runs after section selection; rebuild once when the switch changes.
+    // Section selection precedes this waterfall; reassemble once when settings change.
     refreshing.add(context)
     try { return await ctx.systemPrompt.assemble(context) }
     finally { refreshing.delete(context) }

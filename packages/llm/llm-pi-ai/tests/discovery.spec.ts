@@ -115,6 +115,23 @@ describe('catalog-route model discovery', () => {
 })
 
 describe('draft-provider model discovery', () => {
+  it.each([
+    { levels: ['low', 'high', 'max'], expected: { low: 'low', high: 'high', max: 'max' } },
+    { levels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+      expected: { off: 'none', minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' } },
+    { levels: ['off', 'on'], expected: { off: 'off', high: 'on' } },
+    { levels: ['adaptive', 'disabled'], expected: { high: 'adaptive', off: 'disabled' } },
+    { levels: ['on'], expected: { high: 'on' } },
+    { levels: ['unknown'], expected: undefined },
+    { levels: [], expected: undefined },
+  ])('reads xKiro reasoning controls $levels without adding unsupported efforts', async ({ levels, expected }) => {
+    const server = await listingServer({ body: JSON.stringify({ data: [{
+      id: 'vendor/reasoning-model', reasoning_efforts: { levels, default: levels[0] },
+    }] }) })
+    const models = await discoverModels({ baseURL: server.url, api: 'openai-completions' })
+    expect(models[0]?.reasoningEfforts).toEqual(expected)
+  })
+
   it('reads an OpenAI-compatible listing and keeps the capabilities it discloses', async () => {
     const server = await listingServer({
       body: JSON.stringify({
@@ -512,12 +529,26 @@ describe('probe key format', () => {
 })
 
 /**
- * Replies recorded from live endpoints on 2026-09-02, plus the reply
+ * Replies recorded from live endpoints, plus the reply
  * Anthropic's List Models reference documents. Each file keeps the reply's
  * top-level fields and entry objects verbatim; only a recorded entry list is
  * cut down to the named entries so the archive stays small.
  */
 const RECORDED_LISTINGS = [
+  {
+    name: 'xKiro GET /v1/models',
+    file: 'xkiro-2026-10-14.json',
+    api: 'openai-completions',
+    models: [
+      { id: 'mistralai/ministral-14b', name: 'Ministral 3 14B', contextWindow: 256_000, maxTokens: 8192 },
+      { id: 'z-ai/glm-5.3', name: 'GLM-5.3', contextWindow: 1_000_000, maxTokens: 65_536,
+        reasoningEfforts: { low: 'low', high: 'high', max: 'max' } },
+      { id: 'z-ai/glm-5', name: 'GLM-5', contextWindow: 200_000, maxTokens: 65_536,
+        reasoningEfforts: { off: 'off', high: 'on' } },
+      { id: 'minimax/minimax-m3', name: 'MiniMax M3', contextWindow: 1_000_000, maxTokens: 65_536,
+        reasoningEfforts: { high: 'adaptive', off: 'disabled' } },
+    ],
+  },
   {
     name: 'OpenRouter GET /api/v1/models',
     file: 'openrouter-2026-09-02.json',

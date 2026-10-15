@@ -14,7 +14,7 @@ export type { ActiveAtToken } from './grammar.ts'
 export type { FileReferenceCandidate } from './types.ts'
 
 /** Model guidance for path-only references selected by a user interface. */
-export const FILE_REFERENCE_PROMPT = 'Tokens prefixed with @ are paths the user explicitly referenced. Relative paths resolve from the workspace root; absolute paths identify files or directories on the host. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.'
+export const FILE_REFERENCE_PROMPT = '@ PATH REFERENCES\nParse rules: @path → user explicitly referenced this path @/abs/path → absolute path on host @rel/path → relative, resolve from workspace root @dir/ → trailing slash = directory → list contents @"some path" → quoted, path contains spaces\n\nType resolution: trailing / → directory (list when contents matter) no trailing / → file (read when contents needed)\n\nAnti-hallucination: NEVER claim to have inspected a file before actually reading it. If contents are needed → read tool. No exceptions.'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

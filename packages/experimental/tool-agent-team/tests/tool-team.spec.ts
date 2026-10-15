@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -216,11 +217,8 @@ describe('dsh-tool-team', () => {
     expect(leadAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
-    expect(leadPrompt).toContain('create teammates only when the user explicitly asks')
-    expect(leadPrompt).toContain('FS_STALE_VERSION')
-    expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
-    expect(leadPrompt).toContain('Task readiness never starts an owner')
-    expect(leadPrompt).toContain('returns noProgress immediately')
+    expect(leadPrompt.length).toBeGreaterThan(0)
+    expect(createHash('sha256').update(leadPrompt).digest('hex')).toMatchInlineSnapshot('"138a3512d92268523d9d2fdc0644863aacb8108ff7597df622dc34a2eeda008f"')
     expect(leadPrompt).not.toContain('Your Team role')
     expect(renderContextSnapshot(leadAssembly)).toBe('')
 

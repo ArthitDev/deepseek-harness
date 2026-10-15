@@ -2,10 +2,22 @@ import { stripVTControlCharacters } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ViewportTUI } from '@earendil-works/pi-tui'
 import { StatusBar } from '../src/ui/views.ts'
+import { TEAM_MODE_OPTIONS } from '../src/core/team-mode.ts'
 
 afterEach(() => { vi.useRealTimers() })
 
 describe('status bar animation', () => {
+  it.each(TEAM_MODE_OPTIONS)('shows the $label icon and name without adding a loading animation', (option) => {
+    vi.useFakeTimers()
+    const bar = new StatusBar({ requestRender: vi.fn() } as unknown as ViewportTUI)
+    try {
+      bar.update({ model: 'chosen-model', teamMode: option.value })
+      const text = stripVTControlCharacters(bar.render(35).join('\n'))
+      expect(text).toContain(`${option.icon} ${option.label}`)
+      expect(text).toContain('🤖 chosen-model')
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { bar.stop() }
+  })
   it('keeps the model robot static during work without starting a status animation', () => {
     vi.useFakeTimers()
     const requestRender = vi.fn()

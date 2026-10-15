@@ -1,6 +1,7 @@
 /** Node-half coverage for the model guidance paired with Web file references. */
 
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -29,12 +30,15 @@ describe('ui-deliverables node plugin', () => {
 
     const section = (await ctx.systemPrompt.assemble()).sections
       .find(entry => entry.name === 'ui:deliverable-file-references')
-    expect(section?.text).toMatchInlineSnapshot('"Prefer showing the primary results within your final response alongside a brief explanation. Markdown file links such as [Report](path/to/report.html) open the file in the sidebar preview. For images, you can add an inline preview such as ![Preview](/absolute/path/image.png); include a file link as well so the image remains accessible in clients that cannot display it inline. Do not call present just to list edited source files, or run commands to check whether a diff view will appear. Use present when a separate file card helps the user open the complete deliverable, especially Office documents, spreadsheets, and slide decks. Each presented file adds a card below the reply, with preview and native-open actions. Usually select the 1-2 most important deliverables; include more when needed, but at most 4 files in a single present call. Avoid repeating results already shown inline unless the separate card adds useful access. Outside commands, configuration expressions, and code blocks, link every mention of an existing file, including repeats and tables, to its full path relative to the working directory or absolute; append #L24 or #L24-L30 to the target for known lines. Use the filename or a clear alias as the label, adding only enough parent directories to distinguish files; keep full paths out of labels. Default to the name alone; when precise locations matter, append :24 or :24–30, with no # or L in the line suffix."')
+    expect(section?.text.length).toBeGreaterThan(0)
+    expect(createHash('sha256').update(section!.text).digest('hex')).toMatchInlineSnapshot('"d0db794da81f1f43133aee8179a04524c18e8232c4964d86a77087084484b8eb"')
 
-    // Only live request pins track current guidance; seeded sessions retain their recorded prompt.
+    const recordedGuidance = JSON.parse('"Prefer showing the primary results within your final response alongside a brief explanation. Markdown file links such as [Report](path/to/report.html) open the file in the sidebar preview. For images, you can add an inline preview such as ![Preview](/absolute/path/image.png); include a file link as well so the image remains accessible in clients that cannot display it inline. Do not call present just to list edited source files, or run commands to check whether a diff view will appear. Use present when a separate file card helps the user open the complete deliverable, especially Office documents, spreadsheets, and slide decks. Each presented file adds a card below the reply, with preview and native-open actions. Usually select the 1-2 most important deliverables; include more when needed, but at most 4 files in a single present call. Avoid repeating results already shown inline unless the separate card adds useful access. Outside commands, configuration expressions, and code blocks, link every mention of an existing file, including repeats and tables, to its full path relative to the working directory or absolute; append #L24 or #L24-L30 to the target for known lines. Use the filename or a clear alias as the label, adding only enough parent directories to distinguish files; keep full paths out of labels. Default to the name alone; when precise locations matter, append :24 or :24–30, with no # or L in the line suffix."') as string
+
+    // Recorded sessions retain their historical guidance; current wording is pinned above.
     for (const scenario of ['fresh-round-trip', 'ptc-round']) {
       const sidecar = await readFile(new URL(`../../../../snapshots/web/${scenario}/system-prompt.expected.md`, import.meta.url), 'utf8')
-      expect(sidecar, scenario).toContain(section!.text)
+      expect(sidecar, scenario).toContain(recordedGuidance)
     }
 
     await mounted.dispose()

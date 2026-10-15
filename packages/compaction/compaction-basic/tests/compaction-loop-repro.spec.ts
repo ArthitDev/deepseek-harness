@@ -105,7 +105,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
     const trailing = options.messages.at(-1)?.content
       .map(block => (block.type === 'text' ? block.text : ''))
       .join('') ?? ''
-    if (trailing.includes('acting as a compaction engine')) {
+    if (trailing.includes('Create a structured checkpoint from the conversation above')) {
       this.summaryRequests.push(options)
       yield { type: 'block-start', index: 0, blockType: 'text' }
       yield { type: 'block-end', index: 0, block: { type: 'text', text: 'RECOVERY CHECKPOINT' } }
@@ -423,6 +423,8 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
         const instruction = adapter.summaryRequests[0]!.messages.at(-1)?.content
           .map(block => (block.type === 'text' ? block.text : ''))
           .join('') ?? ''
+        expect(instruction).toMatch(/^Create a structured checkpoint from the conversation above/)
+        expect(instruction).not.toContain('You are')
         expect(instruction).toContain('Write concise English engineering prose.')
         expect(instruction).toContain('numeric values, function signatures, and syntax fragments.')
         expect(JSON.stringify(adapter.conversationRequests[0]!.messages)).toContain('OLD HISTORY SENTINEL')

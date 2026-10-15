@@ -74,6 +74,11 @@ interface ListingReasoning {
   mandatory?: unknown
 }
 
+/** Reasoning controls nested by xKiro model-directory replies. */
+interface ListingReasoningControls {
+  levels?: unknown
+}
+
 /** One entry of a supported `GET /models` reply. */
 interface ListingEntry {
   id?: unknown
@@ -93,6 +98,7 @@ interface ListingEntry {
   top_provider?: ListingTopProvider | null
   reasoning?: ListingReasoning | null
   supported_reasoning_efforts?: unknown
+  reasoning_efforts?: ListingReasoningControls | null
 }
 
 /** Reasoning levels the pi-ai profile schema can advertise. */
@@ -114,11 +120,12 @@ function label(...candidates: readonly unknown[]): string | undefined {
   return undefined
 }
 
-/** Normalize advertised OpenRouter, LiteLLM, and Codex effort lists for profile adoption. */
+/** Normalize advertised effort lists and binary reasoning controls for profile adoption. */
 function reasoningEfforts(entry: ListingEntry | null): Readonly<Record<string, string | null>> | undefined {
   const nested = entry?.reasoning
   const nestedEfforts = nested?.supported_efforts
-  const advertised = nestedEfforts === null ? null : nestedEfforts ?? entry?.supported_reasoning_efforts
+  const advertised = nestedEfforts === null ? null
+    : nestedEfforts ?? entry?.supported_reasoning_efforts ?? entry?.reasoning_efforts?.levels
   const values = advertised === null && nested !== null && nested !== undefined
     ? [...REASONING_LEVELS, 'none']
     : Array.isArray(advertised) ? advertised : []
@@ -126,8 +133,10 @@ function reasoningEfforts(entry: ListingEntry | null): Readonly<Record<string, s
   for (const value of values) {
     const item = value as { effort?: unknown; reasoning_effort?: unknown } | null
     const wire = label(value, item?.effort, item?.reasoning_effort)
-    if (wire === 'none') {
-      if (nested?.mandatory !== true) efforts.off = 'none'
+    if (wire === 'none' || wire === 'off' || wire === 'disabled') {
+      if (nested?.mandatory !== true) efforts.off = wire
+    } else if (wire === 'on' || wire === 'adaptive') {
+      efforts.high ??= wire
     } else if (wire !== undefined && REASONING_LEVELS.has(wire)) {
       efforts[wire] = wire
     }

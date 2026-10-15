@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
+import { createDeveloperMessage, createSystemMessage } from '@deepseek-ai/dsh-llm'
 import {
   buildForkSeed,
   SessionId,
@@ -127,7 +128,7 @@ async function attachToWorkspace(
 
 /** Copy-pasteable resume command for a persisted session. */
 export function resumeCommand(sessionId: string): string {
-  return `dsh --profile pi-tui --resume ${sessionId}`
+  return `dsh tui --resume ${sessionId}`
 }
 
 /**
@@ -299,18 +300,40 @@ export async function resolveAgent(
  * fresh session id. The seed is built with the session fork primitive the
  * agent factory documents: an exact parent prefix, the inherited marker, and
  * synthetic closers for the open tail.
+ * With resetPrompt, copy the log with empty system messages and non-model-visible
+ * session-edit placeholders for developer and injected user instructions. Conversation,
+ * tool results, and compacted checkpoints remain. This edited seed shares no inherited
+ * persistence prefix; the source is unchanged and the child's new preset is recorded.
  */
 export async function forkSession(
   ctx: Context,
   source: Agent,
   agentOptions: AgentOptions,
   meta: SessionMeta,
+  resetPrompt = false,
 ): Promise<ResolvedAgent> {
   const events = replayEvents(source.session)
   const lastSeq = events.length - 1
-  const seed = lastSeq >= 0 ? buildForkSeed(events, SessionSeq(lastSeq)) : undefined
+  const prefix = resetPrompt ? events.map((event): SessionEvent => {
+    if (event.type === 'system/message') return {
+      ...event, data: { ...event.data, message: createSystemMessage('') },
+    }
+    if ((event.type === 'developer/message' && event.data.message.source.kind !== 'session-edit') || (event.type === 'user/message'
+      && event.data.source.kind !== 'user' && (event.data.source as { kind: string }).kind !== 'compact-checkpoint'
+      && !(event.data.source.kind === 'pi-tui' && event.data.source.form === 'notice'))) {
+      return {
+        ...event, type: 'developer/message', data: {
+          turn: event.type === 'developer/message' ? event.data.turn : 1,
+          step: event.type === 'developer/message' ? event.data.step : 1,
+          message: createDeveloperMessage({ content: [], source: { kind: 'session-edit' } }),
+        },
+      }
+    }
+    return event
+  }) : events
+  const seed = lastSeq >= 0 ? resetPrompt ? prefix : buildForkSeed(prefix, SessionSeq(lastSeq)) : undefined
   const presets = ctx.get('agentPresets') as
-    { composedPreset(agentCtx: Context): string | undefined } | undefined
+    { composedPreset(agentCtx: Context): string | undefined; select(agent: Agent, id: string): Promise<string> } | undefined
   const composition = await composeSetup(
     ctx,
     meta.agentPreset ?? presets?.composedPreset(source.ctx),
@@ -322,15 +345,18 @@ export async function forkSession(
     meta: {
       ...meta,
       parentSession: source.session.id,
-      ...(seed !== undefined ? { isSeeded: true } : {}),
+      ...(seed !== undefined && !resetPrompt ? { isSeeded: true } : {}),
       ...(composition.agentPreset !== undefined ? { agentPreset: composition.agentPreset } : {}),
     },
-    // The fork seed's inherited prefix is the copied source events; the
-    // marker and synthetic closers after it belong to the child.
-    ...(seed !== undefined ? { inheritedEventCount: SessionLogOffset(lastSeq + 1) } : {}),
+    // An edited seed must be persisted independently from the source prefix.
+    ...(seed !== undefined ? { inheritedEventCount: SessionLogOffset(resetPrompt ? 0 : lastSeq + 1) } : {}),
     agentOptions,
     ...(composition.setup !== undefined ? { setup: composition.setup } : {}),
   })
+  if (resetPrompt && composition.agentPreset !== undefined && presets !== undefined) {
+    try { await presets.select(created.agent, composition.agentPreset) }
+    catch (error) { await created.dispose(); throw error }
+  }
   attachWorkspaceOnFirstEvent(ctx, childId, meta.cwd)
   return { agent: created.agent, handle: created }
 }

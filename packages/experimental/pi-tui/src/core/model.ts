@@ -212,7 +212,8 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
   switch (event.type) {
     case 'developer/message': {
       // The rewind/clear marker: its surfaceOp replace shadows every item in
-      // [startSeq, endSeq]. The marker's own prose is log bookkeeping, not a
+      // [startSeq, endSeq]; clear also removes later log-only output up to
+      // the marker. The marker's own prose is log bookkeeping, not a
       // bubble; the notice is what the transcript shows at the shadow point,
       // live and on replay. Ids re-densify after the prune because the fold
       // window reads them as positions.
@@ -221,15 +222,20 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
         && typeof surfaceOp.startSeq === 'number'
         && typeof surfaceOp.endSeq === 'number') {
         const start = surfaceOp.startSeq
-        const end = surfaceOp.endSeq
         const clearing = textOf(event.data.message.content).startsWith('the operator cleared')
+        const end = clearing ? event.seq : surfaceOp.endSeq
         model.items = model.items
           .filter(item => item.seq === undefined
             ? !clearing || item.notice === 'banner'
             : item.seq < start || item.seq > end)
           .map((item, index) => item.id === index ? item : { ...item, id: index })
+        if (clearing) {
+          model.openAssistant = undefined
+          model.openReasoning = undefined
+        }
         // nextId was captured before the prune; rebase it on the densified list.
         nextId = model.items.length
+        if (event.data.message.content.length === 0) break
         push({
           kind: 'notice',
           text: replaceMarkerNotice(event.data.message.content),

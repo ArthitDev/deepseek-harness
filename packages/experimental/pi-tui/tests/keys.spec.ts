@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ctrlC, cycleEffort, isPathLikeToken, parseBang, parseSlash } from '../src/core/keys.ts'
+import { ctrlC, isPathLikeToken, parseBang, parseSlash } from '../src/core/keys.ts'
 
 describe('ctrlC', () => {
   it('cancels the running turn while working and keeps the arm state', () => {
@@ -26,27 +26,6 @@ describe('ctrlC', () => {
     expect(result.action).toBe('arm')
     expect(result.state).toEqual({ lastPressAt: 10_501 })
     expect(result.arm).toBe(true)
-  })
-})
-
-describe('cycleEffort', () => {
-  const efforts = [{ id: 'off' }, { id: 'high' }, { id: 'max' }]
-
-  it('returns undefined for an empty effort list', () => {
-    expect(cycleEffort([], 'high')).toBeUndefined()
-  })
-
-  it('wraps to the first effort past the end', () => {
-    expect(cycleEffort(efforts, 'max')).toBe('off')
-  })
-
-  it('steps to the next effort in the list', () => {
-    expect(cycleEffort(efforts, 'off')).toBe('high')
-  })
-
-  it('starts from the first effort when the current one is unknown', () => {
-    expect(cycleEffort(efforts, 'medium')).toBe('off')
-    expect(cycleEffort(efforts, undefined)).toBe('off')
   })
 })
 

@@ -29,18 +29,6 @@ export function ctrlC(
   return { action: 'arm', state: { lastPressAt: now }, arm: true }
 }
 
-/** Next effort in the model's ordered list, wrapping around. */
-export function cycleEffort(
-  efforts: readonly { id: string }[],
-  current: string | undefined,
-): string | undefined {
-  if (efforts.length === 0) return undefined
-  const ids = efforts.map(effort => effort.id)
-  const index = efforts.findIndex(effort => effort.id === current)
-  if (index === -1) return ids[0]
-  return ids[(index + 1) % ids.length]
-}
-
 /** Split a slash line into its lower-case command name and raw input. */
 export function parseSlash(line: string): { name: string; raw: string } | undefined {
   if (!line.startsWith('/')) return undefined

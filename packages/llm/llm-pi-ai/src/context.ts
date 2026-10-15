@@ -46,12 +46,9 @@ function toolResultOf(
   }
 }
 
-/** Reject unsupported developer blocks, tool-change blocks, and image roles before replay or image offloading. */
+/** Reject tool-change blocks and unsupported image roles before replay or image offloading. */
 function assertSupportedHistory(messages: readonly RequestMessage[]): void {
   for (const message of messages) {
-    if (message.role === 'developer' && message.content.some(block => block.type !== 'text')) {
-      throw new LlmError('pi-ai developer messages support text only', 'UNSUPPORTED_CONTENT')
-    }
     if (message.content.some(block => block.type === 'tool-addition' || block.type === 'tool-removal')) {
       throw new LlmError('Tool-change blocks require developer role', 'UNSUPPORTED_CONTENT')
     }
@@ -62,6 +59,15 @@ function assertSupportedHistory(messages: readonly RequestMessage[]): void {
       )
     }
   }
+}
+
+/**
+ * Exclude developer history from provider requests without changing the caller's messages.
+ * @param options - original request with any persisted or injected developer messages.
+ * @returns a request copy retaining all other roles and request fields.
+ */
+export function withoutDeveloperMessages(options: GenerateOptions): GenerateOptions {
+  return { ...options, messages: options.messages.filter(message => message.role !== 'developer') }
 }
 
 function userContent(
@@ -155,8 +161,7 @@ interface SystemPromptSplit {
  * including a leading `system` message, which then folds into a `user`
  * message. Otherwise a leading `system` history message supplies the prompt
  * and leaves the converted history; empty leading text sends no prompt.
- * Developer text appends to the system prompt in history order because pi-ai
- * has no developer history role; empty developer messages are omitted.
+ * Developer messages are excluded before conversion and never contribute prompt text.
  */
 function splitSystemPrompt(options: GenerateOptions): SystemPromptSplit {
   let systemPrompt = options.system
@@ -169,13 +174,7 @@ function splitSystemPrompt(options: GenerateOptions): SystemPromptSplit {
       messages = rest
     }
   }
-  const developerText = messages.filter(message => message.role === 'developer')
-    .map(flattenText).filter(text => text.length > 0)
-  if (developerText.length > 0) {
-    systemPrompt = [systemPrompt, ...developerText]
-      .filter(text => text !== undefined && text.length > 0).join('\n\n')
-  }
-  return { systemPrompt, messages: messages.filter(message => message.role !== 'developer') }
+  return { systemPrompt, messages }
 }
 
 /** Assemble the request-level pi-ai context envelope shared by both conversion paths. */
@@ -266,13 +265,13 @@ function requestImageTarget(ref: ImageAttachmentRef, budget: PiImageRequestBudge
 }
 
 /**
- * Convert text-only harness history to a synchronous pi-ai Context. Tool
+ * Convert text-only harness history, excluding developer messages, to a synchronous pi-ai Context. Tool
  * result names are recovered from preceding assistant tool calls.
  * @param options - the harness request; `options.system`, else a leading `system` message, maps to pi-ai's single `systemPrompt` slot.
  * @param images - absent; selects the synchronous conversion.
  * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
  * @returns the pi-ai context; `tools` is omitted when the request declares none.
- * @throws {LlmError} `UNSUPPORTED_CONTENT` for images in any history role, including a leading system message.
+ * @throws {LlmError} `UNSUPPORTED_CONTENT` for images in retained history roles, including a leading system message.
  */
 export function toPiContext(
   options: GenerateOptions,
@@ -280,7 +279,7 @@ export function toPiContext(
   onReplayDegrade?: (reason: string) => void,
 ): PiContext
 /**
- * Convert harness history to a pi-ai Context while resolving durable images.
+ * Convert harness history, excluding developer messages, to a pi-ai Context while resolving durable images.
  * Tool result names are recovered from preceding assistant tool calls. Image
  * occurrences the surface marks offloaded become text placeholders; when the
  * retained occurrences' exact base64 payload still exceeds
@@ -301,6 +300,7 @@ export function toPiContext(
   images?: PiImageRequestContext,
   onReplayDegrade?: (reason: string) => void,
 ): PiContext | Promise<PiContext> {
+  options = withoutDeveloperMessages(options)
   return images === undefined
     ? textOnlyContext(options, onReplayDegrade)
     : toPiContextWithImages(options, images, onReplayDegrade)

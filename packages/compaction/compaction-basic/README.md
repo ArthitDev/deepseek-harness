@@ -194,7 +194,7 @@ The summarization model receives the conversation replayed verbatim — the same
 ##### Compaction instruction (final user message)
 
 ```markdown
-You are now acting as a compaction engine for this AI coding assistant. Condense the conversation ABOVE into a structured checkpoint that lets another model resume the work with no loss of essential context.
+Create a structured checkpoint from the conversation above, preserving the information needed to resume the task.
 
 Output EXACTLY the Markdown structure below: keep every section, in order. Use terse bullets, not prose paragraphs. Write "(none)" for an empty section — never drop a section.
 

@@ -189,7 +189,7 @@ describe('continuable policy inheritance', () => {
     const contextText = runtimeContext?.data.content
       .flatMap(block => block.type === 'text' ? [block.text] : [])
       .join('\n')
-    expect(contextText).toContain('You are a delegated subagent')
+    expect(contextText).toContain('Delegation context: this session has a fixed permission scope')
   })
 
   it('captures policy at delegation before asynchronous child creation', { timeout: 20_000 }, async () => {

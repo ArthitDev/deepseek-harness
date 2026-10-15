@@ -133,16 +133,17 @@ export function resolveLanTrust(bindHost: string, extra: readonly string[]): Web
 
 /** Model-visible orientation and acceptance boundary for sessions created through `dsh web`. */
 function webSurfacePrompt(webUrl: string): string {
-  const updateContract = 'The client-plugin HMR receiver is active, but client-plugin changes reload without a refresh only while '
-    + '`pnpm run dev:web` is also running from this same checkout to rebuild their bundles; verify that watcher before promising automatic updates. '
-    + 'Every other change — the apps/web shell and plain packages — requires rebuilding the affected Web artifacts and verifying this existing URL after a page refresh. '
-  return `You are interacting with the user through the Shield Break Harness Web GUI at ${webUrl}. `
-    + 'When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. '
-    + 'The browser provides no implicit DOM, route, or screenshot context. '
-    + updateContract
-    + 'Starting another server does not update this GUI. '
-    + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
-    + 'Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.'
+  const updateContract = "// template expression\nconst updateContract = `\nBuild & update:\n  client-plugin changes:\n    HMR receiver active\n    auto-reload without refresh ONLY while \\`pnpm run dev:web\\` is running from this same checkout\n    → verify watcher is running BEFORE telling user that auto-update works\n\n  all other changes (apps/web shell, plain packages):\n    manual rebuild of affected Web artifacts required\n    then refresh page → verify ${ctx.template.resolve('webUrl') ?? 'the existing GUI URL'}\n`;"
+  return `WEB GUI
+Interface: Shield Break Harness Web GUI URL: ${webUrl}
+
+Reference resolution: user says "this page" / "this GUI" / "this app" (no other target named) → means this GUI
+
+Browser constraints: NO implicit DOM access NO implicit route context NO implicit screenshot capability → model cannot assume it sees what the user sees
+
+${updateContract}
+
+Server management: starting another server does NOT update this GUI do NOT start a replacement server unless user explicitly asks if asked → use managed background job → verify its exact URL before reporting`
 }
 
 /** Resolve the canonical loopback URL from the active Web server. */

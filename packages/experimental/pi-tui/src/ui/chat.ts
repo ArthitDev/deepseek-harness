@@ -14,18 +14,20 @@
  *   Ctrl+T     toggle thinking display
  *   Ctrl+O     toggle full tool output
  *   Ctrl+L     open the model picker
- *   Shift+Tab  cycle thinking effort
+ *   Ctrl+X     open the reasoning-level picker
+ *   Shift+Tab  cycle mode
  */
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename, relative } from 'node:path'
+import chalk from 'chalk'
 import { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
-import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
@@ -66,14 +68,13 @@ import { runRgFiles, shouldShowPath } from '../core/files.js'
 import { foldWindow, visibleItemsBefore, type FoldWindow } from '../core/fold.js'
 import {
   ctrlC,
-  cycleEffort,
   isPathLikeToken,
   parseBang,
   parseSlash,
   type ExitArm,
 } from '../core/keys.js'
 import { collectProjection } from '../core/projection.js'
-import { editorTheme, style } from './theme.js'
+import { BRAND_RED, editorTheme, selectListTheme, style } from './theme.js'
 import { createView, ReasoningView, StatusBar, ToolCardView, updateView, type StatusBarData } from './views.js'
 import { listAllModels, pickModel, type LlmRuntimeLike, type ModelRoute } from './model-picker.js'
 import {
@@ -91,9 +92,12 @@ import {
 } from '../core/session.js'
 import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
-import { pickFromListWithSearch, openFindOverlay, pickFromSlider, promptSecret, promptText } from './overlays.js'
+import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
+import { pickReasoningLevel } from './reasoning-picker.js'
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
+import { defaultModelSelection } from '../core/web-settings.js'
+import { TEAM_MODE_OPTIONS, type TeamMode } from '../core/team-mode.js'
 
 export interface ChatScreenOptions {
   ctx: Context
@@ -117,12 +121,7 @@ interface LlmRuntime extends LlmRuntimeLike {
   resolveModelInfo(
     provider: string,
     model: string,
-  ): Promise<{
-    reasoning?: {
-      efforts?: { id: string; name: string; description?: string }[]
-      defaultEffort?: string
-    }
-  }>
+  ): Promise<LlmResolvedModelInfo>
   resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>
 }
 
@@ -133,6 +132,8 @@ export class ChatScreen {
   private readonly config: ChatScreenOptions['config']
   private readonly commands: CommandRuntime | undefined
   private readonly onAgentSwitch: ((resolved: ResolvedAgent) => void) | undefined
+  private readonly onQuit: ChatScreenOptions['onQuit']
+  private quitting = false
   private model: ChatModel = createModel()
   private readonly messages = new Container()
   private readonly statusBar: StatusBar
@@ -151,6 +152,10 @@ export class ChatScreen {
   private expandReasoning: boolean | undefined
   private expandTools = false
   private atPickerOpen = false
+  private reasoningPickerOpen = false
+  private suppressionPickerOpen = false
+  private teamModePickerOpen = false
+  private presetSwitching = false
   /** In-flight official slash command's abort signal (Esc interrupts it). */
   private slashAbort: AbortController | undefined
   /** Last counted running background jobs (refreshed outside the chunk hot path). */
@@ -184,6 +189,7 @@ export class ChatScreen {
   private lastQueueKey = ''
 
   constructor(options: ChatScreenOptions) {
+    this.onQuit = options.onQuit
     this.ctx = options.ctx
     this.tui = options.tui
     this.statusBar = new StatusBar(this.tui)
@@ -250,6 +256,7 @@ export class ChatScreen {
       // which filters kitty key-release events — do the same here, or every
       // functional key (Ctrl+C/D/T/O/L, Esc, Shift+Tab) fires twice.
       if (isKeyRelease(data)) return undefined
+      if ((this.reasoningPickerOpen || this.suppressionPickerOpen || this.teamModePickerOpen) && this.tui.hasOverlay()) return undefined
       if (matchesKey(data, 'escape')) {
         // A running human shell command owns Esc first (pi semantics).
         if (this.bashRunning) {
@@ -299,13 +306,13 @@ export class ChatScreen {
         this.exitArm = state
         if (action === 'cancel') this.interrupt()
         else if (action === 'clear') this.editor.setText('')
-        else if (action === 'exit') options.onQuit(this.resumeHint())
+        else if (action === 'exit') this.quit()
         if (arm) this.pushNotice('Press Ctrl+C again to exit')
         return { consume: true }
       }
       if (matchesKey(data, 'ctrl+d')) {
         if (this.editor.getText() === '' && !this.isWorking()) {
-          options.onQuit(this.resumeHint())
+          this.quit()
           return { consume: true }
         }
         return undefined // editor handles delete-forward
@@ -345,7 +352,7 @@ export class ChatScreen {
         return { consume: true }
       }
       if (matchesKey(data, 'ctrl+x')) {
-        void this.cycleThinking()
+        if (!this.tui.hasOverlay()) void this.cmdThinking('')
         return { consume: true }
       }
       if (matchesKey(data, 'ctrl+f')) {
@@ -407,7 +414,14 @@ export class ChatScreen {
   /** Copy-pasteable resume hint, or undefined when the session has no durable events. */
   private resumeHint(): string | undefined {
     if (this.agent.session.seq === 0) return undefined
-    return `resume: ${resumeCommand(this.currentSessionId)}`
+    return `session: ${this.currentSessionId}\nresume: ${resumeCommand(this.currentSessionId)}`
+  }
+
+  /** Exit once; the app stops the alternate screen before printing the saved-session hint. */
+  private quit(): void {
+    if (this.quitting) return
+    this.quitting = true
+    this.onQuit(this.resumeHint())
   }
 
   /**
@@ -430,7 +444,11 @@ export class ChatScreen {
    * request header wins, then the live selection, then startup fallbacks.
    */
   private seedSelection(): void {
-    const header = this.agent.session.requestHeader()?.config
+    const requestHeader = this.agent.session.requestHeader()
+    const header = requestHeader === undefined ? undefined : {
+      ...requestHeader.config,
+      ...requestHeader.adapterDefaults === undefined ? {} : { adapterDefaults: requestHeader.adapterDefaults },
+    }
     const defaults = this.defaultSelection()
     const prior = this.selection.current
     this.selection.current = seedModelSelection({
@@ -445,8 +463,7 @@ export class ChatScreen {
   /** The harness's shared default-model selection (same source as app.ts). */
   private defaultSelection():
     { provider?: string; model?: string; reasoningEffort?: string } | undefined {
-    const service = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
-    return service?.currentSelection()
+    return defaultModelSelection(this.ctx)
   }
 
   /**
@@ -565,6 +582,7 @@ export class ChatScreen {
         description: descriptor.description,
       })),
       { name: 'new', description: 'Start a fresh session' },
+      { name: 'exit', description: 'Exit and show the session resume command' },
       { name: 'fork', description: 'Fork this session at its current end' },
       { name: 'resume', description: 'List sessions / reopen one' },
       { name: 'tree', description: 'Subagent session tree' },
@@ -575,8 +593,9 @@ export class ChatScreen {
       },
       { name: 'preset', description: 'Switch the session preset' },
       { name: 'preset-create', description: 'Create a new preset from pasted text' },
-      { name: 'preset-create', description: 'Create a new preset from pasted text' },
-      { name: 'thinking', description: 'Set thinking effort (off/high/max)' },
+      { name: 'suppress-prompt', description: 'Suppress built-in prompt sections' },
+      { name: 'team-mode', description: 'Switch the team mode' },
+      { name: 'thinking', description: 'Choose reasoning level for the selected model' },
       { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
       { name: 'recon', description: 'Scan a target / list recon runs' },
       { name: 'machines', description: 'SSH machines: list|probe|open' },
@@ -638,9 +657,10 @@ export class ChatScreen {
   }
 
   private sessionMeta() {
+    const preset = this.currentPresetId() ?? this.config.preset
     return {
       cwd: this.cwd,
-      ...(this.config.preset !== undefined ? { agentPreset: this.config.preset } : {}),
+      ...(preset !== undefined ? { agentPreset: preset } : {}),
     }
   }
 
@@ -842,7 +862,12 @@ export class ChatScreen {
 
   /** Submit one human turn or dispatch a slash/bang command. */
   submit(text: string): void {
+    if (this.quitting) return
     const trimmed = text.trim()
+    if (this.presetSwitching && !/^\/exit(?:\s|$)/.test(trimmed)) {
+      this.pushNotice('preset switch in progress; send again when it finishes', 'info')
+      return
+    }
     if (trimmed === '') {
       this.editor.setText('')
       return
@@ -885,25 +910,22 @@ export class ChatScreen {
       this.followup(line)
       return
     }
+    if (parsed.name === 'exit') {
+      this.quit()
+      return
+    }
     if (parsed.name === 'model') return this.cmdModel(parsed.raw.trim())
     if (parsed.name === 'preset') return this.cmdPreset(parsed.raw.trim())
+    if (parsed.name === 'suppress-prompt' || parsed.name === 'suppress-promot') return this.cmdSuppressPrompt(parsed.raw.trim())
+    if (parsed.name === 'team-mode') return this.cmdTeamMode(parsed.raw.trim())
     if (parsed.name === 'runs') return this.cmdRuns(parsed.raw.trim())
     if (parsed.name === 'recon') return this.cmdRecon(parsed.raw.trim())
     if (parsed.name === 'machines') return this.cmdMachines(parsed.raw.trim())
     if (parsed.name === 'key') return this.cmdKey(parsed.raw.trim())
     if (parsed.name === 'provider') return this.cmdProvider()
-    if (parsed.name === 'memory') {
-      void this.cmdMemory(parsed.raw.trim())
-      return
-    }
-    if (parsed.name === 'sessions') {
-      void this.cmdSessions(parsed.raw.trim())
-      return
-    }
-    if (parsed.name === 'rewind') {
-      void this.cmdRewind()
-      return
-    }
+    if (parsed.name === 'memory') return this.cmdMemory(parsed.raw.trim())
+    if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
+    if (parsed.name === 'rewind') return this.cmdRewind()
     if (parsed.name === 'clear') {
       this.cmdClear()
       return
@@ -912,14 +934,8 @@ export class ChatScreen {
       this.cmdQueue(parsed.raw.trim())
       return
     }
-    if (parsed.name === 'preset-create') {
-      void this.cmdPresetCreate()
-      return
-    }
-    if (parsed.name === 'providers') {
-      void this.cmdProviders()
-      return
-    }
+    if (parsed.name === 'preset-create') return this.cmdPresetCreate()
+    if (parsed.name === 'providers') return this.cmdProviders()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1000,7 +1016,7 @@ export class ChatScreen {
   // ── local UI commands ─────────────────────────────────────────────────────
 
   private llm(): LlmRuntime | undefined {
-    return this.ctx.get('llm') as LlmRuntime | undefined
+    return this.ctx.get('llm')
   }
 
   private currentRoute(): ModelRoute {
@@ -1029,10 +1045,103 @@ export class ChatScreen {
     return presets?.composedPreset(this.agent.ctx)
   }
 
+  /** Pick or set persisted TUI suppression; the shared policy applies it to subsequent requests. */
+  private async cmdSuppressPrompt(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /suppress-prompt [on|off|toggle|status]', 'error')
+      return
+    }
+    const policy = this.ctx.get('pentestModePolicy') as { current(): { suppressSections: boolean } } | undefined
+    if (policy === undefined) {
+      this.pushNotice('prompt suppression unavailable in this profile', 'error')
+      return
+    }
+    const current = policy.current().suppressSections
+    if (action === 'status') {
+      this.pushNotice(`suppress-prompt: ${current ? 'ON' : 'OFF'}`)
+      return
+    }
+    const settings = this.ctx.get('settings') as { update(ns: string, patch: object): Promise<void> } | undefined
+    if (settings === undefined) {
+      this.pushNotice('prompt suppression settings unavailable in this profile', 'error')
+      return
+    }
+    let enabled: boolean
+    if (action === '') {
+      if (this.suppressionPickerOpen || this.tui.hasOverlay()) return
+      this.suppressionPickerOpen = true
+      try {
+        const picked = await pickFromList(this.tui, {
+          title: 'Suppress built-in prompt sections',
+          body: '\n' + style.muted('↑/↓ choose · number jump · Enter apply · Esc cancel') + '\n',
+          initial: current ? 'on' : 'off',
+          numberKeys: true,
+          theme: { ...selectListTheme, selectedText: text => chalk.bgHex(BRAND_RED).black.bold(text) },
+          items: [
+            { value: 'on', label: `1. ON${current ? ' (current)' : ''}`, description: 'Suppress built-in prompt and supplemental context; keep the preset' },
+            { value: 'off', label: `2. OFF${current ? '' : ' (current)'}`, description: 'Include built-in prompt and supplemental context' },
+          ],
+        })
+        if (picked === undefined || this.quitting) return
+        enabled = picked === 'on'
+      } finally { this.suppressionPickerOpen = false }
+    } else enabled = action === 'on' ? true : action === 'off' ? false : !current
+    await settings.update('pentest-mode', { suppressSections: enabled })
+    this.pushNotice(`suppress-prompt: ${enabled ? 'ON' : 'OFF'} · applies to the next request`)
+  }
+
+  /** Pick or set the saved TUI team mode, applied to the next model request. */
+  private async cmdTeamMode(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (action !== '' && action !== 'status' && !TEAM_MODE_OPTIONS.some(option => option.value === action)) {
+      this.pushNotice('usage: /team-mode [blue|red|black|dead|status]', 'error')
+      return
+    }
+    const policy = this.ctx.get('pentestModePolicy') as
+      { current(): { mode: TeamMode; suppressSections: boolean } } | undefined
+    if (policy === undefined) {
+      this.pushNotice('team mode unavailable in this profile', 'error')
+      return
+    }
+    const current = policy.current().mode
+    if (action === 'status') {
+      this.pushNotice(`team-mode: ${current}${policy.current().suppressSections ? ' · prompt suppressed (Suppress ON)' : ''}`)
+      return
+    }
+    const settings = this.ctx.get('settings') as { update(ns: string, patch: object): Promise<void> } | undefined
+    if (settings === undefined) {
+      this.pushNotice('team mode settings unavailable in this profile', 'error')
+      return
+    }
+    let mode = action
+    if (action === '') {
+      if (this.teamModePickerOpen || this.tui.hasOverlay()) return
+      this.teamModePickerOpen = true
+      try {
+        const picked = await pickFromList(this.tui, {
+          title: 'Select Team Mode',
+          body: '\n' + style.muted('↑/↓ choose · number jump · Enter apply · Esc cancel') + '\n',
+          initial: current, numberKeys: true,
+          theme: { ...selectListTheme, selectedText: text => chalk.bgHex(BRAND_RED).black.bold(text) },
+          items: TEAM_MODE_OPTIONS.map((option, index) => ({
+            value: option.value, label: `${index + 1}. ${option.icon} ${option.label}${option.value === current ? ' (current)' : ''}`,
+            description: `Use the ${option.label} prompt`,
+          })),
+        })
+        if (picked === undefined || this.quitting) return
+        mode = picked
+      } finally { this.teamModePickerOpen = false }
+    }
+    await settings.update('pentest-mode', { mode })
+    this.pushNotice(`team-mode: ${mode} · applies to the next request${policy.current().suppressSections ? ' · prompt suppressed (Suppress ON)' : ''}`)
+  }
+
   private async cmdPreset(query: string): Promise<void> {
-    const presets = this.ctx.get('agentPresets') as
-      | { select(agent: Agent, agentPreset: string): Promise<string> }
-      | undefined
+    if (this.isBusy() || this.presetSwitching) {
+      this.pushNotice('cannot switch presets while work is running', 'error')
+      return
+    }
     const roster = await listPresets(this.ctx)
     if (roster.length === 0) {
       this.pushNotice('no agent presets available in this profile', 'error')
@@ -1063,12 +1172,12 @@ export class ChatScreen {
       if (pickedId === undefined) return
     }
     try {
-      const id = await presets?.select(this.agent, pickedId)
-      this.pushNotice(`preset switched to ${id ?? pickedId}`, 'info')
+      await this.switchPreset(pickedId)
       // Make the choice the deployment default: write selectedDefault into
       // the home patch row so new sessions open on this preset too.
       try {
-        const patchPath = join(homedir(), '.dsh', 'cordis.patch.yml')
+        const home = (this.ctx.get('profileContext') as { home: string } | undefined)?.home ?? join(homedir(), '.dsh')
+        const patchPath = join(home, 'cordis.patch.yml')
         const lines = readFileSync(patchPath, 'utf8').split('\n')
         const row = lines.findIndex(line => line === '    - id: agent-presets')
         if (row !== -1) {
@@ -1086,6 +1195,30 @@ export class ChatScreen {
         `preset switch failed: ${error instanceof Error ? error.message : String(error)}`,
         'error',
       )
+    }
+  }
+
+  /** Open a child session under the new preset, retaining conversation without old instructions. */
+  private async switchPreset(preset: string): Promise<void> {
+    if (preset === this.currentPresetId()) return
+    if (this.isBusy() || this.presetSwitching) throw new Error('cannot switch presets while work is running')
+    this.presetSwitching = true
+    const source = this.agent
+    const selection = this.selection.current
+    try {
+      const resolved = await forkSession(this.ctx, source, this.sessionOptions(), {
+        cwd: this.cwd, agentPreset: preset,
+      }, true)
+      if (source !== this.agent || this.isBusy() || this.quitting) {
+        await resolved.handle?.dispose()
+        throw new Error('session changed while switching presets; try again when idle')
+      }
+      this.commitSwitch(resolved)
+      this.selection.current = selection
+      this.pushNotice(`preset → ${preset} · new session ${this.currentSessionId.slice(0, 8)} · conversation kept`, 'info')
+      this.sync()
+    } finally {
+      this.presetSwitching = false
     }
   }
 
@@ -1602,10 +1735,7 @@ export class ChatScreen {
       } catch {
         // Best effort; session selection already applied.
       }
-      // The per-model preset binding moves the live composition with the
-      // model: a model bound to another preset replaces the standing mount
-      // right away (a turn in progress rejects with agent-preset/locked and
-      // stays, mirroring the web session-controller).
+      // A changed model binding opens a child session without the previous preset's instructions.
       await this.followModelPreset(resolved.provider, resolved.model)
       this.pushNotice(`model → ${resolved.model} (${resolved.provider}) · from the next step`)
       this.sync()
@@ -1617,23 +1747,20 @@ export class ChatScreen {
     }
   }
 
-  /** Move the live composition to the preset bound to this model route: the
-   * newest binding replaces the standing mount at once. Locked presets (a
-   * turn in progress) keep the old composition and say so. */
+  /** Follow the model's preset in a new session while preserving conversation. */
   private async followModelPreset(provider: string, model: string): Promise<void> {
     const presets = this.ctx.get('agentPresets') as
       | {
-        select(agent: Agent, agentPreset: string): Promise<string>
+        presetIdForModel(provider: string, model: string): string
       }
       | undefined
     if (presets === undefined) return
     const target = resolveModelPreset(this.ctx, provider, model)
     if (target === undefined || target === this.currentPresetId()) return
     try {
-      const id = await presets.select(this.agent, target)
-      this.pushNotice(`preset → ${id} (bound to ${provider}/${model})`, 'info')
+      await this.switchPreset(target)
     } catch (error) {
-      if ((error as { code?: string }).code === 'agent-preset/locked') {
+      if (this.isBusy() || this.presetSwitching) {
         this.pushNotice(
           `preset ${target} follows ${provider}/${model} but a turn is in progress — switch again when it ends`,
           'info',
@@ -1648,47 +1775,46 @@ export class ChatScreen {
   }
 
   private async cmdThinking(effort: string): Promise<void> {
+    if (effort === '' && this.reasoningPickerOpen) return
     const llm = this.llm()
     if (llm === undefined) {
       this.pushNotice('llm service unavailable', 'error')
       return
     }
     const route = this.currentRoute()
-    const info = await llm.resolveModelInfo(route.provider, route.model)
-    const efforts = info.reasoning?.efforts ?? []
-    const stops = (efforts.length > 0
-      ? efforts.map(entry => ({ value: entry.id, label: entry.name || entry.id }))
-      : ['off', 'low', 'high', 'max'].map(value => ({ value, label: value })))
-    if (effort === '') {
-      const initial = this.currentEffort()
-      const picked = await pickFromSlider(this.tui, {
-        title: 'Thinking effort',
-        stops,
-        ...(initial !== undefined ? { initial } : {}),
-      })
-      if (picked === undefined) return
-      await this.applyThinking(picked)
-      return
+    const agent = this.agent
+    if (effort === '') this.reasoningPickerOpen = true
+    try {
+      const info = await llm.resolveModelInfo(route.provider, route.model)
+      const efforts = info.reasoning?.efforts ?? []
+      if (efforts.length === 0) {
+        this.pushNotice(`No reasoning controls advertised for ${info.name || route.model}`, 'info')
+        return
+      }
+      if (effort === '') {
+        const picked = await pickReasoningLevel(this.tui, info, this.currentEffort())
+        if (picked === undefined) return
+        const current = this.currentRoute()
+        if (this.agent !== agent || current.provider !== route.provider || current.model !== route.model) {
+          this.pushNotice('Session or model changed; open the reasoning picker again', 'info')
+          return
+        }
+        await this.applyThinking(picked)
+        return
+      }
+      if (!efforts.some(entry => entry.id === effort)) {
+        const list = efforts.map(entry => entry.id).join('|')
+        this.pushNotice(
+          `thinking: ${list} · current: ${this.currentEffort() ?? info.reasoning?.defaultEffort ?? 'default'}`,
+        )
+        return
+      }
+      await this.applyThinking(effort)
+    } catch (error) {
+      this.pushNotice(`thinking picker failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    } finally {
+      if (effort === '') this.reasoningPickerOpen = false
     }
-    if (!stops.some(entry => entry.value === effort)) {
-      const list = stops.map(entry => entry.value).join('|')
-      this.pushNotice(
-        `thinking: ${list} · current: ${this.currentEffort() ?? info.reasoning?.defaultEffort ?? 'default'}`,
-      )
-      return
-    }
-    await this.applyThinking(effort)
-    await this.applyThinking(effort)
-  }
-
-  private async cycleThinking(): Promise<void> {
-    const llm = this.llm()
-    if (llm === undefined) return
-    const route = this.currentRoute()
-    const info = await llm.resolveModelInfo(route.provider, route.model)
-    const efforts = info.reasoning?.efforts ?? []
-    const next = cycleEffort(efforts, this.currentEffort())
-    if (next !== undefined) await this.cmdThinking(next)
   }
 
   /** Shift+Tab: cycle the session mode (normal ↔ plan), CC semantics. */
@@ -1805,16 +1931,28 @@ export class ChatScreen {
       return
     }
     const nodes = this.agent.session.surface.nodes
+    const active = new Set(nodes)
+    const events = replayEvents(this.agent.session)
     // The system prompt occupies the leading surface node(s) and a replace
-    // may not touch them; the first transcript item's seq is the first
-    // conversation node, so the cleared range starts there.
-    const first = this.model.items.find(item => item.seq !== undefined)?.seq
+    // may not touch them. UI notices and attempts are not surface nodes.
+    const first = events.find(event => active.has(event.seq)
+      && event.type !== 'system/message'
+      && !(event.type === 'developer/message' && event.data.message.source.kind === 'session-edit'))?.seq
     const tail = nodes.at(-1)
     if (first === undefined || tail === undefined || first > tail) {
-      this.pushNotice('the transcript is already clear', 'info')
+      this.model.items = this.model.items.filter(item => item.notice === 'banner')
+        .map((item, id) => ({ ...item, id }))
+      this.model.openAssistant = undefined
+      this.model.openReasoning = undefined
+      this.views.clear()
+      this.lastFoldKey = ''
+      this.searchQuery = undefined
+      this.focusedToolId = undefined
+      this.expandedToolId = undefined
+      this.pushNotice('session cleared — same session, fresh context', 'compact')
       return
     }
-    const nextTurn = replayEvents(this.agent.session).findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    const nextTurn = events.findLast(event => event.type === 'turn/start')?.data.turn ?? 0
     // The replace op must cite every surface node it shadows.
     const shadowed = nodes.filter(node => node >= first && node <= tail)
     const marker = this.agent.session.append('developer/message', {
@@ -1918,7 +2056,7 @@ export class ChatScreen {
       | { describe(): readonly { ns: string; value: unknown }[] }
       | undefined
     const credentials = this.ctx.get('credentials') as
-      | { describe(refs: string[]): Promise<Record<string, { configured: boolean }>> }
+      | { describe(ref: string): Promise<{ configured: boolean }> }
       | undefined
     const profiles = (settings?.describe().find(row => row.ns === 'llm-pi-ai')?.value as
       | { providers?: Record<string, { displayName?: string; apiKeyEnv?: string; models?: unknown[] }> }
@@ -1930,10 +2068,14 @@ export class ChatScreen {
       const keyRef = profile?.apiKeyEnv
       let keyState = 'provider-native auth'
       if (keyRef !== undefined) {
-        const described = credentials === undefined
-          ? {}
-          : await credentials.describe([keyRef]).catch(() => ({}))
-        keyState = described[keyRef]?.configured === true ? `key ✓ (${keyRef})` : `key ✗ — /key ${keyRef}`
+        let described: { configured: boolean } | undefined
+        try {
+          described = await credentials?.describe(keyRef)
+        } catch (_error) {
+          // A failed metadata read is unavailable, not an absent key; no secret value is resolved.
+        }
+        keyState = described === undefined ? `key status unavailable (${keyRef})`
+          : described.configured ? `key ✓ (${keyRef})` : `key ✗ — /key ${keyRef}`
       }
       const marker = provider.id === current ? ' ← current' : ''
       this.pushNotice(
@@ -2124,13 +2266,13 @@ export class ChatScreen {
         '  Ctrl+T     toggle thinking display',
         '  Ctrl+O     toggle full tool output / diff',
         '  Ctrl+F     find in transcript · Alt+C copy last assistant',
-        '  Ctrl+L     model picker · Ctrl+X cycle thinking',
+        '  Ctrl+L     model picker · Ctrl+X reasoning picker',
         '  Ctrl+R     search message history · Shift+Tab cycle mode',
         '  Ctrl+Z     suspend to background',
         '  Ctrl+G     edit input in $EDITOR',
         '  Tab        complete paths · / slash commands · @ attach files',
         '             (empty editor: cycle tool-card focus · Enter expand)',
-        'commands: /new /fork /resume /tree /model /thinking /skills /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
+        'commands: /new /fork /resume /tree /model /thinking /team-mode /suppress-prompt /skills /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
       ].join('\n'),
     )
   }
@@ -2936,6 +3078,8 @@ export class ChatScreen {
     const route = this.currentRoute()
     const effort = this.currentEffort()
     const preset = this.currentPresetId()
+    const teamPolicy = this.ctx.get('pentestModePolicy') as { current(): { mode: string } } | undefined
+    const teamMode = TEAM_MODE_OPTIONS.find(option => option.value === teamPolicy?.current().mode)?.value
     this.updateQueueBanner()
     const status: StatusBarData = {
       model: route.model,
@@ -2947,6 +3091,7 @@ export class ChatScreen {
       ...(this.gitState !== undefined ? { git: this.gitState } : {}),
       ...(todos !== undefined ? { todos } : {}),
       ...(preset !== undefined ? { preset } : {}),
+      ...(teamMode !== undefined ? { teamMode } : {}),
       ...(planActive !== undefined ? { planActive } : {}),
       ...(goalPhase !== undefined ? { goalPhase } : {}),
       ...(contextPct !== undefined ? { contextPct } : {}),

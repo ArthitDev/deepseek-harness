@@ -19,6 +19,7 @@ import {
   type ViewportTUI,
 } from '@earendil-works/pi-tui'
 import type { ChatItem } from '../core/model.js'
+import { TEAM_MODE_OPTIONS, type TeamMode } from '../core/team-mode.js'
 import { BRAND_RED, markdownTheme, reasoningMarkdownTheme, style } from './theme.js'
 import {
   highlightMatches,
@@ -424,6 +425,8 @@ export interface StatusBarData {
   tokens?: { input: number; output: number }
   todos?: { done: number; total: number }
   preset?: string
+  /** Team mode selected for subsequent model requests. */
+  teamMode?: TeamMode
   planActive?: boolean
   goalPhase?: string
   contextPct?: number
@@ -474,6 +477,14 @@ export class StatusBar extends Loader {
       parts.push((hot ? chalk.red : chalk.hex('#ff9a3d'))(`⚡ ${data.effort}`))
     }
     if (data.preset !== undefined) parts.push(chalk.hex('#b588f7')(`❖ ${data.preset}`))
+    if (data.teamMode !== undefined) {
+      const option = TEAM_MODE_OPTIONS.find(option => option.value === data.teamMode)
+      if (option !== undefined) {
+        const color = data.teamMode === 'blue' ? chalk.blue : data.teamMode === 'red' ? chalk.red
+          : data.teamMode === 'dead' ? chalk.magenta : chalk.gray
+        parts.push(color(`${option.icon} ${option.label}`))
+      }
+    }
     // Explicit mode indicator: plan when active (warn hue), normal otherwise.
     parts.push(data.planActive === true ? chalk.yellow('⌘ plan') : chalk.dim('◌ normal'))
     const modeShort = sandboxShort(data.sandboxMode)

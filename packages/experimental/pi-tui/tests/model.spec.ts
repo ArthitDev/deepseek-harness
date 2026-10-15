@@ -270,6 +270,22 @@ describe('surface replace folding (rewind/clear markers)', () => {
     ])
   })
 
+  it('clears failed attempt text and turn notices after the last surface node', () => {
+    const model = createModel()
+    pushNotice(model, 'banner', 'banner')
+    const prompt = userMessageEvent(userMessage('old question'))
+    applyEvent(model, prompt)
+    applyEvent(model, attemptEvent({ turn: 1, step: 1, stream: attemptStream('failed answer', 'failed thinking') }))
+    applyEvent(model, turnEndEvent({ turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } }))
+    applyEvent(model, developerMessageEvent(
+      'the operator cleared the conversation; the earlier surface is shadowed in the log',
+      { op: 'replace', startSeq: prompt.seq, endSeq: prompt.seq },
+    ))
+    expect(model.items.map(item => item.text)).toEqual(['banner', 'session cleared — same session, fresh context'])
+    expect(model.openAssistant).toBeUndefined()
+    expect(model.openReasoning).toBeUndefined()
+  })
+
   it('ignores an append developer/message, and a replace matching nothing still posts its notice', () => {
     const model = createModel()
     applyEvent(model, userMessageEvent(userMessage('kept')))

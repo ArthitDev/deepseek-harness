@@ -9,7 +9,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { createDeveloperMessage, createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createDeveloperMessage, createSystemMessage, createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -18,6 +18,7 @@ import { DEFAULT_MAX_REQUEST_IMAGE_BYTES, resolveProfiles } from '../src/config.
 import { memoryAuth } from './auth-double.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
+import { discoverModels } from '../src/discovery.ts'
 
 afterEach(async () => {
   vi.unstubAllEnvs()
@@ -73,7 +74,108 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
-  it('sends developer text through a gateway that only accepts the system role', async () => {
+  it.each([
+    { id: 'glm-5.3-flash', effort: 'low', efforts: { low: 'low', high: 'high', max: 'max' }, compat: { thinkingFormat: 'deepseek', supportsReasoningEffort: true }, payload: { thinking: { type: 'enabled' }, reasoning_effort: 'low' } },
+    { id: 'glm-5.3-flash', effort: 'max', efforts: { low: 'low', high: 'high', max: 'max' }, compat: { thinkingFormat: 'deepseek', supportsReasoningEffort: true }, payload: { thinking: { type: 'enabled' }, reasoning_effort: 'max' } },
+    { id: 'qwen3.8-flash', effort: 'high', efforts: { off: null, high: 'high' }, compat: { thinkingFormat: 'qwen', supportsReasoningEffort: false }, payload: { enable_thinking: true } },
+    { id: 'qwen3.8-flash', effort: 'off', efforts: { off: null, high: 'high' }, compat: { thinkingFormat: 'qwen', supportsReasoningEffort: false }, payload: { enable_thinking: false } },
+    { id: 'mimo-v2.5', effort: 'high', efforts: { off: 'disabled', high: 'high' }, compat: { thinkingFormat: 'deepseek', supportsReasoningEffort: false }, payload: { thinking: { type: 'enabled' } } },
+    { id: 'mimo-v2.5', effort: 'off', efforts: { off: 'disabled', high: 'high' }, compat: { thinkingFormat: 'deepseek', supportsReasoningEffort: false }, payload: { thinking: { type: 'disabled' } } },
+  ] as const)('sends declared B.AI $id $effort controls without listing metadata', async ({ id, effort, efforts, compat, payload }) => {
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+    const ctx = new Context()
+    try {
+      await ctx.plugin(LlmRuntime)
+      await ctx.plugin(LlmPiAi, {
+        providers: {
+          gateway: {
+            api: 'openai-completions',
+            baseURL: `${server.url}/v1`,
+            apiKeyEnv: 'PI_TEST_KEY',
+            compat: { supportsDeveloperRole: false },
+            models: [{ id, reasoningEfforts: efforts, compat }],
+          },
+        },
+      })
+      const info = await ctx.llm.resolveModelInfo('gateway', id)
+      expect(info.reasoning?.efforts.map(option => option.id).sort()).toEqual(Object.keys(efforts).sort())
+      const result = await assemble(ctx, {
+        provider: 'gateway', model: id, reasoningEffort: ReasoningEffortId(effort),
+        messages: [createSystemMessage('PRESET_SENTINEL'), createUserMessage({ content: [{ type: 'text', text: 'test' }], source: { kind: 'user' } })],
+      })
+      expect(result.finish).toEqual({ kind: 'stop' })
+      expect(server.requests[0]).toMatchObject(payload)
+      expect(server.requests[0]).toMatchObject({ messages: [
+        { role: 'system', content: 'PRESET_SENTINEL' }, { role: 'user', content: 'test' },
+      ] })
+      if (!compat.supportsReasoningEffort) expect(server.requests[0]).not.toHaveProperty('reasoning_effort')
+      const unsupported = await assemble(ctx, {
+        provider: 'gateway', model: id, reasoningEffort: ReasoningEffortId('medium'), messages: [],
+      })
+      expect(unsupported.finish).toMatchObject({ kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT' } })
+      expect(server.requests).toHaveLength(1)
+      const ordinary = await assemble(ctx, { provider: 'gateway', model: id, messages: [] })
+      expect(ordinary.finish).toEqual({ kind: 'stop' })
+      expect(server.requests[1]).not.toHaveProperty('reasoning_effort')
+      if (id === 'glm-5.3-flash') {
+        expect(server.requests[1]).not.toHaveProperty('thinking')
+        const off = await assemble(ctx, { provider: 'gateway', model: id, reasoningEffort: ReasoningEffortId('off'), messages: [] })
+        expect(off.finish).toMatchObject({ kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT' } })
+        expect(server.requests).toHaveLength(2)
+      } else if (id === 'qwen3.8-flash') {
+        expect(server.requests[1]).toMatchObject({ enable_thinking: false })
+      } else {
+        expect(server.requests[1]).toMatchObject({ thinking: { type: 'disabled' } })
+      }
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each([
+    { levels: ['low', 'high', 'max'], high: 'high', off: undefined },
+    { levels: ['none', 'high'], high: 'high', off: 'none' },
+    { levels: ['off', 'on'], high: 'on', off: 'off' },
+    { levels: ['adaptive', 'disabled'], high: 'adaptive', off: 'disabled' },
+  ])('adopts xKiro controls $levels into selectors and OpenAI requests', async ({ levels, high, off }) => {
+    const events = [
+      '{"choices":[{"delta":{"reasoning_content":"working"},"index":0,"finish_reason":null}]}',
+      ...textEvents,
+    ]
+    const server = await mockServer([
+      { body: JSON.stringify({ data: [{ id: 'vendor/model', reasoning_efforts: { levels, default: 'high' } }] }) },
+      { events }, { events }, ...off === undefined ? [] : [{ events: textEvents }],
+    ])
+    const models = await discoverModels({ baseURL: server.url, api: 'openai-completions' })
+    const ctx = new Context()
+    try {
+      await ctx.plugin(LlmRuntime)
+      await ctx.plugin(LlmPiAi, { providers: {
+        xkiro: { api: 'openai-completions', baseURL: server.url, apiKeyEnv: 'PI_TEST_KEY',
+          compat: { supportsDeveloperRole: false }, models: [...models] },
+      } })
+      const info = await ctx.llm.resolveModelInfo('xkiro', 'vendor/model')
+      expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(off === undefined ? ['low', 'high', 'max'] : ['off', 'high'])
+      expect(info.reasoning).not.toHaveProperty('defaultEffort')
+      const ordinary = await assemble(ctx, {
+        provider: 'xkiro', model: 'vendor/model', messages: [createSystemMessage('PRESET_SENTINEL')],
+      })
+      expect(server.requests[1]).toMatchObject({ messages: [{ role: 'system', content: 'PRESET_SENTINEL' }] })
+      if (off === undefined) expect(server.requests[1]).not.toHaveProperty('reasoning_effort')
+      else expect(server.requests[1]).toMatchObject({ reasoning_effort: off })
+      expect(ordinary.message.content).toContainEqual({ type: 'reasoning', text: 'working' })
+      await assemble(ctx, { provider: 'xkiro', model: 'vendor/model', reasoningEffort: ReasoningEffortId('high'), messages: [] })
+      expect(server.requests[2]).toMatchObject({ reasoning_effort: high })
+      if (off !== undefined) {
+        await assemble(ctx, { provider: 'xkiro', model: 'vendor/model', reasoningEffort: ReasoningEffortId('off'), messages: [] })
+        expect(server.requests[3]).toMatchObject({ reasoning_effort: off })
+      }
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('drops developer messages through a gateway that only accepts the system role', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url, { compat: { supportsDeveloperRole: false } })
     const result = await assemble(ctx, {
@@ -86,9 +188,48 @@ describe('PiAiAdapter provider routing', () => {
     })
     expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
     expect(server.requests[0]).toMatchObject({ messages: [
-      { role: 'system', content: 'base instructions\n\nthe operator cleared the conversation' },
+      { role: 'system', content: 'base instructions' },
       { role: 'user', content: 'hi' },
     ] })
+    expect(JSON.stringify(server.requests[0])).not.toContain('the operator cleared the conversation')
+  })
+
+  it.each(['openai-completions', 'anthropic-messages'] as const)('omits developer content before image validation for %s', async (api) => {
+    const eventPayloads: [string, Record<string, unknown>][] = [
+      ['message_start', { type: 'message_start', message: { id: 'fixture', type: 'message', role: 'assistant', model: 'mock', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } }],
+      ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
+      ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello' } }],
+      ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+      ['message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } }],
+      ['message_stop', { type: 'message_stop' }],
+    ]
+    const events = eventPayloads.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('')
+    const server = await mockServer([api === 'anthropic-messages'
+      ? { body: events, headers: { 'content-type': 'text/event-stream' } }
+      : { events: textEvents }])
+    const adapter = adapterOf({ generic: { api, baseURL: server.url,
+      models: [{ id: 'mock', name: 'mock', input: ['text'], contextWindow: 32768, maxTokens: 1024 }] } })
+    const messages = [
+      createDeveloperMessage({ content: [{ type: 'text', text: 'DEVELOPER_SENTINEL' }], source: { kind: 'test' } }),
+      createSystemMessage('PRESET_SENTINEL'),
+      createDeveloperMessage({ content: [{ type: 'image', attachment: IMAGE_REF }], source: { kind: 'test' } }),
+      createDeveloperMessage({ content: [{ type: 'tool-addition', toolName: 'DEVELOPER_TOOL_SENTINEL' }], source: { kind: 'test' } }),
+      createUserMessage({ content: [{ type: 'text', text: 'question' }], source: { kind: 'user' } }),
+    ]
+    const chunks = await Array.fromAsync(adapter.stream({ provider: 'generic', model: 'mock', messages }))
+    expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')).toBe('hello')
+    const wire = server.requests[0]
+    expect(JSON.stringify(wire)).not.toContain('DEVELOPER_SENTINEL')
+    expect(JSON.stringify(wire)).not.toContain('DEVELOPER_TOOL_SENTINEL')
+    expect(JSON.stringify(wire)).not.toContain(String(IMAGE_REF.attachmentId))
+    if (api === 'anthropic-messages') expect(wire).toMatchObject({
+      system: [{ type: 'text', text: 'PRESET_SENTINEL' }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'question' }] }],
+    })
+    else expect(wire).toMatchObject({ messages: [
+      { role: 'system', content: 'PRESET_SENTINEL' }, { role: 'user', content: 'question' },
+    ] })
+    expect(messages.filter(message => message.role === 'developer')).toHaveLength(3)
   })
 
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
@@ -454,6 +595,7 @@ describe('provider profile lifecycle', () => {
     for (const helper of [
       'resolveProfiles',
       'toPiContext',
+      'withoutDeveloperMessages',
       'toPiReplayState',
       'toPiAssistant',
       'mapStopReason',

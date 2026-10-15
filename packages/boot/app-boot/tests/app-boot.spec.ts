@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -1268,7 +1269,6 @@ describe('boot', () => {
 
 describe('addHarnessSourceSection', () => {
   const SOURCE_ROOT = `${sep}opt${sep}harness-src`
-  const EXPECTED = `The Shield Break Harness implementation checkout is at ${SOURCE_ROOT}. The checkout location and current working directory are separate values and may differ; never infer the working directory from this path. Use pwd to determine the current working directory. Use this checkout only to inspect or extend DSH itself.`
 
   it('distinguishes the source path from the current workdir after reusable instructions', async () => {
     const ctx = new Context()
@@ -1280,15 +1280,20 @@ describe('addHarnessSourceSection', () => {
       const dispose = addHarnessSourceSection(ctx, SOURCE_ROOT)
       expect(dispose).toBeTypeOf('function')
       const systemPrompt = ctx.get('systemPrompt')!
-      const rendered = renderPrompt(await systemPrompt.assemble())
-      expect(rendered).toContain(EXPECTED)
+      const assembly = await systemPrompt.assemble()
+      const source = assembly.sections.find(section => section.name === HARNESS_SOURCE_SECTION)
+      expect(source?.text).toContain(SOURCE_ROOT)
+      // Pin operator-authored wording without copying prompt bodies into test failures.
+      expect(createHash('sha256').update(source!.text.replaceAll(SOURCE_ROOT, '<source-root>')).digest('hex')).toMatchInlineSnapshot('"5259f6b01ba29831b124eae6d90b74ed772865da047a485efb524b08a6c574a0"')
+      const rendered = renderPrompt(assembly)
       // The >= 0 guards keep a drifted opener/persona string from a false pass
       // through `-1 < n`.
-      const identityAt = rendered.indexOf('You are an AI agent powered by Shield Break Harness.')
-      const sourceAt = rendered.indexOf(EXPECTED)
+      const identityAt = rendered.indexOf('Runtime host: Shield Break Harness.')
+      const sourceAt = rendered.indexOf(source!.text)
       const personaAt = rendered.indexOf('You are a coding agent.')
       expect(identityAt).toBeGreaterThanOrEqual(0)
       expect(personaAt).toBeGreaterThanOrEqual(0)
+      expect(sourceAt).toBeGreaterThanOrEqual(0)
       const sdkAt = rendered.indexOf('Reusable tool SDK.')
       expect(personaAt).toBeGreaterThan(identityAt)
       expect(sdkAt).toBeGreaterThan(personaAt)

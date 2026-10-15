@@ -9,7 +9,7 @@ export const DEFAULT_PROVIDER = 'deepseek-official'
 export const DEFAULT_MODEL = 'deepseek-v4-flash'
 
 export interface SelectionSeed {
-  header?: { provider?: string; model?: string; reasoningEffort?: string }
+  header?: { provider?: string; model?: string; reasoningEffort?: string; adapterDefaults?: { reasoningEffort?: boolean } }
   config?: { provider?: string; model?: string }
   agentOptions?: { provider?: string; model?: string }
   defaults?: { provider?: string; model?: string; reasoningEffort?: string }
@@ -21,9 +21,9 @@ export interface SelectionSeed {
  * Fold the selection sources into the next-step model selection.
  * Precedence: persisted request header → prior selection (the model currently
  * in use — /new and /clear keep it) → row config → agent options →
- * harness default → hard-coded route. Reasoning effort falls back prior →
- * saved default (the `agentDefaultModel` store, applied when the resolved
- * route is the saved route — /thinking survives new/fork/resume/restart).
+ * harness default → hard-coded route. A restored header retains only explicitly
+ * selected effort, matching Web. Without a header, effort falls back prior →
+ * saved default when the resolved route matches the saved route.
  */
 export function seedModelSelection(input: SelectionSeed): ModelSelection {
   const provider =
@@ -42,8 +42,10 @@ export function seedModelSelection(input: SelectionSeed): ModelSelection {
     DEFAULT_MODEL
   const savedEffort = input.defaults?.reasoningEffort
   const reasoningEffort =
-    input.header?.reasoningEffort !== undefined
-      ? ReasoningEffortId(input.header.reasoningEffort)
+    input.header !== undefined
+      ? input.header.reasoningEffort !== undefined && input.header.adapterDefaults?.reasoningEffort !== true
+        ? ReasoningEffortId(input.header.reasoningEffort)
+        : undefined
       : input.prior?.reasoningEffort !== undefined
         ? input.prior.reasoningEffort
         : savedEffort !== undefined

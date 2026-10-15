@@ -6,10 +6,12 @@
  */
 
 import { EventEmitter } from 'node:events'
+import { createHash } from 'node:crypto'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { PassThrough } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -154,12 +156,11 @@ describe('web-app runtime glue', () => {
       'open:http://127.0.0.1:4567/?token=test-token',
     ])
     const assembly = await ctx.systemPrompt.assemble()
-    expect(assembly.sections.find(entry => entry.name === 'harness:source')?.text).toContain('Shield Break Harness implementation checkout')
+    expect(assembly.sections.find(entry => entry.name === 'harness:source')?.text)
+      .toContain(resolve(fileURLToPath(new URL('../../../../', import.meta.url))))
     const section = assembly.sections.find(entry => entry.name === 'app:web-surface')
     expect(section?.text).toContain('http://127.0.0.1:4567')
-    // The single update contract: the receiver is always on; no-refresh
-    // reloads additionally need the rebuild watcher.
-    expect(section?.text).toContain('pnpm run dev:web')
+    expect(createHash('sha256').update(section!.text).digest('hex')).toMatchInlineSnapshot('"e43a9ff9ec597954fca26f48ce56b3bdb2b81b67d979bd5d60c815a670719393"')
     const webRuntime = contributions.find(contribution => contribution.name === 'web-runtime')
     expect(webRuntime?.resolve()).toEqual({ DSH_WEB_URL: 'http://127.0.0.1:4567' })
     await ctx.fiber.dispose()
@@ -179,8 +180,9 @@ describe('web-app runtime glue', () => {
     expect(log).not.toHaveBeenCalled()
     expect(openBrowser).not.toHaveBeenCalled()
     const assembly = await ctx.systemPrompt.assemble()
-    expect(assembly.sections.find(entry => entry.name === 'app:web-surface')?.text)
-      .toContain('rebuilding the affected Web artifacts')
+    const section = assembly.sections.find(entry => entry.name === 'app:web-surface')
+    expect(section?.text).toContain('http://127.0.0.1:4567')
+    expect(createHash('sha256').update(section!.text).digest('hex')).toMatchInlineSnapshot('"e43a9ff9ec597954fca26f48ce56b3bdb2b81b67d979bd5d60c815a670719393"')
     await ctx.fiber.dispose()
   })
 

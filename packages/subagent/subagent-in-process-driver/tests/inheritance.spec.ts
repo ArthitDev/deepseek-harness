@@ -186,7 +186,7 @@ describe('in-process policy inheritance', () => {
       expect(contextText).toContain('Current DSH file policy: read-only')
       expect(contextText).toContain('Approval prompts are disabled')
       // The statement rides runtime context; the system node (surface node 0) stays uniform.
-      expect(contextText).toContain('You are a delegated subagent')
+      expect(contextText).toContain('Delegation context: this session has a fixed permission scope')
       const systemHead = child.session.deriveMessages()[0]
       if (systemHead?.role !== 'system') throw new Error('child surface node 0 is not a system message')
       expect(child.session.surface.nodes[0]).toBe(systemNode.seq)
@@ -195,7 +195,7 @@ describe('in-process policy inheritance', () => {
         .map(block => block.text)
         .join('\n')
       expect(systemText).not.toContain('Approval prompts are disabled')
-      expect(systemText).not.toContain('You are a delegated subagent')
+      expect(systemText).not.toContain('Delegation context: this session has a fixed permission scope')
       expect(parent.session.snapshotEvents()).toHaveLength(parentLogLength)
     } finally {
       await run.dispose()

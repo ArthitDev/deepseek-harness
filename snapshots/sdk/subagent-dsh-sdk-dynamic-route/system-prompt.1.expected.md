@@ -1,4 +1,4 @@
-You are an AI agent powered by Shield Break Harness.
+Runtime host: Shield Break Harness.
 
 Echo where you run.
 

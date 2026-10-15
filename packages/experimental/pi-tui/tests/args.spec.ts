@@ -57,7 +57,8 @@ describe('parseArgs', () => {
 
 describe('USAGE', () => {
   it('documents the profile invocations', () => {
-    expect(USAGE).toContain('dsh --profile pi-tui')
+    expect(USAGE).toContain('dsh tui')
+    expect(USAGE).toContain('/exit')
     expect(USAGE).toContain('--resume')
     expect(USAGE).toContain('--preset')
     expect(USAGE).toContain('--machine')

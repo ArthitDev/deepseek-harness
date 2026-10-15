@@ -287,8 +287,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.systemPrompt.section({
     name: 'tool:pwsh',
     order: ctx.systemPrompt.getSectionOrder('TOOL_PWSH'),
-    text: 'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
-      + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.',
+    text: 'EXIT CODE HANDLING\nGeneral: non-zero exit → [exit code: N] marker appears → investigate failure BEFORE proceeding → do not skip past errors\n\nWindows exception: killed process settles as [exit code: 1], no signal marker bare exit 1 after user interruption = termination, NOT command failure → do not investigate as error → recognize as intentional stop',
   })
 
   /**

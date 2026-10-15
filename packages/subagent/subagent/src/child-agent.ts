@@ -191,8 +191,8 @@ export interface ChildComposition {
  * deployment's system prompt stays uniform across parents and children.
  */
 export const SUBAGENT_DELEGATION_CONTEXT
-  = 'You are a delegated subagent: your permission scope was fixed when you were started and cannot be '
-    + 'widened from inside this session — operations that require approval are rejected automatically. '
+  = 'Delegation context: this session has a fixed permission scope that cannot be widened from inside the session. '
+    + 'Operations that require approval are rejected automatically. '
     + 'When the task needs access beyond that scope, do not retry the denied operation; state the '
     + 'limitation in your reply so the delegating agent can handle it.'
 

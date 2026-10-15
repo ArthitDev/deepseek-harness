@@ -56,12 +56,20 @@ describe('seedModelSelection', () => {
     expect(seeded.reasoningEffort).toBe(ReasoningEffortId('high'))
   })
 
-  it('carries the prior selection model and effort when the header has neither', () => {
+  it('restores the header without importing effort from another session', () => {
     const seeded = seedModelSelection({
       header: { provider: 'header-p' },
       prior: selection('p', 'm', 'max'),
     })
-    expect(seeded).toMatchObject({ provider: 'header-p', model: 'm', reasoningEffort: ReasoningEffortId('max') })
+    expect(seeded).toEqual({ provider: 'header-p', model: 'm' })
+  })
+
+  it('does not restore adapter-default effort as an explicit choice, matching Web', () => {
+    expect(seedModelSelection({
+      header: { provider: 'p', model: 'm', reasoningEffort: 'low', adapterDefaults: { reasoningEffort: true } },
+      prior: selection('p', 'm', 'max'),
+      defaults: { provider: 'p', model: 'm', reasoningEffort: 'high' },
+    })).toEqual({ provider: 'p', model: 'm' })
   })
 
   it('omits the reasoning effort when neither header nor prior has one', () => {
