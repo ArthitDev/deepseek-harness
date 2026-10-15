@@ -242,7 +242,7 @@ describe('preset switches with conversation history', () => {
         ...input.meta === undefined ? {} : { meta: input.meta },
         ...input.inheritedEventCount === undefined ? {} : { inheritedEventCount: input.inheritedEventCount },
       }), input.agentOptions)
-      await input.setup?.(agent.ctx)
+      await input.setup?.(agent.ctx, agent)
       return { agent, dispose: vi.fn() }
     })
     ctx.provide('agents', { create })

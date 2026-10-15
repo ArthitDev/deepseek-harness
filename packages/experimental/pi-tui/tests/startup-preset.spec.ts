@@ -7,7 +7,7 @@ import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { createUserMessage, LlmAdapter, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmAdapter, ReasoningEffortId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as Persona from '@deepseek-ai/dsh-persona'
 import { describe, expect, it, vi } from 'vitest'
 import AgentDefaultModel from '../../../core/agent-default-model/src/index.ts'
@@ -42,7 +42,7 @@ describe('TUI preset startup through Loader', () => {
       ctx.provide('workspaceRegistry', { resolveByPath: async () => ({ attachSession: async () => {} }) })
       await ctx.plugin(Loader)
       class DeferredPresets extends AgentPresets {
-        static inject = [...AgentPresets.inject, 'testPresetReady']
+        static override inject = [...AgentPresets.inject, 'testPresetReady']
       }
       class DeferredDefaultModel extends AgentDefaultModel {
         static inject = ['testModelReady']
@@ -60,7 +60,11 @@ describe('TUI preset startup through Loader', () => {
         tui: { ...piTui, apply: async (tuiCtx: Context) => {
           opened()
           const route = defaultModelSelection(tuiCtx)
-          const { agent } = await resolveAgent(tuiCtx, undefined, route ?? {}, { cwd: home })
+          const { agent } = await resolveAgent(tuiCtx, undefined, {
+            ...route?.provider === undefined ? {} : { provider: route.provider },
+            ...route?.model === undefined ? {} : { model: route.model },
+            ...route?.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) },
+          }, { cwd: home })
           expect(tuiCtx.agentPresets.composedPreset(agent.ctx)).toBe('bound')
           agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'first task' }] }))
           await agent.whenIdle()

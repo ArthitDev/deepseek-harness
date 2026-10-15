@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createDeveloperMessage, createMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createDeveloperMessage, createMessage, createSystemMessage, createToolResultMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import { fixtureAgent } from './fixture-agent.ts'
 import {
@@ -67,7 +67,7 @@ function silence(ctx: Context): void {
 }
 
 function persistenceWith(
-  sessions: Record<string, { header?: unknown; events?: unknown[] }>,
+  sessions: Record<string, { header?: unknown; events?: readonly unknown[] }>,
   options: { failOpen?: boolean; failList?: boolean } = {},
 ) {
   return {
@@ -640,9 +640,10 @@ describe('forkSession', () => {
     session.append('user/message', createUserMessage({ source: { kind: 'skill-invocation', name: 'ponytail', form: 'instructions' }, content: [{ type: 'text', text: 'OLD_SKILL' }] }), { surfaceOp: 'append' })
     session.append('developer/message', { turn: 1, step: 1, message: createDeveloperMessage({ source: { kind: 'pi-tui' }, content: [{ type: 'text', text: 'OLD_DEVELOPER' }] }) }, { surfaceOp: 'append' })
     session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
-    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'tool-call', id: 'read-call', name: 'read', arguments: '{}' }] }) }, { surfaceOp: 'append' })
-    session.append('tool/call', { turn: 1, step: 1, callId: 'read-call', name: 'read', arguments: {} })
-    const result = createMessage({ role: 'tool', source: { kind: 'tool', callId: 'read-call' }, toolCallId: 'read-call', content: [{ type: 'text', text: 'retained file contents' }] })
+    const readCallId = ToolCallId('read-call')
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({ source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'tool-call', id: readCallId, name: 'read', arguments: '{}' }] }) }, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 1, callId: readCallId, name: 'read', arguments: '{}' })
+    const result = createToolResultMessage({ callId: readCallId, content: [{ type: 'text', text: 'retained file contents' }], isError: false })
     session.append('tool/result', { turn: 1, step: 1, message: result }, { surfaceOp: 'append' })
     const shell = createUserMessage({ source: { kind: 'pi-tui', form: 'notice', summary: 'shell output' }, content: [{ type: 'text', text: 'retained shell output' }] })
     session.append('user/message', shell, { surfaceOp: 'append' })
@@ -658,7 +659,9 @@ describe('forkSession', () => {
     const dispose = vi.fn()
     ctx.provide('agents', { create: async (input: Parameters<typeof ctx.agents.create>[0]) => ({
       agent: fixtureAgent(ctx, ctx.sessions.create(input.sessionId, {
-        seed: input.seed, meta: input.meta, inheritedEventCount: input.inheritedEventCount,
+        ...input.seed === undefined ? {} : { seed: input.seed },
+        ...input.meta === undefined ? {} : { meta: input.meta },
+        ...input.inheritedEventCount === undefined ? {} : { inheritedEventCount: input.inheritedEventCount },
       })), dispose,
     }) })
     try {

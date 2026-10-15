@@ -16,7 +16,7 @@ import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { resolveProfiles } from '@deepseek-ai/dsh-llm-pi-ai/src/config.ts'
 import PentestModePolicy from '@deepseek-ai/dsh-pentest-executor'
 import * as Persona from '@deepseek-ai/dsh-persona'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { installWebPromptSettings } from '../src/core/prompt-settings.ts'
 import { forkSession } from '../src/core/session.ts'
 
@@ -152,9 +152,9 @@ describe('TUI Web prompt settings', () => {
           const contexts = request.messages.filter(({ source }) =>
             source?.kind === 'agent-instructions' || source?.kind === 'runtime-context'
             || (source?.kind === 'skill-invocation' && source.name === 'jev-first-policy'))
-          expect(contexts.filter(message => message.source.kind === 'agent-instructions')).toHaveLength(suppressed ? 0 : 1)
-          expect(contexts.some(message => message.source.kind === 'runtime-context')).toBe(!suppressed)
-          expect(contexts.some(message => message.source.kind === 'skill-invocation' && message.source.name === 'jev-first-policy')).toBe(!suppressed)
+          expect(contexts.filter(message => message.source?.kind === 'agent-instructions')).toHaveLength(suppressed ? 0 : 1)
+          expect(contexts.some(message => message.source?.kind === 'runtime-context')).toBe(!suppressed)
+          expect(contexts.some(message => message.source?.kind === 'skill-invocation' && message.source.name === 'jev-first-policy')).toBe(!suppressed)
           expect(text).toContain(question)
           expect(text.includes('built-in guidance')).toBe(!suppressed)
           expect(text).toContain('preset contribution')
@@ -231,7 +231,7 @@ describe('TUI Web prompt settings', () => {
           await child.handle?.dispose()
           const reopened = await ctx.agents.create({
             sessionId: SessionId('restored-pending-preset'), seed,
-            inheritedEventCount: 0, meta: { cwd: root, parentSession: agent.id, agentPreset: id },
+            inheritedEventCount: SessionLogOffset(0), meta: { cwd: root, parentSession: agent.id, agentPreset: id },
             agentOptions: { provider: 'mock', model: 'mock' },
             setup: async (agentCtx) => { await agentCtx.plugin(Persona, { prefix: `NEW_PRESET_${id}` }) },
           })
