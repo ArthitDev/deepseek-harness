@@ -94,11 +94,13 @@ import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
 import { pickReasoningLevel } from './reasoning-picker.js'
+import { pickWiki } from './wiki.js'
 import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 import { defaultModelSelection } from '../core/web-settings.js'
 import { TEAM_MODE_OPTIONS, type TeamMode } from '../core/team-mode.js'
 
+/** Dependencies for one live ChatScreen: context, viewport, agent, and quit/switch callbacks. */
 export interface ChatScreenOptions {
   ctx: Context
   tui: ViewportTUI
@@ -121,10 +123,49 @@ interface LlmRuntime extends LlmRuntimeLike {
   resolveModelInfo(
     provider: string,
     model: string,
+    signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo>
   resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>
 }
 
+interface ToolPolicyRuntime {
+  guard?(guard: (execution: { readonly name: string }) => string | undefined): () => void
+  schemas?(scope?: Agent): readonly { name: string }[]
+}
+
+const MCP_TOOL_PREFIX = 'mcp__'
+const DIRECT_JEV_MCP_TOOL_PREFIX = 'mcp__jev__'
+const JEV_MCP_TOOL_PREFIXES = [DIRECT_JEV_MCP_TOOL_PREFIX, 'mcp__open-dev-browser__', 'mcp__open_dev_browser__']
+const JEV_POLICY_SKILL = 'jev-first-policy'
+const SKILL_TOOL_NAME = 'skill'
+
+const isJevTool = (name: string): boolean => JEV_MCP_TOOL_PREFIXES.some(prefix => name.startsWith(prefix))
+
+/**
+ * Sum provider-reported Jev cost from successful direct-MCP calls in this session.
+ * @param items - the transcript items to scan for Jev tool results.
+ * @returns the summed cost across Jev calls that reported one, or undefined when none did.
+ */
+export function jevSessionCost(items: readonly ChatItem[]): number | undefined {
+  let total = 0
+  let found = false
+  for (const item of items) {
+    if (item.tool?.status !== 'ok' || !item.tool.name.startsWith(DIRECT_JEV_MCP_TOOL_PREFIX)
+      || item.tool.resultFull === undefined) continue
+    try {
+      const value = JSON.parse(item.tool.resultFull) as { usage?: { cost?: unknown } }
+      const cost = value.usage?.cost
+      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) continue
+      total += cost
+      found = true
+    } catch {
+      // Older or custom Jev servers may return plain text without usage metadata.
+    }
+  }
+  return found ? total : undefined
+}
+
+/** The live conversation surface: transcript views, status bar, and editor bound to one agent. */
 export class ChatScreen {
   private readonly ctx: Context
   private readonly tui: ViewportTUI
@@ -141,6 +182,11 @@ export class ChatScreen {
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
   private readonly selection: ModelSelectionRef = { current: undefined, assembled: undefined }
   private disposeSelection: (() => void) | undefined
+  private disposeMcpPolicy: (() => void) | undefined
+  private disposeSkillsPolicy: (() => void) | undefined
+  private mcpEnabled = true
+  private jevEnabled = true
+  private skillsEnabled = true
   /** Per-agent live stream subscription (rebound on every agent switch). */
   private disposeStream: (() => void) | undefined
   private streamSyncTimer: ReturnType<typeof setTimeout> | undefined
@@ -198,6 +244,8 @@ export class ChatScreen {
       this.workingLoader?.stop()
       this.cancelStreamSync()
       this.disposeStream?.()
+      this.disposeMcpPolicy?.()
+      this.disposeSkillsPolicy?.()
     })
     this.agent = options.agent
     this.config = options.config
@@ -205,7 +253,9 @@ export class ChatScreen {
     this.onAgentSwitch = options.onAgentSwitch
 
     this.seedSelection()
-    this.disposeSelection = installModelSelection(this.agent.ctx, this.selection)
+    this.disposeSelection = this.installSelection()
+    this.disposeMcpPolicy = this.installMcpPolicy()
+    this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
     this.listenSubagents()
 
@@ -386,6 +436,7 @@ export class ChatScreen {
     })
 
     this.showBanner()
+    this.ctx.events.on('tools/change', () => { this.sync(false) }, { global: true })
     this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
     this.sync()
     this.refreshGitState()
@@ -434,6 +485,11 @@ export class ChatScreen {
     return this.agent.session.header.cwd ?? this.config.cwd ?? process.cwd()
   }
 
+  /**
+   * Whether a session or agent id names the session this screen currently renders.
+   * @param id - the session or agent id to test, in branded or string form.
+   * @returns true when `id` names the current session.
+   */
   ownsSession(id: unknown): boolean {
     return id === this.agent.session.id || String(id) === String(this.agent.session.id)
   }
@@ -464,6 +520,93 @@ export class ChatScreen {
   private defaultSelection():
     { provider?: string; model?: string; reasoningEffort?: string } | undefined {
     return defaultModelSelection(this.ctx)
+  }
+
+  /** Repair saved or resumed efforts before the runtime validates each request. */
+  private installSelection(): () => void {
+    const agent = this.agent
+    const disposeRouting = installModelSelection(agent.ctx, this.selection)
+    const disposeEffort = agent.ctx.on('agent/request', async ({ signal }, next) => {
+      const proposed = await next()
+      const effort = proposed.reasoningEffort
+      const llm = this.llm()
+      if (effort === undefined || llm === undefined) return proposed
+      const info = await llm.resolveModelInfo(proposed.provider, proposed.model, signal)
+      signal.throwIfAborted()
+      if (info.reasoning?.efforts.some(level => level.id === effort)) return proposed
+      const { reasoningEffort: _unsupported, ...withoutEffort } = proposed
+      for (const key of ['current', 'assembled'] as const) {
+        const selected = this.selection[key]
+        if (selected?.provider === proposed.provider && selected.model === proposed.model && selected.reasoningEffort === effort) {
+          this.selection[key] = { provider: selected.provider, model: selected.model }
+        }
+      }
+      if (this.agent === agent) {
+        delete this.model.effort
+        this.pushNotice(`Reasoning effort ${effort} is not advertised for ${proposed.model}; using provider default`, 'info')
+      }
+      return withoutEffort
+    }, { prepend: true })
+    return () => { disposeEffort(); disposeRouting() }
+  }
+
+  /** Hide MCP/JEV schemas and policy context, and deny stale calls while their switches are off. */
+  private installMcpPolicy(): () => void {
+    const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+      const assembly = await next()
+      return this.mcpEnabled && this.jevEnabled
+        ? assembly
+        : { ...assembly, tools: assembly.tools.filter(tool =>
+          (this.mcpEnabled || !tool.name.startsWith(MCP_TOOL_PREFIX))
+          && (this.jevEnabled || !isJevTool(tool.name))) }
+    })
+    const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
+      const decision = await next()
+      if (this.jevEnabled || decision.kind === 'reject') return decision
+      return {
+        ...decision,
+        messages: decision.messages.filter(message =>
+          message.source.kind !== 'skill-invocation' || message.source.name !== JEV_POLICY_SKILL),
+      }
+    }, { prepend: true })
+    const tools = this.agent.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const disposeGuard = tools?.guard?.((execution) => {
+      if (!this.mcpEnabled && execution.name.startsWith(MCP_TOOL_PREFIX)) {
+        return 'MCP tools are disabled in this TUI; run /mcp on'
+      }
+      if (!this.jevEnabled && isJevTool(execution.name)) {
+        return 'JEV is disabled in this TUI; run /jev on'
+      }
+      return undefined
+    })
+    return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
+  }
+
+  /** Hide skill discovery and deny both model and user invocation while this TUI switch is off. */
+  private installSkillsPolicy(): () => void {
+    const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+      const assembly = await next()
+      return this.skillsEnabled
+        ? assembly
+        : { ...assembly, tools: assembly.tools.filter(tool => tool.name !== SKILL_TOOL_NAME) }
+    })
+    const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
+      const decision = await next()
+      if (this.skillsEnabled || decision.kind === 'reject') return decision
+      return {
+        ...decision,
+        messages: decision.messages.filter((message) => {
+          const kind: string = message.source.kind
+          return kind !== 'skill-catalog' && kind !== 'skill-invocation'
+        }),
+      }
+    }, { prepend: true })
+    const tools = this.agent.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const disposeGuard = tools?.guard?.(execution =>
+      !this.skillsEnabled && execution.name === SKILL_TOOL_NAME
+        ? 'Skills are disabled in this TUI; run /skills on'
+        : undefined)
+    return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
   }
 
   /**
@@ -497,6 +640,7 @@ export class ChatScreen {
    * Rebind the screen to another live agent (new/fork/resume): tear down the
    * old per-agent selection install, reset the transcript, reinstall and
    * reseed the selection, replay the durable log, and repaint.
+   * @param next - the live agent to rebind the screen to.
    */
   switchAgent(next: Agent): void {
     if (next === this.agent) return
@@ -505,6 +649,8 @@ export class ChatScreen {
       return
     }
     this.disposeSelection?.()
+    this.disposeMcpPolicy?.()
+    this.disposeSkillsPolicy?.()
     this.agent = next
     this.model = createModel()
     this.views.clear()
@@ -522,7 +668,9 @@ export class ChatScreen {
       this.workingLoader = undefined
     }
     this.seedSelection()
-    this.disposeSelection = installModelSelection(this.agent.ctx, this.selection)
+    this.disposeSelection = this.installSelection()
+    this.disposeMcpPolicy = this.installMcpPolicy()
+    this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
     this.replaying = true
     try {
@@ -594,6 +742,8 @@ export class ChatScreen {
       { name: 'preset', description: 'Switch the session preset' },
       { name: 'preset-create', description: 'Create a new preset from pasted text' },
       { name: 'suppress-prompt', description: 'Suppress built-in prompt sections' },
+      { name: 'mcp', description: 'Enable or disable MCP tools' },
+      { name: 'jev', description: 'Enable or disable JEV tools and policy context' },
       { name: 'team-mode', description: 'Switch the team mode' },
       { name: 'thinking', description: 'Choose reasoning level for the selected model' },
       { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
@@ -607,7 +757,8 @@ export class ChatScreen {
       { name: 'clear', description: 'Clear the conversation (same session, fresh context)' },
       { name: 'queue', description: 'Pending inbox: list|remove <id>|clear' },
       { name: 'providers', description: 'List provider routes with model counts and key state' },
-      { name: 'skills', description: 'List user-invocable skills' },
+      { name: 'skills', description: 'List, enable, or disable skills' },
+      { name: 'wiki', description: 'View Wiki index or open Obsidian / Wiki folder' },
       { name: 'agents', description: 'List live subagents' },
       { name: 'jobs', description: 'List background jobs' },
       { name: 'export', description: 'Write this transcript to a markdown file' },
@@ -626,7 +777,9 @@ export class ChatScreen {
     // Rebuild the provider once the skill catalog arrives so `/` completes
     // user-invocable skills too (plain `/name` — the dsh pre-step gesture
     // recognizes that token, not pi's `/skill:name` form).
+    const agent = this.agent
     void this.listSkills().then((skills) => {
+      if (this.agent !== agent || !this.skillsEnabled) return
       const withSkills: SlashCommand[] = [
         ...slashCommands,
         ...skills.map(skill => ({
@@ -860,7 +1013,10 @@ export class ChatScreen {
     })
   }
 
-  /** Submit one human turn or dispatch a slash/bang command. */
+  /**
+   * Submit one human turn or dispatch a slash/bang command.
+   * @param text - the editor text: a plain turn, a `!` shell line, or a `/` command.
+   */
   submit(text: string): void {
     if (this.quitting) return
     const trimmed = text.trim()
@@ -917,6 +1073,14 @@ export class ChatScreen {
     if (parsed.name === 'model') return this.cmdModel(parsed.raw.trim())
     if (parsed.name === 'preset') return this.cmdPreset(parsed.raw.trim())
     if (parsed.name === 'suppress-prompt' || parsed.name === 'suppress-promot') return this.cmdSuppressPrompt(parsed.raw.trim())
+    if (parsed.name === 'mcp') {
+      this.cmdMcp(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'jev') {
+      this.cmdJev(parsed.raw.trim())
+      return
+    }
     if (parsed.name === 'team-mode') return this.cmdTeamMode(parsed.raw.trim())
     if (parsed.name === 'runs') return this.cmdRuns(parsed.raw.trim())
     if (parsed.name === 'recon') return this.cmdRecon(parsed.raw.trim())
@@ -937,7 +1101,8 @@ export class ChatScreen {
     if (parsed.name === 'preset-create') return this.cmdPresetCreate()
     if (parsed.name === 'providers') return this.cmdProviders()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
-    if (parsed.name === 'skills') return this.cmdSkills()
+    if (parsed.name === 'skills') return this.cmdSkills(parsed.raw.trim())
+    if (parsed.name === 'wiki') return this.cmdWiki()
     if (parsed.name === 'new') return this.cmdNew()
     if (parsed.name === 'fork') return this.cmdFork()
     if (parsed.name === 'resume') return this.cmdResume(parsed.raw)
@@ -1035,7 +1200,10 @@ export class ChatScreen {
   }
 
   private currentEffort(): string | undefined {
-    return this.selection.current?.reasoningEffort ?? this.model.effort
+    const current = this.selection.current
+    if (current?.reasoningEffort !== undefined) return current.reasoningEffort
+    if (current !== undefined && (current.provider !== this.model.route?.provider || current.model !== this.model.route.model)) return
+    return this.model.effort
   }
 
   /** The mounted preset of the visible agent, shared by the banner and status bar. */
@@ -1043,6 +1211,50 @@ export class ChatScreen {
     const presets = this.ctx.get('agentPresets') as
       { composedPreset(agentCtx: Context): string | undefined } | undefined
     return presets?.composedPreset(this.agent.ctx)
+  }
+
+  /** Toggle model visibility and execution of MCP tools for the visible TUI agent. */
+  private cmdMcp(argument: string): void {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /mcp [on|off|toggle|status]', 'error')
+      return
+    }
+    const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const count = tools?.schemas?.(this.agent)
+      .filter(tool => tool.name.startsWith(MCP_TOOL_PREFIX)).length ?? 0
+    if (action === 'status') {
+      this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${count} tool(s) ${this.mcpEnabled ? 'available' : 'hidden'}`)
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot change MCP tools while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    this.mcpEnabled = action === 'on' ? true : action === 'off' ? false : !this.mcpEnabled
+    this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${count} tool(s) ${this.mcpEnabled ? 'available' : 'hidden'} · applies to the next request`)
+  }
+
+  /** Toggle JEV policy context and open-dev-browser MCP tools for this TUI process. */
+  private cmdJev(argument: string): void {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /jev [on|off|toggle|status]', 'error')
+      return
+    }
+    const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const count = tools?.schemas?.(this.agent)
+      .filter(tool => isJevTool(tool.name)).length ?? 0
+    if (action === 'status') {
+      this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''}`)
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot change JEV while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    this.jevEnabled = action === 'on' ? true : action === 'off' ? false : !this.jevEnabled
+    this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''} · applies to the next request`)
   }
 
   /** Pick or set persisted TUI suppression; the shared policy applies it to subsequent requests. */
@@ -1701,7 +1913,10 @@ export class ChatScreen {
         routes.find(route => `${route.provider}/${route.model}` === query) ??
         routes.find(route => route.provider === query) ??
         routes.find(route => route.model === query) ??
+        routes.find(route => route.name?.toLowerCase() === queryLower) ??
         routes.find(route => `${route.provider}/${route.model}`.toLowerCase().includes(queryLower)) ??
+        routes.find(route => route.name?.toLowerCase().includes(queryLower)) ??
+        routes.find(route => route.providerName?.toLowerCase().includes(queryLower)) ??
         routes.find(route => route.provider.toLowerCase().includes(queryLower))
       if (match !== undefined) {
         await this.applyModel(match)
@@ -1716,14 +1931,19 @@ export class ChatScreen {
     const llm = this.llm()
     if (llm === undefined) return
     try {
-      const resolved = await llm.resolveCallConfig({ provider: route.provider, model: route.model })
-      // Preserve the selected reasoning effort across a model switch; the
-      // adapter re-resolves it for the new model on the next request.
+      const previousEffort = this.selection.current?.reasoningEffort
+      const info = previousEffort === undefined ? undefined : await llm.resolveModelInfo(route.provider, route.model)
+      const retainedEffort = info?.reasoning?.efforts.some(effort => effort.id === previousEffort) ? previousEffort : undefined
+      const resolved = await llm.resolveCallConfig({
+        provider: route.provider,
+        model: route.model,
+        ...retainedEffort === undefined ? {} : { reasoningEffort: retainedEffort },
+      })
       this.selection.current = {
         provider: resolved.provider,
         model: resolved.model,
-        ...(this.selection.current?.reasoningEffort !== undefined
-          ? { reasoningEffort: this.selection.current.reasoningEffort }
+        ...(resolved.reasoningEffort !== undefined
+          ? { reasoningEffort: resolved.reasoningEffort }
           : {}),
       }
       // Write the shared default too (grok rationale: the web host's outer
@@ -1841,8 +2061,38 @@ export class ChatScreen {
     }
   }
 
-  private async cmdSkills(): Promise<void> {
-    const skills = await this.listSkills()
+  private async cmdWiki(): Promise<void> {
+    if (this.tui.hasOverlay()) return
+    const agent = this.agent
+    const notice = await pickWiki(this.ctx, agent, this.tui)
+    if (notice !== undefined && this.agent === agent) this.pushNotice(notice)
+  }
+
+  private async cmdSkills(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /skills [on|off|toggle|status]', 'error')
+      return
+    }
+    const skills = await this.discoverSkills()
+    if (action === 'status') {
+      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${skills.length} skill(s) ${this.skillsEnabled ? 'available' : 'hidden'}`)
+      return
+    }
+    if (action !== '') {
+      if (this.isBusy()) {
+        this.pushNotice('cannot change skills while work is running (Esc to interrupt)', 'error')
+        return
+      }
+      this.skillsEnabled = action === 'on' ? true : action === 'off' ? false : !this.skillsEnabled
+      this.rebuildAutocomplete()
+      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${skills.length} skill(s) ${this.skillsEnabled ? 'available' : 'hidden'} · applies to the next request`)
+      return
+    }
+    if (!this.skillsEnabled) {
+      this.pushNotice(`skills: OFF · ${skills.length} skill(s) hidden · run /skills on`)
+      return
+    }
     if (skills.length === 0) {
       this.pushNotice('no user-invocable skills in this workspace')
       return
@@ -1864,6 +2114,10 @@ export class ChatScreen {
   }
 
   private async listSkills(): Promise<readonly SkillSummary[]> {
+    return this.skillsEnabled ? this.discoverSkills() : []
+  }
+
+  private async discoverSkills(): Promise<readonly SkillSummary[]> {
     try {
       const presets = this.ctx.get('agentPresets') as
         { serviceFor(agent: unknown, key: string): unknown } | undefined
@@ -2272,7 +2526,7 @@ export class ChatScreen {
         '  Ctrl+G     edit input in $EDITOR',
         '  Tab        complete paths · / slash commands · @ attach files',
         '             (empty editor: cycle tool-card focus · Enter expand)',
-        'commands: /new /fork /resume /tree /model /thinking /team-mode /suppress-prompt /skills /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
+        'commands: /new /fork /resume /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
       ].join('\n'),
     )
   }
@@ -2799,13 +3053,20 @@ export class ChatScreen {
 
   // ── transcript plumbing ───────────────────────────────────────────────────
 
-  /** Push a UI-side notice into the transcript. */
+  /**
+   * Push a UI-side notice into the transcript.
+   * @param text - the notice body.
+   * @param notice - the flavor selecting the marker and styling.
+   */
   pushNotice(text: string, notice: 'info' | 'error' | 'compact' = 'info'): void {
     pushNotice(this.model, text, notice)
     this.sync()
   }
 
-  /** Fold one session event and reconcile the component tree. */
+  /**
+   * Fold one session event and reconcile the component tree.
+   * @param event - the durable session event to fold into the transcript.
+   */
   handleEvent(event: SessionEvent): void {
     if (event.type === 'turn/start') {
       this.turnStartedAt = Date.now()
@@ -3080,6 +3341,9 @@ export class ChatScreen {
     const preset = this.currentPresetId()
     const teamPolicy = this.ctx.get('pentestModePolicy') as { current(): { mode: string } } | undefined
     const teamMode = TEAM_MODE_OPTIONS.find(option => option.value === teamPolicy?.current().mode)?.value
+    const jevAvailable = (this.ctx.get('tools') as ToolPolicyRuntime | undefined)?.schemas?.(this.agent)
+      .some(tool => isJevTool(tool.name)) ?? false
+    const jevCost = jevSessionCost(this.model.items)
     this.updateQueueBanner()
     const status: StatusBarData = {
       model: route.model,
@@ -3092,6 +3356,11 @@ export class ChatScreen {
       ...(todos !== undefined ? { todos } : {}),
       ...(preset !== undefined ? { preset } : {}),
       ...(teamMode !== undefined ? { teamMode } : {}),
+      jev: {
+        state: !jevAvailable ? 'unavailable' : this.mcpEnabled && this.jevEnabled ? 'on' : 'off',
+        ...(jevCost !== undefined ? { cost: jevCost } : {}),
+      },
+      wikiAvailable: this.ctx.get('tools')?.get('knowledge_list', this.agent) !== undefined,
       ...(planActive !== undefined ? { planActive } : {}),
       ...(goalPhase !== undefined ? { goalPhase } : {}),
       ...(contextPct !== undefined ? { contextPct } : {}),
@@ -3234,6 +3503,11 @@ export class ChatScreen {
   }
 }
 
+/**
+ * Create the alternate-screen viewport TUI over a terminal.
+ * @param terminal - the terminal abstraction the TUI renders through.
+ * @returns the viewport TUI instance the screens render into.
+ */
 export function createTui(terminal: import('@earendil-works/pi-tui').Terminal): ViewportTUI {
   return new TuiAltScreen(terminal)
 }

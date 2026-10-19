@@ -5,9 +5,12 @@
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
+/** Fallback provider when no selection source names one. */
 export const DEFAULT_PROVIDER = 'deepseek-official'
+/** Fallback model when no selection source names one. */
 export const DEFAULT_MODEL = 'deepseek-v4-flash'
 
+/** The selection sources `seedModelSelection` folds into one model route. */
 export interface SelectionSeed {
   header?: { provider?: string; model?: string; reasoningEffort?: string; adapterDefaults?: { reasoningEffort?: boolean } }
   config?: { provider?: string; model?: string }
@@ -24,6 +27,8 @@ export interface SelectionSeed {
  * harness default → hard-coded route. A restored header retains only explicitly
  * selected effort, matching Web. Without a header, effort falls back prior →
  * saved default when the resolved route matches the saved route.
+ * @param input - the selection sources: persisted header, prior selection, row config, agent options, and saved defaults.
+ * @returns the provider/model/reasoning-effort selection for the next step.
  */
 export function seedModelSelection(input: SelectionSeed): ModelSelection {
   const provider =

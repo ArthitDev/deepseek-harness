@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import {
   agentEvents,
+  currentModelSelection,
   installModelSelection,
   type Agent,
   type ModelSelection,
@@ -91,6 +92,7 @@ describe('installModelSelection()', () => {
       model: 'a1',
       reasoningEffort: ReasoningEffortId('high'),
     }
+    expect(currentModelSelection(ctx)).toBe(selection.current)
     expect((await ctx.systemPrompt.assemble()).variables).toMatchObject({ provider: 'alpha', model: 'a1' })
     selection.current = { provider: 'beta', model: 'b1' }
     await expect(agentEvents(ctx, agent).waterfall(
@@ -114,6 +116,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({ provider: 'beta', model: 'b1', temperature: 0.2 })
 
     dispose()
+    expect(currentModelSelection(ctx)).toBeUndefined()
     expect((await ctx.systemPrompt.assemble()).variables).toEqual({})
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 2, step: 0, signal }, () => Promise.resolve(seed),

@@ -1100,6 +1100,7 @@ describe('createTransport', () => {
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
+    expect(transport).toHaveProperty('_serverParams.stderr', 'ignore')
   })
 
   it('creates StreamableHTTPClientTransport for http config without headers', () => {

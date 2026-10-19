@@ -17,6 +17,8 @@ const OSC52_PATTERN = new RegExp(`${ESC}]52;[^;${ESC}${BEL}]*;([A-Za-z0-9+/=]*)$
  * Encode `text` as an OSC 52 clipboard write (`c` = clipboards). Writing the
  * sequence through the terminal lets ClipboardTerminal mirror it into tmux +
  * the OS clipboard, and terminals that natively handle OSC 52 act directly.
+ * @param text - the UTF-8 text to place on the clipboard.
+ * @returns the escape sequence with the base64-encoded payload.
  */
 export function osc52Encode(text: string): string {
   return `${ESC}]52;c;${Buffer.from(text, 'utf8').toString('base64')}${BEL}`
@@ -25,6 +27,8 @@ export function osc52Encode(text: string): string {
 /**
  * Decode every OSC 52 payload in `data` to UTF-8 text. Malformed payloads are
  * skipped (best effort). Returns an empty array when `data` carries no OSC 52.
+ * @param data - the terminal output to scan for OSC 52 sequences.
+ * @returns the decoded non-empty texts in match order.
  */
 export function decodeOsc52(data: string): string[] {
   if (!data.includes('\x1b]52;')) return []

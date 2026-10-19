@@ -336,6 +336,20 @@ declare module '@deepseek-ai/cordis' {
     */
     'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
     /**
+     * Observe the adapter-prepared call configuration before model-visible
+     * input is committed or snapshotted. Awaited listeners may perform
+     * admission maintenance such as compacting history for a smaller route;
+     * they cannot replace the prepared configuration.
+     * @param payload.agent - the agent making the model call.
+     * @param payload.turn - the open turn number.
+     * @param payload.step - the step whose request this is.
+     * @param payload.config - final adapter-prepared call configuration.
+     * @param payload.signal - the current turn's explicit abort signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode serial
+     */
+    'agent/request-prepared'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; config: LlmCallConfig; signal: AbortSignal }): Promise<void>
+    /**
      * Select the provider-neutral tool-call policy for one exact model request.
      * A mode that requires a tool returns `required`; otherwise call `next()`.
      * @param payload - identity and boundary of the request being selected.

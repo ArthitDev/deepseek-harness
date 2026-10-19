@@ -9,6 +9,7 @@
     "src"
   ],
   "references": [
+    { "path": "../../fs/tool-fs-search" },
     {
       "path": "../../../vendor/schemastery"
     },

@@ -58,14 +58,17 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
  * @param binName Diagnostic prefix for malformed or missing configuration.
  * @param context Data supplied by the profile launcher.
  * @param initialProfile Already loaded startup profile; omitted reads the current files.
+ * @param homePatches In-memory home-layer candidate for validation; omitted reads the home patch.
  * @returns Detached ordered patches; this function does not update the Loader.
  */
-export function readProfilePatches(binName: string, context: ProfileContext, initialProfile?: Profile): PatchOptions[] {
+export function readProfilePatches(
+  binName: string, context: ProfileContext, initialProfile?: Profile, homePatches?: readonly PatchOptions[],
+): PatchOptions[] {
   const profile = initialProfile ?? loadProfileDirectory(binName, context.dir, context.installAnchor, { userLayer: false })
   const patches = structuredClone([
     ...profile.layers.flatMap(layer => layer.patches),
     ...(initialProfile?.patches ?? loadOptionalPatches(binName, context.patchPath) ?? []),
-    ...(loadOptionalPatches(binName, join(context.home, PROFILE_PATCH_FILENAME)) ?? []),
+    ...(homePatches ?? loadOptionalPatches(binName, join(context.home, PROFILE_PATCH_FILENAME)) ?? []),
     ...context.overlays,
   ])
   const telemetryPatch = resolveTelemetryPatch(context.telemetryDisabledEnv,

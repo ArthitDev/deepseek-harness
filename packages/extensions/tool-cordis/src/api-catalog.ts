@@ -847,8 +847,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'configEditor',
-    summary: 'Persist complete raw configs and apply them through the normal Loader path.',
-    description: 'Persist complete raw configs and apply them through the normal Loader path.',
+    summary: 'Persist complete raw configs in their owning user layer and apply them through Loader.',
+    description: 'Persist complete raw configs in their owning user layer and apply them through Loader.',
     methods: [
       {
         signature: 'entries(): Entry[]',
@@ -858,13 +858,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>',
-        description: 'Read inherited and explicit profile values for the active entries.',
+        description: 'Read inherited and explicit values from each entry\'s owning user layer.',
         parameters: [],
         returns: 'Detached layer values alongside their Loader entries.',
       },
       {
         signature: 'async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>, ): Promise<void>',
-        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules.',
+        description: 'Validate, persist, and reconcile config in its existing home override or the profile patch. Home edits affect every profile using that override; command-line overrides remain read-only.',
         parameters: [{ name: 'entry', description: 'Current Loader entry, also used to detect replacement during the write.' }, { name: 'change', description: 'Derive a raw config from the current entry and its inherited layer.' }],
         returns: 'Fulfillment after Loader reconciliation completes.',
       },
@@ -1729,7 +1729,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'policyText(mode: PentestMode): string',
-        description: 'Resolve the policy text injected for one mode: the operator override when it carries non-whitespace content, otherwise the built-in policy.',
+        description: 'Resolve the policy text injected for one mode: the operator override when it carries non-whitespace content, otherwise the \'-\' placeholder.',
         parameters: [{ name: 'mode', description: 'Operating mode to resolve.' }],
         returns: 'the effective mode policy text.',
       },
@@ -2354,6 +2354,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the new Session identity.',
       },
       {
+        signature: '@Remote(\'editMessage\') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>',
+        description: 'Edit one sent user message in place: the old exchange is shadowed on the surface and the Agent regenerates its answer inside the same Session log.',
+        parameters: [{ name: 'request', description: 'Session identity, the sent message\'s seq, and the edited text.' }],
+        returns: 'acknowledgement that the edit replaced the exchange and scheduled regeneration.',
+      },
+      {
         signature: '@Remote(\'prompt\') prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>',
         description: 'Admit one prompt after explicitly resuming its Session.',
         parameters: [{ name: 'request', description: 'Session identity, prompt content, source metadata, and delivery mode.' }, { name: 'signal', description: 'caller cancellation before prompt admission begins.' }],
@@ -2947,7 +2953,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async mutate(ns: string, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void>',
-        description: 'Apply field edits without restating redacted secrets; unsetting an array index removes its element.',
+        description: 'Apply field edits without restating redacted secrets; unsetting array or dictionary members removes them.',
         parameters: [{ name: 'ns', description: 'Profile entry id.' }, { name: 'ops', description: 'Ordered form edits.' }, { name: 'expectedRevision', description: 'Revision returned by describe.' }],
       },
     ],
@@ -2990,6 +2996,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'ns', description: 'namespace key to write.' }, { name: 'ops', description: 'the edits to apply, in order.' }, { name: 'expectedRevision', description: 'revision the caller read; `undefined` writes unconditionally.' }],
         returns: 'the namespace\'s redacted view after the write.',
         throws: ['RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.'],
+      },
+      {
+        signature: '@Remote upsertHomePatchEntry( entryId: string, entryName: string, patch: JsonValue, ): void',
+        description: 'Insert or update one entry\'s config in the deployment home patch — the layer that overrides every profile, which the settings service itself refuses to mutate. The patch merges over the row\'s current config host-side (one level: top-level keys replace, `providers`-style nested records merge per key).',
+        parameters: [{ name: 'entryId', description: 'the overridden entry\'s id.' }, { name: 'entryName', description: 'the overridden entry\'s plugin name.' }, { name: 'patch', description: 'JSON-serializable config fields to merge into the row.' }],
+        returns: 'confirmation after the patch file is written.',
+        throws: ['RemoteError when the request is invalid or the patch refuses the write.'],
       },
       {
         signature: '@Remote async openSettingsDocument(signal: AbortSignal): Promise<SettingsDocumentOpenValue>',
@@ -3469,7 +3482,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'suppressSections(options?: { except?: readonly string[] | (() => readonly string[] | undefined) globalOnly?: boolean }): () => void',
         description: 'Suppress prompt sections in the calling context\'s scope, keeping only the names the allowlist carries. Multiple suppressors stack: a section survives only when every active suppressor\'s allowlist names it, so one strict suppressor cannot be widened by another. The owned services that registered the sections keep running; only their prompt contribution is withheld.',
-        parameters: [{ name: 'options', description: '`except` names the sections that remain visible, as a static list or a provider re-evaluated at every assembly for live toggles.' }],
+        parameters: [{ name: 'options', description: '`except` names the sections that remain visible, as a static list or a provider re-evaluated at every assembly for live toggles. An undefined provider result disables suppression; an empty list permits no gated sections.' }],
         returns: 'the exact Cordis effect disposer.',
       },
       {
@@ -4289,6 +4302,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Handle one failed model-request attempt before the loop retries or closes its step.',
     description: 'Handle one failed model-request attempt before the loop retries or closes its step. A listener returns `{ kind: \'retry\' }` without calling `next()` when it owns recovery, or calls `next()` to delegate. The default `undefined` leaves the failure terminal.',
     parameters: [{ name: 'payload', description: '.signal - the turn abort signal. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
+  },
+  {
+    name: 'agent/request-prepared',
+    mode: 'serial',
+    signature: '\'agent/request-prepared\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; config: LlmCallConfig; signal: AbortSignal }): Promise<void>',
+    summary: 'Observe the adapter-prepared call configuration before model-visible input is committed or snapshotted.',
+    description: 'Observe the adapter-prepared call configuration before model-visible input is committed or snapshotted. Awaited listeners may perform admission maintenance such as compacting history for a smaller route; they cannot replace the prepared configuration.',
+    parameters: [{ name: 'payload', description: '.signal - the current turn\'s explicit abort signal. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
     name: 'agent/status',
@@ -5567,10 +5588,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FileBlock {\n    type: \'file\';\n    attachment: FileAttachmentRef;\n}',
   },
   {
-    name: 'FileDiff',
-    declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
-  },
-  {
     name: 'FileLocation',
     declaration: 'export interface FileLocation {\n    path: string;\n    line?: number;\n}',
   },
@@ -5705,10 +5722,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageAttachmentLimits',
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
-  },
-  {
-    name: 'ImageAttachmentRef',
-    declaration: 'export interface ImageAttachmentRef {\n    attachmentId: AttachmentId;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    name?: string;\n    originalDimensions?: {\n        width: number;\n        height: number;\n    };\n}',
   },
   {
     name: 'ImageBlock',
@@ -6271,6 +6284,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PentestMode = typeof PENTEST_MODES[number];',
   },
   {
+    name: 'PentestModeSettings',
+    declaration: 'export interface PentestModeSettings {\n    readonly mode: PentestMode;\n    readonly bluePrompt: string;\n    readonly redPrompt: string;\n    readonly blackPrompt: string;\n    readonly deadPrompt: string;\n    readonly suppressSections: boolean;\n}',
+  },
+  {
     name: 'PentestRunId',
     declaration: 'export type PentestRunId = Branded<\'PentestRunId\'>;',
   },
@@ -6429,10 +6446,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionDefinition',
     declaration: 'export interface ProjectionDefinition<K extends keyof SessionProjectionStateMap, S extends SessionProjectionStateMap[K] = SessionProjectionStateMap[K]> {\n    key: K;\n    stateSchema: ZodType<S>;\n    init(header: SessionHeader, inheritedEventCount: SessionLogOffset): NoInfer<S>;\n    apply(state: NoInfer<S>, event: SessionEvent): NoInfer<S>;\n    wire?: K extends keyof SessionProjectionMap ? {\n        viewSchema: ZodType<SessionProjectionMap[K]>;\n        view(state: NoInfer<S>): SessionProjectionMap[K];\n    } : never;\n    stateVersion: number;\n}',
-  },
-  {
-    name: 'ProjectionSnapshot',
-    declaration: 'export interface ProjectionSnapshot {\n    asOfSeq: SessionSeqCursor;\n    values: Partial<SessionProjectionMap>;\n}',
   },
   {
     name: 'PromptAssembly',
@@ -6873,6 +6886,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionDeleteValue',
     declaration: 'export interface SessionDeleteValue {\n    readonly deleted: true;\n}',
+  },
+  {
+    name: 'SessionEditMessageRequest',
+    declaration: 'export interface SessionEditMessageRequest {\n    readonly sessionId: SessionId;\n    readonly seq: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SessionEditMessageValue',
+    declaration: 'export interface SessionEditMessageValue {\n    readonly accepted: true;\n}',
   },
   {
     name: 'SessionEvent',

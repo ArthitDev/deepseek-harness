@@ -139,6 +139,36 @@ class OverflowRecoveryAdapter extends LlmAdapter {
   }
 }
 
+class RouteSwitchAdapter extends LlmAdapter {
+  readonly conversationRequests: GenerateOptions[] = []
+  readonly summaryRequests: GenerateOptions[] = []
+
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({
+      provider,
+      id: model,
+      name: model,
+      context: { contextWindow: model === 'large' ? 8192 : 512 },
+    })
+  }
+
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const trailing = options.messages.at(-1)?.content
+      .map(block => (block.type === 'text' ? block.text : ''))
+      .join('') ?? ''
+    const summary = trailing.includes('Create a structured checkpoint from the conversation above')
+    if (summary) this.summaryRequests.push(options)
+    else this.conversationRequests.push(options)
+    yield { type: 'block-start', index: 0, blockType: 'text' }
+    yield {
+      type: 'block-end',
+      index: 0,
+      block: { type: 'text', text: summary ? 'ROUTE SWITCH CHECKPOINT' : 'continued' },
+    }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+}
+
 async function mountInvariants(ctx: Context): Promise<void> {
   await ctx.plugin(InvariantRegistry)
   await ctx.plugin(SessionInvariant)
@@ -185,7 +215,7 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
   })
 }
 
-function overflowHistorySeed(): readonly SessionEvent[] {
+function overflowHistorySeed(model?: string): readonly SessionEvent[] {
   const session = Session.create(SessionId('overflow-history-seed'))
   for (let turn = 1; turn <= 2; turn += 1) {
     const sentinel = turn === 1 ? 'OLD HISTORY SENTINEL' : 'RECENT HISTORY'
@@ -197,6 +227,12 @@ function overflowHistorySeed(): readonly SessionEvent[] {
       source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     session.append('step/start', { turn, step: 1 })
+    if (turn === 1 && model !== undefined) {
+      session.append('request/header', {
+        header: { config: { provider: 'mock', model } },
+        reason: 'initial',
+      })
+    }
     session.append('assistant/message', {
       stream: [],
       turn,
@@ -383,6 +419,52 @@ describe('token pressure after loop-admitted system prompts', () => {
 })
 
 describe('context-overflow recovery across the real loop and compaction-basic', () => {
+  it('compacts through the previous route before switching to a smaller model', async () => {
+    const ctx = new Context()
+    const adapter = new RouteSwitchAdapter()
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], adapter)
+    ctx.on('agent/request', async (_payload, next) => ({
+      ...await next(), provider: 'mock', model: 'small',
+    }))
+    await ctx.plugin(BasicCompactionEngine, {
+      auto: true,
+      headroomTokens: 0,
+      thresholdRatio: 1,
+      retainTokens: 32,
+      maxTokens: 64,
+      compactionRetries: 0,
+    })
+
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('route-switch-pressure'),
+        seed: overflowHistorySeed('large'),
+        agentOptions: { provider: 'mock', model: 'large' },
+      })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'continue on small' }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+
+      expect(adapter.summaryRequests.map(request => request.model)).toEqual(['large'])
+      expect(adapter.conversationRequests.map(request => request.model)).toEqual(['small'])
+      const request = JSON.stringify(adapter.conversationRequests[0]!.messages)
+      expect(request).toContain('ROUTE SWITCH CHECKPOINT')
+      expect(request).not.toContain('OLD HISTORY SENTINEL')
+
+      const events = agent.session.snapshotEvents()
+      const summary = events.find(event => event.type === 'compaction/summary')!
+      const changedHeader = events.find(event =>
+        event.type === 'request/header' && event.data.header.config.model === 'small',
+      )!
+      expect(summary.seq).toBeLessThan(changedHeader.seq)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it.each(['thrown', 'in-band'] as const)(
     'force-compacts a %s overflow within the retried step',
     async (delivery) => {

@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`deletes a home-defined provider, retains other routes and credentials, and persists across restart 1`] = `
+{
+  "base": {
+    "providers": {
+      "b-ai": {
+        "model": "lower-bai",
+      },
+      "profile": {
+        "model": "lower",
+      },
+    },
+  },
+  "credentialUnchanged": true,
+  "user": {
+    "providers": {
+      "retained": {
+        "apiKeyEnv": "SHARED_API_KEY",
+        "model": "keep",
+      },
+    },
+  },
+  "value": {
+    "providers": {
+      "retained": {
+        "apiKeyEnv": "SHARED_API_KEY",
+        "model": "keep",
+      },
+    },
+  },
+}
+`;

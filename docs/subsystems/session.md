@@ -882,6 +882,14 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('fork') fork(request: SessionForkRequest): Promise<SessionForkValue>
 
 /**
+ * Edit one sent user message in place: the old exchange is shadowed on the
+ * surface and the Agent regenerates its answer inside the same Session log.
+ * @param request - Session identity, the sent message's seq, and the edited text.
+ * @returns acknowledgement that the edit replaced the exchange and scheduled regeneration.
+ */
+@Remote('editMessage') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>
+
+/**
  * Admit one prompt after explicitly resuming its Session.
  * @param request - Session identity, prompt content, source metadata, and delivery mode.
  * @param signal - caller cancellation before prompt admission begins.

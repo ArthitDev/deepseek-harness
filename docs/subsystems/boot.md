@@ -30,7 +30,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.configEditor` — `ConfigEditor`
 
-Persist complete raw configs and apply them through the normal Loader path.
+Persist complete raw configs in their owning user layer and apply them through Loader.
 
 ```ts cordis-catalog
 /** Addressable profile rows; nested Includes have independent configuration ownership.
@@ -38,12 +38,13 @@ Persist complete raw configs and apply them through the normal Loader path.
  */
 entries(): Entry[]
 
-/** Read inherited and explicit profile values for the active entries.
+/** Read inherited and explicit values from each entry's owning user layer.
  * @returns Detached layer values alongside their Loader entries.
  */
 configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>
 
-/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
+/** Validate, persist, and reconcile config in its existing home override or the profile patch.
+ * Home edits affect every profile using that override; command-line overrides remain read-only.
  * @param entry Current Loader entry, also used to detect replacement during the write.
  * @param change Derive a raw config from the current entry and its inherited layer.
  * @returns Fulfillment after Loader reconciliation completes.

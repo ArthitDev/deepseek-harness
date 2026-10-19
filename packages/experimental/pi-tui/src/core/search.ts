@@ -19,7 +19,11 @@ export interface TranscriptSearchMatch {
   snippet: string
 }
 
-/** Searchable plain text of an item (empty for items with no text). */
+/**
+ * Searchable plain text of an item (empty for items with no text).
+ * @param item - Chat transcript item.
+ * @returns The item text; for tool items the tool name, args preview, and full-or-preview result.
+ */
 export function itemSearchText(item: ChatItem): string {
   switch (item.kind) {
     case 'user':
@@ -38,7 +42,12 @@ export function itemSearchText(item: ChatItem): string {
   }
 }
 
-/** Collapse whitespace and trim to a single-line snippet (max ~90 cols). */
+/**
+ * Collapse whitespace and trim to a single-line snippet (max ~90 cols).
+ * @param text - Raw text, possibly multi-line.
+ * @param maxLength - Cap before the trailing ellipsis (default 90).
+ * @returns Whitespace-collapsed single-line text, ellipsis-terminated when longer than `maxLength`.
+ */
 export function snippetOf(text: string, maxLength = 90): string {
   const single = text.replace(/\s+/g, ' ').trim()
   return single.length > maxLength ? `${single.slice(0, maxLength)}…` : single
@@ -49,6 +58,9 @@ export function snippetOf(text: string, maxLength = 90): string {
  * per matching item, in transcript order; an empty/whitespace query matches
  * nothing. The snippet is centered on the first occurrence when the text is
  * long, so the user sees the matched region, not just the head of the item.
+ * @param items - Chat transcript items, in display order.
+ * @param query - Case-insensitive substring to find; empty or whitespace-only matches nothing.
+ * @returns One match per matching item with its id, kind, and centered snippet.
  */
 export function buildSearchIndex(
   items: readonly ChatItem[],

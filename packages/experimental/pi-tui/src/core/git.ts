@@ -7,6 +7,7 @@
  */
 import { execFile } from 'node:child_process'
 
+/** Status-bar facts for one git work tree: the branch and its dirty flag. */
 export interface GitState {
   /** Branch name (`main`, `HEAD` for detached, …). */
   branch: string
@@ -17,6 +18,9 @@ export interface GitState {
 /**
  * Read the branch and dirty flag under `cwd`. Resolves undefined when the
  * directory is not inside a git work tree or git is unavailable.
+ * @param cwd - the directory the git commands run in.
+ * @param timeoutMs - per-command timeout in milliseconds.
+ * @returns the branch and dirty flag, or undefined when git fails or times out.
  */
 export function readGitState(cwd: string, timeoutMs = 3000): Promise<GitState | undefined> {
   return new Promise((resolve) => {

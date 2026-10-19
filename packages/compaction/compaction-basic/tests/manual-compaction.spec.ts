@@ -20,6 +20,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock,
+  GenerateOptions,
   LlmResolvedModelInfo,
   Message,
   RequestMessage,
@@ -32,6 +33,7 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {
   SummarizationInput,
   SummaryResult,
@@ -81,6 +83,7 @@ class GatedCompactionEngine extends BasicCompactionEngine {
 /** One text answer per request, with a context window large enough to avoid pressure. */
 class TextAdapter extends LlmAdapter {
   readonly requests: RequestMessage[][] = []
+  readonly routes: string[] = []
 
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({
@@ -91,8 +94,9 @@ class TextAdapter extends LlmAdapter {
     })
   }
 
-  override async * stream(options: { messages: readonly RequestMessage[] }): AsyncIterable<StreamChunk> {
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push([...options.messages])
+    this.routes.push(`${options.provider}/${options.model}`)
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: 'answer' } }
     yield { type: 'finish', reason: { kind: 'stop' } }
@@ -250,6 +254,39 @@ function compactEvents(session: Session): SessionEvent[] {
 }
 
 describe('compactNow through the real loop', () => {
+  it.each([
+    { config: { auto: false }, expected: `${MODEL}/new` },
+    {
+      config: { auto: false, summarizationProvider: 'summary', summarizationModel: 'fixed' },
+      expected: 'summary/fixed',
+    },
+  ])('uses $expected after a model switch before its first conversation request', async ({ config, expected }) => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    const adapter = new TextAdapter()
+    ctx.llm.registerAdapter([MODEL, 'summary'], adapter)
+    const compact = new BasicCompactionEngine(ctx, config)
+    const agent = await ctx.agentLoop.create(SessionId('manual-compact-after-switch'), { provider: MODEL, model: 'old' })
+    try {
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: PROMPT }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+      const disposeSelection = installModelSelection(agent.ctx, {
+        current: { provider: MODEL, model: 'new' },
+        assembled: undefined,
+      })
+      try {
+        expect(await compact.compactNow(agent, SIGNAL)).not.toBeNull()
+        expect(adapter.routes).toEqual([`${MODEL}/old`, expected])
+      } finally {
+        disposeSelection()
+      }
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('omits logged session-edit markers from summary input without a suppression policy', async () => {
     const harness = await loopHarness()
     const { ctx, agent, compact, adapter } = harness

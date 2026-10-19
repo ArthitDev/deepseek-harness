@@ -406,7 +406,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
     dir: 'tool-fs-search',
     source: 'packages/fs/tool-fs-search/src/index.ts',
     requires: ['ctx.tools', 'ctx.subprocess', 'ctx.systemPrompt'],
-    writes: ['tool/call', 'tool/result'],
+    writes: ['tool/call', 'create-only knowledge note plus INDEX.md append (knowledge_create_note)', 'tool/result'],
     async mount(ctx) {
       // The tools inject `subprocess` (search spawns the packaged ripgrep
       // binary through the seam, not ctx.fs); registration itself never
@@ -414,10 +414,13 @@ const TOOL_PACKAGES: ToolPackage[] = [
       // optional (read via ctx.get) and does not affect the schemas, so no
       // spill backend is mounted.
       await ctx.plugin(LocalSubprocessRuntime)
-      await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true })
+      await ctx.plugin(ToolFsSearch, {
+        sampleOverCapGlobResults: true,
+        knowledgeRoots: [{ name: 'example', path: resolve('packages/fs/tool-fs-search/tests/fixtures/wiki') }],
+      })
     },
     note:
-      'glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments.',
+      'glob and grep spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as foreground calls without a shell layer or host `rg` installation. knowledge_list and the create-only knowledge_create_note writer are opt-in through knowledgeRoots; bootstrap creates missing library skeleton files without overwriting existing content. knowledgeOnly registers both knowledge tools without glob, grep, or their prompt guidance. The catalog enables an example library and uses sampleOverCapGlobResults: true. Capped search results save the complete formatted list through optional ctx.spillStore.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-terminal',

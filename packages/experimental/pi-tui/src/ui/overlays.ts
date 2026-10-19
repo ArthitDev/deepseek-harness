@@ -83,15 +83,21 @@ class InputPanel extends Container {
   }
 }
 
+/** One row in a pick overlay: the resolved value plus its rendered label. */
 export interface ListPickItem {
   value: string
   label: string
   description?: string
+  /** Additional catalog identifiers searchable alongside the visible label. */
+  searchText?: string
 }
 
 /**
  * Generic single-choice overlay: title + optional body + SelectList.
  * Resolves the picked value, or undefined when cancelled (Esc).
+ * @param tui - the live TUI; the list shows as a centered overlay.
+ * @param options - the title, optional body, items, initial selection, number-key shortcuts, and theme.
+ * @returns the picked item's value, or undefined when cancelled (Esc).
  */
 export function pickFromList(
   tui: TUI,
@@ -131,6 +137,9 @@ export function pickFromList(
  * items with fuzzy scoring (the pi ModelSelector pattern). Enter picks the
  * top match; Esc cancels. `shouldShow` gates per-item visibility (e.g. the
  * hidden-file policy); `footerTotal` feeds the count line.
+ * @param tui - the live TUI; the search overlay shows as a centered overlay.
+ * @param options - the title, optional body, items, and per-item visibility gate.
+ * @returns the picked item's value, or undefined when cancelled (Esc).
  */
 export function pickFromListWithSearch(
   tui: TUI,
@@ -253,7 +262,7 @@ class SearchPanel extends Container {
         filtered = byBasename
       } else {
         const rest = visible.filter(item => !byBasename.includes(item))
-        filtered = [...byBasename, ...fuzzyFilter(rest, query, item => item.label)]
+        filtered = [...byBasename, ...fuzzyFilter(rest, query, item => item.searchText ?? item.label)]
       }
     }
     if (filtered.length === 0) {
@@ -288,6 +297,9 @@ class SearchPanel extends Container {
  * Ask the human to allow or reject one pending approval request.
  * Returns the closed outcome; resolves 'cancelled' when the request's
  * signal aborts (the service settles the request itself in that case).
+ * @param tui - the live TUI; the approval shows as a centered overlay.
+ * @param request - the pending approval request (tool name, reason, abort signal).
+ * @returns 'allowed-once', 'rejected' (explicit pick or Esc), or 'cancelled' on signal abort.
  */
 export function confirmApproval(tui: TUI, request: ApprovalRequest): Promise<ApprovalOutcome> {
   return new Promise((resolve) => {
@@ -331,6 +343,10 @@ export function confirmApproval(tui: TUI, request: ApprovalRequest): Promise<App
  * Ask the human a batch of questions, one overlay step per question.
  * Options render as a select list (multi-select accumulates with a Done
  * entry); questions without options render a single-line text input.
+ * @param tui - the live TUI; each question shows as its own overlay step.
+ * @param request - the questions plus an optional abort signal.
+ * @returns the collected answers; aborted or escaped questions contribute no
+ *   entry, and dismissing a plan review rejects with ASK_CANCELLED.
  */
 export function askQuestions(
   tui: TUI,
@@ -541,6 +557,8 @@ function textStep(
  * caller's search and live-jumps to the first match; ↑/↓ (and PgUp/PgDn)
  * cycle through matches, Enter re-jumps to the current one, Esc closes
  * (the highlight stays until the caller clears it).
+ * @param tui - the live TUI; the find bar shows as a centered overlay.
+ * @param options - the search/jump callbacks and the initial query to prefill.
  */
 export function openFindOverlay(
   tui: TUI,

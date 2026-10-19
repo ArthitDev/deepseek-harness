@@ -801,6 +801,7 @@ describe('request header folding', () => {
       }),
     )
     expect(model.route).toEqual({})
+    expect(model.effort).toBeUndefined()
   })
 })
 

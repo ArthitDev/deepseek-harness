@@ -32,7 +32,11 @@ export const RG_EXCLUDE_GLOBS = [
   '!.sl/**',
 ]
 
-/** Split rg --files stdout into clean relative paths. */
+/**
+ * Split rg --files stdout into clean relative paths.
+ * @param stdout - Raw rg --files stdout, one path per line.
+ * @returns Trimmed, non-empty paths in stdout order.
+ */
 export function parseRgFiles(stdout: string): string[] {
   return stdout
     .split('\n')
@@ -40,14 +44,23 @@ export function parseRgFiles(stdout: string): string[] {
     .filter(line => line !== '')
 }
 
-/** Any dot-prefixed path segment (hidden file OR inside a hidden dir). */
+/**
+ * Any dot-prefixed path segment (hidden file OR inside a hidden dir).
+ * @param path - Slash-separated relative path.
+ * @returns True when any segment other than `.`/`..` starts with a dot.
+ */
 export function isHiddenPath(path: string): boolean {
   return path
     .split('/')
     .some(segment => segment.startsWith('.') && segment !== '.' && segment !== '..')
 }
 
-/** Claude Code policy: hidden paths show only when the query starts with '.'. */
+/**
+ * Claude Code policy: hidden paths show only when the query starts with '.'.
+ * @param query - Current filter query.
+ * @param path - Slash-separated relative path.
+ * @returns True when the path may appear in the list for this query.
+ */
 export function shouldShowPath(query: string, path: string): boolean {
   if (query.startsWith('.')) return true
   return !isHiddenPath(path)
@@ -56,6 +69,10 @@ export function shouldShowPath(query: string, path: string): boolean {
 /**
  * Enumerate visible files under `cwd` with one rg invocation. Resolves []
  * on any failure (the caller falls back to the fs walker).
+ * @param rgPath - Path of the rg binary to spawn.
+ * @param cwd - Directory enumerated recursively.
+ * @param timeoutMs - Milliseconds before the child is killed with SIGKILL (default 15000).
+ * @returns Relative file paths in modification-time order; [] when rg cannot spawn, partial results on timeout.
  */
 export function runRgFiles(rgPath: string, cwd: string, timeoutMs = 15000): Promise<string[]> {
   return new Promise((resolve) => {

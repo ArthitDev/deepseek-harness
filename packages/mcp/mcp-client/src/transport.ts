@@ -36,6 +36,8 @@ export function createTransport(config: Config): Transport {
         args: config.args,
         env: buildChildEnv(config.env),
         cwd: config.cwd,
+        // Raw server diagnostics corrupt interactive surfaces; connection failures still flow through the client logger.
+        stderr: 'ignore',
       })
     case 'streamable-http':
       return new StreamableHTTPClientTransport(

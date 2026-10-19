@@ -36,6 +36,17 @@ export interface ModelSelectionRef {
   assembled: ModelSelection | undefined
 }
 
+const installedSelections = new WeakMap<Context, ModelSelectionRef>()
+
+/**
+ * Read the route selected for the next request in one Agent context.
+ * @param agentCtx - Agent-scoped context installed by `installModelSelection`.
+ * @returns The pending route, or undefined before the first selection.
+ */
+export function currentModelSelection(agentCtx: Context): ModelSelection | undefined {
+  return installedSelections.get(agentCtx)?.current
+}
+
 function sameRoute(left: ModelSelection, right: ModelSelection): boolean {
   return left.provider === right.provider && left.model === right.model
 }
@@ -79,6 +90,7 @@ function modelSwitchNotice(previous: ModelSelection, selected: ModelSelection) {
  * @returns Disposer for all scoped waterfall listeners.
  */
 export function installModelSelection(agentCtx: Context, selection: ModelSelectionRef): () => void {
+  installedSelections.set(agentCtx, selection)
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -125,6 +137,7 @@ export function installModelSelection(agentCtx: Context, selection: ModelSelecti
     { prepend: true },
   )
   return () => {
+    if (installedSelections.get(agentCtx) === selection) installedSelections.delete(agentCtx)
     disposeAssembly()
     disposeRequest()
     disposeNotice()

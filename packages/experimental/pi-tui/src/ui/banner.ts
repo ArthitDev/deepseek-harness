@@ -11,6 +11,7 @@ const BOLD_RED = chalk.hex(BRAND_RED).bold
 /** Shield glyph + letter-spaced wordmark, brand-red on boot. */
 const LOGO = `⧉  ${'SHIELD BREAK AGENT'.split('').join(' ')}`
 
+/** Session facts shown under the wordmark; absent fields are omitted. */
 export interface BannerInfo {
   /** The running TUI release, rendered in parentheses after the product name. */
   version?: string
@@ -19,7 +20,11 @@ export interface BannerInfo {
   model?: string
 }
 
-/** Compose the welcome block (pre-colored; the view renders it verbatim). */
+/**
+ * Compose the welcome block (pre-colored; the view renders it verbatim).
+ * @param info - the release version and session facts to render.
+ * @returns the multi-line welcome block.
+ */
 export function buildBanner(info: BannerInfo): string {
   const version = info.version === undefined ? '' : ` v${info.version}`
   const lines: string[] = [BOLD_RED(LOGO)]

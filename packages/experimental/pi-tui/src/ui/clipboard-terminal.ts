@@ -13,6 +13,11 @@ import { decodeOsc52 } from '../core/clipboard.js'
 
 const DEBUG = process.env.PI_TUI_CLIPBOARD_DEBUG === '1'
 
+/**
+ * ProcessTerminal that inspects `write()` traffic for OSC 52 sequences and
+ * mirrors each decoded payload into the tmux paste buffer and the platform
+ * clipboard, best effort; the sequence itself still reaches stdout unchanged.
+ */
 export class ClipboardTerminal extends ProcessTerminal {
   override write(data: string): void {
     super.write(data)

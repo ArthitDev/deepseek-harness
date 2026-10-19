@@ -44,6 +44,14 @@ function formatTime(epochMs: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/**
+ * Show the resume picker and resolve the chosen session. The leading
+ * "new session" entry and a cancellation both resolve undefined.
+ * @param tui - the renderer the overlay mounts on.
+ * @param headers - persisted-session headers, newest first.
+ * @param titles - session id → title, used as row labels when available.
+ * @returns the picked session id, or undefined for "new session"/cancel.
+ */
 export function pickSession(
   tui: TUI,
   headers: readonly SessionHeader[],

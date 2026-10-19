@@ -10,7 +10,11 @@ const SANDBOX_SHORT: Record<string, string> = {
   'danger-full-access': 'danger',
 }
 
-/** Short display name for a sandbox mode. */
+/**
+ * Short display name for a sandbox mode.
+ * @param mode - Sandbox mode name, or undefined.
+ * @returns The short name, the raw mode when unmapped, or undefined when `mode` is undefined.
+ */
 export function sandboxShort(mode: string | undefined): string | undefined {
   if (mode === undefined) return undefined
   return SANDBOX_SHORT[mode] ?? mode
@@ -19,6 +23,9 @@ export function sandboxShort(mode: string | undefined): string | undefined {
 /**
  * Truncate text to `maxWidth` characters, appending a single-character
  * ellipsis when it overflows. `maxWidth <= 0` yields an empty string.
+ * @param text - Text to truncate.
+ * @param maxWidth - Maximum character count to render.
+ * @returns The truncated text, an ellipsis alone at `maxWidth === 1`, or an empty string when `maxWidth <= 0`.
  */
 export function ellipsize(text: string, maxWidth: number): string {
   if (maxWidth <= 0) return ''
@@ -31,6 +38,9 @@ export function ellipsize(text: string, maxWidth: number): string {
  * Wrap every case-insensitive occurrence of `query` in `text` with a
  * yellow-underline highlight (the transcript-search marker). A blank query
  * returns the text unchanged; used by the views only while a find is active.
+ * @param text - Transcript text to decorate.
+ * @param query - Find query; blank disables highlighting.
+ * @returns The text with each match wrapped in the highlight markup.
  */
 export function highlightMatches(text: string, query: string): string {
   const needle = query.trim().toLowerCase()
@@ -51,12 +61,21 @@ export function highlightMatches(text: string, query: string): string {
   return out.join('')
 }
 
-/** Status-bar git segment: `git:main*` (star = dirty working tree). */
+/**
+ * Status-bar git segment: `git:main*` (star = dirty working tree).
+ * @param branch - Current branch name.
+ * @param dirty - True when the working tree has uncommitted changes.
+ * @returns The rendered segment text.
+ */
 export function gitLabel(branch: string, dirty: boolean): string {
   return `git:${branch}${dirty ? '*' : ''}`
 }
 
-/** Human-readable token count (12345 → '12k', 1234567 → '1.2M'). */
+/**
+ * Human-readable token count (12345 → '12k', 1234567 → '1.2M').
+ * @param tokens - Token count to format.
+ * @returns The count as M or k shorthand, or the plain number below 1,000.
+ */
 export function shortTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
   if (tokens >= 1_000) return `${Math.round(tokens / 100) / 10}k`
@@ -70,6 +89,9 @@ const BAR_RED = '#ff4655'
  * 10-cell context bar: filled cells in brand red, empty cells dim. The
  * number beside it already carries the pressure hue, so the bar stays one
  * color and reads as a clean fill gauge. Empty when the total is unknown.
+ * @param used - Tokens used in the context window.
+ * @param total - Context window size in tokens.
+ * @returns The bar string, or undefined when either value is missing or `total <= 0`.
  */
 export function renderContextBar(
   used: number | undefined,
@@ -83,7 +105,11 @@ export function renderContextBar(
   return `${fill('▰').repeat(filled)}${empty.repeat(10 - filled)}`
 }
 
-/** Context pressure percentage (0-100), or undefined when unknown. */
+/**
+ * Context pressure percentage (0-100), or undefined when unknown.
+ * @param pressure - Token pressure record with the context window size and used or projected tokens.
+ * @returns Percent of the window used (projected tokens preferred, capped at 100), or undefined when the window or token count is unknown.
+ */
 export function contextPctOf(
   pressure:
     { pressureTokens?: number; projectedTokens?: number; contextWindow?: number } | undefined,

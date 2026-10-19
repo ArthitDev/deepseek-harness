@@ -18,7 +18,10 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    /** Session-edit bookkeeping stays in the log and never derives model input. */
+    /**
+     * Session-edit bookkeeping stays in the log and never derives model input.
+     * @persistenceAttribution
+     */
     'session-edit': { kind: 'session-edit' }
   }
 }

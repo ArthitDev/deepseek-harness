@@ -14,6 +14,16 @@ export interface FoldWindow {
   boundary: number
 }
 
+/**
+ * Compute the visible window for a transcript: all items when expanded,
+ * otherwise the newest `threshold` items with the hidden head replaced by
+ * the fold notice. Item ids are sequential, so `boundary` is both the fold
+ * count and the first visible id.
+ * @param itemsLength - Total transcript item count.
+ * @param expandedAll - True when the fold is lifted (`/expand-all` or a find jump into the folded region).
+ * @param threshold - Newest-item count kept visible while folded.
+ * @returns The container rebuild key and the first visible item id.
+ */
 export function foldWindow(
   itemsLength: number,
   expandedAll: boolean,
@@ -31,6 +41,11 @@ export function foldWindow(
  * height when folded. Hidden (folded) items are skipped because the layout
  * never renders them — counting them would overshoot the scroll position.
  * `heights(id)` returns a view's rendered line count.
+ * @param targetId - Item id to measure the offset up to (exclusive).
+ * @param window - Active fold window from `foldWindow`.
+ * @param heights - Rendered line count per item id.
+ * @param noticeHeight - Rendered line count of the fold notice.
+ * @returns Sum of visible line heights before `targetId`, plus the notice height when folded.
  */
 export function visibleItemsBefore(
   targetId: number,

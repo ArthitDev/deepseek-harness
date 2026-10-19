@@ -21,6 +21,34 @@ async function renderScreen(tui: TuiAltScreen): Promise<string> {
 }
 
 describe('running subagents in the status bar', () => {
+  it('shows Wiki availability for the visible session and follows tool changes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const first = fixtureAgent(ctx, ctx.sessions.create(SessionId('wiki-enabled')))
+    const second = fixtureAgent(ctx, ctx.sessions.create(SessionId('wiki-denied')))
+    let available = true
+    ctx.provide('tools', { get: (name: string, scope: Agent) => name === 'knowledge_list' && available && scope === first ? {} : undefined })
+    const terminal: Terminal = {
+      columns: 100, rows: 40, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
+    tui.start()
+    try {
+      expect(await renderScreen(tui)).toContain('📚 Wiki')
+      screen.switchAgent(second)
+      expect(await renderScreen(tui)).not.toContain('📚 Wiki')
+      screen.switchAgent(first)
+      expect(await renderScreen(tui)).toContain('📚 Wiki')
+      available = false
+      ctx.events.emit(null, 'tools/change')
+      expect(await renderScreen(tui)).not.toContain('📚 Wiki')
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
   it('tracks lifecycle events per session, ignores duplicates, and releases listeners on disposal', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -226,6 +254,7 @@ describe('preset switches with conversation history', () => {
     session.append('step/start', { turn: 1, step: 1 })
     session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('OLD_PRESET') }, { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'retained question' }] }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ source: { kind: 'knowledge-context', form: 'instructions', digest: 'old-wiki' }, content: [{ type: 'text', text: 'OLD_WIKI_GUIDANCE' }] }), { surfaceOp: 'append' })
     session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', ...oldRoute }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
     session.append('step/end', { turn: 1, step: 1 })
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
@@ -265,6 +294,7 @@ describe('preset switches with conversation history', () => {
       expect(create.mock.calls[0]![0].meta).toMatchObject({ agentPreset: 'new-preset', parentSession: source.id })
       expect(select).toHaveBeenCalledWith(child, 'new-preset')
       expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_PRESET')
+      expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_WIKI_GUIDANCE')
       expect(source.session.snapshotEvents()).toEqual(original)
       const rendered = await renderScreen(tui)
       expect(rendered).toContain('retained question')
@@ -429,7 +459,7 @@ describe('/providers', () => {
 })
 
 describe('/clear transcript', () => {
-  it.each(['empty', 'system-only', 'failed-attempt', 'hidden-context'] as const)(
+  it.each(['empty', 'system-only', 'failed-attempt', 'hidden-context', 'wiki-context'] as const)(
     'clears visible command output and stale text with %s model history', async (history) => {
       const ctx = new Context()
       await ctx.plugin(SessionStore)
@@ -453,6 +483,12 @@ describe('/clear transcript', () => {
             source: { kind: 'pi-tui', form: 'notice', summary: boundContextSummary('test shell command') },
           }), { surfaceOp: 'append' })
           screen.handleEvent(hidden)
+        }
+        if (history === 'wiki-context') {
+          screen.handleEvent(session.append('user/message', createUserMessage({
+            content: [{ type: 'text', text: 'WIKI_GUIDANCE_BEFORE_CLEAR' }],
+            source: { kind: 'knowledge-context', form: 'instructions', digest: 'wiki' },
+          }), { surfaceOp: 'append' }))
         }
         if (history === 'failed-attempt') {
           screen.handleEvent(session.append('turn/start', { turn: 1 }))
@@ -480,7 +516,7 @@ describe('/clear transcript', () => {
         `)
         expect(screen.currentSessionId).toBe(session.id)
         expect(session.deriveMessages()).toEqual(history === 'empty' ? [] : [system])
-        if (history !== 'hidden-context') expect(session.snapshotEvents()).toEqual(before)
+        if (history !== 'hidden-context' && history !== 'wiki-context') expect(session.snapshotEvents()).toEqual(before)
         screen.submit('/clear')
         expect((await renderScreen(tui)).match(/session cleared/g)).toHaveLength(1)
       } finally {

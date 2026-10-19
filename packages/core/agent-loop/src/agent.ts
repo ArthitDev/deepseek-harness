@@ -579,6 +579,8 @@ export class ReactLoopAgent implements Agent {
       config = proposedConfig
     }
     signal.throwIfAborted()
+    await this.dispatch.serial('agent/request-prepared', { turn, step, config, signal })
+    signal.throwIfAborted()
     return { config, ...preparedCall === undefined ? {} : { preparedCall } }
   }
 

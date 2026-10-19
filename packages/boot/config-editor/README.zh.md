@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-将插件配置保存到当前 profile 的 patch 并立即应用。写入在改动磁盘前验证完整候选值，并与 profile 更改及 HMR 串行执行。无效值和更高层覆盖不会改动文件。
+将插件配置保存到现有的 home 覆盖层；没有 home 覆盖时写入当前 profile patch，并立即应用。写入前验证完整候选值，并与 profile 更改及 HMR 串行执行。无效值和命令行覆盖不会改动文件。
 
 ## 目录
 
@@ -38,7 +38,7 @@ kind: "package-reference"
 <details>
 <summary>实现内部细节——点击展开</summary>
 
-[编辑器](src/index.ts) 在派生候选配置前应用外部更改，与其他 profile 操作共同锁定 profile manifest，并原子替换配置覆盖项。它保留替换值以外的 YAML 注释和 `!!js` 表达式。应用失败时恢复之前的文档并重新加载之前的 patch。
+[编辑器](src/index.ts) 在派生候选配置前应用外部更改，同时锁定 profile 与 home manifest，并原子替换拥有该配置的覆盖项。它保留替换值以外的 YAML 注释和 `!!js` 表达式。应用失败时恢复之前的文档并重新加载之前的 patch。设置描述符以同一写入目标为基准提供继承值和显式覆盖值。
 
 此包不发布 invariant companion：编辑器不维护独立配置投影。Loader 和持久化的 profile patch 拥有配置状态。
 
@@ -64,8 +64,8 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 编辑写入当前 profile patch。Home patch 和命令行 overlay 参与优先级解析，但不作为写入目标。
-- 完整配置覆盖保留普通字段，但会在 profile 层固定其当前原始值。
+- 编辑现有 home 覆盖会影响使用它的所有 profile。命令行 overlay 仍为只读。
+- 完整配置覆盖保留普通字段，但会在编辑层固定其当前原始值。
 - 仅可编辑 profile 根 Include 拥有且可唯一定位的条目。
 
 <a id="dev-note"></a>

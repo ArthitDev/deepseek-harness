@@ -3609,6 +3609,10 @@ export interface Config {
 ```ts config-catalog
 /** Plugin config; over-cap glob sampling is an explicit deployment choice and the remaining fields have defaults. */
 export interface Config {
+  /** Register only knowledge_list, leaving glob/grep and their prompt guidance to another scoped instance. */
+  knowledgeOnly?: boolean
+  /** Local Markdown libraries exposed by the optional knowledge_list tool; empty disables discovery. */
+  knowledgeRoots?: KnowledgeRoot[]
   /** Whether an over-cap `glob` page is sampled across top-level entries instead of taking the modification-time head. */
   sampleOverCapGlobResults: boolean
   /** Max paths one `glob` call retains inline; later paths go to the formatted spill file. */
@@ -3631,9 +3635,19 @@ export interface Config {
    */
   timeoutMs?: number
 }
+
+/** A local reference library advertised only when explicitly configured. */
+export interface KnowledgeRoot {
+  /** Unique lowercase library name, using letters, digits, and hyphens. */
+  name: string
+  /** Absolute directory path containing an INDEX.md entry point. */
+  path: string
+  /** Create the standard library skeleton when files are absent; never overwrite existing files. */
+  bootstrap?: boolean
+}
 ```
 
-来源： [`packages/fs/tool-fs-search/src/index.ts:73`](../packages/fs/tool-fs-search/src/index.ts)
+来源： [`packages/fs/tool-fs-search/src/index.ts:76`](../packages/fs/tool-fs-search/src/index.ts)
 
 <a id="deepseek-aidsh-tool-goal"></a>
 
@@ -4345,7 +4359,7 @@ export interface Config {
 
 ## `dsh-pi-tui`
 
-需要： `agents` · `cmdlineArgs` · `workspaceRegistry` · `loader` · `profileContext` · `pentestModePolicy` · `systemPrompt`
+需要： `agents` · `cmdlineArgs` · `workspaceRegistry` · `loader` · `profileContext` · `pentestModePolicy` · `systemPrompt` · `agentPresets` · `agentDefaultModel`
 
 ```ts config-catalog
 /** dsh-pi-tui plugin configuration (row config in cordis.patch.yml). */
@@ -4361,7 +4375,7 @@ export interface Config {
 }
 ```
 
-来源： [`packages/experimental/pi-tui/src/index.ts:23`](../packages/experimental/pi-tui/src/index.ts)
+来源： [`packages/experimental/pi-tui/src/index.ts:19`](../packages/experimental/pi-tui/src/index.ts)
 
 ## Loadable plugins with no config
 

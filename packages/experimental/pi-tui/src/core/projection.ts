@@ -4,6 +4,7 @@
  */
 import { contextPctOf } from './format.js'
 
+/** Status-bar read model: token counts plus optional todos, plan, goal, and context-window fields. */
 export interface ProjectionSnapshot {
   tokens: { input: number; output: number }
   todos?: { done: number; total: number }
@@ -18,6 +19,9 @@ export interface ProjectionSnapshot {
  * Parse one projection snapshot's values. The caller owns the single
  * snapshot() call; this folds it into the status-bar fields, falling back
  * to the locally counted tokens when the projection is absent.
+ * @param values - one projection snapshot's values; undefined when the session exposes no projection.
+ * @param fallbackTokens - locally counted input/output tokens used when the snapshot carries no tokenUsage totals.
+ * @returns the folded status-bar fields.
  */
 export function collectProjection(
   values: Record<string, unknown> | undefined,

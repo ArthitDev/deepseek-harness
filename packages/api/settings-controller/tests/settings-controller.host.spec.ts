@@ -17,6 +17,7 @@ describe('settings Remote', () => {
     expect(controller.typertRemote.namespace).toBe('settings')
     expect(remoteMethods(controller).map(method => method.method)).toEqual([
       'describe', 'canOpenAgentPresetDirectory', 'update', 'replace', 'mutate',
+      'upsertHomePatchEntry',
       'openSettingsDocument', 'openAgentPresetDirectory',
     ])
     expect(ctx.get('credentialsController')).toBeDefined()

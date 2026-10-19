@@ -1302,6 +1302,33 @@ Types: [LlmFailure](llm-streaming.md) · [ResolvedRetryPolicy](llm-streaming.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
+<a id="agentrequest-prepared--serial"></a>
+
+#### `agent/request-prepared` — serial
+
+Observe the adapter-prepared call configuration before model-visible input is committed or snapshotted. Awaited listeners may perform admission maintenance such as compacting history for a smaller route; they cannot replace the prepared configuration.
+
+```ts cordis-catalog
+/**
+ * Observe the adapter-prepared call configuration before model-visible
+ * input is committed or snapshotted. Awaited listeners may perform
+ * admission maintenance such as compacting history for a smaller route;
+ * they cannot replace the prepared configuration.
+ * @param payload.agent - the agent making the model call.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the step whose request this is.
+ * @param payload.config - final adapter-prepared call configuration.
+ * @param payload.signal - the current turn's explicit abort signal.
+ * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+ * @mode serial
+ */
+'agent/request-prepared'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; config: LlmCallConfig; signal: AbortSignal }): Promise<void>
+```
+
+Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
 <a id="agentstatus--emit"></a>
 
 #### `agent/status` — emit

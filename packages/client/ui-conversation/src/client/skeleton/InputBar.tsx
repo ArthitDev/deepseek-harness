@@ -37,6 +37,7 @@ import {
 import { resolveSubmitMode } from '../input/submission-policy.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
+import { KnowledgeStatus } from './KnowledgeStatus.tsx'
 import { observeControlRow } from './control-row-layout.ts'
 import css from './InputBar.module.css'
 
@@ -498,6 +499,7 @@ export const InputBar = memo(function InputBar({
         </div>
       </div>
       <div className={css.dock}>
+        <KnowledgeStatus useProjection={useProjection} t={t} />
         {variant === 'composer' && input !== undefined && sessionId !== undefined
           ? renderSlot('conversation.composer.dock', {})
           : null}

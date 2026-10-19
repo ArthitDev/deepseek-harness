@@ -1,7 +1,8 @@
 /**
  * The model-facing filesystem discovery tool suite (`glob`, `grep`) over the
  * packaged ripgrep binary (`@vscode/ripgrep`). This single plugin registers
- * both tools; the binary ships inside the npm dependency, so no system `rg`
+ * both tools by default and optionally advertises local Markdown libraries. A knowledge-only
+ * instance omits search tools and their guidance. The binary ships inside the npm dependency, so no system `rg`
  * install and no shell layer is involved.
  *
  * ## Spawn-backed, not a `ctx.fs` provider method
@@ -31,7 +32,11 @@ import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { GLOB_MAX_RESULTS, applyGlobTool } from './glob.ts'
 import { GREP_MAX_LINE_BYTES, GREP_MAX_MATCHES, applyGrepTool } from './grep.ts'
+import { applyKnowledgeListTool, type KnowledgeRoot } from './knowledge.ts'
 import { RAW_OUTPUT_MAX_BYTES, SEARCH_GRACE_MS, SEARCH_META_MAX_BYTES, SEARCH_STDERR_MAX_BYTES, SEARCH_TIMEOUT_MS } from './search-core.ts'
+
+export { knowledgeLibraries, type KnowledgeLibrary } from './knowledge.ts'
+export type * from './knowledge-types.ts'
 
 export { GLOB_MAX_RESULTS, GLOB_VCS_EXCLUDES, applyGlobTool, buildGlobCommand, formatGlobOutput, parseGlobArgs, presentGlobCall, presentGlobResult, sampleAcrossTopLevel } from './glob.ts'
 export type { GlobInput, GlobSample, GlobToolCaps } from './glob.ts'
@@ -62,6 +67,7 @@ export {
   trySaveFormattedResult,
 } from './search-core.ts'
 export type { GrepMatch, RipgrepRun, SearchErrorCode } from './search-core.ts'
+export type { KnowledgeRoot } from './knowledge.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-fs-search'
@@ -71,6 +77,10 @@ export const inject = ['tools', 'systemPrompt', 'subprocess']
 
 /** Plugin config; over-cap glob sampling is an explicit deployment choice and the remaining fields have defaults. */
 export interface Config {
+  /** Register only knowledge_list, leaving glob/grep and their prompt guidance to another scoped instance. */
+  knowledgeOnly?: boolean
+  /** Local Markdown libraries exposed by the optional knowledge_list tool; empty disables discovery. */
+  knowledgeRoots?: KnowledgeRoot[]
   /** Whether an over-cap `glob` page is sampled across top-level entries instead of taking the modification-time head. */
   sampleOverCapGlobResults: boolean
   /** Max paths one `glob` call retains inline; later paths go to the formatted spill file. */
@@ -95,6 +105,12 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
+  knowledgeOnly: z.boolean().default(false),
+  knowledgeRoots: z.array(z.object({
+    name: z.string().required(),
+    path: z.string().required(),
+    bootstrap: z.boolean().default(false),
+  })).default([]),
   sampleOverCapGlobResults: z.boolean().required(),
   globMaxResults: z.number().default(GLOB_MAX_RESULTS),
   grepMaxMatches: z.number().default(GREP_MAX_MATCHES),
@@ -118,13 +134,12 @@ function assertPositiveInteger(name: string, value: number): void {
 
 /**
  * Register the `glob`/`grep` filesystem discovery tool suite. The packaged
- * ripgrep binary is always available (an npm dependency), so registration is
- * unconditional.
+ * ripgrep binary is always available (an npm dependency). Knowledge-only instances
+ * register discovery without the search tools or their guidance.
  *
  * @param ctx - plugin context; registrations are effects scoped to this plugin.
  * @param config - resolved plugin configuration from schemastery.
  */
-// oxlint-disable-next-line typescript/require-await -- async keeps a load-time config rejection a rejection, not a synchronous throw
 export async function apply(ctx: Context, config: Config): Promise<void> {
   // schemastery (Config) has already filled every defaulted field.
   const resolved = config as ResolvedConfig
@@ -139,6 +154,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   assertPositiveInteger('stderrMaxBytes', resolved.stderrMaxBytes)
   assertPositiveInteger('timeoutMs', resolved.timeoutMs)
+  await applyKnowledgeListTool(ctx, resolved.knowledgeRoots, resolved.timeoutMs)
+  if (resolved.knowledgeOnly) return
   applyGlobTool(ctx, {
     sampleOverCapGlobResults: resolved.sampleOverCapGlobResults,
     maxResults: resolved.globMaxResults,

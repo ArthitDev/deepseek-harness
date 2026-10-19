@@ -5,10 +5,12 @@
  */
 import type { SessionId } from '@deepseek-ai/dsh-session'
 
+/** Minimal `ctx.sessionProjections` surface: read one session's projection values snapshot. */
 export interface SessionProjectionsService {
   snapshot(session: unknown): { values: Record<string, unknown> }
 }
 
+/** Minimal `ctx.jobs` surface: list background job snapshots for a caller. */
 export interface JobsService {
   list(caller?: unknown): readonly {
     id: string
@@ -18,6 +20,7 @@ export interface JobsService {
   }[]
 }
 
+/** Minimal `ctx.agentDefaultModel` surface: read and persist the shared default model selection. */
 export interface AgentDefaultModelService {
   currentSelection(): { provider?: string; model?: string; reasoningEffort?: string }
   saveSelection(next: unknown): Promise<void>

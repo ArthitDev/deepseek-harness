@@ -55,6 +55,7 @@ function snapshotOf(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
 }
 
 interface BenchOptions {
+  knowledgeStatus?: { libraries: string[] }
   planEntry?: React.ReactNode
   /** The `plan` projection value the standard-kit useProjection serves. */
   plan?: { active: boolean; pending: boolean }
@@ -190,7 +191,8 @@ function bench(over?: BenchOptions) {
         ? over?.plan
         : key === 'goal' ? over?.goal
           : key === 'imageLimits' ? over?.imageLimits
-            : key === 'contextPressure' ? over?.contextPressure : undefined)),
+            : key === 'contextPressure' ? over?.contextPressure
+              : key === 'knowledgeStatus' ? over?.knowledgeStatus : undefined)),
     useInput: bindSnapshotSelector(shell.state),
     inputActions: shell.actions,
     keyboard: shell,
@@ -1640,6 +1642,12 @@ describe('strips and variants', () => {
 })
 
 describe('command launcher chrome and control seats', () => {
+  it('shows Wiki availability below the composer beside the dock contributions', () => {
+    const { view } = bench({ knowledgeStatus: { libraries: ['cyber'] }, footer: <span>existing stats</span> })
+    const wiki = view.getByTitle('可用知识库：cyber')
+    expect(wiki.parentElement?.textContent).toContain('existing stats')
+    expect(wiki.textContent).toBe('📚Wiki')
+  })
   it('renders the command launcher and dispatches every empty control seat', () => {
     const { view, slotCalls } = bench()
     expect(view.getByLabelText('添加文件或调用指令')).toBeTruthy()

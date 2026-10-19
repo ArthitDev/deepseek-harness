@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Edit fields that plugins declare with `.volatile()` and inspect their effective values. Forms identify each plugin by its profile entry id, preserve secret values, and refuse stale writes. Changes persist through the active profile’s Cordis patch.
+Edit fields that plugins declare with `.volatile()` and inspect their effective values. Forms identify each plugin by its profile entry id, preserve secret values, and refuse stale writes. Changes persist through the owning home or profile Cordis patch.
 
 ## Table of Contents
 
@@ -34,7 +34,7 @@ This plugin has no configuration fields. Forms expose only volatile fields from 
 
 Once the Loader has settled every entry after Settings starts, a `settings.yaml` left in the harness home by earlier releases is imported once: each section is written into the entry of the same id (`ui-developer-tools` → `ui-settings`, `ui-onboarding` → `ui-settings-general`, `shell` → the platform's shell executor entry), the file is renamed to `settings.yaml.imported` before the first write, and a section the running composition rejects is logged and stays only in the renamed file.
 
-Reset restores the value beneath the profile override, including schema defaults. Home patches and command-line overlays take precedence; a form write that they would override is refused.
+Writes update the existing home config override when present, otherwise the profile patch. Home edits are shared across profiles. Reset restores the value beneath that owning layer, including schema defaults. Command-line overrides remain read-only. Unsetting an array element or dictionary entry deletes that member, including when a lower layer contains the same key.
 
 Each form reports `autoGenerate`, enabled by default, for clients that build pages from the schema; no shipped client does so yet. A plugin that ships its own page registers `configure({ auto: false }, ctx.fiber)` as an effect inside an optional `ctx.inject(['settings'], ...)` child from `apply`: the child names the plugin fiber the policy belongs to, a late-loading or replaced Settings service picks the policy up, and the business plugin runs without Settings. The policy does not remove configuration reads or writes.
 
@@ -71,7 +71,7 @@ Consumers that change request prefixes determine cache effects.
 <a id="known-limitations-and-deferred-work"></a>
 
 - Nested Includes own separate configurations and are not editable through the active profile’s form.
-- Field-level resets restore inherited values; they cannot delete a value supplied by a lower configuration layer. Unsetting an array index removes that element.
+- Object-field resets restore inherited values. Unsetting array or dictionary members removes them; resetting the whole collection restores its inherited value.
 
 <a id="dev-note"></a>
 ### Dev Note

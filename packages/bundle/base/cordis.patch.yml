@@ -286,6 +286,10 @@
       name: '@deepseek-ai/dsh-tool-fs-search'
       config:
         sampleOverCapGlobResults: false
+        knowledgeRoots:
+          - name: default
+            path: !!js dshHomePath('knowledge')
+            bootstrap: true
 
     - id: agent-instructions
       name: '@deepseek-ai/dsh-agent-instructions'

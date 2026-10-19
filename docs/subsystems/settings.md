@@ -6,7 +6,7 @@ The [settings service](../../packages/settings/settings/README.md) projects vola
 
 ## Identity and values
 
-A form namespace is the local id of a uniquely addressed entry in the active profile. Multiple plugin instances have separate forms when their entry ids differ. Ordinary fields are excluded. Descriptors carry resolved values, inherited values, explicit profile overrides, and an optimistic revision.
+A form namespace is the local id of a uniquely addressed entry in the active profile. Multiple plugin instances have separate forms when their entry ids differ. Ordinary fields are excluded. Descriptors carry resolved values, values inherited beneath the owning home or profile layer, explicit overrides in that layer, and an optimistic revision. Array and dictionary member unsets delete members; object-field unsets restore inherited values.
 
 ## Edits
 
@@ -62,7 +62,7 @@ async update(ns: string, patch: object, expectedRevision?: number): Promise<void
  */
 async replace(ns: string, section: object, expectedRevision?: number): Promise<void>
 
-/** Apply field edits without restating redacted secrets; unsetting an array index removes its element.
+/** Apply field edits without restating redacted secrets; unsetting array or dictionary members removes them.
  * @param ns Profile entry id.
  * @param ops Ordered form edits.
  * @param expectedRevision Revision returned by describe.
@@ -124,6 +124,20 @@ Host service backing the generated `ctx.remote.settings` namespace. Every remote
  * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
  */
 @Remote async mutate( ns: string, ops: SettingsPathOpView[], expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>
+
+/**
+ * Insert or update one entry's config in the deployment home patch — the
+ * layer that overrides every profile, which the settings service itself
+ * refuses to mutate. The patch merges over the row's current config
+ * host-side (one level: top-level keys replace, `providers`-style nested
+ * records merge per key).
+ * @param entryId - the overridden entry's id.
+ * @param entryName - the overridden entry's plugin name.
+ * @param patch - JSON-serializable config fields to merge into the row.
+ * @returns confirmation after the patch file is written.
+ * @throws RemoteError when the request is invalid or the patch refuses the write.
+ */
+@Remote upsertHomePatchEntry( entryId: string, entryName: string, patch: JsonValue, ): void
 
 /**
  * Materialize the provider-owned settings document and open it in a native text editor.

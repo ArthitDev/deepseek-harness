@@ -1,0 +1,22 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Markdown knowledge discovery through Loader > records discovery as one tool result and sends no Wiki content on the initial model request 1`] = `
+{
+  "initialHasTool": true,
+  "initialHasWikiPath": false,
+  "initialHasWikiText": false,
+  "initialKnowsLibrary": true,
+  "initialWikiNotice": 1,
+  "result": {
+    "isError": false,
+    "libraries": [
+      {
+        "index": "INDEX.md",
+        "name": "cyber",
+        "root": "<wiki>",
+      },
+    ],
+    "role": "tool",
+  },
+}
+`;

@@ -141,6 +141,7 @@ export class ReasoningView extends Container {
   }
 }
 
+/** The user's message line: `›` prefix with search-match highlighting. */
 export class UserMessageView extends Text {
   private item: ChatItem
   private lastKey = ''
@@ -150,6 +151,10 @@ export class UserMessageView extends Text {
     this.item = item
   }
 
+  /**
+   * Re-render the line when the message or search query changed.
+   * @param query - optional search query whose matches get highlighted.
+   */
   updateFromItem(query?: string): void {
     const key = `${this.item.text}:${query ?? ''}`
     if (key !== this.lastKey) {
@@ -161,6 +166,7 @@ export class UserMessageView extends Text {
   }
 }
 
+/** Assistant reply as Markdown; an active search query switches to highlighted plain text. */
 export class AssistantMessageView extends Container {
   private markdown: Markdown
   private plain: Text
@@ -175,6 +181,11 @@ export class AssistantMessageView extends Container {
     this.plain = new Text('', 1, 0)
   }
 
+  /**
+   * Re-render the body when the text or query changed: Markdown normally,
+   * highlighted plain text while a query is active.
+   * @param query - optional search query whose matches get highlighted.
+   */
   updateFromItem(query?: string): void {
     // pi-tui handles incomplete fences; keep the same renderer through sealing.
     const activeQuery = query ?? ''
@@ -193,6 +204,7 @@ export class AssistantMessageView extends Container {
   }
 }
 
+/** One transcript notice: marker + styled text per flavor, or the verbatim banner. */
 export class NoticeView extends Text {
   private item: ChatItem
   private lastKey = ''
@@ -202,6 +214,7 @@ export class NoticeView extends Text {
     this.item = item
   }
 
+  /** Re-render the line when the notice flavor or text changed. */
   updateFromItem(): void {
     const flavor = this.item.notice ?? 'info'
     const key = `${flavor}:${this.item.text}`
@@ -245,17 +258,28 @@ export class ToolCardView implements Component {
     this.item = item
   }
 
+  /**
+   * Record the expansion preference and search query the next render applies.
+   * @param expand - whether to render the framed full-output panel.
+   * @param query - optional search query to highlight in the result body.
+   */
   updateFromItem(expand: boolean, query?: string): void {
     this.expand = expand
     this.query = query ?? ''
   }
 
-  /** Browse-mode focus ring: accent border when focused. */
+  /**
+   * Browse-mode focus ring: accent border when focused.
+   * @param focused - whether to draw the accent border on the card frame.
+   */
   setFocused(focused: boolean): void {
     this.focused = focused
   }
 
-  /** Resolved inline images (filled by the screen after read_image results). */
+  /**
+   * Resolved inline images (filled by the screen after read_image results).
+   * @param images - the base64 images to render in the expanded card.
+   */
   setImages(images: { base64: string; mediaType: string }[]): void {
     this.images = images
     this.imageViews = []
@@ -413,6 +437,7 @@ export class ToolCardView implements Component {
   }
 }
 
+/** Optional status-bar fields; each present field contributes its segment. */
 export interface StatusBarData {
   model?: string
   /** The visible agent or operator shell is currently working. */
@@ -427,6 +452,10 @@ export interface StatusBarData {
   preset?: string
   /** Team mode selected for subsequent model requests. */
   teamMode?: TeamMode
+  /** Wiki discovery is callable by the current agent. */
+  wikiAvailable?: boolean
+  /** Jev tool availability, local switch state, and provider-reported session cost. */
+  jev?: { state: 'on' | 'off' | 'unavailable'; cost?: number }
   planActive?: boolean
   goalPhase?: string
   contextPct?: number
@@ -452,6 +481,10 @@ export class StatusBar extends Loader {
     this.stop()
   }
 
+  /**
+   * Replace the rendered fields; the spinner runs while jobs or subagents are active.
+   * @param data - the fields to render; absent fields drop their segments.
+   */
   update(data: StatusBarData): void {
     this.data = data
     const active = (data.jobsRunning ?? 0) > 0 || (data.subagentsRunning ?? 0) > 0
@@ -484,6 +517,12 @@ export class StatusBar extends Loader {
           : data.teamMode === 'dead' ? chalk.magenta : chalk.gray
         parts.push(color(`${option.icon} ${option.label}`))
       }
+    }
+    if (data.wikiAvailable === true) parts.push(chalk.green('📚 Wiki'))
+    if (data.jev !== undefined) {
+      const label = data.jev.state === 'unavailable' ? 'Jev unavailable' : `Jev ${data.jev.state.toUpperCase()}`
+      const cost = data.jev.cost === undefined ? '' : ` · cost ${data.jev.cost.toFixed(6).replace(/\.?0+$/, '')}`
+      parts.push((data.jev.state === 'on' ? chalk.green : data.jev.state === 'off' ? chalk.yellow : chalk.dim)(`◈ ${label}${cost}`))
     }
     // Explicit mode indicator: plan when active (warn hue), normal otherwise.
     parts.push(data.planActive === true ? chalk.yellow('⌘ plan') : chalk.dim('◌ normal'))
@@ -552,6 +591,11 @@ export class StatusBar extends Loader {
   }
 }
 
+/**
+ * Create the view component for one chat item.
+ * @param item - the chat item the view renders and refreshes from.
+ * @returns the view for the item's kind, bound to `item`.
+ */
 export function createView(item: ChatItem): Component {
   switch (item.kind) {
     case 'user':
@@ -567,6 +611,14 @@ export function createView(item: ChatItem): Component {
   }
 }
 
+/**
+ * Push the current expansion preferences and search query into a view,
+ * dispatching to the view class's `updateFromItem`.
+ * @param view - the component previously returned by createView.
+ * @param expandReasoning - shared reasoning expansion preference, or undefined for the streaming default.
+ * @param expandTools - whether tool cards render their expanded panel.
+ * @param query - optional search query to highlight in view bodies.
+ */
 export function updateView(
   view: Component,
   expandReasoning: boolean | undefined,

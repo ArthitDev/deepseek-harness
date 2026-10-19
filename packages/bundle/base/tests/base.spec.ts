@@ -44,6 +44,14 @@ describe('dsh-base bundle', () => {
     expect(rows.find(row => row.id === 'web')?.config).toMatchObject({ fetchProvider: 'http' })
     expect(rows.find(row => row.id === 'web-fetch-http')).toBeDefined()
     expect(rows.find(row => row.id === 'tool-web')?.config).toMatchObject({ fetch: true })
+    expect(rows.find(row => row.id === 'tool-fs-search')?.config).toMatchObject({
+      sampleOverCapGlobResults: false,
+      knowledgeRoots: [{
+        name: 'default',
+        path: { __jsExpr: "dshHomePath('knowledge')" },
+        bootstrap: true,
+      }],
+    })
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-codex')
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-claude-code')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-web-fetch-http')

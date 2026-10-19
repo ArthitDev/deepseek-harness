@@ -151,6 +151,7 @@ suppressRuntimeContext(): () => void
  * withheld.
  * @param options - `except` names the sections that remain visible, as a
  *   static list or a provider re-evaluated at every assembly for live toggles.
+ *   An undefined provider result disables suppression; an empty list permits no gated sections.
  * @returns the exact Cordis effect disposer.
  */
 suppressSections(options?: { except?: readonly string[] | (() => readonly string[] | undefined) globalOnly?: boolean }): () => void

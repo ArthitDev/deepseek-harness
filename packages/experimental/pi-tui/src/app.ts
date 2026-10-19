@@ -30,6 +30,10 @@ import { pickFromListWithSearch } from './ui/overlays.js'
 import { confirmApproval, askQuestions } from './ui/overlays.js'
 import { ChatScreen } from './ui/chat.js'
 
+/**
+ * Profile row config for the TUI app: the session to resume, an explicit
+ * provider/model route, and the working directory for new sessions.
+ */
 export interface AppConfig {
   sessionId?: string
   provider?: string

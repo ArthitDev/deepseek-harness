@@ -3607,6 +3607,10 @@ Requires: `tools` · `systemPrompt` · `subprocess`
 ```ts config-catalog
 /** Plugin config; over-cap glob sampling is an explicit deployment choice and the remaining fields have defaults. */
 export interface Config {
+  /** Register only knowledge_list, leaving glob/grep and their prompt guidance to another scoped instance. */
+  knowledgeOnly?: boolean
+  /** Local Markdown libraries exposed by the optional knowledge_list tool; empty disables discovery. */
+  knowledgeRoots?: KnowledgeRoot[]
   /** Whether an over-cap `glob` page is sampled across top-level entries instead of taking the modification-time head. */
   sampleOverCapGlobResults: boolean
   /** Max paths one `glob` call retains inline; later paths go to the formatted spill file. */
@@ -3629,9 +3633,19 @@ export interface Config {
    */
   timeoutMs?: number
 }
+
+/** A local reference library advertised only when explicitly configured. */
+export interface KnowledgeRoot {
+  /** Unique lowercase library name, using letters, digits, and hyphens. */
+  name: string
+  /** Absolute directory path containing an INDEX.md entry point. */
+  path: string
+  /** Create the standard library skeleton when files are absent; never overwrite existing files. */
+  bootstrap?: boolean
+}
 ```
 
-Source: [`packages/fs/tool-fs-search/src/index.ts:73`](../packages/fs/tool-fs-search/src/index.ts)
+Source: [`packages/fs/tool-fs-search/src/index.ts:79`](../packages/fs/tool-fs-search/src/index.ts)
 
 <a id="deepseek-aidsh-tool-goal"></a>
 
@@ -4343,7 +4357,7 @@ Source: [`packages/deliverables/workspace-changes/src/index.ts:33`](../packages/
 
 ## `dsh-pi-tui`
 
-Requires: `agents` · `cmdlineArgs` · `workspaceRegistry` · `loader` · `profileContext` · `pentestModePolicy` · `systemPrompt`
+Requires: `agents` · `cmdlineArgs` · `workspaceRegistry` · `loader` · `profileContext` · `pentestModePolicy` · `systemPrompt` · `agentPresets` · `agentDefaultModel`
 
 ```ts config-catalog
 /** dsh-pi-tui plugin configuration (row config in cordis.patch.yml). */
@@ -4359,7 +4373,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/pi-tui/src/index.ts:23`](../packages/experimental/pi-tui/src/index.ts)
+Source: [`packages/experimental/pi-tui/src/index.ts:19`](../packages/experimental/pi-tui/src/index.ts)
 
 ## Loadable plugins with no config
 

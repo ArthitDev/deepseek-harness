@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Save plugin configuration in the active profile’s patch and apply it immediately. Writes validate the complete candidate before touching disk and serialize with profile changes and HMR. Invalid values and higher-layer overrides leave the file unchanged.
+Save plugin configuration in its existing home override, or the active profile patch when no home override owns it, and apply it immediately. Writes validate before touching disk and serialize with profile changes and HMR. Invalid values and command-line overrides leave files unchanged.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ Use [settings](../../settings/settings/README.md) for forms restricted to live f
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [editor](src/index.ts) reconciles external changes before deriving a candidate, locks the profile manifest alongside other profile operations, and atomically replaces its config override. It preserves YAML comments and `!!js` expressions outside replaced values. A failed reconciliation restores the prior document and reloads the prior patches.
+The [editor](src/index.ts) reconciles external changes before deriving a candidate, locks both profile and home manifests, and atomically replaces the owning config override. It preserves YAML comments and `!!js` expressions outside replaced values. A failed reconciliation restores the prior document and reloads the prior patches. Settings descriptors expose inherited and explicit values relative to the same write target.
 
 No invariant companion is published: the editor keeps no independent configuration projection. Loader and the persisted profile patch own configuration state.
 
@@ -64,8 +64,8 @@ Consumers that change request prefixes determine cache effects.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Edits target the active profile patch. Home patches and command-line overlays are read for precedence but are not write targets.
-- A complete config override preserves ordinary fields but pins their current raw values at the profile layer.
+- Editing an existing home override affects every profile that uses it. Command-line overlays remain read-only.
+- A complete config override preserves ordinary fields but pins their current raw values at the edited layer.
 - Only uniquely addressed entries owned by the profile’s root Include are editable.
 
 <a id="dev-note"></a>

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-编辑插件通过 `.volatile()` 声明的字段，并查看其实际值。表单以 profile 条目 id 标识插件、保留秘密值，并拒绝过期写入。更改通过当前 profile 的 Cordis patch 持久化。
+编辑插件通过 `.volatile()` 声明的字段，并查看其实际值。表单以 profile 条目 id 标识插件、保留秘密值，并拒绝过期写入。更改通过所属 home 或 profile 的 Cordis patch 持久化。
 
 ## 目录
 
@@ -34,7 +34,7 @@ kind: "package-reference"
 
 Settings 启动后、Loader 完成所有条目的加载时，早期版本留在 harness home 中的 `settings.yaml` 会被导入一次：每个 section 写入同名条目（`ui-developer-tools` → `ui-settings`、`ui-onboarding` → `ui-settings-general`、`shell` → 当前平台的 shell 执行器条目），文件在第一次写入前改名为 `settings.yaml.imported`，被当前组合拒绝的 section 会记录日志并只保留在改名后的文件中。
 
-重置恢复 profile 覆盖层以下的值，包括 schema 默认值。Home patch 和命令行 overlay 优先级更高；表单写入若会被它们覆盖，则被拒绝。
+写入更新现有的 home 配置覆盖，否则写入 profile patch。Home 编辑由多个 profile 共享。重置恢复所属覆盖层以下的值，包括 schema 默认值。命令行 overlay 保持只读。取消设置数组元素或字典条目会删除该成员，即使下层包含相同的键。
 
 每个表单报告 `autoGenerate`（默认开启），供按 schema 生成页面的客户端使用；目前没有已发布的客户端这样做。自带页面的插件在 `apply` 中于可选的 `ctx.inject(['settings'], ...)` 子级内以 effect 注册 `configure({ auto: false }, ctx.fiber)`：子级指明策略所属的插件 fiber，迟加载或被替换的 Settings 服务也会采用该策略，业务插件无需 Settings 即可运行。策略不移除配置读写。
 
@@ -71,7 +71,7 @@ Settings 启动后、Loader 完成所有条目的加载时，早期版本留在 
 <a id="known-limitations-and-deferred-work"></a>
 
 - 嵌套 Include 独立拥有配置，不能通过当前 profile 的表单编辑。
-- 字段重置恢复继承值，不能删除下层配置提供的值。取消设置数组索引会移除该元素。
+- 对象字段重置恢复继承值。取消设置数组或字典成员会删除该成员；重置整个集合恢复其继承值。
 
 <a id="dev-note"></a>
 ### 开发备注

@@ -6,7 +6,7 @@
 
 ## 标识与值
 
-表单命名空间是当前 profile 中可唯一定位条目的本地 id。多个插件实例在条目 id 不同时拥有独立表单。普通字段被排除。描述符包含实际值、继承值、显式 profile 覆盖值和乐观修订号。
+表单命名空间是当前 profile 中可唯一定位条目的本地 id。多个插件实例在条目 id 不同时拥有独立表单。普通字段被排除。描述符包含实际值、所属 home 或 profile 层以下的继承值、该层的显式覆盖值和乐观修订号。取消设置数组或字典成员会删除成员；取消设置对象字段恢复继承值。
 
 ## 编辑
 
@@ -62,7 +62,7 @@ async update(ns: string, patch: object, expectedRevision?: number): Promise<void
  */
 async replace(ns: string, section: object, expectedRevision?: number): Promise<void>
 
-/** Apply field edits without restating redacted secrets; unsetting an array index removes its element.
+/** Apply field edits without restating redacted secrets; unsetting array or dictionary members removes them.
  * @param ns Profile entry id.
  * @param ops Ordered form edits.
  * @param expectedRevision Revision returned by describe.
@@ -124,6 +124,20 @@ Host service backing the generated `ctx.remote.settings` namespace. Every remote
  * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
  */
 @Remote async mutate( ns: string, ops: SettingsPathOpView[], expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>
+
+/**
+ * Insert or update one entry's config in the deployment home patch — the
+ * layer that overrides every profile, which the settings service itself
+ * refuses to mutate. The patch merges over the row's current config
+ * host-side (one level: top-level keys replace, `providers`-style nested
+ * records merge per key).
+ * @param entryId - the overridden entry's id.
+ * @param entryName - the overridden entry's plugin name.
+ * @param patch - JSON-serializable config fields to merge into the row.
+ * @returns confirmation after the patch file is written.
+ * @throws RemoteError when the request is invalid or the patch refuses the write.
+ */
+@Remote upsertHomePatchEntry( entryId: string, entryName: string, patch: JsonValue, ): void
 
 /**
  * Materialize the provider-owned settings document and open it in a native text editor.

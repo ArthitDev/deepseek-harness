@@ -21,6 +21,14 @@ export interface PiTuiArgs {
   unknown: string[]
 }
 
+/**
+ * Parse the launcher's argument tokens. `--resume`/`-r` and `--preset`/`-p`
+ * consume a following non-flag value and, when bare, become their
+ * pick-from-a-list flag (`pickSession`/`pickPreset`); a valueless `--machine`
+ * and every other token land in `unknown`.
+ * @param argv - the raw tokens handed to the booted profile.
+ * @returns the parsed flags, with `unknown` carrying unrecognized tokens.
+ */
 export function parseArgs(argv: readonly string[]): PiTuiArgs {
   const args: PiTuiArgs = { pickSession: false, pickPreset: false, help: false, unknown: [] }
   let skipValue = false
@@ -68,6 +76,7 @@ export function parseArgs(argv: readonly string[]): PiTuiArgs {
   return args
 }
 
+/** The `--help` text: usage lines, key table, and slash-command reference. */
 export const USAGE = `Shield Break TUI — terminal front door for Shield Break Harness
 
 Usage:
@@ -102,8 +111,10 @@ Commands:
   /model [query]          switch model (picker without a query)
   /thinking [level]       choose reasoning level (next step)
   /suppress-prompt [on|off|toggle|status]   choose prompt suppression (ON/OFF picker)
+  /mcp [on|off|toggle|status]   enable or disable MCP tools for this TUI
+  /jev [on|off|toggle|status]   enable or disable JEV tools and policy context
   /team-mode [blue|red|black|dead]   choose the team mode (numbered picker)
-  /skills                 list user-invocable skills
+  /skills [on|off|toggle|status]   list, enable, or disable skills for this TUI
   /agents                 list live subagents
   /jobs                   list background jobs
   /export                 write this transcript to a markdown file

@@ -17,6 +17,10 @@ import type { MessageSource } from '@deepseek-ai/dsh-llm'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Session-edit bookkeeping stays in the log and never derives model input.
+     * @persistenceAttribution
+     */
     'session-edit': { kind: 'session-edit' }
   }
 }

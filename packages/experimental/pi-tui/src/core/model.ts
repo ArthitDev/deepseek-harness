@@ -22,12 +22,15 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
  */
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /** @persistenceAttribution */
     'pi-tui': { kind: 'pi-tui' } & ContextFormed
   }
 }
 
+/** Lifecycle of one tool card: running from `tool/call`, then ok, error, or rejected. */
 export type ToolCardStatus = 'running' | 'ok' | 'error' | 'rejected'
 
+/** Rendered state of one tool card, keyed by `callId`. */
 export interface ToolCardState {
   callId: string
   name: string
@@ -62,6 +65,7 @@ export interface FileDiff {
   newText: string
 }
 
+/** One renderable transcript row: a user or assistant bubble, reasoning, tool card, or notice. */
 export interface ChatItem {
   readonly id: number
   kind: 'user' | 'assistant' | 'reasoning' | 'tool' | 'notice'
@@ -75,6 +79,7 @@ export interface ChatItem {
   notice?: 'info' | 'error' | 'compact' | 'banner'
 }
 
+/** Folded transcript state the views render: the item list plus token, route, and turn status. */
 export interface ChatModel {
   items: ChatItem[]
   /** Cumulative token accounting from `assistant/message` usage records. */
@@ -98,11 +103,19 @@ export interface ChatModel {
 const ARGS_PREVIEW_LIMIT = 200
 const RESULT_PREVIEW_LIMIT = 400
 
+/**
+ * Create an empty transcript model.
+ * @returns A model with no items, zeroed token counters, and no active turn.
+ */
 export function createModel(): ChatModel {
   return { items: [], tokens: { input: 0, output: 0 }, working: false }
 }
 
-/** Extract plain text from content blocks (text blocks only; others skipped). */
+/**
+ * Extract plain text from content blocks (text blocks only; others skipped).
+ * @param content - Content blocks of a message, or undefined.
+ * @returns The joined, trimmed text of all text blocks (empty when none).
+ */
 export function textOf(content: readonly ContentBlock[] | undefined): string {
   return (content ?? [])
     .map(block => (block.type === 'text' ? block.text : ''))
@@ -198,6 +211,9 @@ function replaceMarkerNotice(content: readonly ContentBlock[] | undefined): stri
 /**
  * Fold one session event into the model. Stateful in place; returns the
  * model for chaining.
+ * @param model - Transcript model to mutate.
+ * @param event - Session event from the durable log or the live stream.
+ * @returns The same model, for chaining.
  */
 export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
   let nextId = model.items.length
@@ -382,7 +398,8 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
           ...(config.provider !== undefined ? { provider: config.provider } : {}),
           ...(config.model !== undefined ? { model: config.model } : {}),
         }
-        if (config.reasoningEffort !== undefined) model.effort = config.reasoningEffort
+        if (config.reasoningEffort === undefined) delete model.effort
+        else model.effort = config.reasoningEffort
       }
       break
     }
@@ -499,6 +516,9 @@ function replaceStreamText(
  * Fold one live stream chunk from the agent's `agent/assistant-stream`
  * publication (the process-local successor of the retired durable
  * `assistant/chunk` events) into the open streaming items.
+ * @param model - Transcript model to mutate.
+ * @param chunk - Stream chunk; only text and reasoning deltas are folded, other kinds are ignored.
+ * @returns The same model, for chaining.
  */
 export function applyStreamChunk(model: ChatModel, chunk: StreamChunk): ChatModel {
   if (chunk.type === 'text-delta' && chunk.text) {
@@ -547,7 +567,13 @@ function sealReasoning(model: ChatModel, seq: number): void {
   }
 }
 
-/** Push a UI-side notice (slash-command results, errors) into the transcript. */
+/**
+ * Push a UI-side notice (slash-command results, errors) into the transcript.
+ * @param model - Transcript model to append to.
+ * @param text - Notice text to render.
+ * @param notice - Notice flavor.
+ * @returns The pushed notice item.
+ */
 export function pushNotice(
   model: ChatModel,
   text: string,

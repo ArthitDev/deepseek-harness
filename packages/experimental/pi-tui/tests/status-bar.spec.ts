@@ -7,6 +7,30 @@ import { TEAM_MODE_OPTIONS } from '../src/core/team-mode.ts'
 afterEach(() => { vi.useRealTimers() })
 
 describe('status bar animation', () => {
+  it('shows Wiki availability without a spinner and removes it when disabled', () => {
+    vi.useFakeTimers()
+    const bar = new StatusBar({ requestRender: vi.fn() } as unknown as ViewportTUI)
+    try {
+      bar.update({ wikiAvailable: true })
+      expect(stripVTControlCharacters(bar.render(30).join('\n'))).toContain('📚 Wiki')
+      expect(vi.getTimerCount()).toBe(0)
+      bar.update({ wikiAvailable: false })
+      expect(stripVTControlCharacters(bar.render(30).join('\n'))).not.toContain('Wiki')
+    } finally { bar.stop() }
+  })
+  it('shows Jev state and provider-reported session cost without a spinner', () => {
+    vi.useFakeTimers()
+    const bar = new StatusBar({ requestRender: vi.fn() } as unknown as ViewportTUI)
+    try {
+      bar.update({ jev: { state: 'on', cost: 0.001234 } })
+      expect(stripVTControlCharacters(bar.render(40).join('\n'))).toContain('Jev ON · cost 0.001234')
+      expect(vi.getTimerCount()).toBe(0)
+      bar.update({ jev: { state: 'off', cost: 0 } })
+      expect(stripVTControlCharacters(bar.render(40).join('\n'))).toContain('Jev OFF · cost 0')
+      bar.update({ jev: { state: 'unavailable' } })
+      expect(stripVTControlCharacters(bar.render(40).join('\n'))).toContain('Jev unavailable')
+    } finally { bar.stop() }
+  })
   it.each(TEAM_MODE_OPTIONS)('shows the $label icon and name without adding a loading animation', (option) => {
     vi.useFakeTimers()
     const bar = new StatusBar({ requestRender: vi.fn() } as unknown as ViewportTUI)

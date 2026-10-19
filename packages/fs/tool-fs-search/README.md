@@ -52,6 +52,34 @@ Routine budgets stay out of the model-facing schema: a model that needs surround
 
 ### Configuration
 
+#### Local Markdown libraries
+
+Set `knowledgeRoots` to an array of `{ name, path, bootstrap? }` objects to register the optional knowledge tools. Each name must be unique and contain lowercase letters, digits, or hyphens. Each path must be absolute and contain a regular `INDEX.md` whose canonical path remains inside that root. `bootstrap` defaults to `false`; when `true`, activation creates the root plus missing `INDEX.md`, `CONTRIBUTING.md`, and `templates/NOTE.md` files without replacing existing content. Invalid roots reject activation. The default empty list registers no additional tool.
+
+`knowledge_list` returns only library names, canonical roots, and index paths. `knowledge_create_note` creates one sourced Markdown draft in a selected library and adds its link to `INDEX.md`. Neither tool adds a system-prompt section or database. Follow returned paths with the existing `read`, `glob`, and `grep` tools. File changes become visible on the next read; changing configured roots requires a plugin reload. The timeout is the configured `timeoutMs`.
+
+When Agent services are mounted, a short user-role `knowledge-context` notice explains retrieval and durable capture: list libraries, read `INDEX.md`, retrieve relevant notes, and cite sources; before writing, read `CONTRIBUTING.md` and templates, create sourced drafts with `knowledge_create_note` when available, and never store credentials, tokens, secrets, or transient logs. The notice is logged once while present in active model history. Compaction or clearing restores it on the next request; overflow retries restore it before retrying. Preset changes use the current configuration. Disabling discovery withdraws the notice from active history without deleting the original log. Wiki enablement is independent of built-in prompt suppression; preset system text remains unchanged.
+
+The `knowledgeStatus` session projection carries current library names for UI status, including before the first request. TUI shows `📚 Wiki`; Web shows the same indicator below the composer. An unavailable or explicitly denied Wiki hides the indicator. The new `knowledge/status` log event requires a reader build that understands it.
+
+Host UI consumers can call `knowledgeLibraries(ctx, agent)` to read the resolved names, roots, and index paths for the discovery registration visible to that agent. An absent or denied registration returns an empty list. This does not execute a tool, read note content, or append session events. TUI uses it for `/wiki`.
+
+Base-backed profiles already configure one host-level `tool-fs-search` row so Web and TUI can share the knowledge tools. Replace that row's `knowledgeRoots` in the home patch; inserting another host-level instance would register `knowledge_list` twice. Standalone compositions without the base bundle may instead mount one `knowledgeOnly: true` instance alongside preset-owned search tools. The default `knowledgeOnly: false` retains ordinary search registration.
+
+```yaml
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots:
+      - name: cyber
+        path: '/absolute/path/to/cyber-wiki'
+        bootstrap: true
+```
+
+`knowledge_list` is read-only. `knowledge_create_note` accepts a kebab-case slug, title, body, and source URLs; it creates only `<slug>.md`, refuses an existing filename, and appends the note link to the canonical `INDEX.md`. If the index update fails, it removes the new note. Bootstrap files are also create-only. These controls do not make the whole library writable through the tool; other file tools and an unrestricted shell retain their existing permissions. The paths refer to the local host filesystem. An Obsidian installation is not required.
+
+#### Search limits
+
 `sampleOverCapGlobResults` is required; the remaining keys are optional search caps with the defaults below.
 
 | Key | Default | Meaning |
@@ -175,6 +203,20 @@ Fixed schema cost on every request where the tools are visible.
 #### KV Cache effect
 
 Prefix-stable while tool visibility and definitions are unchanged. Registration lifecycle or scoped restrictions may invalidate reuse from the first changed schema token.
+
+### Knowledge tool schemas
+
+#### What the model sees
+
+Configured libraries add the [`knowledge_list` and `knowledge_create_note` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-fs-search) to visible tool sets. Results enter history only when called. Suppressing built-in prompt sections does not hide the tools or load Wiki contents. No Wiki `AGENTS.md` is discovered by these tools. The description names the configured libraries on the first request and explains index-first retrieval, note/source citations, and safe durable capture. Team mode, plan state, and file-sandbox mode do not disable discovery. Native and both modes expose descriptions on the knowledge tools. PTC carries declarations for the visible knowledge/read/glob/grep tools in the `run_code` description, so suppression or a complete persona can remove system sections without hiding the APIs. Tool restrictions still apply, and no extra system section or repeated conversation context is added.
+
+#### Token effect
+
+Schema tokens are added whenever the knowledge tools are visible, including in PTC, where declarations ride the `run_code` description even when its full SDK section is also visible.
+
+#### KV Cache effect
+
+Prefix-stable while the configured library set and tool visibility are unchanged; registration lifecycle or scoped restrictions invalidate reuse from the first changed schema token.
 
 ### Results and spill notices
 

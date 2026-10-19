@@ -188,7 +188,7 @@ current(): PentestModeSettings
 
 /**
  * Resolve the policy text injected for one mode: the operator override when
- * it carries non-whitespace content, otherwise the built-in policy.
+ * it carries non-whitespace content, otherwise the '-' placeholder.
  * @param mode - Operating mode to resolve.
  * @returns the effective mode policy text.
  */

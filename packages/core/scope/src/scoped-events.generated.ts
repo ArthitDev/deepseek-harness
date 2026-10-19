@@ -18,6 +18,7 @@ const scopedSubjectResolvers: Readonly<Record<string, ScopedSubjectResolver | nu
   'agent/pre-step': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/request': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/request-error': args => (args[0] as Record<string, unknown>)['agent'],
+  'agent/request-prepared': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/status': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/tool-choice': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/turn-stopping': args => (args[0] as Record<string, unknown>)['agent'],

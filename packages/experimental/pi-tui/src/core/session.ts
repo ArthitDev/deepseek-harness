@@ -25,6 +25,8 @@ import { readWebProfileConfig } from './web-settings.js'
  * renders boundary, tool-call, and header records that `surface.nodes`
  * (message-producing seqs only) would drop, and there is no other public
  * synchronous log read on the attached Session.
+ * @param session - Live session exposing the synchronous `snapshotEvents()` log read.
+ * @returns the durable log events in recorded order.
  */
 export function replayEvents(session: {
   snapshotEvents(): readonly SessionEvent[]
@@ -32,6 +34,7 @@ export function replayEvents(session: {
   return session.snapshotEvents()
 }
 
+/** An agent plus its handle when the call created or resumed it; absent when attaching to an already-live agent. */
 export interface ResolvedAgent {
   agent: Agent
   handle?: AgentHandle
@@ -126,7 +129,10 @@ async function attachToWorkspace(
   }
 }
 
-/** Copy-pasteable resume command for a persisted session. */
+/** Copy-pasteable resume command for a persisted session.
+ * @param sessionId - Persisted session id to resume.
+ * @returns The full `dsh tui` command line.
+ */
 export function resumeCommand(sessionId: string): string {
   return `dsh tui --resume ${sessionId}`
 }
@@ -137,6 +143,9 @@ export function resumeCommand(sessionId: string): string {
  * any event leaves nothing behind: the persistence backend already skips
  * zero-event sessions in `list()`, and this keeps the workspace record
  * empty too. `attachToWorkspace` still swallows its own errors.
+ * @param ctx - TUI context holding the workspace registry.
+ * @param sessionId - Session to attach once its first durable event arrives.
+ * @param cwd - Session working directory; a missing or empty cwd skips the attach entirely.
  */
 export function attachWorkspaceOnFirstEvent(
   ctx: Context,
@@ -171,6 +180,8 @@ export function attachWorkspaceOnFirstEvent(
  * repair, never destroy. The web host's own VIEW still needs a restart to
  * rebuild its index; this heals the durable data loss that would otherwise
  * be unrecoverable.
+ * @param ctx - TUI context with workspace-registry and session-persistence services.
+ * @returns the count of sessions re-attached; 0 when either service is unavailable or a pass fails.
  */
 export async function reconcileWorkspaceAttachments(ctx: Context): Promise<number> {
   const registry = ctx.get('workspaceRegistry') as WorkspaceRegistryService | undefined
@@ -232,7 +243,13 @@ async function persistedPreset(ctx: Context, id: string): Promise<string | undef
 }
 
 /** Resolve a live or persisted session, or create one with the explicit preset
- * or the preset bound to its model. Resumed sessions retain their recorded preset. */
+ * or the preset bound to its model. Resumed sessions retain their recorded preset.
+ * @param ctx - TUI context with agent, preset, persistence, and workspace services.
+ * @param requestedSessionId - Session id to resume; undefined or a failed resume falls back to a fresh session.
+ * @param agentOptions - Provider and model options for a newly created session.
+ * @param meta - Session-creation metadata (cwd and optional agent preset).
+ * @returns the attached, resumed, or freshly created agent with its handle.
+ */
 export async function resolveAgent(
   ctx: Context,
   requestedSessionId: string | undefined,
@@ -304,6 +321,13 @@ export async function resolveAgent(
  * session-edit placeholders for developer and injected user instructions. Conversation,
  * tool results, and compacted checkpoints remain. This edited seed shares no inherited
  * persistence prefix; the source is unchanged and the child's new preset is recorded.
+ * @param ctx - TUI context with agent and preset services.
+ * @param source - Agent whose session log is forked.
+ * @param agentOptions - Provider and model options for the child agent.
+ * @param meta - Session-creation metadata (cwd and optional agent preset).
+ * @param resetPrompt - Copy the log with emptied system messages and non-model-visible
+ *   session-edit placeholders instead of an exact inherited seed.
+ * @returns the newly created child agent with its handle.
  */
 export async function forkSession(
   ctx: Context,
@@ -383,6 +407,8 @@ interface SessionPersistenceLike {
 /**
  * Read one persisted session's header and complete event log through a
  * borrowed read handle (the modern replacement for the retired `load`).
+ * @param ctx - TUI context with the session-persistence service.
+ * @param id - Session id to read.
  * @returns the log and header, or undefined when persistence is unavailable.
  */
 export async function loadPersistedSession(
@@ -400,7 +426,10 @@ export async function loadPersistedSession(
   }
 }
 
-/** Persisted session headers, newest first (dsh's own persistence backend). */
+/** Persisted session headers, newest first (dsh's own persistence backend).
+ * @param ctx - TUI context with the session-persistence service.
+ * @returns Headers sorted newest first; empty when persistence is unavailable or listing fails.
+ */
 export async function listSessions(ctx: Context): Promise<SessionHeader[]> {
   const persistence = ctx.get('sessionPersistence') as SessionPersistenceLike | undefined
   if (persistence === undefined) return []
@@ -423,6 +452,9 @@ export async function listSessions(ctx: Context): Promise<SessionHeader[]> {
  * Last `session/title` value in a persisted session's log, or undefined.
  * Mirrors `persistedPreset`'s bounded scan; the picker shows titles instead
  * of bare `basename(cwd)` labels.
+ * @param ctx - TUI context with the session-persistence service.
+ * @param id - Session id to scan.
+ * @returns the newest non-empty `session/title` value, or undefined when none exists or loading fails.
  */
 export async function persistedTitle(ctx: Context, id: string): Promise<string | undefined> {
   try {
@@ -446,6 +478,10 @@ export async function persistedTitle(ctx: Context, id: string): Promise<string |
  * Titles for the newest `limit` headers, keyed by session id (sessions with
  * no title are absent). Loading full logs is I/O, so callers bound it —
  * boot/resume pickers pass the already-sorted, already-capped header list.
+ * @param ctx - TUI context with the session-persistence service.
+ * @param headers - Session headers in newest-first order.
+ * @param limit - Maximum number of headers to scan; defaults to 15.
+ * @returns Titles keyed by session id; sessions without a title are absent.
  */
 export async function sessionTitles(
   ctx: Context,
@@ -461,6 +497,7 @@ export async function sessionTitles(
   return titles
 }
 
+/** A preset entry for the TUI pickers; `broken` carries the preset's load-failure reason. */
 export interface PresetInfo {
   id: string
   trust?: 'system' | 'user'
@@ -469,7 +506,11 @@ export interface PresetInfo {
   broken?: string
 }
 
-/** User presets for the TUI pickers, name-sorted. */
+/** User presets for the TUI pickers, name-sorted.
+ * @param ctx - TUI context with the preset service.
+ * @returns Broken and system presets filtered out, sorted by name (id when unnamed);
+ *   empty without the preset service or on failure.
+ */
 export async function listPresets(ctx: Context): Promise<PresetInfo[]> {
   const presets = ctx.get('agentPresets') as { list(): Promise<readonly PresetInfo[]> } | undefined
   if (presets === undefined) return []

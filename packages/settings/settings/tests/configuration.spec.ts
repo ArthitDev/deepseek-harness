@@ -36,14 +36,29 @@ it('isolates instances, hides ordinary fields, rejects invalid edits, and redact
   expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'first')!.value).toEqual({ count: 2, list: [] })
 })
 
-it('refuses an edit shadowed by a higher home layer', async () => {
+it('edits the owning home layer without changing the profile and restores it at restart', async () => {
   const { ctx, home, profile } = await fixture()
   writeFileSync(join(home, 'cordis.patch.yml'), JSON.stringify([{ id: 'default-model', config: { provider: 'test', model: 'home' } }]))
   const before = readFileSync(profile.patchPath, 'utf8')
-  await expect(ctx.settings.update('default-model', { model: 'profile' })).rejects.toThrow('overridden')
+  await ctx.settings.update('default-model', { model: 'updated-home' })
   expect(readFileSync(profile.patchPath, 'utf8')).toBe(before)
-  expect(ctx.agentDefaultModel.currentSelection().model).toBe('home')
+  expect(ctx.agentDefaultModel.currentSelection().model).toBe('updated-home')
+  expect(parse(readFileSync(join(home, 'cordis.patch.yml'), 'utf8'))).toContainEqual({
+    id: 'default-model', config: { provider: 'test', model: 'updated-home' },
+  })
 }, 15_000)
+
+it('keeps command-line overrides read-only and leaves both patch files unchanged', async () => {
+  const { ctx, home, profile } = await fixture({ hmr: false })
+  writeFileSync(join(home, 'cordis.patch.yml'), JSON.stringify([{ id: 'default-model', config: { provider: 'test', model: 'home' } }]))
+  Object.assign(profile, { overlays: [{ id: 'default-model', config: { provider: 'test', model: 'command-line' } }] })
+  const homeBefore = readFileSync(join(home, 'cordis.patch.yml'), 'utf8')
+  const profileBefore = readFileSync(profile.patchPath, 'utf8')
+  await expect(ctx.settings.update('default-model', { model: 'edit' })).rejects.toThrow('overridden')
+  expect(readFileSync(profile.patchPath, 'utf8')).toBe(profileBefore)
+  expect(readFileSync(join(home, 'cordis.patch.yml'), 'utf8')).toBe(homeBefore)
+  expect(ctx.agentDefaultModel.currentSelection().model).toBe('command-line')
+})
 
 it('serializes concurrent writes and refuses stale revisions after external changes', async () => {
   const { ctx, profile } = await fixture()

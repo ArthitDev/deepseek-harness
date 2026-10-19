@@ -35,6 +35,7 @@ export function gradient(text: string, from: string, to: string): string {
   return out
 }
 
+/** Markdown render styles for transcript text: headings, links, code, quotes, and lists. */
 export const markdownTheme: MarkdownTheme = {
   heading: text => chalk.bold.hex('#ff6b7a')(text),
   link: text => chalk.underline.blue(text),
@@ -59,6 +60,7 @@ export const reasoningMarkdownTheme: MarkdownTheme = {
   italic: text => chalk.italic.dim(text),
 }
 
+/** Picker styles: brand-red selection glyph, bold selected row, dim descriptions and scroll state. */
 export const selectListTheme: SelectListTheme = {
   selectedPrefix: _text => accent('❯ '),
   selectedText: text => chalk.bold.white(text),
@@ -67,11 +69,13 @@ export const selectListTheme: SelectListTheme = {
   noMatch: text => chalk.dim(text),
 }
 
+/** Input-editor chrome: dim border and the shared select-list styles. */
 export const editorTheme: EditorTheme = {
   borderColor: text => chalk.dim(text),
   selectList: selectListTheme,
 }
 
+/** Style helpers for transcript chrome: prompt glyphs, thinking and tool labels, status bar, queue, and spinner. */
 export const style = {
   accent,
   muted,

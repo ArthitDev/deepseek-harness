@@ -88,7 +88,7 @@ kind: "package-reference"
 
 ### 通过 /compact 按需压缩
 
-挂载 `dsh-command-compact` 后，在聊天 UI 中输入 `/compact` 即可立即压缩，即使未达到压力阈值。命令会报告压缩了多少历史项以及估算节省的 token 数。当 agent 正在轮次中或压缩已在运行时，`/compact` 会报告压缩暂不可用；运行期间你发送的提示词会被接受，并在压缩结束后才开始。
+挂载 `dsh-command-compact` 后，在聊天 UI 中输入 `/compact` 即可立即压缩，即使未达到压力阈值。选择其他模型后，手动压缩会在该模型首次处理对话请求前使用它；显式配置的 `summarizationProvider` 和 `summarizationModel` 仍然优先。命令会报告压缩了多少历史项以及估算节省的 token 数。当 agent 正在轮次中或压缩已在运行时，`/compact` 会报告压缩暂不可用；运行期间你发送的提示词会被接受，并在压缩结束后才开始。
 
 ### 修剪超大工具输出
 

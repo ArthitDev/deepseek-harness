@@ -359,7 +359,7 @@ export class SettingsForms extends Service {
     await this.write(ns, (_current, base) => mergeLayers(base, input) as Record<string, unknown>, expectedRevision)
   }
 
-  /** Apply field edits without restating redacted secrets; unsetting an array index removes its element.
+  /** Apply field edits without restating redacted secrets; unsetting array or dictionary members removes them.
    * @param ns Profile entry id.
    * @param ops Ordered form edits.
    * @param expectedRevision Revision returned by describe.
@@ -368,7 +368,9 @@ export class SettingsForms extends Service {
     await this.write(ns, (current, base, schema) => ops.reduce((value, op) => {
       if (op.op === 'set') return applyPathOp(value, op, schema)
       const parent = op.path.slice(0, -1).reduce<unknown>((node, key) => member(node, key), value)
-      if (Array.isArray(parent)) return applyPathOp(value, op, schema)
+      const parentSchema = op.path.slice(0, -1).reduce<z | undefined>((node, key) =>
+        node?.type === 'dict' || node?.type === 'array' ? node.inner : node?.dict?.[key], schema)
+      if (Array.isArray(parent) || parentSchema?.type === 'dict') return applyPathOp(value, op, schema)
       const inherited = op.path.reduce<unknown>((node, key) => member(node, key, true), base)
       return applyPathOp(value, inherited === undefined ? op : { op: 'set', path: op.path, value: inherited }, schema)
     }, current), expectedRevision, ops.map(op => op.path))

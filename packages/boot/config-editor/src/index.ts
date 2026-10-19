@@ -1,4 +1,4 @@
-/** Profile-owned configuration edits, serialized with Loader hot reload. */
+/** Configuration edits in the owning user layer, serialized with Loader hot reload. */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -8,7 +8,7 @@ import { entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-i
 import yaml from 'js-yaml'
 import type { Entry, EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-hmr'
-import { composeEntries, loadProfileDirectory, readProfilePatches, reconcileProfilePatches } from '@deepseek-ai/dsh-app-boot'
+import { composeEntries, loadOptionalPatches, loadProfileDirectory, readProfilePatches, reconcileProfilePatches } from '@deepseek-ai/dsh-app-boot'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { isMap, isSeq, parseDocument, Scalar, visit } from 'yaml'
 
@@ -23,7 +23,7 @@ function flatten(rows: EntryOptions[]): EntryOptions[] {
   return rows.flatMap(row => [row, ...row.group && Array.isArray(row.config) ? flatten(row.config as EntryOptions[]) : []])
 }
 
-/** Persist complete raw configs and apply them through the normal Loader path. */
+/** Persist complete raw configs in their owning user layer and apply them through Loader. */
 export class ConfigEditor extends Service {
   static inject = ['loader', 'profileContext']
 
@@ -44,31 +44,45 @@ export class ConfigEditor extends Service {
     return candidates.filter(entry => counts.get(entry.options.id) === 1)
   }
 
-  /** Read inherited and explicit profile values for the active entries.
+  /** Read inherited and explicit values from each entry's owning user layer.
    * @returns Detached layer values alongside their Loader entries.
    */
   configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }> {
     const profile = this.ownerContext.profileContext
     const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-    return this.entries().map(entry => ({
-      entry, inherited: this.inherited(entry, loaded),
-      override: structuredClone((loaded.patches.findLast(
-        row => row.id === entry.options.id && row.config !== undefined,
-      )?.config ?? {}) as Record<string, unknown>),
-    }))
+    const home = loadOptionalPatches('dsh', join(profile.home, 'cordis.patch.yml')) ?? []
+    return this.entries().map((entry) => {
+      const homeOwned = this.homeOwns(entry, home)
+      const target = homeOwned ? home : loaded.patches
+      return {
+        entry, inherited: this.inherited(entry, loaded, homeOwned ? home : undefined),
+        override: structuredClone((target.findLast(
+          row => row.id === entry.options.id && row.config !== undefined,
+        )?.config ?? {}) as Record<string, unknown>),
+      }
+    })
   }
 
-  private inherited(entry: Entry, loaded: ReturnType<typeof loadProfileDirectory>): Record<string, unknown> {
-    const patches = loaded.patches.map((patch) => {
+  private homeOwns(entry: Entry, patches: readonly PatchOptions[]): boolean {
+    return patches.some(patch => patch.id === entry.options.id && patch.config !== undefined
+      && patch.insert === undefined && (patch.name === undefined || patch.name === entry.options.name))
+  }
+
+  private inherited(
+    entry: Entry, loaded: ReturnType<typeof loadProfileDirectory>, home?: readonly PatchOptions[],
+  ): Record<string, unknown> {
+    const patches = (home ?? loaded.patches).map((patch) => {
       if (patch.id !== entry.options.id || patch.insert !== undefined) return patch
       const rest = { ...patch }; Reflect.deleteProperty(rest, 'config')
       return rest
     })
-    const row = flatten(composeEntries([...loaded.layers.map(layer => layer.patches), patches])).find(row => row.id === entry.options.id)
+    const layers = [...loaded.layers.map(layer => layer.patches), ...(home === undefined ? [] : [loaded.patches]), patches]
+    const row = flatten(composeEntries(layers)).find(row => row.id === entry.options.id)
     return structuredClone((row?.config ?? {}) as Record<string, unknown>)
   }
 
-  /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
+  /** Validate, persist, and reconcile config in its existing home override or the profile patch.
+   * Home edits affect every profile using that override; command-line overrides remain read-only.
    * @param entry Current Loader entry, also used to detect replacement during the write.
    * @param change Derive a raw config from the current entry and its inherited layer.
    * @returns Fulfillment after Loader reconciliation completes.
@@ -78,14 +92,19 @@ export class ConfigEditor extends Service {
     change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>,
   ): Promise<void> {
     const run = async (): Promise<void> => {
-      const path = this.documentPath
-      await withFileLock(join(this.ownerContext.profileContext.dir, 'package.json'), async () => {
+      const profile = this.ownerContext.profileContext
+      await withFileLock(join(profile.dir, 'package.json'), () => withFileLock(join(profile.home, 'package.json'), async () => {
         if (!this.entries().includes(entry) || entry.fiber === undefined) throw new Error('Configuration entry is no longer available')
         const beforePatches = readProfilePatches('dsh', this.ownerContext.profileContext)
         await reconcileProfilePatches(this.ownerContext.root, beforePatches, 'dsh')
         if (!this.entries().includes(entry)) throw new Error('Configuration entry changed during reload')
         const current = structuredClone((entry.options.config ?? {}) as Record<string, unknown>)
-        const inherited = this.inherited(entry, loadProfileDirectory('dsh', this.ownerContext.profileContext.dir, this.ownerContext.profileContext.installAnchor))
+        const homePath = join(profile.home, 'cordis.patch.yml')
+        const home = loadOptionalPatches('dsh', homePath) ?? []
+        const homeOwned = this.homeOwns(entry, home)
+        const path = homeOwned ? homePath : this.documentPath
+        const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
+        const inherited = this.inherited(entry, loaded, homeOwned ? home : undefined)
         const next = change(current, inherited)
         const fiber = entry.fiber
         if (fiber.state !== FiberState.ACTIVE) throw new Error('Configuration plugin is no longer active')
@@ -121,9 +140,10 @@ export class ConfigEditor extends Service {
           expression.tag = 'tag:yaml.org,2002:js'
           return expression
         } })
-        const profile = this.ownerContext.profileContext
-        const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-        const patches = readProfilePatches('dsh', profile, { ...loaded, patches: yaml.load(String(document), { schema: entryListSchema }) as PatchOptions[] })
+        const candidate = yaml.load(String(document), { schema: entryListSchema }) as PatchOptions[]
+        const patches = homeOwned
+          ? readProfilePatches('dsh', profile, loaded, candidate)
+          : readProfilePatches('dsh', profile, { ...loaded, patches: candidate })
         const effective = flatten(composeEntries([patches])).find(row => row.id === entry.options.id)
         if (!isDeepStrictEqual(effective?.config ?? {}, next)) {
           throw new Error(`Configuration for "${entry.options.id}" is overridden by a home patch or command-line overlay`)
@@ -136,7 +156,7 @@ export class ConfigEditor extends Service {
           await reconcileProfilePatches(this.ownerContext.root, beforePatches, 'dsh')
           throw error
         }
-      })
+      }))
     }
     const hmr = this.ownerContext.get('hmr')
     await (hmr === undefined ? run() : hmr.runExclusive(run))

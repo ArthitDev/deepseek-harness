@@ -12,7 +12,8 @@ import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
 import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import { currentModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 // Type-only: makes the optional sibling service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
@@ -68,8 +69,8 @@ function routedTarget(
  * the adapter's per-request default, which the adapter materializes when that
  * envelope omits one. No declared cap means no reservation.
  */
-function reservedCompletionTokens(agent: Agent, defaultMaxTokens: number | undefined): number {
-  const configured = agent.session.requestHeader()?.config.maxTokens
+function reservedCompletionTokens(config: LlmCallConfig, defaultMaxTokens: number | undefined): number {
+  const configured = config.maxTokens
   return configured ?? defaultMaxTokens ?? 0
 }
 
@@ -139,6 +140,7 @@ export class BasicCompactionEngine extends CompactionEngine {
 
   private readonly warnedPressureConfigTargets = new Set<string>()
   private readonly overflowRetries = new WeakMap<Agent, number>()
+  private readonly manualTargets = new WeakMap<Agent, ModelSelection>()
   private readonly overflowAgents = new WeakMap<Session, Agent>()
 
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
@@ -196,6 +198,20 @@ export class BasicCompactionEngine extends CompactionEngine {
         + `~${result.shadowedTokenCount} tokens)`,
       )
     }
+
+    // Summarize through the previous route before admitting history to a smaller one.
+    ctx.on('agent/request-prepared', async ({ agent, config, signal }) => {
+      const previous = routedTarget(agent.session)
+      if (signal.aborted || previous === undefined
+        || (previous.provider === config.provider && previous.model === config.model)) return
+      try {
+        const result = await this.compactForPressure(agent, config, signal)
+        if (result !== null) logResult(result, 'route change')
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        ctx.logger.warn(`route-change compaction failed: ${message}; continuing the turn`)
+      }
+    })
 
     ctx.on('agent/pre-step', async (
       { agent, signal },
@@ -291,10 +307,14 @@ export class BasicCompactionEngine extends CompactionEngine {
     agent: Agent,
     signal?: AbortSignal,
   ): Promise<SummaryResult> {
-    const target = conversationTarget(agent)
-    const config = target === undefined
+    const manualTarget = this.manualTargets.get(agent)
+    const target = manualTarget ?? conversationTarget(agent)
+    const policy = target === undefined
       ? this.config
       : resolveTargetPolicy(this.config, target)
+    const config = manualTarget !== undefined && policy.summarizationProvider.length === 0
+      ? { ...policy, summarizationProvider: manualTarget.provider, summarizationModel: manualTarget.model }
+      : policy
     return summarizeWithLlm(this.ctx, config, input, agent, signal)
   }
 
@@ -315,7 +335,6 @@ export class BasicCompactionEngine extends CompactionEngine {
   ): Promise<CompactionResult | null> {
     const target = routedTarget(agent.session)
     if (target === undefined) return null
-    const policy = resolveTargetPolicy(this.config, target)
     const meter = this.ctx.tokenMeter
     let measurement = meter.measure(agent.session)
     switch (trigger) {
@@ -343,6 +362,23 @@ export class BasicCompactionEngine extends CompactionEngine {
       return this.compactRegion(range.start, range.end, agent, signal)
     }
 
+    const config = agent.session.requestHeader()?.config
+    /* v8 ignore next -- routedTarget above proves a durable request config exists. */
+    if (config === undefined) return null
+    return this.compactForPressure(agent, config, signal, measurement)
+  }
+
+  /** Compact current history to fit one exact prepared or durable route. */
+  private async compactForPressure(
+    agent: Agent,
+    target: LlmCallConfig,
+    signal: AbortSignal,
+    initialMeasurement = this.ctx.tokenMeter.measure(agent.session),
+  ): Promise<CompactionResult | null> {
+    const policy = resolveTargetPolicy(this.config, target)
+    const meter = this.ctx.tokenMeter
+    const prune = this.ctx.get('toolResultPruner')
+    let measurement = initialMeasurement
     const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)
     assertNoActiveCompaction(agent.session, 'automatic pressure compaction')
     const targetKey = `${target.provider}/${target.model}`
@@ -356,7 +392,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     const spec = resolveCompactSpec(
       policy,
       info.context.contextWindow,
-      reservedCompletionTokens(agent, info.defaultMaxTokens),
+      reservedCompletionTokens(target, info.defaultMaxTokens),
     )
     if (measurement.totalTokens < spec.thresholdTokens) return null
 
@@ -431,6 +467,8 @@ export class BasicCompactionEngine extends CompactionEngine {
     try {
       return agent.runMaintenance(async (agentSignal) => {
         const operationSignal = AbortSignal.any([agentSignal, signal])
+        const target = currentModelSelection(agent.ctx)
+        if (target !== undefined) this.manualTargets.set(agent, target)
         try {
           operationSignal.throwIfAborted()
           const range = selectCompactableRange(
@@ -465,6 +503,10 @@ export class BasicCompactionEngine extends CompactionEngine {
           }
           operationSignal.throwIfAborted()
           throw error
+        } finally {
+          if (target !== undefined && this.manualTargets.get(agent) === target) {
+            this.manualTargets.delete(agent)
+          }
         }
       })
     } catch (error: unknown) {

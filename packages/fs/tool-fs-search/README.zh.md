@@ -52,6 +52,34 @@ kind: "package-reference"
 
 ### 配置
 
+#### 本地 Markdown 知识库
+
+将 `knowledgeRoots` 设置为 `{ name, path, bootstrap? }` 对象数组即可注册可选的知识工具。名称必须唯一，且仅含小写字母、数字或连字符。路径必须为绝对路径，并包含常规文件 `INDEX.md`；其规范路径必须位于根目录内。`bootstrap` 默认为 `false`；设为 `true` 时，激活会创建根目录及缺少的 `INDEX.md`、`CONTRIBUTING.md` 和 `templates/NOTE.md`，但不会替换已有内容。无效根目录使插件激活失败。默认空数组不会注册额外工具。
+
+`knowledge_list` 只返回知识库名称、规范根路径和索引路径。`knowledge_create_note` 在选定知识库中创建一份带来源的 Markdown 草稿，并把链接加入 `INDEX.md`。两者都不会增加 system prompt 节或数据库。使用现有 `read`、`glob` 和 `grep` 工具访问返回的路径。文件修改在下次读取时可见；修改根目录配置需要重载插件。超时采用配置中的 `timeoutMs`。
+
+挂载 Agent 服务时，简短的用户角色 `knowledge-context` 通知说明如何检索和保存持久知识：列出知识库、读取 `INDEX.md`、检索相关笔记并引用来源；写入前读取 `CONTRIBUTING.md` 和模板，在可用时用 `knowledge_create_note` 创建带来源的草稿，并且绝不保存凭据、token、秘密或临时日志。通知只在有效模型历史中记录一次。压缩或清空移除通知后，下次请求会恢复；上下文溢出重试会在重试前恢复。切换 preset 使用当前配置。禁用发现功能会从有效历史中撤回通知，但保留原始日志。Wiki 启用状态独立于内置提示词抑制，preset system 文本不变。
+
+`knowledgeStatus` 会话投影为 UI 状态提供当前知识库名称，首个请求前即可显示。TUI 显示 `📚 Wiki`，Web 在输入框下方显示同一标记。Wiki 不可用或被显式拒绝时隐藏。新的 `knowledge/status` 日志事件需要支持它的读取版本。
+
+Host UI 可调用 `knowledgeLibraries(ctx, agent)`，读取该 agent 可见的发现工具所配置的名称、规范根路径和索引路径。注册不存在或被拒绝时返回空列表。此操作不执行工具、不读取笔记内容，也不追加会话事件。TUI 的 `/wiki` 使用此接口。
+
+基于 base bundle 的 profile 已配置一个 host 级 `tool-fs-search` 条目，让 Web 与 TUI 共享知识工具。请在 home patch 中替换该条目的 `knowledgeRoots`；再插入一个 host 级实例会重复注册 `knowledge_list`。不使用 base bundle 的独立 composition 可在 preset 自有的搜索工具旁挂载一个 `knowledgeOnly: true` 实例。默认的 `knowledgeOnly: false` 保留普通搜索注册。
+
+```yaml
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots:
+      - name: cyber
+        path: '/absolute/path/to/cyber-wiki'
+        bootstrap: true
+```
+
+`knowledge_list` 为只读。`knowledge_create_note` 接受 kebab-case slug、标题、正文和来源 URL；它只创建 `<slug>.md`，拒绝已有文件名，并把笔记链接追加到规范 `INDEX.md`。如果索引更新失败，它会删除新笔记。Bootstrap 文件同样只创建、不覆盖。这些控制不会让工具获得整个知识库的任意写权限；其他文件工具及不受限制的 shell 仍保留现有权限。路径指向本地主机文件系统。无需安装 Obsidian。
+
+#### 搜索上限
+
 `sampleOverCapGlobResults` 为必填；其余键是可选的搜索上限，默认值如下。
 
 | 键 | 默认值 | 含义 |
@@ -175,6 +203,20 @@ glob 描述声明了配置的超过上限排序方式。生成的 [`glob` 和 `g
 #### KV Cache 影响
 
 工具可见性与定义不变时前缀稳定。注册生命周期或作用域限制可能从第一个改变的 schema token 起使复用失效。
+
+### 知识工具 schema
+
+#### 模型看到的内容
+
+配置知识库后，可见工具集合会增加 [`knowledge_list` 和 `knowledge_create_note` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-fs-search)。只有调用时，结果才进入历史。抑制内置提示词段落不会隐藏这些工具，也不会加载 Wiki 内容。这些工具不会发现 Wiki 中的 `AGENTS.md`。描述会在首次请求中列出已配置的知识库，并说明先读索引、按需检索、引用笔记和来源以及安全保存持久知识的方式。Team 模式、plan 状态和文件沙箱模式不会禁用发现功能。native 和 both 模式通过知识工具展示描述。PTC 在 `run_code` 描述中携带当前可见的 knowledge/read/glob/grep 工具声明，因此段落抑制或完整 persona 可移除系统段落，同时保留这些 API 的说明。工具限制仍然生效，不增加额外系统段落或重复的对话上下文。
+
+#### Token 影响
+
+知识工具可见时增加 schema token，包括 PTC——声明随 `run_code` 描述携带，即使完整 SDK 段落也可见。
+
+#### KV Cache 影响
+
+配置的知识库集合与工具可见性不变时前缀稳定；注册生命周期或作用域限制从第一个改变的 schema token 起使复用失效。
 
 ### 结果与 spill 提示
 
