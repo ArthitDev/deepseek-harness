@@ -4147,7 +4147,7 @@ Sources: [`packages/llm/llm/src/message.ts:136`](../packages/llm/llm/src/message
 | `schedule` | not declared | none | [`{ kind: "schedule" }`](#persistence-type-sha256-f29d63336e8266d80dd7baeab219436db86341304f6be1cd0edb36f5134c4a47) |
 | `session-edit` | not declared | none | [`{ kind: "session-edit" }`](#persistence-type-sha256-2fd2c65e3d68a237f0524bc313dc829574c4339384ed58cd465fdf869f3fcf55) |
 | `session-reference` | `"recall"` | `references`: [`{ capturedFormatVersion?, capturedThroughSeq, compacted, inputIndex, … }[]`](#persistence-type-sha256-df843efd87c78cf8de98f8e0d0216956cd568d0d0e56a22c853663e274aa1a18); `version`: `1` | [`SessionReferenceSource`](#persistence-type-sha256-f56c5b59ca0161310c338d31dd16cf14287ccd602ff4181058df178c1c286d7f) |
-| `skill-catalog` | `"catalog"` | `entries`: [`{ description, name }[]`](#persistence-type-sha256-aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba) | [`SkillCatalogSource`](#persistence-type-sha256-fc2ae6962f9f8801c2b1e414668e1e17cbb7544c4f39381198977a38bd10c093) |
+| `skill-catalog` | `"catalog"` | `entries`: [`SkillCatalogEntry[]`](#persistence-type-sha256-aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba) | [`SkillCatalogSource`](#persistence-type-sha256-fc2ae6962f9f8801c2b1e414668e1e17cbb7544c4f39381198977a38bd10c093) |
 | `skill-invocation` | `"instructions"` | `name`: `string` | [`SkillInvocationSource`](#persistence-type-sha256-672c4aa2a9b736e3d6e5da6346d2e2ed5e3573f2d0baafa18e7407c9f3fee3db) |
 | `subagent-settled` | `"notice"` | `senderSessionId`: `string`; `summary`: `string` | [`SubagentSettledMessageSource`](#persistence-type-sha256-4e97c3d85c0fc817ee58873c38c25a2474abaaa0af4839311b50b68db3b8cf1a) |
 | `system-prompt` | not declared | none | [`SystemPromptMessageSource`](#persistence-type-sha256-65a8400e451e667e5b6e34df72ceb81fca8c12330330fa72083ad40279b189ad) |
@@ -4652,9 +4652,34 @@ Sources: [`packages/session/session-title/src/types.ts:28`](../packages/session/
 | `provider` | not declared | `provider`: `string` | [`{ kind: "provider" }`](#persistence-type-sha256-b81e9de81a481b24e1e1f9adf038bfc59e57b4f35ce62f8f1e45284186f4f812) |
 | `user` | not declared | none | [`CommandSource`](#persistence-type-sha256-ada310bf0bdb8fed51f3b56ea63f6ea6b18bbd587f04fccb63a14ab0b2a24e05) |
 
+<a id="persistence-type-sha256-83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693"></a>
+
+<a id="persistence-type-packagesexperimentalpi-tuisrcuichattsskillcatalogentry"></a>
+
+<a id="persistence-type-skillcatalogentry"></a>
+
+### `SkillCatalogEntry`
+
+SHA-256: `83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693`
+
+Sources: [`packages/experimental/pi-tui/src/ui/chat.ts:150`](../packages/experimental/pi-tui/src/ui/chat.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `description` | required | `string` |
+| `name` | required | `string` |
+
+<a id="persistence-type-sha256-aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba"></a>
+
+### `SkillCatalogEntry[]`
+
+SHA-256: `aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba`
+
+Array of [`SkillCatalogEntry`](#persistence-type-sha256-83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693).
+
 <a id="persistence-type-sha256-fc2ae6962f9f8801c2b1e414668e1e17cbb7544c4f39381198977a38bd10c093"></a>
 
-<a id="persistence-type-packagesskilltool-skillsrcindextsskillcatalogsource"></a>
+<a id="persistence-type-packagesexperimentalpi-tuisrcuichattsskillcatalogsource"></a>
 
 <a id="persistence-type-skillcatalogsource"></a>
 
@@ -4662,11 +4687,11 @@ Sources: [`packages/session/session-title/src/types.ts:28`](../packages/session/
 
 SHA-256: `fc2ae6962f9f8801c2b1e414668e1e17cbb7544c4f39381198977a38bd10c093`
 
-Sources: [`packages/skill/tool-skill/src/index.ts:34`](../packages/skill/tool-skill/src/index.ts)
+Sources: [`packages/experimental/pi-tui/src/ui/chat.ts:155`](../packages/experimental/pi-tui/src/ui/chat.ts)
 
 | Property | Presence | Type |
 |---|---|---|
-| `entries` | required | [`{ description, name }[]`](#persistence-type-sha256-aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba) |
+| `entries` | required | [`SkillCatalogEntry[]`](#persistence-type-sha256-aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba) |
 | `form` | required | `"catalog"` |
 | `kind` | required | `"skill-catalog"` |
 | `update` | optional | `true` |
@@ -6004,27 +6029,6 @@ Sources: [`packages/llm/llm-retry/src/types.ts:30`](../packages/llm/llm-retry/sr
 | `retryId` | required | `string` |
 | `step` | required | `number` |
 | `turn` | required | `number` |
-
-<a id="persistence-type-sha256-83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693"></a>
-
-### `{ description, name }`
-
-SHA-256: `83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693`
-
-Sources: [`packages/skill/tool-skill/src/index.ts:40`](../packages/skill/tool-skill/src/index.ts)
-
-| Property | Presence | Type |
-|---|---|---|
-| `description` | required | `string` |
-| `name` | required | `string` |
-
-<a id="persistence-type-sha256-aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba"></a>
-
-### `{ description, name }[]`
-
-SHA-256: `aba175fb20ffc71112c55efe70458ff5d7dbfb83501892b4ba8d077f0ea5d7ba`
-
-Array of [`{ description, name }`](#persistence-type-sha256-83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693).
 
 <a id="persistence-type-sha256-119abe2b9c0b2f46ecb31d82b9acba4d4b30e049f655e2475e8b4ae12d5a9e25"></a>
 

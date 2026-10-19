@@ -73,9 +73,10 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
       }
     })
   }
+  const startInput = vi.fn<Terminal['start']>()
   const terminal: Terminal = {
     columns: 100, rows: 40, kittyProtocolActive: false,
-    start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+    start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
     clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
   }
@@ -115,11 +116,12 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
     agent,
   })
   tui.start()
+  const input = (data: string): void => { startInput.mock.calls[0]?.[0](data) }
   try {
     expect(await toolNames()).toEqual([MCP_TOOL, DIRECT_JEV_TOOL, JEV_TOOL, 'ordinary'])
     expect(await messageSources()).toEqual(['jev-first-policy', 'user'])
     screen.submit('/jev off')
-    expect(await visible(tui)).toContain('jev: OFF · policy context hidden · 2 tool(s) hidden')
+    expect(await visible(tui)).toContain('jev: OFF · policy context hidden · 2/2 tool(s) hidden')
     expect(await visible(tui)).toContain('Jev OFF')
     expect(await toolNames()).toEqual([MCP_TOOL, 'ordinary'])
     expect(await messageSources()).toEqual(['user'])
@@ -132,7 +134,7 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
     expect(await messageSources(second)).toEqual(['user'])
     screen.switchAgent(agent)
     screen.submit('/jev status')
-    expect(await visible(tui)).toContain('jev: OFF · policy context hidden · 2 tool(s) hidden')
+    expect(await visible(tui)).toContain('jev: OFF · policy context hidden · 2/2 tool(s) hidden')
     screen.submit('/jev on')
     expect(await toolNames()).toEqual([MCP_TOOL, DIRECT_JEV_TOOL, JEV_TOOL, 'ordinary'])
     expect(await messageSources()).toEqual(['jev-first-policy', 'user'])
@@ -142,11 +144,32 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
     expect(await visible(tui)).toContain('usage: /jev [on|off|toggle|status]')
 
     screen.submit('/mcp')
-    expect(await visible(tui)).toContain('mcp: OFF · 3 tool(s) hidden')
+    await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+    expect(await visible(tui)).toContain('MCP servers')
+    expect(await visible(tui)).toContain('ON  fixture')
+    input('\r')
+    await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
+    expect(await visible(tui)).toContain('mcp: fixture OFF · 1 tool(s) hidden')
+    expect(await toolNames()).toEqual([DIRECT_JEV_TOOL, JEV_TOOL, 'ordinary'])
+    const serverDenied = await runMcp()
+    expect(serverDenied.isError).toBe(true)
+    expect(serverDenied.content.some(block =>
+      block.type === 'text' && block.text.includes('MCP server "fixture" is disabled'))).toBe(true)
+    screen.submit('/mcp status')
+    expect(await visible(tui)).toContain('mcp: ON · 2/3 server(s) enabled · 2/3 tool(s) available')
+    screen.submit('/mcp')
+    await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+    expect(await visible(tui)).toContain('OFF fixture')
+    input('\r')
+    await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
+    expect(await toolNames()).toEqual([MCP_TOOL, DIRECT_JEV_TOOL, JEV_TOOL, 'ordinary'])
+
+    screen.submit('/mcp off')
+    expect(await visible(tui)).toContain('mcp: OFF · 0/3 server(s) enabled · 0/3 tool(s) available')
     expect(await toolNames()).toEqual(['ordinary'])
     screen.submit('/jev off')
     screen.submit('/jev on')
-    expect(await visible(tui)).toContain('jev: ON · policy context enabled · 2 tool(s) hidden · MCP is OFF')
+    expect(await visible(tui)).toContain('jev: ON · policy context enabled · 2/2 tool(s) hidden · MCP is OFF')
     const denied = await runMcp()
     expect(denied.isError).toBe(true)
     expect(JSON.stringify(denied.content)).toContain('MCP tools are disabled in this TUI')
@@ -155,7 +178,7 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
     screen.switchAgent(agent)
 
     screen.submit('/mcp status')
-    expect(await visible(tui)).toContain('mcp: OFF · 3 tool(s) hidden')
+    expect(await visible(tui)).toContain('mcp: OFF · 0/3 server(s) enabled · 0/3 tool(s) available')
     screen.submit('/mcp on')
     expect(await toolNames()).toEqual([MCP_TOOL, DIRECT_JEV_TOOL, JEV_TOOL, 'ordinary'])
     expect(await runMcp()).toMatchObject({ isError: false, value: `ran:${MCP_TOOL}` })

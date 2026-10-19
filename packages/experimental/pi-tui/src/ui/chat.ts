@@ -27,7 +27,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
-import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type MessageSource, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
@@ -129,7 +129,7 @@ interface LlmRuntime extends LlmRuntimeLike {
 }
 
 interface ToolPolicyRuntime {
-  guard?(guard: (execution: { readonly name: string }) => string | undefined): () => void
+  guard?(guard: (execution: { readonly name: string; readonly arguments: unknown }) => string | undefined): () => void
   schemas?(scope?: Agent): readonly { name: string }[]
 }
 
@@ -140,6 +140,65 @@ const JEV_POLICY_SKILL = 'jev-first-policy'
 const SKILL_TOOL_NAME = 'skill'
 
 const isJevTool = (name: string): boolean => JEV_MCP_TOOL_PREFIXES.some(prefix => name.startsWith(prefix))
+
+const mcpServerName = (name: string): string => {
+  const rest = name.slice(MCP_TOOL_PREFIX.length)
+  const separator = rest.indexOf('__')
+  return separator < 0 ? rest : rest.slice(0, separator)
+}
+
+interface SkillCatalogEntry {
+  readonly name: string
+  readonly description: string
+}
+
+interface SkillCatalogSource {
+  readonly kind: 'skill-catalog'
+  readonly form: 'catalog'
+  readonly update?: true
+  readonly entries: readonly SkillCatalogEntry[]
+}
+
+function isSkillCatalogEntry(entry: unknown): entry is SkillCatalogEntry {
+  return typeof entry === 'object' && entry !== null
+    && 'name' in entry && typeof entry.name === 'string'
+    && 'description' in entry && typeof entry.description === 'string'
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'skill-catalog': SkillCatalogSource
+  }
+}
+
+function isSkillCatalogSource(
+  source: MessageSource,
+): source is SkillCatalogSource {
+  const kind: string = source.kind
+  if (kind !== 'skill-catalog' || !('entries' in source)) return false
+  const entries: unknown = source.entries
+  return Array.isArray(entries) && entries.every(isSkillCatalogEntry)
+}
+
+function filterDisabledSkills(message: UserMessage, disabled: ReadonlySet<string>): UserMessage | undefined {
+  const kind: string = message.source.kind
+  if (kind === 'skill-invocation' && 'name' in message.source
+    && typeof message.source.name === 'string' && disabled.has(message.source.name)) return undefined
+  if (!isSkillCatalogSource(message.source)) return message
+  const entries = message.source.entries.filter(entry => !disabled.has(entry.name))
+  if (entries.length === message.source.entries.length) return message
+  const hiddenPrefixes = message.source.entries
+    .filter(entry => disabled.has(entry.name))
+    .map(entry => `- \`${entry.name}\`:`)
+  return {
+    ...message,
+    content: message.content.map(block => block.type === 'text'
+      ? { ...block, text: block.text.split('\n').filter(line =>
+        !hiddenPrefixes.some(prefix => line.startsWith(prefix))).join('\n') }
+      : block),
+    source: { ...message.source, entries },
+  }
+}
 
 /**
  * Sum provider-reported Jev cost from successful direct-MCP calls in this session.
@@ -175,6 +234,7 @@ export class ChatScreen {
   private readonly onAgentSwitch: ((resolved: ResolvedAgent) => void) | undefined
   private readonly onQuit: ChatScreenOptions['onQuit']
   private quitting = false
+  private disposed = false
   private model: ChatModel = createModel()
   private readonly messages = new Container()
   private readonly statusBar: StatusBar
@@ -187,6 +247,8 @@ export class ChatScreen {
   private mcpEnabled = true
   private jevEnabled = true
   private skillsEnabled = true
+  private readonly disabledMcpServers = new Set<string>()
+  private readonly disabledSkills = new Set<string>()
   /** Per-agent live stream subscription (rebound on every agent switch). */
   private disposeStream: (() => void) | undefined
   private streamSyncTimer: ReturnType<typeof setTimeout> | undefined
@@ -240,6 +302,7 @@ export class ChatScreen {
     this.tui = options.tui
     this.statusBar = new StatusBar(this.tui)
     this.ctx.effect(() => () => {
+      this.disposed = true
       this.statusBar.stop()
       this.workingLoader?.stop()
       this.cancelStreamSync()
@@ -554,10 +617,11 @@ export class ChatScreen {
   private installMcpPolicy(): () => void {
     const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
       const assembly = await next()
-      return this.mcpEnabled && this.jevEnabled
+      return this.mcpEnabled && this.jevEnabled && this.disabledMcpServers.size === 0
         ? assembly
         : { ...assembly, tools: assembly.tools.filter(tool =>
-          (this.mcpEnabled || !tool.name.startsWith(MCP_TOOL_PREFIX))
+          (!tool.name.startsWith(MCP_TOOL_PREFIX)
+            || (this.mcpEnabled && !this.disabledMcpServers.has(mcpServerName(tool.name))))
           && (this.jevEnabled || !isJevTool(tool.name))) }
     })
     const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
@@ -574,6 +638,10 @@ export class ChatScreen {
       if (!this.mcpEnabled && execution.name.startsWith(MCP_TOOL_PREFIX)) {
         return 'MCP tools are disabled in this TUI; run /mcp on'
       }
+      if (execution.name.startsWith(MCP_TOOL_PREFIX)
+        && this.disabledMcpServers.has(mcpServerName(execution.name))) {
+        return `MCP server "${mcpServerName(execution.name)}" is disabled in this TUI; run /mcp to enable it`
+      }
       if (!this.jevEnabled && isJevTool(execution.name)) {
         return 'JEV is disabled in this TUI; run /jev on'
       }
@@ -582,7 +650,7 @@ export class ChatScreen {
     return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
   }
 
-  /** Hide skill discovery and deny both model and user invocation while this TUI switch is off. */
+  /** Hide disabled skill discovery and deny both model and user invocation. */
   private installSkillsPolicy(): () => void {
     const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
       const assembly = await next()
@@ -592,20 +660,31 @@ export class ChatScreen {
     })
     const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
       const decision = await next()
-      if (this.skillsEnabled || decision.kind === 'reject') return decision
+      if (decision.kind === 'reject') return decision
       return {
         ...decision,
-        messages: decision.messages.filter((message) => {
-          const kind: string = message.source.kind
-          return kind !== 'skill-catalog' && kind !== 'skill-invocation'
-        }),
+        messages: this.skillsEnabled
+          ? decision.messages.flatMap((message) => {
+            const filtered = filterDisabledSkills(message, this.disabledSkills)
+            return filtered === undefined ? [] : [filtered]
+          })
+          : decision.messages.filter((message) => {
+            const kind: string = message.source.kind
+            return kind !== 'skill-catalog' && kind !== 'skill-invocation'
+          }),
       }
     }, { prepend: true })
     const tools = this.agent.ctx.get('tools') as ToolPolicyRuntime | undefined
-    const disposeGuard = tools?.guard?.(execution =>
-      !this.skillsEnabled && execution.name === SKILL_TOOL_NAME
-        ? 'Skills are disabled in this TUI; run /skills on'
-        : undefined)
+    const disposeGuard = tools?.guard?.((execution) => {
+      if (execution.name !== SKILL_TOOL_NAME) return undefined
+      if (!this.skillsEnabled) return 'Skills are disabled in this TUI; run /skills on'
+      const args = execution.arguments
+      if (typeof args === 'object' && args !== null && 'name' in args
+        && typeof args.name === 'string' && this.disabledSkills.has(args.name)) {
+        return `Skill "${args.name}" is disabled in this TUI; run /skills to enable it`
+      }
+      return undefined
+    })
     return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
   }
 
@@ -1073,10 +1152,7 @@ export class ChatScreen {
     if (parsed.name === 'model') return this.cmdModel(parsed.raw.trim())
     if (parsed.name === 'preset') return this.cmdPreset(parsed.raw.trim())
     if (parsed.name === 'suppress-prompt' || parsed.name === 'suppress-promot') return this.cmdSuppressPrompt(parsed.raw.trim())
-    if (parsed.name === 'mcp') {
-      this.cmdMcp(parsed.raw.trim())
-      return
-    }
+    if (parsed.name === 'mcp') return this.cmdMcp(parsed.raw.trim())
     if (parsed.name === 'jev') {
       this.cmdJev(parsed.raw.trim())
       return
@@ -1213,26 +1289,57 @@ export class ChatScreen {
     return presets?.composedPreset(this.agent.ctx)
   }
 
-  /** Toggle model visibility and execution of MCP tools for the visible TUI agent. */
-  private cmdMcp(argument: string): void {
+  /** Pick one MCP server or toggle all MCP tools for this TUI process. */
+  private async cmdMcp(argument: string): Promise<void> {
     const action = argument.toLowerCase()
     if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
       this.pushNotice('usage: /mcp [on|off|toggle|status]', 'error')
       return
     }
     const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
-    const count = tools?.schemas?.(this.agent)
-      .filter(tool => tool.name.startsWith(MCP_TOOL_PREFIX)).length ?? 0
+    const mcpTools = tools?.schemas?.(this.agent)
+      .filter(tool => tool.name.startsWith(MCP_TOOL_PREFIX)) ?? []
+    const servers = [...new Set(mcpTools.map(tool => mcpServerName(tool.name)))].sort()
+    const enabledServers = servers.filter(server => !this.disabledMcpServers.has(server)).length
+    const enabledTools = mcpTools.filter(tool => !this.disabledMcpServers.has(mcpServerName(tool.name))).length
     if (action === 'status') {
-      this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${count} tool(s) ${this.mcpEnabled ? 'available' : 'hidden'}`)
+      this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${this.mcpEnabled ? enabledServers : 0}/${servers.length} server(s) enabled · ${this.mcpEnabled ? enabledTools : 0}/${mcpTools.length} tool(s) available`)
       return
     }
     if (this.isBusy()) {
       this.pushNotice('cannot change MCP tools while work is running (Esc to interrupt)', 'error')
       return
     }
+    if (action === '') {
+      if (this.tui.hasOverlay()) return
+      if (servers.length === 0) {
+        this.pushNotice('no MCP servers available in this profile')
+        return
+      }
+      const picked = await pickFromListWithSearch(this.tui, {
+        title: 'MCP servers',
+        body: 'select a server to toggle it for this TUI process',
+        items: servers.map((server) => {
+          const enabled = !this.disabledMcpServers.has(server)
+          const count = mcpTools.filter(tool => mcpServerName(tool.name) === server).length
+          return {
+            value: server,
+            label: `${enabled ? 'ON ' : 'OFF'} ${server}`,
+            description: `${count} tool(s) · select to turn ${enabled ? 'off' : 'on'}`,
+            searchText: server,
+          }
+        }),
+      })
+      if (picked === undefined || this.quitting) return
+      const enabled = this.disabledMcpServers.has(picked)
+      if (enabled) this.disabledMcpServers.delete(picked)
+      else this.disabledMcpServers.add(picked)
+      const count = mcpTools.filter(tool => mcpServerName(tool.name) === picked).length
+      this.pushNotice(`mcp: ${picked} ${enabled ? 'ON' : 'OFF'} · ${count} tool(s) ${enabled && this.mcpEnabled ? 'available' : 'hidden'} · applies to the next request`)
+      return
+    }
     this.mcpEnabled = action === 'on' ? true : action === 'off' ? false : !this.mcpEnabled
-    this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${count} tool(s) ${this.mcpEnabled ? 'available' : 'hidden'} · applies to the next request`)
+    this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${this.mcpEnabled ? enabledServers : 0}/${servers.length} server(s) enabled · ${this.mcpEnabled ? enabledTools : 0}/${mcpTools.length} tool(s) available · applies to the next request`)
   }
 
   /** Toggle JEV policy context and open-dev-browser MCP tools for this TUI process. */
@@ -1243,10 +1350,11 @@ export class ChatScreen {
       return
     }
     const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
-    const count = tools?.schemas?.(this.agent)
-      .filter(tool => isJevTool(tool.name)).length ?? 0
+    const jevTools = tools?.schemas?.(this.agent).filter(tool => isJevTool(tool.name)) ?? []
+    const count = jevTools.length
+    const available = jevTools.filter(tool => !this.disabledMcpServers.has(mcpServerName(tool.name))).length
     if (action === 'status') {
-      this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''}`)
+      this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${available}/${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''}`)
       return
     }
     if (this.isBusy()) {
@@ -1254,7 +1362,7 @@ export class ChatScreen {
       return
     }
     this.jevEnabled = action === 'on' ? true : action === 'off' ? false : !this.jevEnabled
-    this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''} · applies to the next request`)
+    this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${available}/${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''} · applies to the next request`)
   }
 
   /** Pick or set persisted TUI suppression; the shared policy applies it to subsequent requests. */
@@ -2075,8 +2183,9 @@ export class ChatScreen {
       return
     }
     const skills = await this.discoverSkills()
+    const enabledCount = skills.filter(skill => !this.disabledSkills.has(skill.name)).length
     if (action === 'status') {
-      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${skills.length} skill(s) ${this.skillsEnabled ? 'available' : 'hidden'}`)
+      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${this.skillsEnabled ? enabledCount : 0}/${skills.length} skill(s) available`)
       return
     }
     if (action !== '') {
@@ -2086,35 +2195,41 @@ export class ChatScreen {
       }
       this.skillsEnabled = action === 'on' ? true : action === 'off' ? false : !this.skillsEnabled
       this.rebuildAutocomplete()
-      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${skills.length} skill(s) ${this.skillsEnabled ? 'available' : 'hidden'} · applies to the next request`)
-      return
-    }
-    if (!this.skillsEnabled) {
-      this.pushNotice(`skills: OFF · ${skills.length} skill(s) hidden · run /skills on`)
+      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${this.skillsEnabled ? enabledCount : 0}/${skills.length} skill(s) available · applies to the next request`)
       return
     }
     if (skills.length === 0) {
-      this.pushNotice('no user-invocable skills in this workspace')
+      this.pushNotice('no skills available in this workspace')
       return
     }
+    if (this.isBusy()) {
+      this.pushNotice('cannot change skills while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    if (this.tui.hasOverlay()) return
     const picked = await pickFromListWithSearch(this.tui, {
-      title: 'Skills (user-invocable)',
-      body: 'pick one to stage /name in the input; send it to invoke',
+      title: 'Skills',
+      body: 'select a skill to toggle it for this TUI process',
       items: skills.map(skill => ({
         value: skill.name,
-        label: skill.name,
-        description: skill.description,
+        label: `${this.disabledSkills.has(skill.name) ? 'OFF' : 'ON '} ${skill.name}`,
+        description: `${skill.description} · select to turn ${this.disabledSkills.has(skill.name) ? 'on' : 'off'}`,
+        searchText: skill.name,
       })),
     })
-    if (picked !== undefined) {
-      this.editor.setText(`/${picked} `)
-      this.tui.setFocus(this.editor)
-      this.tui.requestRender()
-    }
+    if (picked === undefined || this.quitting) return
+    const enabled = this.disabledSkills.has(picked)
+    if (enabled) this.disabledSkills.delete(picked)
+    else this.disabledSkills.add(picked)
+    this.rebuildAutocomplete()
+    this.pushNotice(`skills: ${picked} ${enabled ? 'ON' : 'OFF'} · applies to the next request`)
   }
 
   private async listSkills(): Promise<readonly SkillSummary[]> {
-    return this.skillsEnabled ? this.discoverSkills() : []
+    if (!this.skillsEnabled) return []
+    return (await this.discoverSkills())
+      .filter(isUserInvocable)
+      .filter(skill => !this.disabledSkills.has(skill.name))
   }
 
   private async discoverSkills(): Promise<readonly SkillSummary[]> {
@@ -2126,7 +2241,7 @@ export class ChatScreen {
         | undefined
       if (registry === undefined) return []
       const all = await registry.list({ cwd: this.cwd, scope: this.agent })
-      return all.filter(skill => isUserInvocable(skill))
+      return [...all].sort((left, right) => left.name.localeCompare(right.name))
     } catch {
       return []
     }
@@ -2726,6 +2841,7 @@ export class ChatScreen {
     const cwd = this.cwd
     this.gitState = undefined
     void readGitState(cwd).then((state) => {
+      if (this.disposed) return
       if (state === undefined || state === this.gitState) return
       // A session switch may have changed the cwd while the read ran; the
       // stale result must not paint the new session's status bar.

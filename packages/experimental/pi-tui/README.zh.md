@@ -93,11 +93,11 @@ TUI 在启动时及每次组装提示词前读取自身保存的 Suppress built-
 
 `/suppress-prompt`（别名 `/suppress-promot`）打开带编号的 ON/OFF 选择列表，默认聚焦并标记当前状态。使用 ↑/↓ 或数字选择，Enter 保存，Esc 取消且不写入设置或中断正在运行的回合。`on`、`off` 和 `toggle` 仍可直接修改，`status` 只显示当前状态。命令通过 Harness 设置服务保存 TUI 配置档，保留其他设置，不修改 Web 配置档。TUI 覆盖值在重启、新建会话及切换预设后仍有效。保存失败时显示错误。
 
-`/mcp [on|off|toggle|status]` 控制当前 TUI 进程的 MCP 工具。OFF 会从后续模型请求中移除所有 `mcp__*` 工具，并拒绝旧调用；ON 会恢复它们。状态会跟随会话切换，但在 TUI 重启时重置。回合运行期间不允许更改。
+`/mcp` 打开可搜索的 MCP 服务器列表；选择服务器会切换其全部工具。`/mcp on|off|toggle|status` 控制当前 TUI 进程的全部 MCP 工具。被停用的服务器或全局 OFF 状态会从后续模型请求中移除受影响的 `mcp__*` 工具，并拒绝旧调用。选择会跟随会话切换，但在 TUI 重启时重置。回合运行期间不允许更改。
 
 `/jev [on|off|toggle|status]` 控制当前 TUI 进程的 Jev-first 策略上下文和 open-dev-browser MCP 工具。OFF 会从后续模型请求中移除两者，并拒绝旧的 JEV 调用；ON 会恢复它们，除非全局 MCP 或 skills 开关也将其隐藏。带连字符和规范化下划线的服务器命名空间都能被识别。状态会跟随会话切换，但在 TUI 重启时重置。回合运行期间不允许更改。
 
-`/skills` 打开用户可调用 skill 选择器。`/skills on|off|toggle|status` 控制当前 TUI 进程的全部 skill。OFF 会从后续模型请求中移除 `skill` 工具，抑制 skill catalog 和直接 `/name` 指令注入，拒绝旧调用，并从自动补全中移除 skill 名称。ON 会恢复它们。状态会跟随会话切换，但在 TUI 重启时重置。回合运行期间不允许更改。
+`/skills` 打开可搜索的 skill 列表；选择 skill 会切换其 catalog 条目、直接 `/name` 指令注入、模型工具调用和自动补全条目。`/skills on|off|toggle|status` 控制当前 TUI 进程的全部 skill。全局 OFF 还会从后续模型请求中移除 `skill` 工具。选择会跟随会话切换，但在 TUI 重启时重置。回合运行期间不允许更改。
 
 开关关闭时，工作区指令、运行时上下文、Jev-first 上下文及所选团队提示词从第一轮对话起即可注入，与 Web 一致。两个界面使用 Harness 提示词注册表和提供方适配器；Pi TUI 不会额外添加编码代理人格。Web 的 GUI 专用提示词章节仅用于 Web。对于支持在历史中更新系统提示词的提供方，当前提示词会合并到历史开头，替换先前的预设及团队策略，同时保留持久日志。
 

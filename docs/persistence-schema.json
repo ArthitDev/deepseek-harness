@@ -72920,9 +72920,11 @@
           }
         ]
       },
-      "names": [],
+      "names": [
+        "packages/experimental/pi-tui/src/ui/chat.ts#SkillCatalogEntry"
+      ],
       "sources": [
-        "packages/skill/tool-skill/src/index.ts:40"
+        "packages/experimental/pi-tui/src/ui/chat.ts:150"
       ]
     },
     {
@@ -103858,10 +103860,10 @@
         ]
       },
       "names": [
-        "packages/skill/tool-skill/src/index.ts#SkillCatalogSource"
+        "packages/experimental/pi-tui/src/ui/chat.ts#SkillCatalogSource"
       ],
       "sources": [
-        "packages/skill/tool-skill/src/index.ts:34"
+        "packages/experimental/pi-tui/src/ui/chat.ts:155"
       ]
     },
     {

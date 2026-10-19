@@ -111,10 +111,10 @@ Commands:
   /model [query]          switch model (picker without a query)
   /thinking [level]       choose reasoning level (next step)
   /suppress-prompt [on|off|toggle|status]   choose prompt suppression (ON/OFF picker)
-  /mcp [on|off|toggle|status]   enable or disable MCP tools for this TUI
+  /mcp [on|off|toggle|status]   list MCP servers or control all MCP tools
   /jev [on|off|toggle|status]   enable or disable JEV tools and policy context
   /team-mode [blue|red|black|dead]   choose the team mode (numbered picker)
-  /skills [on|off|toggle|status]   list, enable, or disable skills for this TUI
+  /skills [on|off|toggle|status]   list and toggle skills or control them all
   /agents                 list live subagents
   /jobs                   list background jobs
   /export                 write this transcript to a markdown file
