@@ -7517,7 +7517,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillSource',
-    declaration: 'export type SkillSource = \'project-dsh\' | \'project-agents\' | \'runtime\' | \'user-dsh\' | \'user-agents\' | \'custom\' | \'bundled\' | (string & {});',
+    declaration: 'export type SkillSource = \'project-dsh\' | \'runtime\' | \'user-dsh\' | \'custom\' | \'bundled\' | (string & {});',
   },
   {
     name: 'SkillSummary',

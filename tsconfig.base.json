@@ -27,6 +27,7 @@
     // not declaration path aliases, keep each package/vendor source compiled
     // under its own tsconfig boundary.
     "paths": {
+      "dsh-pi-tui": ["./packages/experimental/pi-tui/src/index.ts"],
       "@deepseek-ai/dsh-tool-fs-search/knowledge-types": ["./packages/fs/tool-fs-search/src/knowledge-types.ts"],
       "@deepseek-ai/dsh-client-ui-settings-account": ["./packages/client/ui-settings-account/src/index.ts"],
       "@deepseek-ai/dsh-client-ui-settings-account/client": ["./packages/client/ui-settings-account/src/client/index.ts"],

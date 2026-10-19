@@ -26,7 +26,6 @@
 - id: skill-filesystem
   config:
     dshHome: './.dsh-home'
-    agentsHome: './.agents-home'
 
 - id: session-persistence-jsonl
   config:

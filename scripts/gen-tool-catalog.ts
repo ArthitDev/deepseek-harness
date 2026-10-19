@@ -510,7 +510,6 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(SkillRegistry)
       await ctx.plugin(SkillFileSystem, {
         dshHome: resolve(root, '.tmp/tool-catalog/.dsh'),
-        agentsHome: resolve(root, '.tmp/tool-catalog/.agents'),
       })
       await ctx.plugin(ToolSkill)
     },
