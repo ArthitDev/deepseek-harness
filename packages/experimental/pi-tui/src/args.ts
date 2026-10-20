@@ -15,6 +15,8 @@ export interface PiTuiArgs {
   pickPreset: boolean
   /** Saved remote machine id (from `--machine <id>`): new sessions run on it. */
   machine?: string
+  /** Leading positional directory: the session working directory (e.g. `.`). */
+  cwd?: string
   /** `--help` / `-h`: print usage and exit. */
   help: boolean
   /** Unrecognized positional/flags, reported as a usage error. */
@@ -25,7 +27,8 @@ export interface PiTuiArgs {
  * Parse the launcher's argument tokens. `--resume`/`-r` and `--preset`/`-p`
  * consume a following non-flag value and, when bare, become their
  * pick-from-a-list flag (`pickSession`/`pickPreset`); a valueless `--machine`
- * and every other token land in `unknown`.
+ * lands in `unknown`. The first unconsumed positional is the session working
+ * directory; further positionals land in `unknown`.
  * @param argv - the raw tokens handed to the booted profile.
  * @returns the parsed flags, with `unknown` carrying unrecognized tokens.
  */
@@ -71,6 +74,10 @@ export function parseArgs(argv: readonly string[]): PiTuiArgs {
       args.help = true
       continue
     }
+    if (!token.startsWith('-') && args.cwd === undefined) {
+      args.cwd = token
+      continue
+    }
     args.unknown.push(token)
   }
   return args
@@ -80,13 +87,13 @@ export function parseArgs(argv: readonly string[]): PiTuiArgs {
 export const USAGE = `Shield Break TUI — terminal front door for Shield Break Harness
 
 Usage:
-  dsh tui                            start a fresh session
-  dsh tui --resume <id>               reopen a persisted session
-  dsh tui --resume                    pick a persisted session from a list
-  dsh tui --preset <id>               choose an agent preset
-  dsh tui --preset                    pick a preset from the roster
-  dsh tui --machine <id>              run the session on a saved SSH machine
-  dsh tui --help                      this help
+  dsh tui [cwd]                      start a fresh session in the directory
+  dsh tui [cwd] --resume <id>        reopen a persisted session
+  dsh tui --resume                   pick a persisted session from a list
+  dsh tui --preset <id>              choose an agent preset
+  dsh tui --preset                   pick a preset from the roster
+  dsh tui --machine <id>             run the session on a saved SSH machine
+  dsh tui --help                     this help
 
 Keys:
   Esc        interrupt · cancel autocomplete · exit card browse

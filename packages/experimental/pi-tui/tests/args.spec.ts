@@ -44,7 +44,19 @@ describe('parseArgs', () => {
   })
 
   it('collects unrecognized tokens in order', () => {
-    expect(parseArgs(['extra', '--resume', 'id', '--nope']).unknown).toEqual(['extra', '--nope'])
+    expect(parseArgs(['--nope', '--resume', 'id', '--nah']).unknown).toEqual(['--nope', '--nah'])
+  })
+
+  it('reads the first positional as the session cwd', () => {
+    expect(parseArgs(['.', '--resume', 'id'])).toMatchObject({ cwd: '.', resumeId: 'id', unknown: [] })
+    expect(parseArgs(['E:\\fw_watch_releep']).cwd).toBe('E:\\fw_watch_releep')
+  })
+
+  it('keeps further positionals as unknown and flags out of cwd values', () => {
+    const args = parseArgs(['.', 'more', '--nope'])
+    expect(args.cwd).toBe('.')
+    expect(args.unknown).toEqual(['more', '--nope'])
+    expect(parseArgs(['--resume', '--machine']).cwd).toBeUndefined()
   })
 
   it('does not consume a flag-looking token as a value', () => {

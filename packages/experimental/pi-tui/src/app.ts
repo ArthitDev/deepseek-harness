@@ -6,7 +6,8 @@
  * session log → subscribe to live `session/event` → quit on Ctrl+C by
  * disposing the whole tree (bounded fallback, cc-tui semantics).
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
@@ -106,8 +107,19 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
       })),
     })
   }
+  // Leading positional directory: the session cwd, overriding the row config
+  // (e.g. an orchestrator launching `tui . --resume <id>`). Fails loud when
+  // the path is not an existing directory.
+  let cwdOverride: string | undefined
+  if (args.cwd !== undefined) {
+    const sessionCwd = resolve(args.cwd)
+    if (!existsSync(sessionCwd) || !statSync(sessionCwd).isDirectory()) {
+      throw new Error(`pi-tui: session cwd "${args.cwd}" is not an existing directory`)
+    }
+    cwdOverride = sessionCwd
+  }
   const meta = {
-    cwd: config.cwd ?? (args.machine !== undefined ? remoteCwd(args.machine) : process.cwd()),
+    cwd: cwdOverride ?? config.cwd ?? (args.machine !== undefined ? remoteCwd(args.machine) : process.cwd()),
     ...(preset !== undefined ? { agentPreset: preset } : {}),
   }
 

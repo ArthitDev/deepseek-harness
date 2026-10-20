@@ -26,7 +26,7 @@ English | [中文](README.zh.md)
 
 ## Use this package
 
-The plugin ships as a bundle row for the `tui` profile: install it once with `dsh plugin --profile tui add <this package>`, then boot `dsh tui`. `--machine <id>` opens the session with its working directory inside the machine's remote-execution namespace, so shell and file tools run over SSH on that saved machine.
+The plugin ships as a bundle row for the `tui` profile: install it once with `dsh plugin --profile tui add <this package>`, then boot `dsh tui`. A leading positional directory sets the session working directory (`dsh tui .`), overriding the row config, and must exist. `--machine <id>` opens the session with its working directory inside the machine's remote-execution namespace, so shell and file tools run over SSH on that saved machine.
 
 Startup waits for the preset registry and model defaults before creating a session; missing services prevent TUI activation. Sessions use the preset bound to the selected provider and model in the shared Web settings, or the configured default when unbound. `--preset <id>` takes precedence; resumed sessions retain their recorded preset.
 
