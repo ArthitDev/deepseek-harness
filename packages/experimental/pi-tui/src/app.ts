@@ -10,9 +10,12 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { TuiAltScreen, type ViewportTUI } from '@earendil-works/pi-tui'
 import { parseArgs, USAGE } from './args.js'
 import {
+  discardEmptySession,
+  hasUserContent,
   listPresets,
   listSessions,
   reconcileWorkspaceAttachments,
@@ -118,6 +121,13 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
 
   const resolved = await resolveAgent(ctx, sessionId, agentOptions, meta)
   const agent = resolved.agent
+  // Fresh sessions created this run that never carried user content. Their
+  // artifacts are discarded on switch or quit, so a boot without a
+  // conversation leaves no empty shell in the session store.
+  const freshEmptySessions = new Set<SessionId>()
+  if (resolved.fresh === true && !hasUserContent(agent.session)) {
+    freshEmptySessions.add(agent.id)
+  }
   /** The plugin's own manifest release, shown on the banner; boot never depends on this read. */
   const tuiVersion = (() => {
     try {
@@ -161,15 +171,28 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     },
     onQuit: (hint) => {
       tui.stop()
-      disposeRootAndExit(ctx, 0, hint)
+      disposeRootAndExit(ctx, 0, hint, async () => {
+        for (const sessionId of [...freshEmptySessions]) {
+          freshEmptySessions.delete(sessionId)
+          await discardEmptySession(ctx, sessionId)
+        }
+      })
     },
     onAgentSwitch: (next: ResolvedAgent) => {
       const old = current
       current = next
       if (old.handle !== undefined && old.agent !== next.agent) {
-        void old.handle.dispose().catch(() => {
-          // The registry teardown still covers a failed dispose.
-        })
+        void old.handle.dispose()
+          .then(() => {
+            if (!freshEmptySessions.delete(old.agent.id)) return undefined
+            return discardEmptySession(ctx, old.agent.id)
+          })
+          .catch(() => {
+            // The registry teardown still covers a failed dispose.
+          })
+      }
+      if (next.fresh === true && !hasUserContent(next.agent.session)) {
+        freshEmptySessions.add(next.agent.id)
       }
     },
   })
@@ -195,6 +218,9 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     if (screenOwns(session.id)) {
       screen.handleEvent(event)
     }
+    if (event.type === 'user/message' || event.type === 'request/header') {
+      freshEmptySessions.delete(session.id)
+    }
   })
 
   // Heal workspace grouping after the harness's cross-process index
@@ -214,9 +240,12 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
 
 /**
  * Dispose the whole application tree before process exit, with a bounded
- * fallback (mirrors cc-tui's disposeRootAndExit semantics).
+ * fallback (mirrors cc-tui's disposeRootAndExit semantics). `afterDispose`
+ * runs once the tree is down and every session handle has flushed — the
+ * point where abandoned fresh sessions can be durably discarded — bounded
+ * by the same fallback timer as the dispose itself.
  */
-function disposeRootAndExit(ctx: Context, code: number, exitMessage?: string): void {
+function disposeRootAndExit(ctx: Context, code: number, exitMessage?: string, afterDispose?: () => Promise<void>): void {
   let finished = false
   const finish = (): void => {
     if (finished) return
@@ -232,7 +261,7 @@ function disposeRootAndExit(ctx: Context, code: number, exitMessage?: string): v
   void ctx.root.fiber.dispose().then(
     () => {
       clearTimeout(timer)
-      finish()
+      void (afterDispose?.() ?? Promise.resolve()).then(finish, finish)
     },
     () => {
       clearTimeout(timer)

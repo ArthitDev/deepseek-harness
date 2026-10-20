@@ -38,6 +38,52 @@ export function replayEvents(session: {
 export interface ResolvedAgent {
   agent: Agent
   handle?: AgentHandle
+  /** Whether this call created the session in this run; a resumed or attached session is never fresh. */
+  fresh?: boolean
+}
+
+/** Session events that mean real user content; boot-time setup events do not count. */
+const CONTENT_EVENT_TYPES: ReadonlySet<string> = new Set(['user/message', 'request/header'])
+
+/**
+ * Whether a session ever carried user content — a submitted user message or a
+ * model request. A created-but-never-used session holds only boot-time setup
+ * events (`permission/preset`, `sandbox/mode`, `approval/policy`,
+ * `knowledge/status`) and is safe to discard.
+ * @param session - session (or matching shape) whose durable log is inspected.
+ * @returns true when user content is present in the durable log.
+ */
+export function hasUserContent(session: { snapshotEvents(): readonly { type: string }[] }): boolean {
+  return session.snapshotEvents().some(event => CONTENT_EVENT_TYPES.has(event.type))
+}
+
+/**
+ * Best-effort durable discard of one session artifact: forget its workspace
+ * record, then delete the persisted log. Used for sessions created and
+ * abandoned without user content, so boot churn does not accumulate shells.
+ * @param ctx - TUI context with the optional persistence and workspace services.
+ * @param sessionId - session identity to discard.
+ */
+export async function discardEmptySession(ctx: Context, sessionId: SessionId): Promise<void> {
+  try {
+    const registry = ctx.get('workspaceRegistry') as
+      | { forgetSession(sessionId: SessionId): Promise<void> }
+      | undefined
+    const persistence = ctx.get('sessionPersistence') as
+      | { delete(sessionId: SessionId, options?: { signal?: AbortSignal }): Promise<boolean> }
+      | undefined
+    if (persistence === undefined) return
+    await registry?.forgetSession(sessionId)
+    await persistence.delete(sessionId)
+  } catch (error: unknown) {
+    // Discard is best effort: a busy lease or missing services keep the
+    // artifact and the next boot repeats the decision.
+    ctx.logger.warn(
+      `pi-tui: discard of empty session "${sessionId}" skipped: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+  }
 }
 
 /** Session-creation metadata the TUI passes (cwd + optional agent preset). */
@@ -308,7 +354,7 @@ export async function resolveAgent(
   // must never be reported as an agent-create failure, and an empty session
   // (never any event) should leave no workspace record behind.
   attachWorkspaceOnFirstEvent(ctx, sessionId, meta.cwd)
-  return { agent: created.agent, handle: created }
+  return { agent: created.agent, handle: created, fresh: true }
 }
 
 /**
@@ -382,7 +428,7 @@ export async function forkSession(
     catch (error) { await created.dispose(); throw error }
   }
   attachWorkspaceOnFirstEvent(ctx, childId, meta.cwd)
-  return { agent: created.agent, handle: created }
+  return { agent: created.agent, handle: created, fresh: true }
 }
 
 /**
