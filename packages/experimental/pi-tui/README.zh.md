@@ -39,14 +39,17 @@ kind: "package-bundle"
 | 范围 | 必需的 row 与本地资源 | 缺失或无效时的结果 |
 |---|---|---|
 | TUI 启动 | base 与 TUI bundle 必须提供 `agents`、`cmdlineArgs`、`workspaceRegistry`、`loader`、`profileContext`、`pentestModePolicy`、`systemPrompt`、`agentPresets` 和 `agentDefaultModel`。 | **Blocked。** `pi-tui` 插件保持 pending，不会打开终端界面。 |
-| Skill | Base row `skill`、`skill-filesystem` 和 `tool-skill`；TUI row `global-default-skills`；`C:\Users\EPIT-Dev\.dsh\global-skills.mjs`；可发现的 `caveman` 与 `ponytail` skill。 | 缺少 base 服务会移除 skill catalog 与调用路径。缺少本地插件或某个默认 skill 属于 **Degraded**，对应 hook 或 skill 会被跳过。 |
+| Skill | Base row `skill`、`skill-filesystem` 和 `tool-skill`；TUI row `global-default-skills`；`C:\Users\EPIT-Dev\.dsh\global-skills.mjs`。发现机制只读取 harness 自有根目录——`~/.dsh/skills`、`<projectRoot>/.dsh/skills` 与 `customSkillDirs`；跨 harness 共享目录不会被扫描。目录当前包含 133 个 skill，含 `losthex-*` 系列与 `apk-reverse`。 | 缺少 base 服务会移除 skill catalog 与调用路径。缺少本地插件或某个默认 skill 属于 **Degraded**，对应 hook 或 skill 会被跳过。 |
 | Jev-first 策略 | 全局 row `jev-first-action-policy`；`C:\Users\EPIT-Dev\.dsh\jev-first.mjs`；`C:\Users\EPIT-Dev\.agent-rules\JEV-FIRST.md`。`global-skills.mjs` 也导入此插件。 | 插件已加载但策略文件缺失时属于 **Turn-fatal**，因为每次 pre-step 读取都会失败。插件文件无法加载时属于 **Degraded**，策略不会生效。 |
+| Kali 执行策略 | 全局 row `kali-exec-policy`；`C:\Users\EPIT-Dev\.dsh\kali-exec.mjs`；`kali-linux` WSL 发行版及 Kali 软件集（nmap、sqlmap、hydra、john、hashcat、impacket），通过 `wsl -d kali-linux -- bash -lc` 调用。 | 发行版或软件包缺失只会让相应命令在回合内失败，策略文本仍然加载；只有插件文件无法加载才属于 **Degraded**。 |
 | Jev MCP | 全局 row `mcp-jev`；`C:\Users\EPIT-Dev\.local\bin\jev-mcp-launcher.mjs`；Node 22 或更新版本；`C:\Users\EPIT-Dev\.config\typesafe\key`；launcher 固定的 `@jkudish/jev-mcp` 包。 | **Degraded。** `failOnStartupError: false` 允许 TUI 继续运行，但 `/jev status` 不会显示可用工具，状态栏显示 `Jev unavailable`。 |
-| REA MCP | 预期的 `mcp-rea` client 与全局安装的 REA server 脚本。 | **Degraded。** 当前 home patch 修改了一个不存在的 row，而没有插入它，因此 `--dump-config` 警告 `entry "mcp-rea" not found`，REA 尚未激活。 |
+| REA MCP | 全局 row `mcp-rea`（insert）；通过 `C:\nvm4w\nodejs\node.exe` 运行 `C:\Users\EPIT-Dev\AppData\Roaming\npm\node_modules\rea-agents\scripts\rea.mjs`。 | **Degraded。** `failOnStartupError: false` 允许 TUI 在没有 REA 时继续运行；正常启动会暴露约 170 个 `mcp__rea__*` 工具。 |
+| IDA MCP | 全局 row `mcp-ida`（streamable HTTP `http://127.0.0.1:13337/mcp`）；运行中的 IDA 及其 `ida-pro-mcp` 插件（即 `ida-pro-mcp` dotnet tool）。 | **Degraded。** 端点只在 IDA 运行时存在；IDA 出现后客户端会自行重连。 |
+| x64dbg MCP | 全局 row `mcp-x64dbg`（stdio）；Python 3.13（含 `mcp` 与 `requests`）运行 `C:\Users\EPIT-Dev\.dsh\mcp\x64dbg-mcp.py`；x64dbg 插件的 HTTP 服务器 `127.0.0.1:8888`。 | **Degraded。** bridge 可以在 x64dbg 未运行时启动，其工具在插件 HTTP 服务器上线前逐次调用失败。 |
 | Cyber Wiki | 使用 `C:\Users\EPIT-Dev\.dsh\cyber-wiki` 的 `cyber` knowledge root 覆盖现有 host row `tool-fs-search`，并保持其 `INDEX.md` 有效。 | **Degraded。** 无效根目录会使该插件激活失败。不要插入第二个 host `tool-fs-search` row，否则两个实例都会注册 `knowledge_list`，其中一个会以 `tool "knowledge_list" is already registered` 失败。 |
 | Orca hook | 全局 row `orca-agent-hooks` 与 `C:\Users\EPIT-Dev\.orca\agent-hooks\dsh-hooks.json`。 | **Degraded。** Orca hook 集成不可用；它不是 TUI 启动服务。 |
 
-`global-skills.mjs` 与 `jev-first.mjs` 通过绝对 `file:///E:/Cybersecure-Pentest/deepseek-harness/.../lib/index.js` URL 导入构建产物。移动源码检出后不更新这些 URL，或清理 `lib` 后不重新构建，都会阻止本地插件激活。
+`global-skills.mjs`、`jev-first.mjs` 与 `kali-exec.mjs` 通过绝对 `file:///E:/Cybersecure-Pentest/deepseek-harness/.../lib/index.js` URL 导入构建产物。移动源码检出后不更新这些 URL，或清理 `lib` 后不重新构建，都会阻止本地插件激活。
 
 移动或重新构建后，先检查合并后的 profile，再打开 TUI：
 
@@ -54,7 +57,7 @@ kind: "package-bundle"
 dsh --profile tui --dump-config
 ```
 
-输出必须包含 `pi-tui`、`global-default-skills`、`jev-first-action-policy`、`mcp-jev` 和唯一一个被覆盖的 `tool-fs-search` row。TUI 打开后运行以下检查；正数工具计数与可用的 Wiki 选择器表示可选集成已加载。
+输出必须包含 `pi-tui`、`global-default-skills`、`jev-first-action-policy`、`kali-exec-policy`、`mcp-rea`、`mcp-jev`、`mcp-ida`、`mcp-x64dbg` 和唯一一个被覆盖的 `tool-fs-search` row。TUI 打开后运行以下检查；`/mcp status` 必须列出 `rea` 与 `jev` 且工具计数为正，`ida` 与 `x64dbg` 会在其宿主应用运行时加入，可用的 Wiki 选择器表示可选集成已加载。
 
 ```text
 /mcp status

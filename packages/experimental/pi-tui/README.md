@@ -39,14 +39,17 @@ This deployment is not portable by copying only `dsh-pi-tui`. Its effective comp
 | Area | Required rows and local assets | Result when missing or invalid |
 |---|---|---|
 | TUI startup | The base and TUI bundles must supply `agents`, `cmdlineArgs`, `workspaceRegistry`, `loader`, `profileContext`, `pentestModePolicy`, `systemPrompt`, `agentPresets`, and `agentDefaultModel`. | **Blocked.** The `pi-tui` plugin remains pending and never opens the terminal UI. |
-| Skills | Base rows `skill`, `skill-filesystem`, and `tool-skill`; TUI row `global-default-skills`; `C:\Users\EPIT-Dev\.dsh\global-skills.mjs`; discoverable `caveman` and `ponytail` skills. | Missing base services removes the skill catalog and invocation path. A missing local plugin or individual default skill is **Degraded** because the hook or that skill is skipped. |
+| Skills | Base rows `skill`, `skill-filesystem`, and `tool-skill`; TUI row `global-default-skills`; `C:\Users\EPIT-Dev\.dsh\global-skills.mjs`. Discovery reads harness-owned roots only — `~/.dsh/skills`, `<projectRoot>/.dsh/skills`, and `customSkillDirs`; shared cross-harness directories are never scanned. The catalog currently holds 133 skills, including the `losthex-*` family and `apk-reverse`. | Missing base services removes the skill catalog and invocation path. A missing local plugin or individual default skill is **Degraded** because the hook or that skill is skipped. |
 | Jev-first policy | Global row `jev-first-action-policy`; `C:\Users\EPIT-Dev\.dsh\jev-first.mjs`; `C:\Users\EPIT-Dev\.agent-rules\JEV-FIRST.md`. `global-skills.mjs` also imports this plugin. | A loaded plugin with a missing policy file is **Turn-fatal** because each pre-step read rejects. A plugin file that cannot load is **Degraded** and removes the policy. |
+| Kali execution policy | Global row `kali-exec-policy`; `C:\Users\EPIT-Dev\.dsh\kali-exec.mjs`; the `kali-linux` WSL distro with the Kali package set (nmap, sqlmap, hydra, john, hashcat, impacket) reachable through `wsl -d kali-linux -- bash -lc`. | A missing distro or package fails those commands per call while the policy text still loads; only an unloadable plugin file is **Degraded**. |
 | Jev MCP | Global row `mcp-jev`; `C:\Users\EPIT-Dev\.local\bin\jev-mcp-launcher.mjs`; Node 22 or newer; `C:\Users\EPIT-Dev\.config\typesafe\key`; the launcher's pinned `@jkudish/jev-mcp` package. | **Degraded.** `failOnStartupError: false` keeps TUI running, while `/jev status` reports no available tools and the status bar shows `Jev unavailable`. |
-| REA MCP | The intended `mcp-rea` client and the globally installed REA server script. | **Degraded.** The current home patch targets an absent row instead of inserting it, so `--dump-config` warns `entry "mcp-rea" not found` and REA is not active. |
+| REA MCP | Global row `mcp-rea` (insert); `C:\Users\EPIT-Dev\AppData\Roaming\npm\node_modules\rea-agents\scripts\rea.mjs` through `C:\nvm4w\nodejs\node.exe`. | **Degraded.** `failOnStartupError: false` keeps TUI running without REA; a healthy startup exposes about 170 `mcp__rea__*` tools. |
+| IDA MCP | Global row `mcp-ida` (streamable HTTP `http://127.0.0.1:13337/mcp`); IDA running with the `ida-pro-mcp` plugin (the `ida-pro-mcp` dotnet tool). | **Degraded.** The endpoint exists only while IDA runs; the client reconnects on its own when IDA appears. |
+| x64dbg MCP | Global row `mcp-x64dbg` (stdio); `C:\Users\EPIT-Dev\.dsh\mcp\x64dbg-mcp.py` on Python 3.13 with `mcp` and `requests`; the x64dbg plugin's HTTP server on `127.0.0.1:8888`. | **Degraded.** The bridge starts without x64dbg and its tools fail per call until the plugin's HTTP server is up. |
 | Cyber Wiki | Override the existing host row `tool-fs-search` with the `cyber` knowledge root at `C:\Users\EPIT-Dev\.dsh\cyber-wiki`; keep its `INDEX.md` valid. | **Degraded.** An invalid root rejects that plugin. Never insert a second host `tool-fs-search` row because both instances register `knowledge_list` and one activation fails with `tool "knowledge_list" is already registered`. |
 | Orca hooks | Global row `orca-agent-hooks` and `C:\Users\EPIT-Dev\.orca\agent-hooks\dsh-hooks.json`. | **Degraded.** Orca hook integration is unavailable; it is not a TUI startup service. |
 
-`global-skills.mjs` and `jev-first.mjs` import built modules through absolute `file:///E:/Cybersecure-Pentest/deepseek-harness/.../lib/index.js` URLs. Moving the checkout without updating those URLs, or cleaning `lib` without rebuilding, prevents the local plugins from activating.
+`global-skills.mjs`, `jev-first.mjs`, and `kali-exec.mjs` import built modules through absolute `file:///E:/Cybersecure-Pentest/deepseek-harness/.../lib/index.js` URLs. Moving the checkout without updating those URLs, or cleaning `lib` without rebuilding, prevents the local plugins from activating.
 
 After a move or rebuild, inspect the composed profile before opening TUI:
 
@@ -54,7 +57,7 @@ After a move or rebuild, inspect the composed profile before opening TUI:
 dsh --profile tui --dump-config
 ```
 
-The output must contain `pi-tui`, `global-default-skills`, `jev-first-action-policy`, `mcp-jev`, and the single overridden `tool-fs-search` row. After TUI opens, run the following checks; positive tool counts and a working Wiki picker confirm that the optional integrations loaded.
+The output must contain `pi-tui`, `global-default-skills`, `jev-first-action-policy`, `kali-exec-policy`, `mcp-rea`, `mcp-jev`, `mcp-ida`, `mcp-x64dbg`, and the single overridden `tool-fs-search` row. After TUI opens, run the following checks; `/mcp status` must list `rea` and `jev` with positive tool counts while `ida` and `x64dbg` join when their host applications run, and a working Wiki picker confirms that the optional integrations loaded.
 
 ```text
 /mcp status
