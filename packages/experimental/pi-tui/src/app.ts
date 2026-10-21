@@ -19,6 +19,7 @@ import {
   hasUserContent,
   listPresets,
   listSessions,
+  loadParentChain,
   reconcileWorkspaceAttachments,
   remoteCwd,
   replayEvents,
@@ -211,9 +212,16 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   const screenOwns = (id: unknown): boolean => screen.ownsSession(id)
 
   // Replay the durable log first so the transcript paints on the first
-  // frame; only then subscribe, so no event is folded twice.
+  // frame; only then subscribe, so no event is folded twice. Forked sessions
+  // render their parent chain's inherited tail first (the model context
+  // carries it, so the transcript shows the conversation it continued).
   screen.replaying = true
   try {
+    if (agent.session.header.parentSession !== undefined) {
+      for (const event of await loadParentChain(ctx, agent.session.header.parentSession)) {
+        screen.handleEvent(event)
+      }
+    }
     for (const event of replayEvents(agent.session)) {
       screen.handleEvent(event)
     }

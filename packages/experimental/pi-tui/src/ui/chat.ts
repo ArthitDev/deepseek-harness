@@ -81,6 +81,7 @@ import {
   forkSession,
   listSessions,
   loadPersistedSession,
+  loadParentChain,
   listPresets,
   remoteCwd,
   replayEvents,
@@ -721,7 +722,7 @@ export class ChatScreen {
    * reseed the selection, replay the durable log, and repaint.
    * @param next - the live agent to rebind the screen to.
    */
-  switchAgent(next: Agent): void {
+  async switchAgent(next: Agent): Promise<void> {
     if (next === this.agent) return
     if (this.isBusy()) {
       this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
@@ -751,19 +752,36 @@ export class ChatScreen {
     this.disposeMcpPolicy = this.installMcpPolicy()
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
-    this.replaying = true
-    try {
-      for (const event of replayEvents(next.session)) {
-        this.handleEvent(event)
-      }
-    } finally {
-      this.replaying = false
-    }
+    await this.replayTranscript(next)
     this.seedHistory()
     this.rebuildAutocomplete()
     this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
     this.sync()
     this.refreshGitState()
+  }
+
+  /**
+   * Replay a session's durable log into the transcript, with its parent
+   * chain's inherited tail first: fork sessions persist only their own
+   * events, and the model context (the fork seed) includes the inherited
+   * conversation, so the transcript shows it too.
+   * @param agent - the live agent whose transcript is repainted.
+   */
+  async replayTranscript(agent: Agent): Promise<void> {
+    this.replaying = true
+    try {
+      const parent = agent.session.header.parentSession
+      if (parent !== undefined) {
+        for (const event of await loadParentChain(this.ctx, parent)) {
+          this.handleEvent(event)
+        }
+      }
+      for (const event of replayEvents(agent.session)) {
+        this.handleEvent(event)
+      }
+    } finally {
+      this.replaying = false
+    }
   }
 
   /** Welcome block at the top of the transcript (boot and every switch). */
@@ -873,8 +891,8 @@ export class ChatScreen {
   }
 
   /** Switch and notify the app layer (which owns old-handle disposal). */
-  private commitSwitch(resolved: ResolvedAgent): void {
-    this.switchAgent(resolved.agent)
+  private async commitSwitch(resolved: ResolvedAgent): Promise<void> {
+    await this.switchAgent(resolved.agent)
     this.onAgentSwitch?.(resolved)
   }
 
@@ -910,7 +928,7 @@ export class ChatScreen {
         this.sessionOptions(),
         this.sessionMeta(),
       )
-      this.commitSwitch(resolved)
+      await this.commitSwitch(resolved)
       this.pushNotice(
         `new session ${this.currentSessionId.slice(0, 8)} · ${resumeCommand(this.currentSessionId)}`,
       )
@@ -937,7 +955,7 @@ export class ChatScreen {
         this.sessionOptions(),
         this.sessionMeta(),
       )
-      this.commitSwitch(resolved)
+      await this.commitSwitch(resolved)
       this.pushNotice(
         `forked → ${this.currentSessionId.slice(0, 8)} (history kept, lineage recorded) · ${resumeCommand(this.currentSessionId)}`,
       )
@@ -989,7 +1007,7 @@ export class ChatScreen {
         this.sessionOptions(),
         this.sessionMeta(),
       )
-      this.commitSwitch(resolved)
+      await this.commitSwitch(resolved)
       this.pushNotice(`resumed ${this.currentSessionId.slice(0, 8)}`)
     } catch (error) {
       this.pushNotice(
@@ -1040,7 +1058,7 @@ export class ChatScreen {
         this.sessionOptions(),
         this.sessionMeta(),
       )
-      this.commitSwitch(resolved)
+      await this.commitSwitch(resolved)
     }
   }
 
@@ -1536,7 +1554,7 @@ export class ChatScreen {
         await resolved.handle?.dispose()
         throw new Error('session changed while switching presets; try again when idle')
       }
-      this.commitSwitch(resolved)
+      await this.commitSwitch(resolved)
       this.selection.current = selection
       this.pushNotice(`preset → ${preset} · new session ${this.currentSessionId.slice(0, 8)} · conversation kept`, 'info')
       this.sync()
@@ -1711,7 +1729,7 @@ export class ChatScreen {
             ...(this.config.preset !== undefined ? { agentPreset: this.config.preset } : {}),
           },
         )
-        this.commitSwitch(resolved)
+        await this.commitSwitch(resolved)
         this.pushNotice(`session opened on ${machine.id} at ${cwd}`, 'info')
         return
       }
