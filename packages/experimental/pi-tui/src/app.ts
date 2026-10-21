@@ -23,7 +23,7 @@ import {
   remoteCwd,
   replayEvents,
   resolveAgent,
-  sessionTitles,
+  sessionSummaries,
   type ResolvedAgent,
 } from './core/session.js'
 import { defaultModelSelection } from './core/web-settings.js'
@@ -127,8 +127,8 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   let sessionId = args.resumeId ?? sessionConfig
   if (sessionId === undefined && args.pickSession) {
     const headers = await listSessions(ctx)
-    const titles = await sessionTitles(ctx, headers)
-    sessionId = await pickSession(tui, headers, titles)
+    const summaries = await sessionSummaries(ctx, headers)
+    sessionId = await pickSession(tui, headers, summaries)
   }
 
   const resolved = await resolveAgent(ctx, sessionId, agentOptions, meta)

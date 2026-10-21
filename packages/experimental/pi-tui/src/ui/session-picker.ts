@@ -11,6 +11,7 @@
 import { basename } from 'node:path'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import { Container, SelectList, Text, type TUI } from '@earendil-works/pi-tui'
+import type { SessionSummary } from '../core/session.js'
 import { selectListTheme, style } from './theme.js'
 
 class SessionPicker extends Container {
@@ -46,27 +47,32 @@ function formatTime(epochMs: number): string {
 
 /**
  * Show the resume picker and resolve the chosen session. The leading
- * "new session" entry and a cancellation both resolve undefined.
+ * "new session" entry and a cancellation both resolve undefined. Rows show
+ * the session's event count and fork lineage so same-title forks (model and
+ * preset switches fork the conversation) stay distinguishable.
  * @param tui - the renderer the overlay mounts on.
  * @param headers - persisted-session headers, newest first.
- * @param titles - session id → title, used as row labels when available.
+ * @param summaries - session id → title and event count, used per row when available.
  * @returns the picked session id, or undefined for "new session"/cancel.
  */
 export function pickSession(
   tui: TUI,
   headers: readonly SessionHeader[],
-  titles?: ReadonlyMap<string, string>,
+  summaries?: ReadonlyMap<string, SessionSummary>,
 ): Promise<string | undefined> {
   return new Promise((resolve) => {
     const items = [
       { value: '', label: '＋ New session', description: 'start fresh' },
       ...headers.map((header) => {
         const id = String(header.id)
-        const title = titles?.get(id)
+        const summary = summaries?.get(id)
+        const title = summary?.title
         return {
           value: id,
           label: title ?? (basename(header.cwd ?? '') || `session ${id.slice(0, 8)}`),
-          description: `${id.slice(0, 8)} · ${formatTime(header.createdAt)}${
+          description: `${id.slice(0, 8)} · ${formatTime(header.createdAt)} · ${
+            summary?.events ?? '?'
+          } events${header.parentSession !== undefined ? ' · fork' : ''}${
             title !== undefined ? ` · ${basename(header.cwd ?? '') || 'no cwd'}` : ''
           }`,
         }

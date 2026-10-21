@@ -27,7 +27,7 @@ import {
   resolveAgent,
   resolveModelPreset,
   resumeCommand,
-  sessionTitles,
+  sessionSummaries,
   type SessionMeta,
 } from '../src/core/session.ts'
 
@@ -789,7 +789,7 @@ describe('listSessions', () => {
   })
 })
 
-describe('sessionTitles', () => {
+describe('sessionSummaries', () => {
   it('maps the last title per session over the newest headers only', async () => {
     const ctx = harness({
       sessionPersistence: persistenceWith({
@@ -803,12 +803,12 @@ describe('sessionTitles', () => {
         untitled: { header: header('untitled', 2), events: [] },
       }),
     })
-    const titles = await sessionTitles(ctx, [header('untitled', 2), header('titled', 1)])
-    expect(titles.get('titled')).toBe('second')
-    expect(titles.has('untitled')).toBe(false)
+    const summaries = await sessionSummaries(ctx, [header('untitled', 2), header('titled', 1)])
+    expect(summaries.get('titled')).toEqual({ title: 'second', events: 2 })
+    expect(summaries.get('untitled')).toEqual({ events: 0 })
   })
 
-  it('ignores malformed title events and keeps scanning to the latest valid one', async () => {
+  it('counts log events alongside the title', async () => {
     const ctx = harness({
       sessionPersistence: persistenceWith({
         titled: {
@@ -823,20 +823,20 @@ describe('sessionTitles', () => {
         },
       }),
     })
-    const titles = await sessionTitles(ctx, [header('titled', 1)])
-    expect(titles.get('titled')).toBe('current')
+    const summaries = await sessionSummaries(ctx, [header('titled', 1)])
+    expect(summaries.get('titled')).toEqual({ title: 'current', events: 5 })
   })
 
   it('answers nothing for sessions persistence cannot load', async () => {
-    const titles = await sessionTitles(harness(), [header('ghost', 1)])
-    expect(titles.size).toBe(0)
+    const summaries = await sessionSummaries(harness(), [header('ghost', 1)])
+    expect(summaries.size).toBe(0)
   })
 
   it('answers nothing for unreadable sessions without failing', async () => {
     const ctx = harness({ sessionPersistence: persistenceWith({}, { failOpen: true }) })
     silence(ctx)
-    const titles = await sessionTitles(ctx, [header('ghost', 1)])
-    expect(titles.size).toBe(0)
+    const summaries = await sessionSummaries(ctx, [header('ghost', 1)])
+    expect(summaries.size).toBe(0)
   })
 })
 

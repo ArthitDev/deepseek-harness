@@ -494,53 +494,50 @@ export async function listSessions(ctx: Context): Promise<SessionHeader[]> {
   }
 }
 
-/**
- * Last `session/title` value in a persisted session's log, or undefined.
- * Mirrors `persistedPreset`'s bounded scan; the picker shows titles instead
- * of bare `basename(cwd)` labels.
- * @param ctx - TUI context with the session-persistence service.
- * @param id - Session id to scan.
- * @returns the newest non-empty `session/title` value, or undefined when none exists or loading fails.
- */
-export async function persistedTitle(ctx: Context, id: string): Promise<string | undefined> {
-  try {
-    const loaded = await loadPersistedSession(ctx, id)
-    if (loaded === undefined) return undefined
-    for (const event of [...loaded.events].reverse()) {
-      // `session/title` is plugin-merged; read it structurally.
-      const raw = event as { type?: string; data?: { title?: unknown } }
-      if (raw.type !== 'session/title') continue
-      if (typeof raw.data?.title !== 'string') continue
-      if (raw.data.title === '') continue
-      return raw.data.title
-    }
-    return undefined
-  } catch {
-    return undefined
-  }
+/** Display summary for one persisted session: its newest title and log size. */
+export interface SessionSummary {
+  /** Newest non-empty `session/title` value in the durable log. */
+  title?: string
+  /** Number of events in the durable log. */
+  events: number
 }
 
 /**
- * Titles for the newest `limit` headers, keyed by session id (sessions with
- * no title are absent). Loading full logs is I/O, so callers bound it —
- * boot/resume pickers pass the already-sorted, already-capped header list.
+ * Summaries for the newest `limit` headers, keyed by session id. Loading full
+ * logs is I/O, so callers bound it — boot/resume pickers pass the
+ * already-sorted, already-capped header list.
  * @param ctx - TUI context with the session-persistence service.
  * @param headers - Session headers in newest-first order.
  * @param limit - Maximum number of headers to scan; defaults to 15.
- * @returns Titles keyed by session id; sessions without a title are absent.
+ * @returns Summaries keyed by session id; sessions that fail to load are absent.
  */
-export async function sessionTitles(
+export async function sessionSummaries(
   ctx: Context,
   headers: readonly SessionHeader[],
   limit = 15,
-): Promise<Map<string, string>> {
-  const titles = new Map<string, string>()
+): Promise<Map<string, SessionSummary>> {
+  const summaries = new Map<string, SessionSummary>()
   for (const header of headers.slice(0, limit)) {
     const id = String(header.id)
-    const title = await persistedTitle(ctx, id)
-    if (title !== undefined) titles.set(id, title)
+    try {
+      const loaded = await loadPersistedSession(ctx, id)
+      if (loaded === undefined) continue
+      let title: string | undefined
+      for (const event of [...loaded.events].reverse()) {
+        // `session/title` is plugin-merged; read it structurally.
+        const raw = event as { type?: string; data?: { title?: unknown } }
+        if (raw.type !== 'session/title') continue
+        if (typeof raw.data?.title !== 'string') continue
+        if (raw.data.title === '') continue
+        title = raw.data.title
+        break
+      }
+      summaries.set(id, { events: loaded.events.length, ...(title !== undefined ? { title } : {}) })
+    } catch {
+      continue
+    }
   }
-  return titles
+  return summaries
 }
 
 /** A preset entry for the TUI pickers; `broken` carries the preset's load-failure reason. */

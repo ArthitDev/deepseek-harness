@@ -87,7 +87,7 @@ import {
   resolveAgent,
   resolveModelPreset,
   resumeCommand,
-  sessionTitles,
+  sessionSummaries,
   type ResolvedAgent,
 } from '../core/session.js'
 import { parseDocument } from 'yaml'
@@ -961,17 +961,20 @@ export class ChatScreen {
         this.pushNotice('no persisted sessions')
         return
       }
-      const titles = await sessionTitles(this.ctx, headers)
+      const summaries = await sessionSummaries(this.ctx, headers)
       target =
         (await pickFromListWithSearch(this.tui, {
           title: 'Resume session',
           items: headers.map((header) => {
             const id = String(header.id)
-            const title = titles.get(id)
+            const summary = summaries.get(id)
+            const title = summary?.title
             return {
               value: id,
               label: title ?? (basename(header.cwd ?? '') || `session ${id.slice(0, 8)}`),
-              description: `${id.slice(0, 8)} · ${new Date(header.createdAt).toLocaleString()}${
+              description: `${id.slice(0, 8)} · ${new Date(header.createdAt).toLocaleString()} · ${
+                summary?.events ?? '?'
+              } events${header.parentSession !== undefined ? ' · fork' : ''}${
                 title !== undefined && header.cwd !== undefined ? ` · ${basename(header.cwd)}` : ''
               }`,
             }
