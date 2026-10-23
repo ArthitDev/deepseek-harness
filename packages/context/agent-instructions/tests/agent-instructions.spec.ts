@@ -346,6 +346,31 @@ function expectNoDerivedMessages(agent: Agent): void {
   expect(composedPrefixes.get(agent) ?? []).toEqual([])
 }
 
+/**
+ * Pending agent-instructions messages minus the working-directory baseline:
+ * the baseline legitimately stays pending in tests that never commit it.
+ */
+function instructionPending(agent: Agent): readonly UserMessage[] {
+  return agent.inbox.nextStep.filter((message) => {
+    if (message.source.kind !== 'agent-instructions') return true
+    const text = blocksText(message.content)
+    const hasInstructions = text.includes('Instructions from:')
+      || text.includes('Additional instructions from:')
+    return hasInstructions || !text.includes("The session's working directory is `")
+  })
+}
+
+/** Asserts the only injected context is the working-directory disclosure frame. */
+function expectWorkingDirectoryOnlyBaseline(agent: Agent): void {
+  const derived = agent.session.deriveMessages()
+    .filter(message => (message as { source?: { kind?: string } }).source?.kind === 'agent-instructions')
+  expect(derived).toHaveLength(1)
+  const text = blocksText(derived[0]?.content as Parameters<typeof blocksText>[0])
+  expect(text).toContain("The session's working directory is `")
+  expect(text).not.toContain('Instructions from:')
+  expect(composedPrefixes.get(agent) ?? []).toHaveLength(1)
+}
+
 describe('workspace context instruction discovery', () => {
   it('treats ENOTDIR while probing a host candidate as confirmed absence', async () => {
     const root = await tempRepo()
@@ -1513,7 +1538,7 @@ describe('workspace context request injection', () => {
   it.each([
     { label: 'baseline loading is disabled', maxBytes: 0, provideFs: true },
     { label: 'the filesystem provider is unavailable', maxBytes: 65536, provideFs: false },
-  ])('does not requeue recovered workspace contexts when $label', async ({ maxBytes, provideFs }) => {
+  ])('resumes recovered workspace contexts against the disabled baseline when $label', async ({ maxBytes, provideFs }) => {
     const root = await tempRepo()
     const home = await tempRepo()
     const originalCtx = new Context()
@@ -1544,7 +1569,17 @@ describe('workspace context request injection', () => {
       )
 
       expect(claimed.map(message => message.id)).toEqual([stale?.id])
-      expect(decision).toEqual({ kind: 'enter', messages: claimed })
+      if (provideFs) {
+        // The byte budget disables instruction files only; the working-directory
+        // disclosure replaces the stale baseline.
+        if (decision.kind !== 'enter') throw new Error('resumed baseline was rejected')
+        expect(decision.messages).toHaveLength(2)
+        expect(decision.messages[0]).toBe(claimed[0])
+        expect(blocksText(decision.messages[1]?.content)).toContain("The session's working directory is `")
+        expect(blocksText(decision.messages[1]?.content)).not.toContain('repo rule')
+      } else {
+        expect(decision).toEqual({ kind: 'enter', messages: claimed })
+      }
       expect(resumed.inbox.nextStep).toEqual([])
     } finally {
       await originalCtx.fiber.dispose()
@@ -2153,7 +2188,9 @@ describe('workspace context request injection', () => {
 
       const prefix = await composeBaselinePrefix(ctx, await stubAgent(root))
 
-      expect(prefix).toEqual([])
+      expect(prefix).toHaveLength(1)
+      expect(blocksText(prefix[0]?.content)).toContain("The session's working directory is `")
+      expect(blocksText(prefix[0]?.content)).not.toContain('far too large')
       expect(fs.readTargets).toEqual([])
       expect(fs.readTextTargets).toEqual([])
     } finally {
@@ -2178,7 +2215,9 @@ describe('workspace context request injection', () => {
 
       const prefix = await composeBaselinePrefix(ctx, await stubAgent(root))
 
-      expect(prefix).toEqual([])
+      expect(prefix).toHaveLength(1)
+      expect(blocksText(prefix[0]?.content)).toContain("The session's working directory is `")
+      expect(blocksText(prefix[0]?.content)).not.toContain('far too large')
       expect(fs.readTargets).toEqual([instructionPath, instructionPath])
       expect(fs.readTextTargets).toEqual([])
     } finally {
@@ -2246,7 +2285,7 @@ describe('workspace context request injection', () => {
     }
   })
 
-  it('skips provider-visible instruction candidates when ctx.fs reports a non-file target', async () => {
+  it('discloses the working directory when ctx.fs reports a non-file instruction target', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {
@@ -2262,7 +2301,7 @@ describe('workspace context request injection', () => {
 
       await composeBaselinePrefix(ctx, agent)
 
-      expectNoDerivedMessages(agent)
+      expectWorkingDirectoryOnlyBaseline(agent)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
@@ -2292,7 +2331,7 @@ describe('workspace context request injection', () => {
     }
   })
 
-  it('skips provider-visible instruction candidates when ctx.fs cannot stat them', async () => {
+  it('surfaces ctx.fs marker lookup failures instead of crossing into an ancestor project', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {
@@ -2308,7 +2347,7 @@ describe('workspace context request injection', () => {
 
       await composeBaselinePrefix(ctx, agent)
 
-      expectNoDerivedMessages(agent)
+      expectWorkingDirectoryOnlyBaseline(agent)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
@@ -2339,7 +2378,7 @@ describe('workspace context request injection', () => {
     }
   })
 
-  it('surfaces ctx.fs marker lookup failures instead of crossing into an ancestor project', async () => {
+  it('surfaces ctx.fs marker lookup failures while establishing the baseline', async () => {
     const root = await tempRepo()
     const cwd = join(root, 'pkg')
     const home = await tempRepo()
@@ -2455,7 +2494,7 @@ describe('workspace context request injection', () => {
     }
   })
 
-  it('does not inject anything when maxBytes is zero', async () => {
+  it('discloses the working directory when maxBytes is zero', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {
@@ -2467,14 +2506,14 @@ describe('workspace context request injection', () => {
 
       await composeBaselinePrefix(ctx, agent)
 
-      expectNoDerivedMessages(agent)
+      expectWorkingDirectoryOnlyBaseline(agent)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
     }
   })
 
-  it('does not inject an empty agent-instructions message when maxBytes is negative', async () => {
+  it('discloses the working directory when maxBytes is negative', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {
@@ -2486,14 +2525,14 @@ describe('workspace context request injection', () => {
 
       await composeBaselinePrefix(ctx, agent)
 
-      expectNoDerivedMessages(agent)
+      expectWorkingDirectoryOnlyBaseline(agent)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
     }
   })
 
-  it('leaves the request unchanged when no instruction files are present', async () => {
+  it('discloses only the working directory when no instruction files are present', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {
@@ -2504,7 +2543,7 @@ describe('workspace context request injection', () => {
 
       await composeBaselinePrefix(ctx, agent)
 
-      expectNoDerivedMessages(agent)
+      expectWorkingDirectoryOnlyBaseline(agent)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
@@ -2671,15 +2710,18 @@ describe('dynamic nested workspace context injection', () => {
 
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'read and abort' }], source: { kind: 'user' } }))
       await agent.whenIdle()
-      expect(agent.session.snapshotEvents().filter(event =>
-        event.type === 'user/message' && event.data.source.kind !== 'user',
-      )).toHaveLength(0)
+      // The aborted turn still logged the working-directory baseline.
+      const baselineAfterAbort = agent.session.snapshotEvents().filter(event =>
+        event.type === 'user/message' && event.data.source.kind !== 'user')
+      expect(baselineAfterAbort).toHaveLength(1)
+      expect(blocksText((baselineAfterAbort[0]?.data as { content?: Parameters<typeof blocksText>[0] })?.content))
+        .toContain("The session's working directory is `")
 
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'retry the read' }], source: { kind: 'user' } }))
       await agent.whenIdle()
 
       const contexts = agent.session.snapshotEvents().filter(event => event.type === 'user/message' && event.data.source.kind !== 'user')
-      expect(contexts).toHaveLength(1)
+      expect(contexts).toHaveLength(2)
       expect(adapter.requests).toHaveLength(3)
       expect(adapter.requests.at(-1)?.messages.map(blocks => blocksText(blocks.content)).join('\n'))
         .toContain('nested rule survives an aborted tool batch')
@@ -4106,7 +4148,7 @@ describe('dynamic nested workspace context injection', () => {
       expect(blocksText(result.content)).toBe('blocked downstream')
       expect(result.additionalContexts).toBeUndefined()
       await syncAgentInstructions(ctx, agent)
-      expect(agent.inbox.nextStep).toEqual([])
+      expect(instructionPending(agent)).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
@@ -4143,7 +4185,7 @@ describe('dynamic nested workspace context injection', () => {
         agent,
       })
       await syncAgentInstructions(ctx, agent)
-      expect(agent.inbox.nextStep).toEqual([])
+      expect(instructionPending(agent)).toEqual([])
 
       shouldBlock = false
       const accepted = await ctx.tools.execute({
@@ -4157,7 +4199,9 @@ describe('dynamic nested workspace context injection', () => {
       expect(blocked.isError).toBe(true)
       expect(blocked.additionalContexts).toBeUndefined()
       expect(accepted.isError).toBe(false)
-      expect(blocksText(((await syncedAgentInstructions(ctx, agent))).content)).toContain('nested package rule')
+      await syncAgentInstructions(ctx, agent)
+      expect(instructionPending(agent).map(message => blocksText(message.content)).join('\n'))
+        .toContain('nested package rule')
     } finally {
       await ctx.fiber.dispose()
       await rm(root, { recursive: true, force: true })
@@ -4273,11 +4317,12 @@ describe('dynamic nested workspace context injection', () => {
       }), { content: [], isError: false, value: null })
 
       await syncAgentInstructions(ctx, agent)
-      expect(agent.inbox.nextStep).toEqual([])
+      expect(instructionPending(agent)).toEqual([])
 
       const stepEnd = agent.session.append('step/end', { turn: 1, step: 1 })
       ctx.emit('session/event', agent.session, stepEnd)
-      expect(blocksText((await syncedAgentInstructions(ctx, agent)).content))
+      await syncAgentInstructions(ctx, agent)
+      expect(instructionPending(agent).map(message => blocksText(message.content)).join('\n'))
         .toContain('nested package rule')
     } finally {
       await ctx.fiber.dispose()
@@ -4454,9 +4499,9 @@ describe('dynamic nested workspace context injection', () => {
 
       expect(first.additionalContexts).toBeUndefined()
       expect(second.additionalContexts).toBeUndefined()
-      // Nothing was emitted, and the uncommitted version made the second sync
-      // probe the instruction file again — the retry.
-      expect(agent.inbox.nextStep).toHaveLength(0)
+      // No instruction content was emitted, and the uncommitted version made
+      // the second sync probe the instruction file again — the retry.
+      expect(instructionPending(agent)).toEqual([])
       expect(fs.readTargets.filter(path => path === instructionPath)).toHaveLength(2)
     } finally {
       await ctx.fiber.dispose()
@@ -4569,10 +4614,11 @@ describe('workspace context inbox synchronization', () => {
 
       await syncAgentInstructions(ctx, agent)
 
-      // One byte cannot semantically represent the transition, so nothing is
-      // emitted and nothing commits — the uncommitted version retries on the
-      // next touch instead of committing state the model never saw.
-      expect(agent.inbox.nextStep).toHaveLength(0)
+      // One byte cannot semantically represent the transition, so no
+      // instruction content is emitted and nothing commits — the uncommitted
+      // version retries on the next touch instead of committing state the
+      // model never saw.
+      expect(instructionPending(agent)).toEqual([])
     } finally {
       await ctx.fiber.dispose()
       await rm(root, { recursive: true, force: true })
@@ -4595,10 +4641,10 @@ describe('workspace context inbox synchronization', () => {
         callId: ToolCallId('pending-v1'), name: 'read', arguments: { file_path: join('pkg', 'file.txt') }, agent,
       })
       await syncAgentInstructions(ctx, agent)
-      expect(blocksText(agent.inbox.nextStep[0]?.content)).toContain('pending version one')
+      expect(blocksText(instructionPending(agent)[0]?.content)).toContain('pending version one')
       const duplicate = createUserMessage({
-        content: agent.inbox.nextStep[0]!.content,
-        source: agent.inbox.nextStep[0]!.source,
+        content: instructionPending(agent)[0]!.content,
+        source: instructionPending(agent)[0]!.source,
       })
       agent.inbox.append('next-step', duplicate)
 
@@ -4608,10 +4654,10 @@ describe('workspace context inbox synchronization', () => {
         callId: ToolCallId('pending-v2'), name: 'read', arguments: { file_path: join('pkg', 'file.txt') }, agent,
       })
       await syncAgentInstructions(ctx, agent)
-      expect(agent.inbox.nextStep).toHaveLength(1)
-      expect(agent.inbox.nextStep[0]?.id).not.toBe(duplicate.id)
-      expect(blocksText(agent.inbox.nextStep[0]?.content)).toContain('pending version two with more detail')
-      expect(blocksText(agent.inbox.nextStep[0]?.content)).not.toContain('pending version one')
+      expect(instructionPending(agent)).toHaveLength(1)
+      expect(instructionPending(agent)[0]?.id).not.toBe(duplicate.id)
+      expect(blocksText(instructionPending(agent)[0]?.content)).toContain('pending version two with more detail')
+      expect(blocksText(instructionPending(agent)[0]?.content)).not.toContain('pending version one')
 
       await rm(join(root, 'pkg/AGENTS.md'))
       await ctx.tools.execute({
@@ -4619,7 +4665,7 @@ describe('workspace context inbox synchronization', () => {
         callId: ToolCallId('pending-delete'), name: 'read', arguments: { file_path: join('pkg', 'file.txt') }, agent,
       })
       await syncAgentInstructions(ctx, agent)
-      expect(agent.inbox.nextStep).toEqual([])
+      expect(instructionPending(agent)).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })

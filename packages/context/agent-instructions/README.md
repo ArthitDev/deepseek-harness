@@ -130,11 +130,15 @@ Read these pages when the package-level contract is not enough. They move from t
 
 #### What the model sees
 
-At the first request, derived history contains one durable user-role message with the bounded user-global and project instruction chain in broad-to-specific order. Resume reuses that message when its visible baseline is compatible.
+At the first request, derived history contains one durable user-role message that opens with the session's working directory and continues with the bounded user-global and project instruction chain in broad-to-specific order — the disclosure anchors the model to the workspace before any tool result can suggest an input's location, so created files land in the session workspace. Resume reuses that message when its visible baseline is compatible.
 
 ##### Baseline instruction template
 
 ```markdown
+<system-reminder>
+The session's working directory is `/repo`. No workspace instructions are currently active.
+</system-reminder>
+
 <system-reminder>
 The following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.
 
@@ -150,11 +154,11 @@ Instructions from: AGENTS.md
 
 #### Token effect
 
-The rendered baseline is appended once and remains in derived history until compaction. `maxBytes` bounds the complete message, broader files are omitted before the most-specific file is truncated, and an empty chain contributes zero tokens.
+The rendered baseline is appended once and remains in derived history until compaction. `maxBytes` bounds the instruction files inside the message, broader files are omitted before the most-specific file is truncated, and the working-directory frame is the only content when the chain is empty.
 
 #### KV Cache effect
 
-Append-only after the existing reusable prefix. Resume preserves reuse when the visible baseline identity is compatible; an incompatible identity appends a complete replacement, so discovery, precedence, project-root, or budget changes affect reuse only from that history position.
+Append-only after the existing reusable prefix. Resume preserves reuse when the visible baseline identity is compatible; an incompatible identity appends a complete replacement, so discovery, precedence, project-root, or budget changes affect reuse only from that history position. The working-directory frame is stable per session and never invalidates the prefix.
 
 ### Newly discovered scope context
 

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-agent-instructions` 向 agent（智能体）提供来自用户全局文件和项目级文件的工作区指引；这些文件均与 `AGENTS.md` 兼容。它为第一次请求加载适用的指令链。它不会持续监视外部编辑：成功的文件系统操作会发现新适用的嵌套文件，并让后续变更或移除可见；恢复会话也会对账基线。`dsh-base` 默认启用此行为，profile 可以禁用。字节预算限制注入的上下文：较宽泛的文件先被省略，最具体的文件最后被截断，空指令链不添加任何内容。
+`dsh-agent-instructions` 向 agent（智能体）提供来自用户全局文件和项目级文件的工作区指引；这些文件均与 `AGENTS.md` 兼容。它为第一次请求加载适用的指令链。它不会持续监视外部编辑：成功的文件系统操作会发现新适用的嵌套文件，并让后续变更或移除可见；恢复会话也会对账基线。`dsh-base` 默认启用此行为，profile 可以禁用。字节预算限制注入的上下文：较宽泛的文件先被省略，最具体的文件最后被截断，空指令链仍会声明会话工作目录。
 
 ## 目录
 
@@ -130,11 +130,15 @@ export interface Config {
 
 #### 模型看到的内容
 
-第一次请求的派生历史中包含一条持久 user 角色消息，其中按从宽泛到具体的顺序包含有界用户全局指令与项目指令链。可见基线兼容时，恢复会复用该消息。
+第一次请求的派生历史中包含一条持久 user 角色消息：先声明会话的工作目录，再按从宽泛到具体的顺序包含有界用户全局指令与项目指令链。可见基线兼容时，恢复会复用该消息。
 
 ##### 基线指令模板
 
 ```markdown
+<system-reminder>
+The session's working directory is `/repo`. No workspace instructions are currently active.
+</system-reminder>
+
 <system-reminder>
 The following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.
 
@@ -148,13 +152,14 @@ Instructions from: AGENTS.md
 </system-reminder>
 ```
 
+
 #### Token 影响
 
-渲染后基线只追加一次，并保留在派生历史中直到压缩。`maxBytes` 限制完整消息，较宽泛文件在最具体文件截断之前被省略，空指令链不产生 token。
+渲染后基线只追加一次，并保留在派生历史中直到压缩。`maxBytes` 限制消息内的指令文件，较宽泛文件在最具体文件截断之前被省略，指令链为空时工作目录框架就是全部内容。
 
 #### KV Cache 影响
 
-仅追加，位于现有可复用前缀之后。可见基线标识兼容时，恢复会保持复用；不兼容的标识会追加一条完整替代基线，因此发现、优先级、项目根或预算变更只会从该历史位置起影响复用。
+仅追加，位于现有可复用前缀之后。可见基线标识兼容时，恢复会保持复用；不兼容的标识会追加一条完整替代基线，因此发现、优先级、项目根或预算变更只会从该历史位置起影响复用。工作目录框架按会话保持稳定，不会使命令前缀失效。
 
 ### 新发现的 scope 上下文
 

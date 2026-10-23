@@ -158,6 +158,26 @@ function additionalSectionText(file: LoadedInstructionFile): string {
 
 const BASELINE_RENDER_STYLE: RenderStyle = { intro: AGENT_INSTRUCTIONS_INTRO, section: sectionText }
 
+/**
+ * Framed working-directory disclosure that precedes every baseline. Tool
+ * results and attachments carry absolute paths from anywhere on the machine;
+ * without this line the model has no model-visible anchor for where the
+ * session's workspace is and may create files beside an input's location.
+ * @param cwd - the session's absolute working directory.
+ * @param hasInstructions - whether instruction files follow in the same message.
+ * @returns the framed working-directory text.
+ */
+export function renderWorkingDirectoryBaseline(cwd: string, hasInstructions: boolean): string {
+  const tail = hasInstructions
+    ? ''
+    : ' No workspace instructions are currently active.'
+  return [
+    SYSTEM_REMINDER_OPEN,
+    escapeInstructionFrameBody(`The session's working directory is \`${cwd}\`.${tail}`),
+    SYSTEM_REMINDER_CLOSE,
+  ].join('\n')
+}
+
 function baselineRenderStyle(files: LoadedInstructionFile[], replacePreviousBaseline: boolean | undefined): RenderStyle {
   if (replacePreviousBaseline !== true) return BASELINE_RENDER_STYLE
   return {

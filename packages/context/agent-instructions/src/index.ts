@@ -27,7 +27,7 @@ import {
   type InstructionVersionCache,
   type AgentInstructionSource,
 } from './state.ts'
-import type { AgentInstructionChange } from './render.ts'
+import { renderWorkingDirectoryBaseline, type AgentInstructionChange } from './render.ts'
 
 export { Config, name }
 /** Services required by workspace instruction projection. */
@@ -117,7 +117,10 @@ export function apply(ctx: Context, config: Config): void {
     touchedPaths: readonly string[] = [],
   ): Promise<UserMessage | undefined> => {
     signal.throwIfAborted()
-    if (suppressed() || resolved.maxBytes <= 0 || !Number.isFinite(resolved.maxBytes)) {
+    // Suppression withholds every injected section. The byte budget gates the
+    // instruction files only; the working-directory disclosure below stays
+    // available to every active plugin instance.
+    if (suppressed()) {
       return undefined
     }
     const fileSystem = ctx.get('fs')
@@ -165,8 +168,11 @@ export function apply(ctx: Context, config: Config): void {
         instructionVersions.set(agent.session, versionStates)
       }
       for (const [scope, state] of baseline.versions) versionStates?.set(scope, state)
-      if (!keepVisibleBaseline && instructions !== undefined && instructions.rendered.text.length > 0) {
-        const baselineContent = agentInstructionsMessage(instructions.rendered.text).content
+      if (!keepVisibleBaseline) {
+        const baselineText = instructions === undefined || instructions.rendered.text.length === 0
+          ? renderWorkingDirectoryBaseline(cwd, false)
+          : `${renderWorkingDirectoryBaseline(cwd, true)}\n\n${instructions.rendered.text}`
+        const baselineContent = agentInstructionsMessage(baselineText).content
         content.push(...baselineContent)
         const replacementScopes = new Set(baseline.changes.keys())
         const replacementRemovals = replacePreviousBaseline
