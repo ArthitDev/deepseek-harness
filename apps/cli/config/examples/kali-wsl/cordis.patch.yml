@@ -1,0 +1,29 @@
+# Opt-in Kali WSL execution world: a second PTY shell backend and the Web
+# terminal selector entry route interactive shells into the kali-linux WSL
+# distro. Requires an installed and booted WSL distro named kali-linux; the
+# distro carries the Linux offensive toolchain, while the Windows host shell
+# keeps handling node, pnpm, and git in the checkout.
+- insert:
+    # `/shell kali` in the TUI opens the shared-shell overlay over this
+    # backend; the model's terminal_* tools address the same named session.
+    - id: terminal-kali
+      name: '@deepseek-ai/dsh-terminal-bash'
+      config:
+        backendType: kali
+        shellDialect: bash
+        shellPath: 'C:\Windows\System32\wsl.exe'
+        shellArgs: ['-d', 'kali-linux']
+
+# Web terminal selector: expose the same distro to browser-side operators.
+- id: terminal-controller
+  config:
+    shellCandidates:
+      - zsh
+      - bash
+      - fish
+      - pwsh
+      - powershell
+      - cmd
+      - path: 'C:\Windows\System32\wsl.exe'
+        name: kali
+        args: ['-d', 'kali-linux']

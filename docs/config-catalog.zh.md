@@ -324,8 +324,8 @@ export interface Config {
     /** Arguments passed to the interactive shell. */
     args: string[]
   } | undefined
-  /** Executable names or paths checked for the new-terminal shell selector. */
-  readonly shellCandidates: string[]
+  /** Executable names or paths — or complete profiles — checked for the new-terminal shell selector. */
+  readonly shellCandidates: readonly (string | TerminalShell)[]
   /** Maximum retained terminals and pending allocations per Session. */
   readonly maxTerminals: number
   /** Maximum terminal width in columns. */
@@ -346,6 +346,16 @@ export interface Config {
   readonly activityPollIntervalMs: number
   /** Delay before retrying failed owned terminal cleanup. */
   readonly cleanupRetryMs: number
+}
+
+/** An executable shell verified in the subprocess provider's execution environment. */
+export interface TerminalShell {
+  /** Executable path or PATH name the subprocess provider resolved. */
+  readonly path: string
+  /** Arguments passed to the interactive shell. */
+  readonly args: readonly string[]
+  /** User-visible profile name in the new-terminal shell selector. */
+  readonly name: string
 }
 ```
 

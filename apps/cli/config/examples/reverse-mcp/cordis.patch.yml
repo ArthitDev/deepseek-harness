@@ -1,0 +1,44 @@
+# Opt-in reverse-engineering MCP bridges: IDA Pro and x64dbg as model-facing
+# tool servers. Each bridge is offline until its host application runs; both
+# fail startup non-fatally so profiles boot without them.
+- insert:
+    # Hosted by the ida-pro-mcp plugin while IDA runs (default port 13337).
+    # Install the bridge once with: dotnet tool install --global ida-pro-mcp
+    - id: mcp-ida
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: ida
+        transport: streamable-http
+        url: 'http://127.0.0.1:13337/mcp'
+        failOnStartupError: false
+
+# FastMCP stdio bridge proxying the x64dbg plugin's HTTP server on port 8888.
+# Obtain the bridge script from the x64dbg-mcp project and place it under
+# `$DSH_HOME/mcp/x64dbg-mcp.py`; Python 3.10+ needs the `mcp` and `requests`
+# packages. Tools fail per call until x64dbg is running with the plugin.
+- insert:
+    - id: mcp-x64dbg
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: x64dbg
+        transport: stdio
+        command: python
+        args:
+          - !!js >-
+            process.getBuiltinModule('node:path').join(
+              process.getBuiltinModule('node:os').homedir(), '.dsh', 'mcp', 'x64dbg-mcp.py')
+        failOnStartupError: false
+
+# Optional: REA (Reverse Engineer Anything) aggregates analysis engines behind
+# generic tools. Install the global npm package first, then uncomment:
+# - insert:
+#     - id: mcp-rea
+#       name: '@deepseek-ai/dsh-mcp-client'
+#       config:
+#         serverName: rea
+#         transport: stdio
+#         command: node
+#         args:
+#           - '<global-npm>/node_modules/rea-agents/scripts/rea.mjs'
+#           - mcp
+#         failOnStartupError: false

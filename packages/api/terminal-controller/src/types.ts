@@ -25,8 +25,11 @@ export interface TerminalRetentionFrame {
 
 /** An executable shell verified in the subprocess provider's execution environment. */
 export interface TerminalShell {
+  /** Executable path or PATH name the subprocess provider resolved. */
   readonly path: string
+  /** Arguments passed to the interactive shell. */
   readonly args: readonly string[]
+  /** User-visible profile name in the new-terminal shell selector. */
   readonly name: string
 }
 

@@ -72924,7 +72924,7 @@
         "packages/experimental/pi-tui/src/ui/chat.ts#SkillCatalogEntry"
       ],
       "sources": [
-        "packages/experimental/pi-tui/src/ui/chat.ts:150"
+        "packages/experimental/pi-tui/src/ui/chat.ts:153"
       ]
     },
     {
@@ -103863,7 +103863,7 @@
         "packages/experimental/pi-tui/src/ui/chat.ts#SkillCatalogSource"
       ],
       "sources": [
-        "packages/experimental/pi-tui/src/ui/chat.ts:155"
+        "packages/experimental/pi-tui/src/ui/chat.ts:158"
       ]
     },
     {
