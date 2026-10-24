@@ -65,6 +65,7 @@ import {
   SessionProjectionsService,
 } from '../core/services.js'
 import { runRgFiles, shouldShowPath } from '../core/files.js'
+import { collectExecHistory } from '../core/exec-history.js'
 import { foldWindow, visibleItemsBefore, type FoldWindow } from '../core/fold.js'
 import {
   ctrlC,
@@ -94,6 +95,7 @@ import {
 import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
+import { openShellOverlay } from './shell-overlay.js'
 import { pickReasoningLevel } from './reasoning-picker.js'
 import { pickWiki } from './wiki.js'
 import { buildBanner } from './banner.js'
@@ -855,6 +857,8 @@ export class ChatScreen {
       { name: 'queue', description: 'Pending inbox: list|remove <id>|clear' },
       { name: 'providers', description: 'List provider routes with model counts and key state' },
       { name: 'skills', description: 'List, enable, or disable skills' },
+      { name: 'shell', description: 'Open the shared shell (win or kali) — the agent shares it' },
+      { name: 'exec', description: 'List commands the agent executed' },
       { name: 'wiki', description: 'View Wiki index or open Obsidian / Wiki folder' },
       { name: 'agents', description: 'List live subagents' },
       { name: 'jobs', description: 'List background jobs' },
@@ -1199,6 +1203,8 @@ export class ChatScreen {
     if (parsed.name === 'providers') return this.cmdProviders()
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills(parsed.raw.trim())
+    if (parsed.name === 'shell') return this.cmdShell(parsed.raw.trim())
+    if (parsed.name === 'exec') return this.cmdExec()
     if (parsed.name === 'wiki') return this.cmdWiki()
     if (parsed.name === 'new') return this.cmdNew()
     if (parsed.name === 'fork') return this.cmdFork()
@@ -2195,6 +2201,65 @@ export class ChatScreen {
     const agent = this.agent
     const notice = await pickWiki(this.ctx, agent, this.tui)
     if (notice !== undefined && this.agent === agent) this.pushNotice(notice)
+  }
+
+  /**
+   * Open the shared-shell overlay: `win` drives the Windows shell backend,
+   * `kali` the WSL distro; the agent's `terminal_*` tools address the same
+   * named sessions.
+   * @param argument - `win`, `kali`, or empty for the Windows shell.
+   */
+  private async cmdShell(argument: string): Promise<void> {
+    const variant = argument.trim().toLowerCase()
+    if (variant !== '' && variant !== 'win' && variant !== 'kali') {
+      this.pushNotice('usage: /shell [win|kali]', 'error')
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot open the shell while work is running (Esc to interrupt first)', 'error')
+      return
+    }
+    try {
+      await openShellOverlay(this.tui, this.ctx, this.agent, variant === 'kali' ? 'kali' : 'win', new AbortController().signal)
+      this.pushNotice(`shell ${variant === 'kali' ? 'kali' : 'win'} closed · the session keeps running for the agent's terminal tools`)
+    } catch (error) {
+      this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+  }
+
+  /** List the shell commands the agent executed, classified by execution world. */
+  private async cmdExec(): Promise<void> {
+    const entries = collectExecHistory(replayEvents(this.agent.session))
+    if (entries.length === 0) {
+      this.pushNotice('no shell commands executed in this session yet')
+      return
+    }
+    entries.reverse()
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Executed commands',
+      body: 'newest first · Enter to open the transcript tool card · Esc to close',
+      items: entries.map((entry) => {
+        const mark = entry.shell === 'kali' ? 'KALI' : 'WIN '
+        const status = entry.status === 'ok' ? '✓' : entry.status === 'error' ? '✗' : '…'
+        const command = entry.command.split('\n')[0] ?? entry.command
+        return {
+          value: String(entry.seq),
+          label: `${mark} ${status} ${command.slice(0, 90)}`,
+          description: `${new Date(entry.time).toLocaleString()} · ${entry.tool} · ${entry.command.length} chars`,
+          searchText: `${mark} ${entry.command}`,
+        }
+      }),
+    })
+    if (picked === undefined) return
+    const seq = Number(picked)
+    const item = this.model.items.find(candidate => candidate.kind === 'tool' && candidate.seq === seq)
+    if (item === undefined) {
+      this.pushNotice('that tool card is no longer in the live transcript (rewound or cleared)')
+      return
+    }
+    this.expandedToolId = item.id
+    this.focusedToolId = item.id
+    this.sync()
   }
 
   private async cmdSkills(argument: string): Promise<void> {

@@ -7574,9 +7574,18 @@ importers:
       '@deepseek-ai/dsh-skill':
         specifier: workspace:*
         version: link:../../skill/skill
+      '@deepseek-ai/dsh-terminal':
+        specifier: workspace:*
+        version: link:../../terminal/terminal
+      '@deepseek-ai/dsh-terminal-bash':
+        specifier: workspace:*
+        version: link:../../terminal/terminal-bash
       '@deepseek-ai/dsh-tool-fs-search':
         specifier: workspace:*
         version: link:../../fs/tool-fs-search
+      '@deepseek-ai/dsh-tool-terminal':
+        specifier: workspace:*
+        version: link:../../terminal/tool-terminal
       '@deepseek-ai/dsh-user-approval':
         specifier: workspace:*
         version: link:../../interaction/user-approval

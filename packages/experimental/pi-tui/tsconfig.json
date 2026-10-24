@@ -15,6 +15,9 @@
     { "path": "../../interaction/user-approval" },
     { "path": "../../interaction/user-questions" },
     { "path": "../../llm/llm" },
+    { "path": "../../terminal/terminal" },
+    { "path": "../../terminal/terminal-bash" },
+    { "path": "../../terminal/tool-terminal" },
     { "path": "../../util/native-command" },
     { "path": "../../fs/tool-fs-search" },
     { "path": "../../skill/skill" }

@@ -43,6 +43,31 @@
 # workspace records under ~/.dsh.
 
 - insert:
+    # Shared PTY shells: `/shell win` and `/shell kali` open overlays over the
+    # same owner-scoped sessions the model's terminal_* tools address, so the
+    # operator and the agent type into one shell per world. `tool-terminal`
+    # gives the model the terminal_open/send/read/list controls.
+    - id: terminal
+      name: '@deepseek-ai/dsh-terminal'
+
+    - id: terminal-shell
+      name: '@deepseek-ai/dsh-terminal-bash'
+      config:
+        backendType: shell
+        shellDialect: pwsh
+
+    - id: terminal-kali
+      name: '@deepseek-ai/dsh-terminal-bash'
+      config:
+        backendType: kali
+        shellDialect: bash
+        shellPath: 'C:\Windows\System32\wsl.exe'
+        shellArgs: ['-d', 'kali-linux']
+
+    - id: tool-terminal
+      name: '@deepseek-ai/dsh-tool-terminal'
+
+- insert:
     - id: storage
       name: '@deepseek-ai/dsh-storage'
 

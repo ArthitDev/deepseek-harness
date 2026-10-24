@@ -122,6 +122,8 @@ Commands:
   /jev [on|off|toggle|status]   enable or disable JEV tools and policy context
   /team-mode [blue|red|black|dead]   choose the team mode (numbered picker)
   /skills [on|off|toggle|status]   list and toggle skills or control them all
+  /shell [win|kali]        shared shell overlay — the agent shares the session
+  /exec                    list the shell commands the agent executed
   /agents                 list live subagents
   /jobs                   list background jobs
   /export                 write this transcript to a markdown file
