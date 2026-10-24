@@ -18,6 +18,11 @@
   ],
   "scripts": {
     "prepare:primary-runtime": "tsx scripts/primary-runtime/prepare.ts",
+    "sb:start": "node scripts/sb-manager.cjs start --v6 --exec auto --backend http://127.0.0.1:20128",
+    "sb:stop": "node scripts/sb-manager.cjs stop",
+    "sb:status": "node scripts/sb-manager.cjs status",
+    "sb:restart": "node scripts/sb-manager.cjs restart",
+    "sb:test": "node scripts/sb-executor-test.cjs",
     "build": "tsx scripts/build.ts",
     "build:bench": "npm run build:native-system && npm run build:lib && tsdown --config benchmarks/tsdown.config.ts --no-checks.pluginTimings",
     "build:official": "tsx scripts/build.ts --profile official",
@@ -201,7 +206,10 @@
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "start:web": "node --import tsx/esm apps/cli/src/bin.ts web",
     "dev:web": "tsx scripts/dev-web.ts --poll",
-    "postinstall": "node scripts/install-lefthook.mjs"
+    "postinstall": "node scripts/install-lefthook.mjs",
+    "predev": "node scripts/sb-auto-start.cjs start --background",
+    "prestart": "node scripts/sb-auto-start.cjs start --background",
+    "sb:install": "node scripts/sb-auto-start.cjs install"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "workspace:*",

@@ -1,0 +1,7 @@
+# UNLIMITED composition — no guards, no budget, no scope enforcement.
+# Merge this into the deployment's cordis composition to run Dead Mode
+# with zero artificial limits.
+#
+# This intentionally mounts NOTHING from packages/guard/ — no scope-policy,
+# no run-budget, no scope-proxy, no timeout-policy.
+- insert: []
