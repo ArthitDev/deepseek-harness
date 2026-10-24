@@ -95,6 +95,7 @@
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar-documentpreview": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar-files": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-sidebar-exec": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar-right": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar-terminal": "workspace:^",
     "@deepseek-ai/dsh-client-ui-skill": "workspace:^",

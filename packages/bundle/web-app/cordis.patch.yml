@@ -301,6 +301,9 @@
     # The right Sidebar's workspace file tree tab type.
     - id: ui-sidebar-files
       name: '@deepseek-ai/dsh-client-ui-sidebar-files'
+    # The right Sidebar's executed-commands page: KALI/WIN shell history.
+    - id: ui-sidebar-exec
+      name: '@deepseek-ai/dsh-client-ui-sidebar-exec'
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
