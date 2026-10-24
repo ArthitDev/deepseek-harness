@@ -31,18 +31,21 @@ function profile(path: string): TerminalShell {
  * List verified candidates after the configured or environment-default shell.
  * @param subprocess - target execution provider.
  * @param configured - optional default profile.
- * @param candidates - executable names or paths permitted for shell selection.
+ * @param candidates - executable names or paths permitted for shell selection,
+ *   or complete profiles (a route such as `wsl -d kali-linux` whose arguments
+ *   a bare name cannot carry).
  * @param signal - discovery cancellation.
  * @returns unique installed shells, with the default first; transport failures reject.
  */
 export async function discoverShells(
   subprocess: SubprocessRuntime, configured: TerminalShell | undefined,
-  candidates: readonly string[], signal: AbortSignal,
+  candidates: readonly (string | TerminalShell)[], signal: AbortSignal,
 ): Promise<TerminalShell[]> {
   const preferred = await resolveShell(subprocess, configured, signal)
   const found = await Promise.all(candidates.map(async (candidate) => {
-    try { return await resolveShell(subprocess, profile(candidate), signal) }
-    catch (error) {
+    try {
+      return await resolveShell(subprocess, typeof candidate === 'string' ? profile(candidate) : candidate, signal)
+    } catch (error) {
       if (error instanceof SubprocessExecutableNotFoundError) return undefined
       throw error
     }

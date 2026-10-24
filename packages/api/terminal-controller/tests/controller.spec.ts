@@ -530,6 +530,20 @@ it('discovers installed shells once per path, preserves default arguments, and r
   expect(await h.controller.create(h.agent, { ...request, shellPath: '/bin/bash' }, signal())).toBe(created)
 })
 
+it('accepts complete candidate profiles for routed shells such as kali WSL', async () => {
+  const kali = { path: 'C:\\Windows\\System32\\wsl.exe', name: 'kali', args: ['-d', 'kali-linux'] }
+  const h = fixture({ shellCandidates: ['bash', kali] })
+  h.subprocess.resolveExecutable.mockImplementation(async path =>
+    path.includes('/') || path.includes('\\') ? path : `/bin/${path}`)
+  const shells = await h.controller.shells(h.agent, signal())
+  expect(shells).toEqual([config.shell, kali])
+  const created = await h.controller.create(h.agent, { ...request, shellPath: kali.path }, signal())
+  expect(created.shell).toEqual(kali)
+  expect(h.subprocess.spawnTerminal).toHaveBeenCalledWith(expect.objectContaining({
+    argv: ['C:\\Windows\\System32\\wsl.exe', '-d', 'kali-linux'],
+  }))
+})
+
 it('propagates optional-shell discovery transport errors and cancellation', async () => {
   const h = fixture({ shellCandidates: ['fish'] })
   h.subprocess.resolveExecutable.mockImplementation(async (path) => {

@@ -33,8 +33,8 @@ export interface Config {
     /** Arguments passed to the interactive shell. */
     args: string[]
   } | undefined
-  /** Executable names or paths checked for the new-terminal shell selector. */
-  readonly shellCandidates: string[]
+  /** Executable names or paths — or complete profiles — checked for the new-terminal shell selector. */
+  readonly shellCandidates: readonly (string | TerminalShell)[]
   /** Maximum retained terminals and pending allocations per Session. */
   readonly maxTerminals: number
   /** Maximum terminal width in columns. */
@@ -78,7 +78,13 @@ export class TerminalController extends TypertRemoteService {
     shell: z.union([z.object({
       path: z.string().required(), name: z.string().required(), args: z.array(z.string()).default([]),
     }), z.const(undefined)]),
-    shellCandidates: z.array(z.string().min(1)).default(['zsh', 'bash', 'fish', 'pwsh', 'powershell', 'cmd']),
+    // The cast mirrors the repo's schemastery union pattern: the materialized
+    // member shapes are nullable in schemastery's input type, while runtime
+    // values satisfy the declared Config union.
+    shellCandidates: z.array(z.union([
+      z.string().min(1),
+      z.object({ path: z.string().min(1), name: z.string().min(1), args: z.array(z.string()) }),
+    ])).default(['zsh', 'bash', 'fish', 'pwsh', 'powershell', 'cmd']) as unknown as z<Config['shellCandidates']>,
     maxTerminals: z.number().step(1).min(1).default(8),
     maxCols: z.number().step(1).min(2).default(500),
     maxRows: z.number().step(1).min(1).default(200),
