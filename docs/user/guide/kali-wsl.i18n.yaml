@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/user/guide/kali-wsl.md
-kali-wsl.md: 78e09c86feca152ba322dcbb160015013db6def8
-kali-wsl.zh.md: 3d5e4159f14cf6f84521dedd1123e1c9cc31db6c
+kali-wsl.md: 03b613a19e13d72606614c4645f9d54c7cecfbc6
+kali-wsl.zh.md: 00daffa54e58b7db3c097a89fe56fec3e615dd05

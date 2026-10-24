@@ -46,6 +46,11 @@ Windows shell. Run it through:
 
   wsl -d kali-linux -- bash -lc '<command>'
 
+Windows-shell errors do not describe Kali: "not recognized" means the wrong shell
+was used, not that a tool is missing. The distro may be stopped: boot it BEFORE the
+first tool command with 'wsl -d kali-linux -- true' (the first boot after a Windows
+restart can take up to a minute), and if a Kali command fails once, boot and retry
+BEFORE concluding a tool is unusable - a cold start is not a missing tool.
 Single-quote the whole Kali command; use double quotes inside. The Kali shell
 runs as root already. Windows drives mount under /mnt (E:\\x -> /mnt/e/x). Keep
 pure Windows work in the normal shell. A missing tool is installed inside Kali
