@@ -121,7 +121,7 @@ export function ReconTargetControl({ enqueue, openRecon, t }: ReconTargetControl
                 autoFocus
                 type="url"
                 value={target}
-                placeholder="https://target.example"
+                placeholder={t('recon.target.placeholder')}
                 disabled={running}
                 onChange={(event) => { setTarget(event.currentTarget.value) }}
               />

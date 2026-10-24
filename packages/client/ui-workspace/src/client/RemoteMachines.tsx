@@ -793,7 +793,7 @@ function PentestRunsControl({
                               <strong>{artifact.toolCallId}</strong>
                               <span>
                                 {artifact.bytes.toLocaleString()} / {artifact.originalBytes.toLocaleString()} B
-                                {' · '}{artifact.mediaType ?? 'application/json'}
+                                {' · '}{artifact.mediaType ?? t('runs.artifacts.defaultMediaType')}
                                 {artifact.truncated ? ` · ${t('runs.artifacts.truncated')}` : ''}
                               </span>
                               <Button

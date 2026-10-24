@@ -359,7 +359,7 @@ export function ReconView({
           <input
             className={css.scanInput}
             value={targetInput}
-            placeholder="https://target.example"
+            placeholder={t('recon.target.placeholder')}
             disabled={scanning}
             onChange={(event) => { setTargetInput(event.target.value) }}
             onKeyDown={(event) => { if (event.key === 'Enter') runScanFromTab() }}
@@ -464,11 +464,11 @@ export function ReconView({
                 <p className={css.error} role="status">⚠ {t('recon.legacy')}</p>
               )}
               <dl className={css.summary}>
-                <div><dt>run</dt><dd><code>{selected.run_id}</code>{selected.status !== 'completed' ? ` · ${statusLabel(selected.status, t)}` : ''}</dd></div>
-                <div><dt>target</dt><dd>{selected.target.input} → {selected.target.host}:{selected.target.port}</dd></div>
-                <div><dt>started</dt><dd>{selected.started_at}</dd></div>
-                {selected.http !== null && <div><dt>http</dt><dd>{selected.http.status} · {selected.http.server || '—'} · {selected.http.title || '—'}</dd></div>}
-                {selected.tls?.enabled === true && <div><dt>tls</dt><dd>{selected.tls.protocol} · {selected.tls.issuer_org || '—'} · {selected.tls.days_remaining}d</dd></div>}
+                <div><dt>{t('recon.summary.run')}</dt><dd><code>{selected.run_id}</code>{selected.status !== 'completed' ? ` · ${statusLabel(selected.status, t)}` : ''}</dd></div>
+                <div><dt>{t('recon.summary.target')}</dt><dd>{selected.target.input} → {selected.target.host}:{selected.target.port}</dd></div>
+                <div><dt>{t('recon.summary.started')}</dt><dd>{selected.started_at}</dd></div>
+                {selected.http !== null && <div><dt>{t('recon.summary.http')}</dt><dd>{selected.http.status} · {selected.http.server || '—'} · {selected.http.title || '—'}</dd></div>}
+                {selected.tls?.enabled === true && <div><dt>{t('recon.summary.tls')}</dt><dd>{selected.tls.protocol} · {selected.tls.issuer_org || '—'} · {selected.tls.days_remaining}{t('recon.summary.days')}</dd></div>}
               </dl>
               <CollapsibleSection icon={IconEnhanceOutlineRegular} label={t('recon.ai.label')}>
                 {dynamicResult === null
@@ -524,7 +524,7 @@ export function ReconView({
                   <p className={css.muted}>{t('recon.backend.notObservable')}: {selected.backend_reason}</p>
                 )}
                 {selected.favicon_hash !== undefined && (
-                  <p className={css.muted}>{t('recon.favicon')}: <code>{selected.favicon_hash}</code> · Shodan <code>http.favicon.hash:{selected.favicon_hash}</code></p>
+                  <p className={css.muted}>{t('recon.favicon')}: <code>{selected.favicon_hash}</code> {t('recon.shodan')} <code>{t('recon.shodan.hashPrefix')}{selected.favicon_hash}</code></p>
                 )}
                 <TechnologyChips
                   technologies={selected.backend_technologies
@@ -556,9 +556,9 @@ export function ReconView({
                       <li key={`${endpoint.method}:${endpoint.path}`}>
                         <strong>{endpoint.method} {endpoint.path}{endpoint.template === true ? ' ⧙' : ''}</strong>
                         <span>
-                          {endpoint.status ?? 'error'}
+                          {endpoint.status ?? t('recon.statusError')}
                           {` · ${endpoint.source}`}
-                          {endpoint.probe_method === undefined || endpoint.probe_method === endpoint.method ? '' : ` · probed via ${endpoint.probe_method}`}
+                          {endpoint.probe_method === undefined || endpoint.probe_method === endpoint.method ? '' : t('recon.probedVia', { method: endpoint.probe_method })}
                           {endpoint.content_type === '' ? '' : ` · ${endpoint.content_type}`}
                           {endpoint.auth_required ? ` · ${t('recon.authRequired')}${endpoint.auth_scheme === undefined ? '' : ` (${endpoint.auth_scheme})`}` : ''}
                         </span>
@@ -573,7 +573,7 @@ export function ReconView({
                     {selected.hosts.map(host => (
                       <li key={host.host}>
                         <strong>{host.host}</strong>
-                        <span>{host.probed ? `HTTP ${host.status ?? '—'}` : host.ips.length > 0 ? host.ips.join(', ') : '—'}</span>
+                        <span>{host.probed ? `${t('recon.http')} ${host.status ?? '—'}` : host.ips.length > 0 ? host.ips.join(', ') : '—'}</span>
                       </li>
                     ))}
                   </ol>
@@ -628,9 +628,9 @@ export function ReconView({
               </CollapsibleSection>
               <CollapsibleSection icon={IconGaugeOutlineRegular} label={t('recon.coverage')}>
                 <div className={css.summary}>
-                  <div><dt>{t('recon.coverage.pages')}</dt><dd>{selected.coverage.pages.scanned}/{selected.coverage.pages.discovered}{selected.coverage.pages.skipped > 0 ? ` · ${selected.coverage.pages.skipped} skipped` : ''}</dd></div>
+                  <div><dt>{t('recon.coverage.pages')}</dt><dd>{selected.coverage.pages.scanned}/{selected.coverage.pages.discovered}{selected.coverage.pages.skipped > 0 ? t('recon.coverage.skipped', { count: selected.coverage.pages.skipped }) : ''}</dd></div>
                   <div><dt>{t('recon.coverage.javascript')}</dt><dd>{selected.coverage.javascript.scanned}/{selected.coverage.javascript.discovered}</dd></div>
-                  <div><dt>{t('recon.coverage.api')}</dt><dd>{selected.coverage.api.probed}/{selected.coverage.api.discovered} · {selected.coverage.api.failed} err</dd></div>
+                  <div><dt>{t('recon.coverage.api')}</dt><dd>{selected.coverage.api.probed}/{selected.coverage.api.discovered} · {selected.coverage.api.failed} {t('recon.coverage.err')}</dd></div>
                   <div><dt>{t('recon.coverage.subdomains')}</dt><dd>{selected.coverage.subdomains.resolved}/{selected.coverage.subdomains.discovered}</dd></div>
                   <div><dt>{t('recon.coverage.services')}</dt><dd>{selected.coverage.services.probed}</dd></div>
                   {selected.coverage.truncated.map((truncation, index) => (
@@ -646,7 +646,7 @@ export function ReconView({
                       {selected.phases.map((phase, index) => (
                         <li key={`${phase.name}:${index}`}>
                           <strong>{phase.name}</strong>
-                          <span>{phase.status} · {phase.duration_ms}ms{phase.reason === undefined ? '' : ` — ${phase.reason}`}</span>
+                          <span>{phase.status} · {phase.duration_ms}{t('recon.ms')}{phase.reason === undefined ? '' : ` — ${phase.reason}`}</span>
                         </li>
                       ))}
                     </ol>
