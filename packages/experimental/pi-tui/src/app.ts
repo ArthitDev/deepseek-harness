@@ -228,6 +228,8 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   } finally {
     screen.replaying = false
   }
+  // Replay batches: one reconcile after the whole log, not per event.
+  screen.finalizeReplay()
   // ↑/↓ history: seed the editor from the replayed session transcript.
   screen.seedHistory()
   // Boot hint: tell the user persisted history is one Ctrl+R / /resume away

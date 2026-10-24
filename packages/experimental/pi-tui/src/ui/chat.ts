@@ -784,6 +784,17 @@ export class ChatScreen {
     } finally {
       this.replaying = false
     }
+    // Replay batches: one reconcile after the whole log, not per event.
+    this.sync()
+  }
+
+  /**
+   * Close an externally driven replay batch (the boot path drives
+   * `replaying` directly): drop the batch flag and reconcile once.
+   */
+  finalizeReplay(): void {
+    this.replaying = false
+    this.sync()
   }
 
   /** Welcome block at the top of the transcript (boot and every switch). */
@@ -3297,7 +3308,10 @@ export class ChatScreen {
         this.pushNotice(`✓ done in ${seconds.toFixed(1)}s · +${shortTokens(delta)} tok`, 'compact')
       }
     }
-    this.sync()
+    // Replay batches: each sync reconciles every view and schedules a render,
+    // so per-event syncs over a large durable log square the work. The
+    // replay driver issues one final sync when its batch completes.
+    if (!this.replaying) this.sync()
   }
 
   /** Observe all runs; their Cordis carrier filters select the visible agent's descendants. */
