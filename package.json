@@ -17,6 +17,7 @@
     "website"
   ],
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "prepare:primary-runtime": "tsx scripts/primary-runtime/prepare.ts",
     "sb:start": "node scripts/sb-manager.cjs start --v6 --exec auto --backend http://127.0.0.1:20128",
     "sb:stop": "node scripts/sb-manager.cjs stop",
