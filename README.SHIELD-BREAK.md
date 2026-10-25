@@ -205,8 +205,12 @@ pnpm dev          # predev hook → proxy รันอัตโนมัติ
 # 1. Clone harness (branch นี้)
 git clone -b shield-break-agent-v2 <repo>
 
-# 2. Install dependencies
-pnpm install && pnpm run build
+# 2. Setup อัตโนมัติ — เช็ค env (node/pnpm/npm/git) บอกขาดอะไร
+#    activate pnpm ผ่าน corepack ให้ แล้ว pnpm install + build
+#    และเตรียม .env template ให้ในคำสั่งเดียว
+node scripts/setup.mjs            # หรือ pnpm run setup
+#    ดูเฉพาะรายงาน env โดยไม่ลงมือ: node scripts/setup.mjs --check
+#    ข้ามขั้นตอน: --no-install / --no-build
 
 # 3. ติดตั้ง SB stack (proxy + arsenal + auto-start)
 node scripts/sb-install.cjs
