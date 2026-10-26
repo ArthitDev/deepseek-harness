@@ -44,6 +44,8 @@ function detectEnvironment() {
     execMode: process.env.SB_EXEC_MODE || "auto",
     kaliAvailable: false,
     nodeAvailable: true,
+    zcodeDir: null,
+    zcodePort: parseInt(process.env.ZCODE_PORT || "8080"),
   };
 
   // Detect harness root (walk up from this script)
@@ -92,6 +94,13 @@ function detectEnvironment() {
   }
 
   // Detect workspace
+  // ZCode starter proxy (GLM coding plan): auto-detected next to the harness
+  // or under E:; overridden by ZCODE_DIR.
+  env.zcodeDir = process.env.ZCODE_DIR
+    || [path.join(env.harnessRoot || process.cwd(), "..", "Zcode-9Route-Proxy", "zcode-api"),
+        "E:/Zcode-9Route-Proxy/zcode-api", "C:/Zcode-9Route-Proxy/zcode-api"]
+      .map((p) => (p ? path.resolve(p) : null))
+      .find((p) => p && fs.existsSync(path.join(p, "src", "index.ts"))) || null;
   env.workspaceDir = process.env.SB_WORKSPACE
     || path.join(env.scriptsDir || process.cwd(), "exec-workspace");
 
@@ -243,6 +252,71 @@ function stopProxy() {
   try { fs.unlinkSync(PROXY_PID_FILE); } catch { }
 }
 
+function stopAll() {
+  stopProxy();
+  stopZcodeProxy();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ZCODE STARTER PROXY (GLM coding plan on 127.0.0.1:8080)
+// ═══════════════════════════════════════════════════════════════
+
+let zcodeProcess = null;
+
+function zcodeAlive(port) {
+  return new Promise((resolve) => {
+    // The models endpoint answers 401 without a key — any HTTP response means
+    // the proxy process is up and serving.
+    const req = http.get(`http://127.0.0.1:${port}/v1/models`, { timeout: 3000 }, (res) => {
+      res.resume();
+      resolve(res.statusCode !== undefined && res.statusCode < 500);
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+  });
+}
+
+async function startZcodeProxy(env, silent = false) {
+  if (!env.zcodeDir) {
+    if (!silent) console.log("[SB Auto] ZCode starter not found (optional — skipping)");
+    return false;
+  }
+  const alive = await zcodeAlive(env.zcodePort);
+  if (alive) {
+    if (!silent) console.log(`[SB Auto] ZCode proxy already running on :${env.zcodePort}`);
+    return true;
+  }
+  if (!silent) console.log(`[SB Auto] Starting ZCode proxy from ${env.zcodeDir}`);
+  zcodeProcess = spawn("bun", ["run", "src/index.ts", "serve"], {
+    cwd: env.zcodeDir,
+    stdio: "ignore",
+    detached: true,
+    windowsHide: true,
+  });
+  zcodeProcess.on("error", (e) => {
+    if (!silent) console.error("[SB Auto] ZCode proxy spawn failed:", e.message);
+    zcodeProcess = null;
+  });
+  // Wait for the port to come up before declaring success.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (await zcodeAlive(env.zcodePort)) {
+      if (!silent) console.log(`[SB Auto] ZCode proxy running on :${env.zcodePort}`);
+      return true;
+    }
+    if (zcodeProcess === null) return false;
+  }
+  if (!silent) console.error("[SB Auto] ZCode proxy did not become healthy in 10s");
+  return false;
+}
+
+function stopZcodeProxy() {
+  if (zcodeProcess && zcodeProcess.pid) {
+    try { process.kill(zcodeProcess.pid, "SIGTERM"); } catch { }
+    zcodeProcess = null;
+  }
+}
+
 async function startDaemon(options = {}) {
   const silent = options.silent || false;
   const env = detectEnvironment();
@@ -273,6 +347,9 @@ async function startDaemon(options = {}) {
   const started = await startProxy(env);
   if (!started) process.exit(1);
 
+  // ZCode starter proxy rides the same daemon lifecycle.
+  await startZcodeProxy(env, silent);
+
   // Health check loop
   daemonRunning = true;
   const checkInterval = parseInt(process.env.SB_HEALTH_INTERVAL || "30000"); // 30s default
@@ -284,6 +361,10 @@ async function startDaemon(options = {}) {
       console.log("[SB Auto] Proxy died — restarting...");
       await startProxy(env, true);
     }
+    if (env.zcodeDir && !(await zcodeAlive(env.zcodePort))) {
+      console.log("[SB Auto] ZCode proxy died — restarting...");
+      await startZcodeProxy(env, true);
+    }
   }, checkInterval);
 
   // Graceful shutdown
@@ -291,7 +372,7 @@ async function startDaemon(options = {}) {
     console.log("[SB Auto] Shutting down...");
     daemonRunning = false;
     if (healthInterval) clearInterval(healthInterval);
-    stopProxy();
+    stopAll();
     process.exit(0);
   };
 
@@ -328,6 +409,8 @@ function stopDaemon() {
     try { process.kill(proxyPid, "SIGTERM"); } catch { }
     console.log(`[SB Auto] Proxy stopped (PID ${proxyPid})`);
   }
+  stopZcodeProxy();
+  console.log("[SB Auto] ZCode proxy stopped");
 
   try { fs.unlinkSync(DAEMON_PID_FILE); } catch { }
   try { fs.unlinkSync(PROXY_PID_FILE); } catch { }
@@ -347,6 +430,8 @@ async function status() {
   console.log(`  Skills:  ${env.skillsDir ? "✓ " + env.skillsDir : "✗ not found"}`);
   console.log(`  Wiki:    ${env.wikiDir ? "✓ " + env.wikiDir : "✗ not found"}`);
   console.log(`  Kali:    ${env.kaliAvailable ? "✓ available" : "✗ not available"}`);
+  const zcodeUp = await zcodeAlive(env.zcodePort);
+  console.log(`  ZCode:   ${zcodeUp ? `✓ running (port ${env.zcodePort})` : env.zcodeDir ? "✗ stopped" : "— not installed"}`);
   console.log(`  Backend: ${env.backendUrl}`);
   console.log("═".repeat(50));
 }
