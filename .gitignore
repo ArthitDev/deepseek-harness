@@ -48,3 +48,16 @@ worktrees/
 native/system/test/bin/
 
 .codegraph/
+
+# SB suite runtime state, generated artifacts, and local-only persona/grant docs
+scripts/.sb-proxy.pid
+scripts/.sb-exec-session.json
+scripts/.sb-proxy.args.json
+scripts/exec-workspace/
+scripts/*.bak
+scripts/sb-arsenal.d.ts
+scripts/sb-executor.d.ts
+scripts/sb-arsenal.mjs
+scripts/sb-auto-start.mjs
+scripts/sb-executor.mjs
+undefined/

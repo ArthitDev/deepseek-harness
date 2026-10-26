@@ -80,12 +80,12 @@ const TOOLS = {
   "ffuf_dir": {
     desc: "Directory/file fuzzer",
     params: ["url", "wordlist", "timeout"],
-    build: (p) => `ffuf -u "${p.url}${p.url.includes("FUZZ") ? "" : "/FUZZ"}" -w ${p.wordlist || "/usr/share/wordlists/dirb/common.txt"} -t 50 -timeout ${p.timeout || 10} -fc 404 -silent 2>/dev/null | head -50`,
+    build: (p) => `ffuf -u "${p.url}${p.url.includes("FUZZ") ? "" : "/FUZZ"}" -w ${p.wordlist || "/usr/share/seclists/Discovery/Web-Content/common.txt"} -t 50 -timeout ${p.timeout || 10} -fc 404 -s 2>/dev/null | head -50`,
   },
   "gobuster_dir": {
     desc: "Directory brute-force",
     params: ["url", "wordlist", "timeout"],
-    build: (p) => `gobuster dir -u ${p.url} -w ${p.wordlist || "/usr/share/wordlists/dirb/common.txt"} -q -t 30 --timeout ${p.timeout || 10}s 2>/dev/null | head -50`,
+    build: (p) => `gobuster dir -u ${p.url} -w ${p.wordlist || "/usr/share/seclists/Discovery/Web-Content/common.txt"} -q -t 30 --timeout ${p.timeout || 10}s 2>/dev/null | head -50`,
   },
   "feroxbuster_dir": {
     desc: "Fast recursive content discovery",
@@ -254,7 +254,11 @@ const TOOLS = {
   "dig_lookup": {
     desc: "DNS lookup",
     params: ["domain", "type", "server"],
-    build: (p) => `dig ${p.domain} ${p.type || "ANY"} ${p.server ? "@" + p.server : ""} +noall +answer`,
+    build: (p) => {
+      const types = (p.type || "A").split(/[,\s]+/).filter(Boolean);
+      const server = p.server ? "@" + p.server : "";
+      return types.map(t => `dig ${p.domain} ${t} ${server} +noall +answer`).join("; ");
+    },
   },
   "whois_lookup": {
     desc: "WHOIS information",
@@ -274,14 +278,14 @@ const TOOLS = {
 
 function ensureKali() {
   try {
-    execSync("wsl -d kali-linux -- true", { timeout: 60000, stdio: "pipe" });
+    execSync("wsl -d kali-linux -- true", { timeout: 60000, stdio: "pipe", windowsHide: true });
     return true;
   } catch { return false; }
 }
 
 function runInKali(command, timeoutMs = 120000) {
   return new Promise((resolve) => {
-    const proc = spawn("wsl", ["-d", "kali-linux", "--", "bash", "-c", command], {
+    const proc = spawn("wsl", ["-d", "kali-linux", "--", "bash", "-c", command], { windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
       timeout: timeoutMs,
     });
@@ -306,7 +310,7 @@ async function dispatch(toolName, params = {}) {
   const command = tool.build(params);
   console.log(`[arsenal] ${toolName}: ${command}`);
 
-  const result = await runInKali(command, params.timeout || 120000);
+  const result = await runInKali(command, (parseInt(params.exec_timeout, 10) || 120000));
   result.tool = toolName;
   result.command = command;
   return result;

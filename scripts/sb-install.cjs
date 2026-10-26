@@ -83,6 +83,15 @@ ${colors.cyan("╚════════════════════�
   console.log(`\n${colors.dim("── Proxy Stack ──")}`);
   const proxyFiles = [
     { src: path.join(__dirname, "sb-proxy-v6.cjs"), dst: path.join(scriptsDir, "sb-proxy-v6.cjs"), required: true },
+    { src: path.join(__dirname, "sb-arsenal.cjs"), dst: path.join(scriptsDir, "sb-arsenal.cjs"), required: true },
+    { src: path.join(__dirname, "sb-persona.md"), dst: path.join(scriptsDir, "sb-persona.md"), required: true },
+    { src: path.join(__dirname, "sb-agent-slim.md"), dst: path.join(scriptsDir, "sb-agent-slim.md"), required: false },
+    { src: path.join(__dirname, "sb-grant.md"), dst: path.join(scriptsDir, "sb-grant.md"), required: true },
+    { src: path.join(__dirname, "sb-arsenal.mjs"), dst: path.join(scriptsDir, "sb-arsenal.mjs"), required: false },
+    { src: path.join(__dirname, "sb-arsenal.d.ts"), dst: path.join(scriptsDir, "sb-arsenal.d.ts"), required: false },
+    { src: path.join(__dirname, "sb-executor.mjs"), dst: path.join(scriptsDir, "sb-executor.mjs"), required: false },
+    { src: path.join(__dirname, "sb-executor.d.ts"), dst: path.join(scriptsDir, "sb-executor.d.ts"), required: false },
+    { src: path.join(__dirname, "sb-auto-start.mjs"), dst: path.join(scriptsDir, "sb-auto-start.mjs"), required: false },
     { src: path.join(__dirname, "sb-auto-start.cjs"), dst: path.join(scriptsDir, "sb-auto-start.cjs"), required: true },
     { src: path.join(__dirname, "sb-manager.cjs"), dst: path.join(scriptsDir, "sb-manager.cjs"), required: false },
     { src: path.join(__dirname, "sb-executor.cjs"), dst: path.join(scriptsDir, "sb-executor.cjs"), required: false },

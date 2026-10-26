@@ -164,7 +164,7 @@ function classifyEnvironment(code, language) {
 
 async function bootKali() {
   try {
-    execSync(`wsl -d ${CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe" });
+    execSync(`wsl -d ${CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe", windowsHide: true });
     return true;
   } catch {
     return false;
@@ -232,7 +232,7 @@ async function execute(block, options = {}) {
 
   return new Promise((resolve) => {
     const startTime = Date.now();
-    const proc = spawn(cmd, args, { ...cwdOption, stdio: ["pipe", "pipe", "pipe"] });
+    const proc = spawn(cmd, args, { ...cwdOption, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 
     let stdout = "", stderr = "";
     let killed = false;

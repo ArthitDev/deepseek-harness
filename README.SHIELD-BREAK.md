@@ -155,3 +155,16 @@ node scripts/sb-arsenal.cjs nmap_scan --target 10.10.10.5
 *Branch: shield-break-agent-v2 — Full Arsenal Edition v6.2 — persona always-on + Rust/Go runtime*
 *อัปเดต: 2026-10-26 — persona หลัก = DarkAPI v7.1FAST*
 *ทดสอบ: 725/726 tests + full-chain จริงทุกภารกิจ + matrix แชมป์ครบ*
+
+---
+
+## การติดต่อ
+
+หากต้องการความช่วยเหลือเกี่ยวกับ **Shield Break Agent** (branch `shield-break-agent-v2`, SB Arsenal, SB Proxy v6, persona) หรือมีข้อสงสัยเรื่องการนำไปใช้งาน ติดต่อผู้พัฒนา:
+
+**ArthitDev** — เจ้าของและผู้พัฒนาหลัก
+
+- GitHub: [ArthitDev](https://github.com/ArthitDev)
+- สอบถามผ่าน [Issues ของ repo นี้](https://github.com/ArthitDev/deepseek-harness/issues)
+
+หมายเหตุ: ไฟล์ persona/grant/spec (`sb-persona.md`, `sb-grant.md`, `sb-agent-slim.md`, `sb-specs.md`) และ runtime state (`exec-workspace/`, `.sb-*`) เป็นของเฉพาะเครื่อง — ไม่ commit ลง repo และ**ไม่เปิดเผยต่อสาธารณะ** หากต้องการไฟล์กลุ่มนี้เพื่อใช้งาน ติดต่อผู้พัฒนาโดยตรงตามช่องทางข้างต้นเท่านั้น

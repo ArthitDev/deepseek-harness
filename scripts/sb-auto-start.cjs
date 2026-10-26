@@ -101,7 +101,7 @@ function detectEnvironment() {
   // Detect Kali WSL
   if (env.platform === "win32") {
     try {
-      execSync("wsl -d kali-linux -- true", { timeout: 5000, stdio: "pipe" });
+      execSync("wsl -d kali-linux -- true", { timeout: 5000, stdio: "pipe", windowsHide: true });
       env.kaliAvailable = true;
     } catch {
       env.kaliAvailable = false;
@@ -109,7 +109,7 @@ function detectEnvironment() {
   } else if (env.platform === "linux") {
     // On Linux, check if nmap/sqlmap are directly available
     try {
-      execSync("which nmap", { timeout: 3000, stdio: "pipe" });
+      execSync("which nmap", { timeout: 3000, stdio: "pipe", windowsHide: true });
       env.kaliAvailable = true; // tools available natively
     } catch {
       env.kaliAvailable = false;
@@ -161,6 +161,23 @@ function getPersistedPid(file) {
   try { return parseInt(fs.readFileSync(file, "utf8").trim()); } catch { return null; }
 }
 
+// Resolve the API key for a backend URL from the dsh credential store so the
+// proxy can authenticate upstream regardless of which client key arrives.
+function resolveBackendKey(backendUrl) {
+  if (!backendUrl) return null;
+  const b = backendUrl.toLowerCase();
+  let credName = null;
+  if (b.includes("z.ai")) credName = "ZAI_API_KEY";
+  else if (b.includes("deepseek.com")) credName = "DEEPSEEK_API_KEY";
+  else if (b.includes(":20128")) credName = "NINE_ROUTER_GLM_DEEPSEEK_API_KEY";
+  if (!credName) return null;
+  try {
+    const yaml = fs.readFileSync(path.join(os.homedir(), ".dsh", ".credentials.yaml"), "utf8");
+    const m = yaml.match(new RegExp(credName + ":\\s*(\\S+)"));
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
 async function startProxy(env, silent = false) {
   if (!env.proxyScript) {
     if (!silent) console.error("[SB Auto] No proxy script found");
@@ -181,14 +198,17 @@ async function startProxy(env, silent = false) {
     "--exec", env.execMode,
   ];
 
+  const backendKey = resolveBackendKey(env.backendUrl);
   proxyProcess = spawn("node", args, {
     stdio: "ignore",
     detached: true,
+    windowsHide: true,
     env: {
       ...process.env,
       SB_SKILLS_DIR: env.skillsDir || "",
       SB_WIKI_DIR: env.wikiDir || "",
       SB_WORKSPACE: env.workspaceDir || "",
+      ...(backendKey ? { SB_BACKEND_KEY: backendKey } : {}),
     },
   });
 
@@ -430,7 +450,7 @@ async function install() {
       const scriptPath = path.resolve(__filename);
       execSync(
         `schtasks /create /tn "SB-AutoStart" /tr "node ${scriptPath} start --background" /sc onlogon /rl limited /f`,
-        { stdio: "pipe" }
+        { stdio: "pipe", windowsHide: true }
       );
       console.log("  ✓ Windows Task Scheduler: SB-AutoStart on logon");
     } catch {
@@ -463,7 +483,7 @@ if (require.main === module) {
       if (background) {
         // Spawn detached daemon
         const scriptPath = __filename;
-        const proc = spawn("node", [scriptPath, "start"], {
+        const proc = spawn("node", [scriptPath, "start"], { windowsHide: true,
           stdio: "ignore",
           detached: true,
         });
@@ -491,7 +511,7 @@ if (require.main === module) {
       stopDaemon();
       setTimeout(() => {
         if (background) {
-          const proc = spawn("node", [__filename, "start"], { stdio: "ignore", detached: true });
+          const proc = spawn("node", [__filename, "start"], { stdio: "ignore", detached: true, windowsHide: true });
           proc.unref();
           setTimeout(() => process.exit(0), 1000);
         } else {

@@ -4,7 +4,7 @@
  * Tests: extract, classify, execute (Python + Bash), chain analysis
  */
 
-const { extractCodeBlocks, classifyEnvironment, execute } = require("./sb-executor");
+const { extractCodeBlocks, classifyEnvironment, execute } = require("./sb-executor.cjs");
 
 const TESTS = [
   {
