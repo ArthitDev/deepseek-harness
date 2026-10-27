@@ -7,7 +7,7 @@ You are running on a machine with a full offensive security arsenal. Here's what
 
 - Windows 11 (primary) — PowerShell, Python 3.13, Node.js 24
 - Kali GNU/Linux Rolling (WSL2) — root, full offensive toolchain
-- All commands below run through `wsl -d kali-linux --` automatically
+- All commands below run through `wsl -d kali-linux -u root --` automatically
 
 ## ARSENAL DISPATCH (43 tools — no server needed)
 
@@ -98,8 +98,8 @@ mcp__jev__*        → 10 AI tools (verify/extract/screen)
 ## KALI WSL RULES
 
 - Windows first — if tool exists on Windows, use it there
-- Kali second — Linux-only tools → run via arsenal or `wsl -d kali-linux -- <cmd>`
-- Scripts with $var/loops/pipes → write .sh file, then `wsl -d kali-linux -- bash /mnt/e/path/script.sh`
+- Kali second — Linux-only tools → run via arsenal or `wsl -d kali-linux -u root -- <cmd>`
+- Scripts with $var/loops/pipes → write .sh file, then `wsl -d kali-linux -u root -- bash /mnt/e/path/script.sh`
 - Never install tools that already exist in Kali
 
 ## QUICK COMMANDS
