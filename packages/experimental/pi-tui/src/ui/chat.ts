@@ -34,6 +34,7 @@ import {
   CombinedAutocompleteProvider,
   Container,
   Editor,
+  HStack,
   Loader,
   ScrollView,
   Text,
@@ -95,7 +96,6 @@ import {
 import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
-import { SplitLayout } from './split-layout.js'
 import { ShellPane, resolveShellSession } from './shell-pane.js'
 import { pickReasoningLevel } from './reasoning-picker.js'
 import { pickWiki } from './wiki.js'
@@ -246,7 +246,7 @@ export class ChatScreen {
   private shellFocused = false
   /** Plain chat layout; swapped for the split layout while a shell pane is open. */
   private readonly chatRoot = new VStack([])
-  private splitRoot: SplitLayout | undefined
+  private splitRoot: HStack | undefined
   private shellPane: ShellPane | undefined
   private readonly editor: Editor
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
@@ -2254,7 +2254,10 @@ export class ChatScreen {
     try {
       const session = await resolveShellSession(this.ctx, this.agent, variant === 'kali' ? 'kali' : 'win')
       const pane = new ShellPane(this.tui, session, `Shell · ${variant}`, () => this.closeShellPane())
-      this.splitRoot = new SplitLayout(this.chatRoot, pane)
+      this.splitRoot = new HStack([
+        { component: this.chatRoot, basis: 0, grow: 1, minSize: 30 },
+        { component: pane, basis: 46, shrink: 0 },
+      ])
       this.tui.setLayoutRoot(this.splitRoot)
       this.shellPane = pane
       this.shellFocused = true

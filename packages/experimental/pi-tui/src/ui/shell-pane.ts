@@ -77,11 +77,6 @@ export async function resolveShellSession(ctx: Context, agent: Agent, variant: S
  * session survives focus changes and pane closes.
  */
 export class ShellPane extends Container {
-  /** Render into the pane's fixed-width column (SplitLayout right child). */
-  renderColumn(width: number): string[] {
-    return super.render(width)
-  }
-
   /** Called when the pane asks to hand focus back (input `/exit`). */
   private readonly onClose: (() => void) | undefined
   readonly editor: Editor
