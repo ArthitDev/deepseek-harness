@@ -1,15 +1,18 @@
 import { stripVTControlCharacters } from 'node:util'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { AssistantStreamAccumulator, boundContextSummary, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+import TerminalSessionService, { TerminalSessionId } from '@deepseek-ai/dsh-terminal'
+import type { TerminalBackend, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
+import { ShellPane, type ShellPaneSession } from '../src/ui/shell-pane.ts'
 import { StatusBar } from '../src/ui/views.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
@@ -297,10 +300,7 @@ describe('preset switches with conversation history', () => {
       expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_PRESET')
       expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_WIKI_GUIDANCE')
       expect(source.session.snapshotEvents()).toEqual(original)
-      const childEvents = child.session.snapshotEvents().map(e => e.type)
-      console.error('[DBG] child events:', childEvents.join(','), '| inherited:', String(child.session.inheritedEventCount))
       const rendered = await renderScreen(tui)
-      await writeFile(join(tmpdir(), 'dsh-rendered.txt'), rendered)
       expect(rendered).toContain('retained question')
       expect(rendered).toContain('retained answer')
       expect(rendered).toContain('new-preset')
@@ -601,4 +601,109 @@ describe('/clear transcript', () => {
       }
     },
   )
+})
+
+/** One PTY backend whose single session answers reads with a fixed tail. */
+function stubPaneBackend(tail: string): TerminalBackend {
+  return {
+    type: 'shell',
+    spawn: async () => ({
+      motd: 'stub shell ready',
+      startSend: () => settledOperation(''),
+      read: () => ({ text: tail, totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
+      signal: async () => ({ delivered: true, targetPgid: 1 }),
+      status: () => ({ kind: 'running' }),
+      close: async () => {},
+    }),
+  }
+}
+
+function settledOperation(viewport: string): TerminalSendOperation {
+  return {
+    done: Promise.resolve({ viewport, waitReason: 'stdin_read', sessionStatus: { kind: 'running' }, truncated: false }),
+    readOutput: () => ({ delta: '', truncated: false }),
+    cancel: () => false,
+  }
+}
+
+describe('the split-pane shell', () => {
+  it('opens the shared shell beside the chat, then toggles it closed', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(TerminalSessionService)
+    ctx.terminals.registerBackend(stubPaneBackend('stub shell tail'))
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('shell-pane')))
+    await ctx.agents.register(agent)
+    const terminal: Terminal = {
+      columns: 100, rows: 40, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    tui.start()
+    try {
+      screen.submit('/shell bogus')
+      expect(await renderScreen(tui)).toContain('usage: /shell [win|kali]')
+      screen.submit('/shell kali')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('no "kali" PTY backend is mounted')
+      })
+      screen.submit('/shell')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('── Shell · win ──')
+      })
+      expect(await renderScreen(tui)).toContain('stub shell tail')
+      screen.submit('/shell')
+      expect(await renderScreen(tui)).not.toContain('── Shell · win ──')
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('streams pane input to the PTY and renders the retained tail', async () => {
+    const sent: string[] = []
+    let tail = 'first boot'
+    const session: ShellPaneSession = {
+      id: TerminalSessionId('pane-test'),
+      owner: fixtureAgent(new Context(), Session.create(SessionId('pane-owner'))),
+      terminals: {
+        listBackends: () => ['shell'],
+        list: () => [],
+        spawn: async () => ({
+          sessionId: TerminalSessionId('pane-test'), motd: '', type: 'shell', status: { kind: 'running' },
+        }),
+        startSend: (_owner, _id, request) => {
+          sent.push(request.text)
+          tail = `ran: ${request.text.trim()}`
+          return settledOperation(request.text)
+        },
+        read: () => ({ text: tail, totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
+      },
+    }
+    const terminal: Terminal = {
+      columns: 46, rows: 20, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    tui.start()
+    try {
+      const onClose = vi.fn()
+      const pane = new ShellPane(tui, session, 'Shell · test', onClose)
+      expect(pane.render(46).join('\n')).toContain('── Shell · test ──')
+      expect(pane.render(46).join('\n')).toContain('first boot')
+      await pane.send('whoami')
+      expect(sent).toEqual(['whoami'])
+      expect(pane.render(46).join('\n')).toContain('ran: whoami')
+      pane.editor.onSubmit?.('/exit')
+      expect(onClose).toHaveBeenCalledOnce()
+    } finally {
+      tui.stop()
+    }
+  })
 })

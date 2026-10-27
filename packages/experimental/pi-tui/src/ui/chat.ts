@@ -356,22 +356,12 @@ export class ChatScreen {
       primary: true,
       overscroll: 'chain',
     })
-    this.tui.setLayoutRoot(
-      new VStack([
-        {
-          component: this.transcriptScroll,
-          basis: 0,
-          grow: 1,
-          minSize: 1,
-        },
-        {
-          component: new VStack([this.queueBanner, this.editor, this.statusBar]),
-          basis: 'auto',
-          shrink: 1,
-          minSize: 1,
-        },
-      ]),
+    this.chatRoot.addChild(this.transcriptScroll, { basis: 0, grow: 1, minSize: 1 })
+    this.chatRoot.addChild(
+      new VStack([this.queueBanner, this.editor, this.statusBar]),
+      { basis: 'auto', shrink: 1, minSize: 1 },
     )
+    this.tui.setLayoutRoot(this.chatRoot)
     this.tui.setFocus(this.editor)
 
     this.tui.addInputListener((data: string) => {
@@ -2252,8 +2242,9 @@ export class ChatScreen {
       return
     }
     try {
-      const session = await resolveShellSession(this.ctx, this.agent, variant === 'kali' ? 'kali' : 'win')
-      const pane = new ShellPane(this.tui, session, `Shell · ${variant}`, () => this.closeShellPane())
+      const resolved = variant === 'kali' ? 'kali' : 'win'
+      const session = await resolveShellSession(this.ctx, this.agent, resolved)
+      const pane = new ShellPane(this.tui, session, `Shell · ${resolved}`, () => { this.closeShellPane() })
       this.splitRoot = new HStack([
         { component: this.chatRoot, basis: 0, grow: 1, minSize: 30 },
         { component: pane, basis: 46, shrink: 0 },
@@ -2262,7 +2253,7 @@ export class ChatScreen {
       this.shellPane = pane
       this.shellFocused = true
       this.tui.setFocus(pane.editor)
-      this.pushNotice(`shell ${variant} open on the right · Esc returns to chat, /exit in the pane closes it`)
+      this.pushNotice(`shell ${resolved} open on the right · Esc returns to chat, /exit in the pane closes it`)
     } catch (error) {
       this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
     }
