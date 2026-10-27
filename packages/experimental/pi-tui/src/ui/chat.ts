@@ -15,6 +15,7 @@
  *   Ctrl+O     toggle full tool output
  *   Ctrl+L     open the model picker
  *   Ctrl+X     open the reasoning-level picker
+ *   Ctrl+P     open the shell pane; when open, cycle pane/chat focus
  *   Shift+Tab  cycle mode
  */
 import { join } from 'node:path'
@@ -96,7 +97,7 @@ import {
 import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
-import { ShellPane, resolveShellSession } from './shell-pane.js'
+import { ShellPane, resolveShellSession, type ShellVariant } from './shell-pane.js'
 import { pickReasoningLevel } from './reasoning-picker.js'
 import { pickWiki } from './wiki.js'
 import { buildBanner } from './banner.js'
@@ -138,6 +139,8 @@ interface ToolPolicyRuntime {
 }
 
 const MCP_TOOL_PREFIX = 'mcp__'
+/** Fixed right-column width of the shell pane; needs a ≥100-column terminal. */
+const PANE_COLUMNS = 46
 const DIRECT_JEV_MCP_TOOL_PREFIX = 'mcp__jev__'
 const JEV_MCP_TOOL_PREFIXES = [DIRECT_JEV_MCP_TOOL_PREFIX, 'mcp__open-dev-browser__', 'mcp__open_dev_browser__']
 const JEV_POLICY_SKILL = 'jev-first-policy'
@@ -244,9 +247,12 @@ export class ChatScreen {
   private readonly statusBar: StatusBar
   /** Whether keyboard focus currently lives in the shell pane's editor. */
   private shellFocused = false
-  /** Plain chat layout; swapped for the split layout while a shell pane is open. */
+  /** Plain chat column inside the stable split root. */
   private readonly chatRoot = new VStack([])
-  private splitRoot: HStack | undefined
+  /** The native two-column root; the right column collapses to zero width while closed. */
+  private screenRoot: HStack | undefined
+  /** Right-column mount point for the shell pane (empty while closed). */
+  private readonly paneSlot = new Container()
   private shellPane: ShellPane | undefined
   private readonly editor: Editor
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
@@ -319,6 +325,7 @@ export class ChatScreen {
       this.disposeStream?.()
       this.disposeMcpPolicy?.()
       this.disposeSkillsPolicy?.()
+      this.shellPane?.dispose()
     })
     this.agent = options.agent
     this.config = options.config
@@ -361,7 +368,15 @@ export class ChatScreen {
       new VStack([this.queueBanner, this.editor, this.statusBar]),
       { basis: 'auto', shrink: 1, minSize: 1 },
     )
-    this.tui.setLayoutRoot(this.chatRoot)
+    // Native split layout: the two-column root exists for the screen's whole
+    // life. The shell pane mounts into `paneSlot`; closing empties the slot
+    // and collapses its column back to zero width, so no layout-root swap
+    // ever happens.
+    this.screenRoot = new HStack([
+      { component: this.chatRoot, basis: 0, grow: 1, minSize: 30 },
+      { component: this.paneSlot, basis: 0, shrink: 0 },
+    ])
+    this.tui.setLayoutRoot(this.screenRoot)
     this.tui.setFocus(this.editor)
 
     this.tui.addInputListener((data: string) => {
@@ -371,8 +386,12 @@ export class ChatScreen {
       if (isKeyRelease(data)) return undefined
       // A focused shell pane's editor yields Esc back to the chat first
       if (this.shellFocused && data === '\u001b') {
-        this.shellFocused = false
-        this.tui.setFocus(this.editor)
+        this.unfocusShellPane()
+        return { consume: true }
+      }
+      // Ctrl+P opens the shell pane or cycles pane/chat focus (see the key map).
+      if (matchesKey(data, 'ctrl+p') && !this.tui.hasOverlay()) {
+        this.cycleShellFocus()
         return { consume: true }
       }
       if ((this.reasoningPickerOpen || this.suppressionPickerOpen || this.teamModePickerOpen) && this.tui.hasOverlay()) return undefined
@@ -733,6 +752,9 @@ export class ChatScreen {
       this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
       return
     }
+    // The pane streams a PTY session owned by the outgoing agent; it dies
+    // with that agent's scope.
+    this.closeShellPane()
     this.disposeSelection?.()
     this.disposeMcpPolicy?.()
     this.disposeSkillsPolicy?.()
@@ -2218,55 +2240,121 @@ export class ChatScreen {
   }
 
   /**
-   * Open the shared-shell overlay: `win` drives the Windows shell backend,
-   * `kali` the WSL distro; the agent's `terminal_*` tools address the same
-   * named sessions.
-   * @param argument - `win`, `kali`, or empty for the Windows shell.
+   * The native split-pane shell: `Ctrl+P` opens or cycles focus, `/shell`
+   * toggles, and `/shell win|kali` opens or rebinds the pane to that backend.
+   * The pane shares the agent's named PTY session, so agent-run commands
+   * stream into it too. Opening is allowed while work runs — the pane is the
+   * live view onto that work.
+   * @param argument - `win`, `kali`, `close`, or empty.
    */
   private async cmdShell(argument: string): Promise<void> {
-    const variant = argument.trim().toLowerCase()
-    if (variant !== '' && variant !== 'win' && variant !== 'kali') {
-      this.pushNotice('usage: /shell [win|kali]', 'error')
-      return
-    }
-    if (this.isBusy()) {
-      this.pushNotice('cannot open the shell while work is running (Esc to interrupt first)', 'error')
-      return
-    }
-    if (this.shellPane !== undefined) {
+    const arg = argument.trim().toLowerCase()
+    if (arg === 'close') {
       this.closeShellPane()
+      return
+    }
+    if (arg !== '' && arg !== 'win' && arg !== 'kali') {
+      this.pushNotice('usage: /shell [win|kali|close]', 'error')
+      return
+    }
+    const variant = arg === '' ? undefined : arg
+    if (this.shellPane !== undefined) {
+      if (variant === undefined) {
+        this.closeShellPane()
+        return
+      }
+      if (this.shellPane.variant === variant) {
+        this.focusShellPane()
+        return
+      }
+      await this.rebindShellPane(variant)
       return
     }
     if (this.tui.terminal.columns < 100) {
       this.pushNotice('shell pane needs a terminal at least 100 columns wide', 'error')
       return
     }
+    await this.openShellPane(variant ?? 'win')
+  }
+
+  /** Mount the pane for one variant into the stable split root and focus it. */
+  private async openShellPane(variant: ShellVariant): Promise<void> {
     try {
-      const resolved = variant === 'kali' ? 'kali' : 'win'
-      const session = await resolveShellSession(this.ctx, this.agent, resolved)
-      const pane = new ShellPane(this.tui, session, `Shell · ${resolved}`, () => { this.closeShellPane() })
-      this.splitRoot = new HStack([
-        { component: this.chatRoot, basis: 0, grow: 1, minSize: 30 },
-        { component: pane, basis: 46, shrink: 0 },
-      ])
-      this.tui.setLayoutRoot(this.splitRoot)
+      const session = await resolveShellSession(this.ctx, this.agent, variant)
+      const pane = new ShellPane(this.tui, session, variant, `Shell · ${variant}`, () => { this.closeShellPane() })
+      this.paneSlot.addChild(pane)
+      this.replacePaneSlotEntry(PANE_COLUMNS)
       this.shellPane = pane
-      this.shellFocused = true
-      this.tui.setFocus(pane.editor)
-      this.pushNotice(`shell ${resolved} open on the right · Esc returns to chat, /exit in the pane closes it`)
+      this.focusShellPane()
+      this.pushNotice(`shell ${variant} open on the right · Ctrl+P cycles focus, /shell close closes it`)
     } catch (error) {
       this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
     }
   }
 
+  /** Point the mounted pane at the other backend without touching the layout. */
+  private async rebindShellPane(variant: ShellVariant): Promise<void> {
+    if (this.shellPane === undefined) return
+    try {
+      const session = await resolveShellSession(this.ctx, this.agent, variant)
+      this.shellPane.rebind(session, variant, `Shell · ${variant}`)
+      this.focusShellPane()
+      this.pushNotice(`shell switched to ${variant}`)
+    } catch (error) {
+      this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+  }
+
+  /** Give the shell pane keyboard focus and mark it focused. */
+  private focusShellPane(): void {
+    if (this.shellPane === undefined) return
+    this.shellFocused = true
+    this.shellPane.setFocused(true)
+    this.tui.setFocus(this.shellPane.editor)
+    this.sync()
+  }
+
+  /** Return keyboard focus to the chat editor; the pane keeps rendering. */
+  private unfocusShellPane(): void {
+    if (this.shellPane === undefined) return
+    this.shellFocused = false
+    this.shellPane.setFocused(false)
+    this.tui.setFocus(this.editor)
+    this.sync()
+  }
+
+  /**
+   * `Ctrl+P`: open the default shell pane when none is mounted, otherwise
+   * cycle keyboard focus between the chat editor and the pane.
+   */
+  cycleShellFocus(): void {
+    if (this.shellPane === undefined) {
+      void this.cmdShell('')
+      return
+    }
+    if (this.shellFocused) this.unfocusShellPane()
+    else this.focusShellPane()
+  }
+
   /** Remove the shell pane from the split layout and return focus to chat. */
   private closeShellPane(): void {
     if (this.shellPane === undefined) return
+    const pane = this.shellPane
     this.shellPane = undefined
     this.shellFocused = false
-    this.tui.setLayoutRoot(this.chatRoot)
+    pane.dispose()
+    this.paneSlot.removeChild(pane)
+    this.replacePaneSlotEntry(0)
     this.tui.setFocus(this.editor)
     this.sync()
+  }
+
+  /** Resize the right column: re-add the slot entry with a new basis. */
+  private replacePaneSlotEntry(basis: number): void {
+    const root = this.screenRoot
+    if (root === undefined) return
+    root.removeChild(this.paneSlot)
+    root.addChild(this.paneSlot, { basis, shrink: 0 })
   }
 
   /** List the shell commands the agent executed, classified by execution world. */
@@ -2767,6 +2855,7 @@ export class ChatScreen {
         '  Ctrl+R     search message history · Shift+Tab cycle mode',
         '  Ctrl+Z     suspend to background',
         '  Ctrl+G     edit input in $EDITOR',
+        '  Ctrl+P     shell pane: open · cycle pane/chat focus (Esc leaves pane)',
         '  Tab        complete paths · / slash commands · @ attach files',
         '             (empty editor: cycle tool-card focus · Enter expand)',
         'commands: /new /fork /resume /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
@@ -3617,6 +3706,9 @@ export class ChatScreen {
       ...(jobsRunning !== undefined ? { jobsRunning } : {}),
       subagentsRunning: [...this.subagentRuns.values()].filter(admits => admits(this.agent.ctx)).length,
       queuePending: this.agent.inbox.nextTurn.length + this.agent.inbox.nextStep.length,
+      ...(this.shellPane !== undefined
+        ? { shellPane: { variant: this.shellPane.variant, focused: this.shellFocused } }
+        : {}),
     }
     this.statusBar.update(status)
     this.tui.requestRender()

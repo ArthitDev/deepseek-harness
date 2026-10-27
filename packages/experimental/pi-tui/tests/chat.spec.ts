@@ -12,7 +12,7 @@ import TerminalSessionService, { TerminalSessionId } from '@deepseek-ai/dsh-term
 import type { TerminalBackend, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
-import { ShellPane, type ShellPaneSession } from '../src/ui/shell-pane.ts'
+import { ShellPane, PANE_POLL_MS, type ShellPaneSession } from '../src/ui/shell-pane.ts'
 import { StatusBar } from '../src/ui/views.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
@@ -604,11 +604,11 @@ describe('/clear transcript', () => {
 })
 
 /** One PTY backend whose single session answers reads with a fixed tail. */
-function stubPaneBackend(tail: string): TerminalBackend {
+function stubPaneBackend(type: string, tail: string): TerminalBackend {
   return {
-    type: 'shell',
+    type,
     spawn: async () => ({
-      motd: 'stub shell ready',
+      motd: `stub ${type} ready`,
       startSend: () => settledOperation(''),
       read: () => ({ text: tail, totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
       signal: async () => ({ delivered: true, targetPgid: 1 }),
@@ -627,12 +627,12 @@ function settledOperation(viewport: string): TerminalSendOperation {
 }
 
 describe('the split-pane shell', () => {
-  it('opens the shared shell beside the chat, then toggles it closed', async () => {
+  it('opens the shared shell beside the chat, cycles focus, then toggles closed', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(TerminalSessionService)
-    ctx.terminals.registerBackend(stubPaneBackend('stub shell tail'))
+    ctx.terminals.registerBackend(stubPaneBackend('shell', 'stub shell tail'))
     const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('shell-pane')))
     await ctx.agents.register(agent)
     const terminal: Terminal = {
@@ -646,18 +646,64 @@ describe('the split-pane shell', () => {
     tui.start()
     try {
       screen.submit('/shell bogus')
-      expect(await renderScreen(tui)).toContain('usage: /shell [win|kali]')
+      expect(await renderScreen(tui)).toContain('usage: /shell [win|kali|close]')
       screen.submit('/shell kali')
       await vi.waitFor(async () => {
         expect(await renderScreen(tui)).toContain('no "kali" PTY backend is mounted')
       })
       screen.submit('/shell')
       await vi.waitFor(async () => {
-        expect(await renderScreen(tui)).toContain('── Shell · win ──')
+        expect(await renderScreen(tui)).toContain('── ▾ Shell · win')
       })
       expect(await renderScreen(tui)).toContain('stub shell tail')
+      // Focused pane: the status chip reads bright and the header offers Esc.
+      expect(await renderScreen(tui)).toContain('⌨ shell:win')
+      // Ctrl+P cycle: focus returns to chat, pane keeps rendering unfocused.
+      screen.cycleShellFocus()
+      expect(await renderScreen(tui)).toContain('── ▸ Shell · win')
+      screen.cycleShellFocus()
+      expect(await renderScreen(tui)).toContain('── ▾ Shell · win')
       screen.submit('/shell')
-      expect(await renderScreen(tui)).not.toContain('── Shell · win ──')
+      expect(await renderScreen(tui)).not.toContain('Shell · win')
+      expect(await renderScreen(tui)).not.toContain('⌨ shell:')
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('rebinds the mounted pane between win and kali backends', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(TerminalSessionService)
+    ctx.terminals.registerBackend(stubPaneBackend('shell', 'win tail'))
+    ctx.terminals.registerBackend(stubPaneBackend('kali', 'kali tail'))
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('shell-rebind')))
+    await ctx.agents.register(agent)
+    const terminal: Terminal = {
+      columns: 100, rows: 40, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    tui.start()
+    try {
+      screen.submit('/shell win')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('win tail')
+      })
+      screen.submit('/shell kali')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('── ▾ Shell · kali')
+      })
+      expect(await renderScreen(tui)).toContain('kali tail')
+      // Same variant refocuses instead of closing.
+      screen.cycleShellFocus()
+      screen.submit('/shell kali')
+      expect(await renderScreen(tui)).toContain('── ▾ Shell · kali')
     } finally {
       tui.stop()
       await ctx.fiber.dispose()
@@ -694,8 +740,8 @@ describe('the split-pane shell', () => {
     tui.start()
     try {
       const onClose = vi.fn()
-      const pane = new ShellPane(tui, session, 'Shell · test', onClose)
-      expect(pane.render(46).join('\n')).toContain('── Shell · test ──')
+      const pane = new ShellPane(tui, session, 'win', 'Shell · test', onClose)
+      expect(pane.render(46).join('\n')).toContain('── ▸ Shell · test')
       expect(pane.render(46).join('\n')).toContain('first boot')
       await pane.send('whoami')
       expect(sent).toEqual(['whoami'])
@@ -703,6 +749,50 @@ describe('the split-pane shell', () => {
       pane.editor.onSubmit?.('/exit')
       expect(onClose).toHaveBeenCalledOnce()
     } finally {
+      tui.stop()
+    }
+  })
+
+  it('polls the shared session so agent-run output appears live', async () => {
+    let tail = 'first boot'
+    let totalLines = 1
+    const session: ShellPaneSession = {
+      id: TerminalSessionId('pane-poll'),
+      owner: fixtureAgent(new Context(), Session.create(SessionId('pane-poll-owner'))),
+      terminals: {
+        listBackends: () => ['shell'],
+        list: () => [],
+        spawn: async () => ({
+          sessionId: TerminalSessionId('pane-poll'), motd: '', type: 'shell', status: { kind: 'running' },
+        }),
+        startSend: () => settledOperation(''),
+        read: () => ({ text: tail, totalLines, lineBegin: 0, lineEnd: totalLines, truncated: false }),
+      },
+    }
+    const terminal: Terminal = {
+      columns: 46, rows: 20, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    tui.start()
+    vi.useFakeTimers()
+    try {
+      const pane = new ShellPane(tui, session, 'win', 'Shell · poll')
+      expect(pane.render(46).join('\n')).toContain('first boot')
+      // The agent writes to the shared session out-of-band; the poll picks it up.
+      tail = 'nmap scan results'
+      totalLines = 9
+      await vi.advanceTimersByTimeAsync(PANE_POLL_MS + 50)
+      expect(pane.render(46).join('\n')).toContain('nmap scan results')
+      pane.dispose()
+      tail = 'after dispose'
+      await vi.advanceTimersByTimeAsync(PANE_POLL_MS + 50)
+      expect(pane.render(46).join('\n')).toContain('nmap scan results')
+      expect(pane.render(46).join('\n')).not.toContain('after dispose')
+    } finally {
+      vi.useRealTimers()
       tui.stop()
     }
   })

@@ -2187,10 +2187,12 @@ export interface PentestRunManagerConfig {
   readonly repeatedFailedHypothesisThreshold: number
   /** Total retained raw-artifact bytes one run may commit before new artifacts are omitted. */
   readonly maxRunArtifactBytes: number
+  /** Consecutive branch iterations scored before no-progress pauses the branch. */
+  readonly noProgressWindow: number
 }
 ```
 
-Source: [`packages/pentest/pentest-run/src/index.ts:882`](../packages/pentest/pentest-run/src/index.ts)
+Source: [`packages/pentest/pentest-run/src/index.ts:884`](../packages/pentest/pentest-run/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -4431,6 +4433,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-settings-web-search` ([`packages/client/ui-settings-web-search/src/index.ts`](../packages/client/ui-settings-web-search/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-browser` ([`packages/client/ui-sidebar-browser/src/index.ts`](../packages/client/ui-sidebar-browser/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-sidebar-exec` ([`packages/client/ui-sidebar-exec/src/index.ts`](../packages/client/ui-sidebar-exec/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-files` ([`packages/client/ui-sidebar-files/src/index.ts`](../packages/client/ui-sidebar-files/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-right` ([`packages/client/ui-sidebar-right/src/index.ts`](../packages/client/ui-sidebar-right/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-terminal` ([`packages/client/ui-sidebar-terminal/src/index.ts`](../packages/client/ui-sidebar-terminal/src/index.ts))

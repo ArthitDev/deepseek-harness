@@ -110,13 +110,13 @@ TUI 未指定默认推理级别时，如果提供方和模型相同，则使用 
 
 `/preset` 和 `--preset` 选择列表隐藏系统预设，仅显示可用的用户预设。模型绑定和恢复的会话仍可使用系统预设。
 
-/shell [win|kali] 在一个 owner 作用域的 PTY 会话上打开全屏共享 shell 覆盖层（`shared-win` 位于 Windows pwsh 后端，`shared-kali` 位于 kali WSL 发行版内）。操作者逐行输入命令，输出实时流入覆盖层；按 Esc 关闭覆盖层但会话继续运行。同名会话也由模型的 `terminal_open`/`terminal_send`/`terminal_read`/`terminal_list` 工具（随本 bundle 挂载）寻址，因此操作者与 agent 共用同一个 shell。关闭 TUI 时这些会话随 agent 一起释放。
+原生分栏 shell 在聊天右侧的右栏挂载一个实时 PTY 会话（`shared-win` 位于 Windows pwsh 后端，`shared-kali` 位于 kali WSL 发行版内）。`Ctrl+P` 打开该面板并在聊天与面板之间循环切换键盘焦点；按 `Esc` 把焦点交还聊天，面板继续渲染。面板轮询共享会话，因此 agent 通过 `terminal_*` 工具运行的命令会实时流入面板；操作者在获得焦点的面板输入行中键入命令——操作者与 agent 共用同一个 shell。`/shell win|kali` 在该后端上打开面板，或把已挂载的面板切换到该后端；`/shell close` 关闭面板但会话继续运行；面板挂载时状态栏显示 `⌨ shell:<variant>`。打开面板需要终端至少 100 列宽，且在任务运行期间也允许打开。关闭 TUI 时这些会话随 agent 一起释放。
 
 `/exec` 按新到旧列出本会话中 agent 执行过的 shell 命令，标注 `KALI`（经 `wsl -d kali-linux` 路由）或 `WIN`，并显示配对结果状态。选择一行会聚焦对应的 transcript 工具卡片以查看完整输出与参数。
 
 ## 命令
 
-`/exit`、`/new`、`/fork`、`/resume`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali]`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
+`/exit`、`/new`、`/fork`、`/resume`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
 
 `/wiki` 打开带编号的知识库选择列表，读取当前预设可见的 `knowledge_list` 工具所配置的知识库。选择知识库后，可在对话区查看 `INDEX.md` 的标题和链接、在 Obsidian 中打开该索引，或在文件管理器中打开配置的文件夹。方向键或数字选择，Enter 确认，Esc 取消。需要安装 Obsidian 并注册 `obsidian://` 协议处理程序，且 Wiki 文件夹已作为 Obsidian 库打开过。知识库不可用或打开失败时显示 TUI 通知。菜单不请求模型、不追加会话事件，也不修改提示词或 Wiki 文件。
 

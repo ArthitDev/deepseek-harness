@@ -467,6 +467,8 @@ export interface StatusBarData {
   subagentsRunning?: number
   /** Pending inbox items (queued turns + steering) awaiting the agent. */
   queuePending?: number
+  /** The mounted split-pane shell: its backend and where keyboard focus lives. */
+  shellPane?: { variant: string; focused: boolean }
 }
 
 /** Status bar that wraps segments to the terminal width. */
@@ -526,6 +528,12 @@ export class StatusBar extends Loader {
     }
     // Explicit mode indicator: plan when active (warn hue), normal otherwise.
     parts.push(data.planActive === true ? chalk.yellow('⌘ plan') : chalk.dim('◌ normal'))
+    if (data.shellPane !== undefined) {
+      // Focused pane reads bright (keys land there); unfocused stays dim.
+      parts.push(data.shellPane.focused
+        ? style.accent(`⌨ shell:${data.shellPane.variant}`)
+        : chalk.dim(`⌨ shell:${data.shellPane.variant}`))
+    }
     const modeShort = sandboxShort(data.sandboxMode)
     if (modeShort !== undefined) {
       // danger posture must stand out; a confined mode reads calm green.
