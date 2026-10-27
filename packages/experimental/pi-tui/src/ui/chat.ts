@@ -95,7 +95,8 @@ import {
 import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
-import { openShellOverlay } from './shell-overlay.js'
+import { SplitLayout } from './split-layout.js'
+import { ShellPane, resolveShellSession } from './shell-pane.js'
 import { pickReasoningLevel } from './reasoning-picker.js'
 import { pickWiki } from './wiki.js'
 import { buildBanner } from './banner.js'
@@ -241,6 +242,12 @@ export class ChatScreen {
   private model: ChatModel = createModel()
   private readonly messages = new Container()
   private readonly statusBar: StatusBar
+  /** Whether keyboard focus currently lives in the shell pane's editor. */
+  private shellFocused = false
+  /** Plain chat layout; swapped for the split layout while a shell pane is open. */
+  private readonly chatRoot = new VStack([])
+  private splitRoot: SplitLayout | undefined
+  private shellPane: ShellPane | undefined
   private readonly editor: Editor
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
   private readonly selection: ModelSelectionRef = { current: undefined, assembled: undefined }
@@ -372,6 +379,12 @@ export class ChatScreen {
       // which filters kitty key-release events — do the same here, or every
       // functional key (Ctrl+C/D/T/O/L, Esc, Shift+Tab) fires twice.
       if (isKeyRelease(data)) return undefined
+      // A focused shell pane's editor yields Esc back to the chat first
+      if (this.shellFocused && data === '\u001b') {
+        this.shellFocused = false
+        this.tui.setFocus(this.editor)
+        return { consume: true }
+      }
       if ((this.reasoningPickerOpen || this.suppressionPickerOpen || this.teamModePickerOpen) && this.tui.hasOverlay()) return undefined
       if (matchesKey(data, 'escape')) {
         // A running human shell command owns Esc first (pi semantics).
@@ -2230,12 +2243,36 @@ export class ChatScreen {
       this.pushNotice('cannot open the shell while work is running (Esc to interrupt first)', 'error')
       return
     }
+    if (this.shellPane !== undefined) {
+      this.closeShellPane()
+      return
+    }
+    if (this.tui.terminal.columns < 100) {
+      this.pushNotice('shell pane needs a terminal at least 100 columns wide', 'error')
+      return
+    }
     try {
-      await openShellOverlay(this.tui, this.ctx, this.agent, variant === 'kali' ? 'kali' : 'win', new AbortController().signal)
-      this.pushNotice(`shell ${variant === 'kali' ? 'kali' : 'win'} closed · the session keeps running for the agent's terminal tools`)
+      const session = await resolveShellSession(this.ctx, this.agent, variant === 'kali' ? 'kali' : 'win')
+      const pane = new ShellPane(this.tui, session, `Shell · ${variant}`, () => this.closeShellPane())
+      this.splitRoot = new SplitLayout(this.chatRoot, pane)
+      this.tui.setLayoutRoot(this.splitRoot)
+      this.shellPane = pane
+      this.shellFocused = true
+      this.tui.setFocus(pane.editor)
+      this.pushNotice(`shell ${variant} open on the right · Esc returns to chat, /exit in the pane closes it`)
     } catch (error) {
       this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
     }
+  }
+
+  /** Remove the shell pane from the split layout and return focus to chat. */
+  private closeShellPane(): void {
+    if (this.shellPane === undefined) return
+    this.shellPane = undefined
+    this.shellFocused = false
+    this.tui.setLayoutRoot(this.chatRoot)
+    this.tui.setFocus(this.editor)
+    this.sync()
   }
 
   /** List the shell commands the agent executed, classified by execution world. */

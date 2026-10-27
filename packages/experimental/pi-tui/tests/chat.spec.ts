@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from 'node:util'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
@@ -15,8 +15,9 @@ import { fixtureAgent } from './fixture-agent.ts'
 
 /** Wait for the fake terminal's scheduled render and read its visible text. */
 async function renderScreen(tui: TuiAltScreen): Promise<string> {
-  tui.requestRender()
-  await setTimeout(30)
+  // Render synchronously: a scheduled render plus a fixed sleep races
+  // under parallel-suite load and reads stale frames.
+  tui.renderNow()
   return stripVTControlCharacters(tui.getScreenLines().join('\n'))
 }
 
@@ -39,9 +40,9 @@ describe('running subagents in the status bar', () => {
     tui.start()
     try {
       expect(await renderScreen(tui)).toContain('📚 Wiki')
-      screen.switchAgent(second)
+      await screen.switchAgent(second)
       expect(await renderScreen(tui)).not.toContain('📚 Wiki')
-      screen.switchAgent(first)
+      await screen.switchAgent(first)
       expect(await renderScreen(tui)).toContain('📚 Wiki')
       available = false
       ctx.events.emit(null, 'tools/change')
@@ -85,23 +86,23 @@ describe('running subagents in the status bar', () => {
       expect(await renderScreen(tui)).toContain('2 agents')
       emit(nested, 'subagent/start', 'nested-run', [first.id])
       expect(await renderScreen(tui)).toContain('3 agents')
-      screen.switchAgent(nested)
+      await screen.switchAgent(nested)
       expect(await renderScreen(tui)).toContain('1 agents')
-      screen.switchAgent(first)
+      await screen.switchAgent(first)
       expect(await renderScreen(tui)).toContain('3 agents')
       emit(nested, 'subagent/end', 'nested-run', [first.id])
       expect(await renderScreen(tui)).toContain('2 agents')
       emit(first, 'subagent/end', 'local-run')
       expect(await renderScreen(tui)).toContain('1 agents')
-      screen.switchAgent(second)
+      await screen.switchAgent(second)
       expect(await renderScreen(tui)).toContain('1 agents')
       emit(second, 'subagent/start', 'second-run')
       expect(await renderScreen(tui)).toContain('2 agents')
       emit(first, 'subagent/end', 'external-run')
       expect(await renderScreen(tui)).toContain('2 agents')
-      screen.switchAgent(first)
+      await screen.switchAgent(first)
       expect(await renderScreen(tui)).not.toContain(' agents')
-      screen.switchAgent(second)
+      await screen.switchAgent(second)
       expect(await renderScreen(tui)).toContain('2 agents')
       emit(second, 'subagent/end', 'second-run')
       expect(await renderScreen(tui)).toContain('1 agents')
@@ -143,7 +144,7 @@ describe('exit and resume hints', () => {
     const screen = new ChatScreen({ ctx, tui, agent: original, config: {}, onQuit })
     tui.start()
     try {
-      screen.switchAgent(resumed)
+      await screen.switchAgent(resumed)
       const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
       if (entry === 'slash') {
         screen.handleEvent(resumed.session.append('turn/start', { turn: 1 }))
@@ -296,7 +297,10 @@ describe('preset switches with conversation history', () => {
       expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_PRESET')
       expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_WIKI_GUIDANCE')
       expect(source.session.snapshotEvents()).toEqual(original)
+      const childEvents = child.session.snapshotEvents().map(e => e.type)
+      console.error('[DBG] child events:', childEvents.join(','), '| inherited:', String(child.session.inheritedEventCount))
       const rendered = await renderScreen(tui)
+      await writeFile(join(tmpdir(), 'dsh-rendered.txt'), rendered)
       expect(rendered).toContain('retained question')
       expect(rendered).toContain('retained answer')
       expect(rendered).toContain('new-preset')
