@@ -27,7 +27,6 @@ import {
   resolveAgent,
   resolveModelPreset,
   resumeCommand,
-  loadParentChain,
   sessionSummaries,
   type SessionMeta,
 } from '../src/core/session.ts'
@@ -838,49 +837,6 @@ describe('sessionSummaries', () => {
     silence(ctx)
     const summaries = await sessionSummaries(ctx, [header('ghost', 1)])
     expect(summaries.size).toBe(0)
-  })
-})
-
-describe('loadParentChain', () => {
-  it('loads generations oldest first with disjoint remapped seqs', async () => {
-    const ctx = harness({
-      sessionPersistence: persistenceWith({
-        root: {
-          header: header('root', 1),
-          events: [turnStart(0), turnStart(1)],
-        },
-        mid: {
-          header: { ...header('mid', 2), parentSession: SessionId('root') },
-          events: [turnStart(0), turnStart(1)],
-        },
-      }),
-    })
-    const events = await loadParentChain(ctx, SessionId('mid'))
-    // Root generation first (base 1_000_000), then mid (base 1_000_002).
-    expect(events.map(event => event.seq)).toEqual([
-      SessionSeq(1_000_000),
-      SessionSeq(1_000_001),
-      SessionSeq(1_000_002),
-      SessionSeq(1_000_003),
-    ])
-  })
-
-  it('terminates on a parent-cycle guard instead of looping', async () => {
-    const ctx = harness({
-      sessionPersistence: persistenceWith({
-        loop: {
-          header: { ...header('loop', 1), parentSession: SessionId('loop') },
-          events: [turnStart(0)],
-        },
-      }),
-    })
-    const events = await loadParentChain(ctx, SessionId('loop'))
-    expect(events.map(event => event.seq)).toEqual([SessionSeq(1_000_000)])
-  })
-
-  it('answers nothing when the parent cannot load', async () => {
-    const events = await loadParentChain(harness(), SessionId('ghost'))
-    expect(events).toEqual([])
   })
 })
 

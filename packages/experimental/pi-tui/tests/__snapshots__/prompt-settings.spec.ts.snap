@@ -1,0 +1,61 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TUI Web prompt settings > retains complete TUI prompts despite suppression false and saved Web settings false > complete system prompt 1`] = `
+{
+  "content": "Runtime host: Shield Break Harness.
+
+preset contribution
+
+built-in guidance
+
+scoped built-in guidance
+
+mode contribution",
+  "role": "system",
+}
+`;
+
+exports[`TUI Web prompt settings > retains complete TUI prompts despite suppression false and saved Web settings true > complete system prompt 1`] = `
+{
+  "content": "Runtime host: Shield Break Harness.
+
+preset contribution
+
+built-in guidance
+
+scoped built-in guidance
+
+mode contribution",
+  "role": "system",
+}
+`;
+
+exports[`TUI Web prompt settings > retains complete TUI prompts despite suppression true and saved Web settings false > complete system prompt 1`] = `
+{
+  "content": "Runtime host: Shield Break Harness.
+
+preset contribution
+
+built-in guidance
+
+scoped built-in guidance
+
+mode contribution",
+  "role": "system",
+}
+`;
+
+exports[`TUI Web prompt settings > retains complete TUI prompts despite suppression true and saved Web settings true > complete system prompt 1`] = `
+{
+  "content": "Runtime host: Shield Break Harness.
+
+preset contribution
+
+built-in guidance
+
+scoped built-in guidance
+
+mode contribution",
+  "role": "system",
+}
+`;

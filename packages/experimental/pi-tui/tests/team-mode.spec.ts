@@ -105,7 +105,7 @@ describe('/team-mode', () => {
         await vi.waitFor(() => { expect(visible()).toContain(`${option.icon} ${option.label}`) })
         await ctx.systemPrompt.assemble()
         expect(ctx.pentestModePolicy.current().mode).toBe(option.value)
-        expect(ctx.pentestModePolicy.current().suppressSections).toBe(suppressed)
+        expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       }
       const stable = await readFile(profile.patchPath, 'utf8')
       const count = write.mock.calls.length
@@ -126,14 +126,14 @@ describe('/team-mode', () => {
       await ctx.fiber.dispose()
       const restarted = await start()
       expect(restarted.pentestModePolicy.current().mode).toBe('black')
-      expect(restarted.pentestModePolicy.current().suppressSections).toBe(suppressed)
+      expect(restarted.pentestModePolicy.current().suppressSections).toBe(false)
       // Web prompt edits remain shared, while saved TUI mode and suppression retain precedence.
       await writeFile(webPath, JSON.stringify([{ id: 'pentest-mode', config: { ...webConfig, mode: 'red', blackPrompt: 'UPDATED_WEB_BLACK' } }]))
       const assembly = await restarted.systemPrompt.assemble()
       expect(restarted.pentestModePolicy.current().mode).toBe('black')
       expect(restarted.pentestModePolicy.current().blackPrompt).toBe('UPDATED_WEB_BLACK')
       expect(assembly.sections.find(section => section.name === 'pentest:mode-policy')?.text)
-        .toBe(suppressed ? undefined : 'UPDATED_WEB_BLACK')
+        .toBe('UPDATED_WEB_BLACK')
     } finally {
       tui?.stop()
       for (const ctx of contexts) await ctx.fiber.dispose()

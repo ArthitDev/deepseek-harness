@@ -15,6 +15,14 @@ describe('plugin entry', () => {
     expect(piTui.Config).toBeDefined()
   })
 
+  it('defaults to 20 visible history items and accepts only positive integers', () => {
+    expect(piTui.Config({}).historyLimit).toBe(20)
+    expect(piTui.Config({ historyLimit: 50 }).historyLimit).toBe(50)
+    for (const historyLimit of [0, -1, 1.5]) {
+      expect(() => piTui.Config({ historyLimit })).toThrow()
+    }
+  })
+
   it('refuses to boot outside an interactive terminal', async () => {
     const ctx = new Context()
     ctx.provide('cmdlineArgs', { get: () => [] as string[] })

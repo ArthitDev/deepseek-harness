@@ -5,15 +5,17 @@ import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
-import { AssistantStreamAccumulator, boundContextSummary, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { AssistantStreamAccumulator, boundContextSummary, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, ToolCallId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import SessionStore, { Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import TerminalSessionService, { TerminalSessionId } from '@deepseek-ai/dsh-terminal'
 import type { TerminalBackend, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
-import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
+import { Text, TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
 import { ShellPane, PANE_POLL_MS, type ShellPaneSession } from '../src/ui/shell-pane.ts'
-import { StatusBar } from '../src/ui/views.ts'
+import { StatusBar, ToolCardView } from '../src/ui/views.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
 /** Wait for the fake terminal's scheduled render and read its visible text. */
@@ -127,6 +129,123 @@ describe('running subagents in the status bar', () => {
 })
 
 describe('exit and resume hints', () => {
+  it('loads folded tool images only when revealed and reloads evicted images', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const readImage = vi.fn(async () => ({ data: new Uint8Array([1, 2, 3]) }))
+    ctx.provide('attachments', { readImage })
+    const session = ctx.sessions.create(SessionId('bounded-images'))
+    const callId = ToolCallId('saved-image')
+    session.append('tool/call', { turn: 1, step: 1, callId, name: 'read_image', arguments: '{}' })
+    session.append('tool/result', { turn: 1, step: 1, message: createMessage({ role: 'tool',
+      source: { kind: 'tool', callId }, toolCallId: callId,
+      content: [{ type: 'image', attachment: { attachmentId: AttachmentId('saved-image'),
+        mediaType: 'image/png', bytes: 3, width: 1, height: 1 } }] }) }, { surfaceOp: 'append' })
+    for (let i = 0; i < 5; i++) {
+      session.append('user/message', createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: `after-image-${i}` }] }), { surfaceOp: 'append' })
+    }
+    const agent = fixtureAgent(ctx, session)
+    const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { historyLimit: 3 }, onQuit: vi.fn() })
+    const setImages = vi.spyOn(ToolCardView.prototype, 'setImages')
+    tui.start()
+    try {
+      await screen.replayTranscript(agent)
+      expect(readImage).not.toHaveBeenCalled()
+      screen.submit('/expand-all')
+      await vi.waitFor(() => { expect(setImages).toHaveBeenCalledTimes(1) })
+      screen.submit('/expand-all')
+      screen.submit('/expand-all')
+      await vi.waitFor(() => { expect(setImages).toHaveBeenCalledTimes(2) })
+      expect(readImage).toHaveBeenCalledTimes(2)
+    } finally { tui.stop(); setImages.mockRestore(); await ctx.fiber.dispose() }
+  })
+
+  it.each([undefined, 3])('creates only the visible history views with limit %s', async (historyLimit) => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('bounded-history'))
+    for (let i = 1; i <= 120; i++) {
+      session.append('user/message', createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: `saved-${i}` }] }), { surfaceOp: 'append' })
+    }
+    const agent = fixtureAgent(ctx, session)
+    const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent,
+      config: historyLimit === undefined ? {} : { historyLimit }, onQuit: vi.fn() })
+    const createView = vi.spyOn(await import('../src/ui/views.ts'), 'createView')
+    tui.start()
+    try {
+      await screen.replayTranscript(agent)
+      expect(createView).toHaveBeenCalledTimes(historyLimit ?? 20)
+      expect(createView.mock.calls.map(([item]) => item.text)).not.toContain('saved-1')
+      expect(await renderScreen(tui)).toContain('saved-120')
+      if (historyLimit === 3) {
+        expect(tui.getScreenLines().map(line => stripVTControlCharacters(line))).toMatchSnapshot('bounded history')
+      }
+      createView.mockClear()
+      screen.handleEvent(session.append('user/message', createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: 'live-latest' }] }), { surfaceOp: 'append' }))
+      expect(createView).toHaveBeenCalledTimes(1)
+      expect(await renderScreen(tui)).toContain('live-latest')
+
+      screen.submit('/expand-all')
+      expect(createView.mock.calls.map(([item]) => item.text)).toContain('saved-1')
+      screen.handleEvent(session.append('user/message', createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: 'live-expanded' }] }), { surfaceOp: 'append' }))
+      expect(await renderScreen(tui)).toContain('live-expanded')
+      screen.submit('/expand-all')
+      createView.mockClear()
+      screen.submit('/expand-all')
+      expect(createView.mock.calls.map(([item]) => item.text)).toContain('saved-1')
+      expect(session.snapshotEvents().filter(event => event.type === 'user/message')).toHaveLength(122)
+    } finally { tui.stop(); createView.mockRestore(); await ctx.fiber.dispose() }
+  })
+
+  it('replays a seeded session once even when its parent no longer exists', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const open = vi.fn(async () => { throw new Error('session "missing-parent" not found') })
+    ctx.provide('sessionPersistence', { open })
+    const original = ctx.sessions.create(SessionId('seed-source'))
+    original.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'saved question' }] }), { surfaceOp: 'append' })
+    original.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant',
+      source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: 'saved answer' }] }) }, { surfaceOp: 'append' })
+    const resumedSession = ctx.sessions.create(SessionId('seeded-resume'), {
+      seed: original.snapshotEvents(), inheritedEventCount: SessionLogOffset(original.seq),
+      meta: { parentSession: SessionId('missing-parent'), isSeeded: true },
+    })
+    const first = fixtureAgent(ctx, ctx.sessions.create(SessionId('current-resume')))
+    const resumed = fixtureAgent(ctx, resumedSession)
+    const tui = new TuiAltScreen({ columns: 120, rows: 30, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
+    tui.start()
+    try {
+      await screen.switchAgent(resumed)
+      const text = await renderScreen(tui)
+      expect(text.match(/› saved question/g)).toHaveLength(1)
+      expect(text.split('\n').filter(line => line.trimStart().startsWith('saved answer'))).toHaveLength(1)
+      expect(open).not.toHaveBeenCalled()
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line)))
+        .toMatchSnapshot('resumed inherited messages with a missing parent')
+      const history = resumed.session.snapshotEvents()
+      const followup = vi.spyOn(resumed, 'followup')
+      screen.submit('/recap')
+      expect((await renderScreen(tui)).match(/Recap · Request: saved question/g)).toHaveLength(2)
+      screen.submit('/recap unexpected')
+      expect(await renderScreen(tui)).toContain('usage: /recap')
+      expect(resumed.session.snapshotEvents()).toEqual(history)
+      expect(followup).not.toHaveBeenCalled()
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
   it.each(['slash', 'ctrl-d', 'ctrl-c'] as const)('exits through %s with the currently visible saved session', async (entry) => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -433,9 +552,9 @@ describe('/providers', () => {
       expect(describe.mock.calls).toEqual([['TEST_GATEWAY_KEY'], ['TEST_MISSING_KEY']])
       expect(rendered.split('\n').filter(line => line.includes(' model(s)')).map(line => line.trimEnd())).toMatchInlineSnapshot(`
         [
-          " ℹ gateway ← current — Gateway · 2 model(s) · key ✓ (TEST_GATEWAY_KEY)",
-          " ℹ missing — Missing Key · 0 model(s) · key ✗ — /key TEST_MISSING_KEY",
-          " ℹ native — Native Auth · 0 model(s) · provider-native auth",
+          " ℹ gateway ← current — Gateway · 2 model(s) · key ✓ (TEST_GATEWAY_KEY)                      │",
+          " ℹ missing — Missing Key · 0 model(s) · key ✗ — /key TEST_MISSING_KEY                       │",
+          " ℹ native — Native Auth · 0 model(s) · provider-native auth                                 │",
         ]
       `)
       expect(resolve).not.toHaveBeenCalled()
@@ -515,7 +634,7 @@ describe('/clear transcript', () => {
         expect(cleared.match(/session cleared/g)).toHaveLength(1)
         expect(cleared.split('\n').filter(line => line.includes('session cleared')).map(line => line.trim())).toMatchInlineSnapshot(`
           [
-            "» session cleared — same session, fresh context",
+            "» session cleared — same session, fresh context    │",
           ]
         `)
         expect(screen.currentSessionId).toBe(session.id)
@@ -627,6 +746,91 @@ function settledOperation(viewport: string): TerminalSendOperation {
 }
 
 describe('the split-pane shell', () => {
+  it('stages a scoped shell draft without execution, overwrites, or focus changes', async () => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    const harness = await mountAgentLoopTestHarness(ctx)
+    const agent = await harness.create(SessionId('shell-draft'))
+    const other = await harness.create(SessionId('other-draft-owner'))
+    await ctx.plugin(TerminalSessionService)
+    ctx.terminals.registerBackend(stubPaneBackend('shell', 'shell ready'))
+    ctx.terminals.registerBackend(stubPaneBackend('kali', 'kali ready'))
+    const sends = vi.spyOn(ctx.terminals, 'startSend')
+    const start = vi.fn<Terminal['start']>()
+    const terminal: Terminal = {
+      columns: 100, rows: 40, kittyProtocolActive: false,
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    const draft = (command: unknown, shell = 'win') => ctx.tools.execute({
+      name: 'shell_draft', arguments: { command, shell }, agent,
+      callId: ToolCallId('draft-call'), signal: new AbortController().signal,
+    })
+    const schemas = (scope = agent) => ctx.tools.schemas(scope).map(tool => tool.name)
+    const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
+    tui.start()
+    try {
+      expect(schemas()).not.toContain('shell_draft')
+      screen.submit('/shell win')
+      await vi.waitFor(() => { expect(schemas()).toContain('shell_draft') })
+      expect(schemas(other)).not.toContain('shell_draft')
+      screen.cycleShellFocus()
+      const focus = vi.spyOn(tui, 'setFocus')
+      expect((await draft('Get-Date', 'kali')).isError).toBe(true)
+      for (const command of [42, ' ', '\x1b[31mGet-Date', '\x9b31mGet-Date', 'Get-Date\r']) {
+        expect((await draft(command)).isError).toBe(true)
+      }
+      const deny = agent.ctx.tools.guard(execution => execution.name === 'shell_draft' ? 'draft not approved' : undefined)
+      expect((await draft('Get-Date')).isError).toBe(true)
+      deny()
+      const staged = await draft('Get-Date')
+      expect(staged.isError).toBe(false)
+      expect(staged.content).toMatchSnapshot('draft handoff result')
+      expect(focus).not.toHaveBeenCalled()
+      expect(sends).not.toHaveBeenCalled()
+      await renderScreen(tui)
+      const right = (): string => tui.getScreenLines()
+        .map(line => stripVTControlCharacters(line).slice(54)).join('\n')
+      expect(right()).toContain('Get-Date')
+      expect((await draft('Get-Location')).isError).toBe(true)
+      await renderScreen(tui)
+      expect(right()).toContain('Get-Date')
+      expect(right()).not.toContain('Get-Location')
+      expect(sends).not.toHaveBeenCalled()
+      screen.submit('/shell kali')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('shell input is not empty')
+      })
+      expect(right()).toContain('Shell · win')
+      expect(right()).toContain('Get-Date')
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(51)))
+        .toMatchSnapshot('shell draft awaiting human submission')
+      screen.cycleShellFocus()
+      input('\r')
+      await vi.waitFor(() => { expect(sends).toHaveBeenCalledOnce() })
+      expect(sends.mock.calls[0]?.[2]).toMatchObject({ text: 'Get-Date', submit: true })
+      screen.submit('/shell kali')
+      await vi.waitFor(async () => { expect(await renderScreen(tui)).toContain('Shell · kali') })
+      expect((await draft('Get-Date')).isError).toBe(true)
+      expect((await draft('pwd\nwhoami', 'kali')).isError).toBe(false)
+      await renderScreen(tui)
+      expect(right()).toContain('pwd')
+      expect(right()).toContain('whoami')
+      expect(sends).toHaveBeenCalledOnce()
+      screen.submit('/shell close')
+      expect(schemas()).not.toContain('shell_draft')
+      expect((await draft('pwd', 'kali')).isError).toBe(true)
+      await screen.switchAgent(other)
+      expect(schemas(other)).not.toContain('shell_draft')
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('opens the shared shell beside the chat, cycles focus, then toggles closed', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -635,9 +839,10 @@ describe('the split-pane shell', () => {
     ctx.terminals.registerBackend(stubPaneBackend('shell', 'stub shell tail'))
     const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('shell-pane')))
     await ctx.agents.register(agent)
+    const start = vi.fn<Terminal['start']>()
     const terminal: Terminal = {
       columns: 100, rows: 40, kittyProtocolActive: false,
-      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
     }
@@ -645,6 +850,11 @@ describe('the split-pane shell', () => {
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
     tui.start()
     try {
+      expect(await renderScreen(tui)).toContain('Agent Debug')
+      expect(await renderScreen(tui)).not.toContain('Shell · win')
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(51)))
+        .toMatchSnapshot('tool activity without a shell')
+      const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
       screen.submit('/shell bogus')
       expect(await renderScreen(tui)).toContain('usage: /shell [win|kali|close]')
       screen.submit('/shell kali')
@@ -652,20 +862,137 @@ describe('the split-pane shell', () => {
         expect(await renderScreen(tui)).toContain('no "kali" PTY backend is mounted')
       })
       screen.submit('/shell')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      expect(await renderScreen(tui)).toContain('1. Windows')
+      expect(await renderScreen(tui)).toContain('2. Kali')
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line)))
+        .toMatchSnapshot('shell picker')
+      input('\r')
       await vi.waitFor(async () => {
         expect(await renderScreen(tui)).toContain('── ▾ Shell · win')
       })
       expect(await renderScreen(tui)).toContain('stub shell tail')
+      const lines = tui.getScreenLines().map(line => stripVTControlCharacters(line))
+      const borders = (column: number): number[] => lines.flatMap((line, row) =>
+        /^─{5}/.test(line.slice(column)) ? [row] : [])
+      expect(borders(54)).toEqual(borders(0))
+      expect(borders(54)).toHaveLength(2)
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(51)))
+        .toMatchSnapshot('shared shell and resize divider')
+      expect(await renderScreen(tui)).toContain('Agent Debug')
+      screen.handleEvent({
+        type: 'tool/call', seq: SessionSeq(1), time: 0,
+        data: { turn: 1, step: 1, callId: ToolCallId('live-command'), name: 'pwsh', arguments: '{"command":"Get-Date"}' },
+      })
+      await renderScreen(tui)
+      const activity = (): string => tui.getScreenLines()
+        .map(line => stripVTControlCharacters(line).slice(54)).join('\n')
+      expect(activity()).toContain('[RUNNING] Shell · pwsh')
+      expect(activity()).toContain('Get-Date')
+      screen.handleEvent({
+        type: 'tool/result', seq: SessionSeq(2), time: 0, surfaceOp: 'append',
+        data: {
+          turn: 1, step: 1,
+          message: createMessage({
+            role: 'tool', toolCallId: ToolCallId('live-command'),
+            source: { kind: 'tool', callId: ToolCallId('live-command') },
+            content: [{ type: 'text', text: 'finished\nsecond line only expanded' }],
+          }),
+        },
+      })
+      await renderScreen(tui)
+      expect(activity()).toContain('[OK] Shell · pwsh')
+      expect(activity()).not.toContain('[RUNNING]')
+      expect(activity()).toContain('stub shell tail')
+      expect(activity()).not.toContain('second line only expanded')
+      const debugSends = vi.spyOn(ctx.terminals, 'startSend')
+      input('\x1b[100;7u')
+      input('\r')
+      expect(await renderScreen(tui)).toContain('second line only expanded')
+      expect(debugSends).not.toHaveBeenCalled()
+      const interrupt = vi.spyOn(agent, 'cancel')
+      input('\x1b')
+      expect(interrupt).not.toHaveBeenCalled()
+      expect(await renderScreen(tui)).toContain('── ▾ Shell · win')
+      debugSends.mockRestore()
+      screen.submit('/agent-debug bogus')
+      expect(await renderScreen(tui)).toContain('usage: /agent-debug')
+      expect(activity()).toContain('Agent Debug')
+      input('pending command')
+      const sends = vi.spyOn(ctx.terminals, 'startSend')
+      const focus = vi.spyOn(tui, 'setFocus')
+      screen.submit('/agent-debug')
+      expect(await renderScreen(tui)).not.toContain('Agent Debug')
+      expect(activity()).toContain('Shell · win')
+      expect(activity()).toContain('pending command')
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(51)))
+        .toMatchSnapshot('shell with agent debug hidden')
+      screen.submit('/agent-debug')
+      await renderScreen(tui)
+      expect(activity()).toContain('[OK] Shell · pwsh')
+      expect(activity()).toContain('pending command')
+      expect(sends).not.toHaveBeenCalled()
+      expect(focus).not.toHaveBeenCalled()
+      const shellColumn = async (): Promise<number> =>
+        (await renderScreen(tui)).split('\n').find(line => line.includes('Shell · win'))?.indexOf('──') ?? -1
+      expect(await shellColumn()).toBe(54)
+      input('\x1b[1;7D')
+      expect(await shellColumn()).toBe(52)
+      input('\x1b[1;7C')
+      expect(await shellColumn()).toBe(54)
+      const overlay = tui.showOverlay(new Text('modal', 0, 0))
+      input('\x1b[1;7D')
+      overlay.hide()
+      expect(await shellColumn()).toBe(54)
       // Focused pane: the status chip reads bright and the header offers Esc.
       expect(await renderScreen(tui)).toContain('⌨ shell:win')
       // Ctrl+P cycle: focus returns to chat, pane keeps rendering unfocused.
       screen.cycleShellFocus()
       expect(await renderScreen(tui)).toContain('── ▸ Shell · win')
+      input('\x1b[1;7C')
+      expect(await shellColumn()).toBe(56)
       screen.cycleShellFocus()
       expect(await renderScreen(tui)).toContain('── ▾ Shell · win')
       screen.submit('/shell')
-      expect(await renderScreen(tui)).not.toContain('Shell · win')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      input('\x1b')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
+      expect(await renderScreen(tui)).toContain('── ▾ Shell · win')
+      screen.submit('/shell')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      expect(await renderScreen(tui)).toContain('3. Close shell')
+      input('3')
+      input('\r')
+      await vi.waitFor(async () => { expect(await renderScreen(tui)).not.toContain('Shell · win') })
       expect(await renderScreen(tui)).not.toContain('⌨ shell:')
+      expect(await renderScreen(tui)).toContain('Agent Debug')
+      screen.submit('/agent-debug')
+      expect(await renderScreen(tui)).not.toContain('Agent Debug')
+      screen.handleEvent({
+        type: 'tool/call', seq: SessionSeq(3), time: 0,
+        data: { turn: 1, step: 1, callId: ToolCallId('without-shell'), name: 'read_file', arguments: '{"path":"README.md"}' },
+      })
+      screen.submit('/agent-debug')
+      await renderScreen(tui)
+      expect(activity()).toContain('[RUNNING] Tool · read_file')
+      input('\x1b[1;7D')
+      await renderScreen(tui)
+      expect(tui.getScreenLines()[0]).toContain('Agent Debug')
+      expect(stripVTControlCharacters(tui.getScreenLines()[0] ?? '').indexOf('──')).toBe(54)
+      input('\x1b[1;7C')
+      screen.submit('/shell win')
+      await vi.waitFor(async () => {
+        expect(await renderScreen(tui)).toContain('Shell · win')
+      })
+      expect(activity()).toContain('[OK] Shell · pwsh')
+      expect(activity().match(/Agent Debug/g)).toHaveLength(1)
+      const next = fixtureAgent(ctx, ctx.sessions.create(SessionId('next-tools-session')))
+      await ctx.agents.register(next)
+      await screen.switchAgent(next)
+      await renderScreen(tui)
+      expect(activity()).toContain('Agent Debug')
+      expect(activity()).not.toContain('read_file')
+      expect(activity()).not.toContain('Get-Date')
     } finally {
       tui.stop()
       await ctx.fiber.dispose()
@@ -678,12 +1005,13 @@ describe('the split-pane shell', () => {
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(TerminalSessionService)
     ctx.terminals.registerBackend(stubPaneBackend('shell', 'win tail'))
-    ctx.terminals.registerBackend(stubPaneBackend('kali', 'kali tail'))
+    ctx.terminals.registerBackend(stubPaneBackend('kali', 'kali tail\n┌──(root㉿kali-test)-[/tmp]\n└─# '))
     const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('shell-rebind')))
     await ctx.agents.register(agent)
+    const start = vi.fn<Terminal['start']>()
     const terminal: Terminal = {
       columns: 100, rows: 40, kittyProtocolActive: false,
-      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
     }
@@ -695,14 +1023,27 @@ describe('the split-pane shell', () => {
       await vi.waitFor(async () => {
         expect(await renderScreen(tui)).toContain('win tail')
       })
-      screen.submit('/shell kali')
+      screen.submit('/shell')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
+      input('\x1b[B')
+      input('\r')
       await vi.waitFor(async () => {
         expect(await renderScreen(tui)).toContain('── ▾ Shell · kali')
       })
       expect(await renderScreen(tui)).toContain('kali tail')
+      expect(await renderScreen(tui)).toContain('┌──(root㉿kali-test)-[/tmp]')
       // Same variant refocuses instead of closing.
       screen.cycleShellFocus()
       screen.submit('/shell kali')
+      expect(await renderScreen(tui)).toContain('── ▾ Shell · kali')
+      screen.handleEvent({ type: 'turn/start', seq: SessionSeq(1), time: 0, data: { turn: 1 } })
+      const interrupt = vi.spyOn(agent, 'cancel')
+      screen.submit('/shell')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      input('\x1b')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
+      expect(interrupt).not.toHaveBeenCalled()
       expect(await renderScreen(tui)).toContain('── ▾ Shell · kali')
     } finally {
       tui.stop()
@@ -713,6 +1054,8 @@ describe('the split-pane shell', () => {
   it('streams pane input to the PTY and renders the retained tail', async () => {
     const sent: string[] = []
     let tail = 'first boot'
+    const completion = Promise.withResolvers<Awaited<TerminalSendOperation['done']>>()
+    const readOutput = vi.fn(() => ({ delta: '', truncated: false }))
     const session: ShellPaneSession = {
       id: TerminalSessionId('pane-test'),
       owner: fixtureAgent(new Context(), Session.create(SessionId('pane-owner'))),
@@ -725,7 +1068,7 @@ describe('the split-pane shell', () => {
         startSend: (_owner, _id, request) => {
           sent.push(request.text)
           tail = `ran: ${request.text.trim()}`
-          return settledOperation(request.text)
+          return { done: completion.promise, readOutput, cancel: () => false }
         },
         read: () => ({ text: tail, totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
       },
@@ -737,19 +1080,35 @@ describe('the split-pane shell', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
+    vi.useFakeTimers()
     tui.start()
+    const onClose = vi.fn()
+    const pane = new ShellPane(tui, session, 'win', 'Shell · test', onClose)
     try {
-      const onClose = vi.fn()
-      const pane = new ShellPane(tui, session, 'win', 'Shell · test', onClose)
       expect(pane.render(46).join('\n')).toContain('── ▸ Shell · test')
       expect(pane.render(46).join('\n')).toContain('first boot')
-      await pane.send('whoami')
+      const requestRender = vi.spyOn(tui, 'requestRender')
+      requestRender.mockClear()
+      const sending = pane.send('whoami')
+      await vi.advanceTimersByTimeAsync(PANE_POLL_MS)
+      expect(pane.render(46).join('\n')).toContain('ran: whoami')
+      requestRender.mockClear()
+      readOutput.mockReturnValueOnce({ delta: 'ran: whoami', truncated: false })
+      await vi.advanceTimersByTimeAsync(80)
+      expect(requestRender).toHaveBeenCalled()
+      expect(pane.render(46).join('\n').match(/ran: whoami/g)).toHaveLength(1)
+      requestRender.mockClear()
+      completion.resolve(await settledOperation(tail).done)
+      await sending
+      expect(requestRender).toHaveBeenCalled()
       expect(sent).toEqual(['whoami'])
       expect(pane.render(46).join('\n')).toContain('ran: whoami')
       pane.editor.onSubmit?.('/exit')
       expect(onClose).toHaveBeenCalledOnce()
     } finally {
+      pane.dispose()
       tui.stop()
+      vi.useRealTimers()
     }
   })
 
@@ -795,5 +1154,59 @@ describe('the split-pane shell', () => {
       vi.useRealTimers()
       tui.stop()
     }
+  })
+
+  it('pins the latest Kali prompt through clear, updates its directory, and drops it on rebind', async () => {
+    let tail = 'boot output\n┌──(root㉿kali-test)-[/tmp]\n└─# '
+    const ctx = new Context()
+    const session: ShellPaneSession = {
+      id: TerminalSessionId('kali-prompt'),
+      owner: fixtureAgent(ctx, Session.create(SessionId('kali-prompt-owner'))),
+      terminals: {
+        listBackends: () => ['kali'], list: () => [],
+        spawn: async () => ({ sessionId: TerminalSessionId('kali-prompt'), motd: '' }),
+        startSend: () => settledOperation(''),
+        read: () => ({ text: tail, totalLines: tail.split('\n').length, lineBegin: 0, lineEnd: tail.split('\n').length, truncated: false }),
+      },
+    }
+    const terminal: Terminal = {
+      columns: 60, rows: 16, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const pane = new ShellPane(tui, session, 'kali', 'Shell · kali', undefined, () => 2)
+    tui.setLayoutRoot(pane)
+    tui.setFocus(pane.editor)
+    tui.start()
+    try {
+      const initial = await renderScreen(tui)
+      expect(initial.match(/root㉿kali-test/g)).toHaveLength(1)
+      expect(initial).toContain('boot output')
+      const lines = initial.split('\n')
+      expect(lines[9]?.trim()).toBe('┌──(root㉿kali-test)-[/tmp]')
+      expect(lines[10]?.trim()).toBe('└─#')
+      expect(lines[11]?.trim()).toBe('─'.repeat(60))
+      tail = ''
+      pane.renderTail()
+      const cleared = await renderScreen(tui)
+      expect(cleared).not.toContain('boot output')
+      expect(cleared).toContain('┌──(root㉿kali-test)-[/tmp]')
+      expect(cleared).toMatchSnapshot('Kali prompt after clear')
+      tail = `${Array.from({ length: 30 }, (_, index) => `output ${index}`).join('\n')}\n┌──(root㉿kali-test)-[/var/log]\n└─# `
+      pane.renderTail()
+      const updated = await renderScreen(tui)
+      expect(updated).toContain('output 29')
+      expect(updated).not.toContain('[/tmp]')
+      expect(updated.match(/root㉿kali-test/g)).toHaveLength(1)
+      expect(updated).toContain('[/var/log]')
+      pane.rebind(session, 'win', 'Shell · win')
+      expect(await renderScreen(tui)).not.toContain('kali ❯')
+      tail = ''
+      pane.rebind(session, 'kali', 'Shell · kali')
+      expect(await renderScreen(tui)).not.toContain('root㉿kali-test')
+      expect(await renderScreen(tui)).toContain('kali ❯')
+    } finally { pane.dispose(); tui.stop(); await ctx.fiber.dispose() }
   })
 })

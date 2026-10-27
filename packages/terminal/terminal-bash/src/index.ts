@@ -4,6 +4,7 @@
  * @module @deepseek-ai/dsh-terminal-bash
  */
 
+import { Buffer } from 'node:buffer'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -90,15 +91,16 @@ function childEnvironment(spec: TerminalBackendSpawnSpec, dialect: ShellDialect)
 
 /**
  * The pwsh prompt function that emits the shared OSC `133;D;` + BEL marker
- * before every prompt, mirroring bash's PROMPT_COMMAND. `[char]27`/`[char]7`
- * build the control bytes at runtime because raw ESC characters in submitted
- * input are unreliable under PSReadLine.
+ * before every prompt, mirroring bash's PROMPT_COMMAND.
  */
 export const PWSH_PROMPT_SETUP =
   "function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '" + CONTROLLED_PROMPT + "' }"
 
 async function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy, signal?: AbortSignal): Promise<string[]> {
   const argv = [config.shellPath, ...config.shellArgs]
+  if (config.shellDialect === 'pwsh') {
+    argv.push('-NoExit', '-EncodedCommand', Buffer.from(ENCODING_PREAMBLE + PWSH_PROMPT_SETUP, 'utf16le').toString('base64'))
+  }
   if (policy.mode === 'danger-full-access') return argv
   const sandbox = ctx.get('sandbox')
   if (sandbox === undefined) {
@@ -123,17 +125,13 @@ async function startupSession(
       await session.initialize(signal)
       return
     }
-    // pwsh cannot install its prompt from the environment. Write the prompt
-    // function through the session, pin UTF-8 output before user input, and
-    // accept only backend stdin_read evidence; echoed setup source containing
-    // the printable prompt is not readiness. Follow-up sends bridge silence
-    // settlements during startup, while one absolute deadline bounds them.
+    // Empty sends observe the argv-installed prompt without echoing setup into
+    // scrollback. One absolute deadline bounds all silence settlements.
     let viewport = ''
     for (;;) {
-      const first = viewport.length === 0
       startupOperation = session.startSend({
-        text: first ? ENCODING_PREAMBLE + PWSH_PROMPT_SETUP : '',
-        submit: first,
+        text: '',
+        submit: false,
         ...signal !== undefined ? { signal } : {},
       })
       const result = await startupOperation.done

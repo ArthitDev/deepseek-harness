@@ -4662,7 +4662,7 @@ Sources: [`packages/session/session-title/src/types.ts:28`](../packages/session/
 
 SHA-256: `83079c8a3f733ac3fa603eefa0fbb4737ca4d8b69e7e2e7298b60f9ac4098693`
 
-Sources: [`packages/experimental/pi-tui/src/ui/chat.ts:157`](../packages/experimental/pi-tui/src/ui/chat.ts)
+Sources: [`packages/experimental/pi-tui/src/ui/chat.ts:160`](../packages/experimental/pi-tui/src/ui/chat.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -4687,7 +4687,7 @@ Array of [`SkillCatalogEntry`](#persistence-type-sha256-83079c8a3f733ac3fa603eef
 
 SHA-256: `fc2ae6962f9f8801c2b1e414668e1e17cbb7544c4f39381198977a38bd10c093`
 
-Sources: [`packages/experimental/pi-tui/src/ui/chat.ts:162`](../packages/experimental/pi-tui/src/ui/chat.ts)
+Sources: [`packages/experimental/pi-tui/src/ui/chat.ts:165`](../packages/experimental/pi-tui/src/ui/chat.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -6812,7 +6812,7 @@ Sources: [`packages/core/session/src/types.ts:201`](../packages/core/session/src
 
 SHA-256: `6eacdad23065a06cc0f641c9338ec8bc48aaa61d91d07f5f50663c7359fc311d`
 
-Sources: [`packages/pentest/pentest-executor/src/index.ts:32`](../packages/pentest/pentest-executor/src/index.ts)
+Sources: [`packages/pentest/pentest-executor/src/index.ts:33`](../packages/pentest/pentest-executor/src/index.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -6824,7 +6824,7 @@ Sources: [`packages/pentest/pentest-executor/src/index.ts:32`](../packages/pente
 
 SHA-256: `0562ac5b41b64c659eebfc58ffb0f3660b443b13d71c86ed823778eb1a0f31fd`
 
-Sources: [`packages/pentest/pentest-executor/src/index.ts:31`](../packages/pentest/pentest-executor/src/index.ts)
+Sources: [`packages/pentest/pentest-executor/src/index.ts:32`](../packages/pentest/pentest-executor/src/index.ts)
 
 | Property | Presence | Type |
 |---|---|---|

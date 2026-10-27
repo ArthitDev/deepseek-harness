@@ -16,7 +16,7 @@ import type {
   TerminalSessionId,
   TerminalSessionSnapshot,
 } from '@deepseek-ai/dsh-terminal'
-import { Container, Editor, Text, type TUI } from '@earendil-works/pi-tui'
+import { Editor, ScrollView, Text, VStack, type TUI } from '@earendil-works/pi-tui'
 import { editorTheme, style } from './theme.js'
 
 /** Which registered PTY backend the pane drives. */
@@ -77,21 +77,23 @@ export async function resolveShellSession(ctx: Context, agent: Agent, variant: S
 }
 
 /**
- * Right-pane shell: output tail above a one-line input. Submitting a line
+ * Right-pane shell: scrolling output above a bottom-pinned input. Submitting a line
  * sends it to the PTY and streams the response into the tail; a poll timer
  * re-reads the scrollback so every writer to the shared session (operator or
  * agent) is rendered live. The pane is a layout child — it renders whenever
  * the split layout includes it, and the session survives focus changes and
  * pane closes.
  */
-export class ShellPane extends Container {
+export class ShellPane extends VStack {
   /** The PTY backend family this pane currently streams. */
   variant: ShellVariant
-  /** The one-line input the operator submits commands through. */
+  /** The bottom-pinned input the operator submits commands through. */
   readonly editor: Editor
   private readonly tui: TUI
   private readonly output: Text
   private readonly header: Text
+  private readonly prompt = new Text('', 0, 0)
+  private promptText = ''
   private session: ShellPaneSession
   private title: string
   private readonly onClose: (() => void) | undefined
@@ -99,7 +101,6 @@ export class ShellPane extends Container {
   private focused = false
   private tail = ''
   private pollTimer: NodeJS.Timeout | undefined
-  private pollSignature = ''
 
   /**
    * @param tui - renderer the pane renders through and schedules redraws on.
@@ -107,6 +108,7 @@ export class ShellPane extends Container {
    * @param variant - which backend family the session belongs to.
    * @param title - pane header text.
    * @param onClose - invoked when the pane asks to close (`/exit` inside it).
+   * @param bottomRows - reserved rows below the input, matching the chat status bar.
    */
   constructor(
     tui: TUI,
@@ -114,6 +116,7 @@ export class ShellPane extends Container {
     variant: ShellVariant,
     title: string,
     onClose?: () => void,
+    bottomRows: (width: number) => number = () => 0,
   ) {
     super()
     this.tui = tui
@@ -124,9 +127,13 @@ export class ShellPane extends Container {
     this.output = new Text('', 0, 0)
     this.header = new Text('', 0, 0)
     this.editor = new Editor(tui, editorTheme, { paddingX: 1 })
-    this.addChild(this.header)
-    this.addChild(this.output)
-    this.addChild(this.editor)
+    this.addChild(this.header, { basis: 'auto' })
+    this.addChild(new ScrollView(this.output, { follow: 'end', overscroll: 'contain' }), { basis: 0, grow: 1, minSize: 1 })
+    this.addChild(new VStack([
+      this.prompt,
+      this.editor,
+      { invalidate: () => {}, render: width => Array.from({ length: bottomRows(width) }, () => '') },
+    ]), { basis: 'auto', shrink: 1, minSize: 1 })
     this.editor.onSubmit = (line: string): void => {
       if (line.trim().length === 0) return
       if (/^\s*\/(exit|quit)\s*$/i.test(line)) {
@@ -178,13 +185,15 @@ export class ShellPane extends Container {
    * @param session - the newly resolved PTY session to stream.
    * @param variant - the backend family the new session belongs to.
    * @param title - the replacement header title.
+   * @throws if the editor contains unsubmitted input.
    */
   rebind(session: ShellPaneSession, variant: ShellVariant, title: string): void {
+    if (this.editor.getText() !== '') throw new Error('shell input is not empty; review or clear it before switching backends')
     this.session = session
     this.variant = variant
     this.title = title
-    this.pollSignature = ''
     this.tail = ''
+    this.promptText = ''
     this.renderHeader()
     this.renderTail()
   }
@@ -193,6 +202,20 @@ export class ShellPane extends Container {
   dispose(): void {
     this.stopPolling()
     this.abort.abort()
+  }
+
+  /**
+   * Fill an empty editor for human review without sending input to the PTY.
+   * @param command - command text to review and submit manually.
+   * @throws if the input is occupied or the command is empty or contains terminal controls.
+   */
+  stageCommand(command: string): void {
+    if (command.trim().length === 0 || /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(command)) {
+      throw new Error('draft command must contain text without terminal control characters')
+    }
+    if (this.editor.getText() !== '') throw new Error('shell input is not empty; review or clear it before staging another draft')
+    this.editor.setText(command)
+    this.tui.requestRender()
   }
 
   /** Re-read the retained scrollback into the output view. */
@@ -216,7 +239,7 @@ export class ShellPane extends Container {
       })
       const pump = setInterval(() => {
         const { delta } = operation.readOutput()
-        if (delta.length > 0) this.appendTail(delta)
+        if (delta.length > 0) this.renderTail()
       }, 80)
       try {
         await operation.done
@@ -239,18 +262,13 @@ export class ShellPane extends Container {
       }
       let page: TerminalReadResult
       try {
-        page = this.session.terminals.read(this.session.owner, this.session.id)
+        page = this.session.terminals.read(this.session.owner, this.session.id, { count: PANE_OUTPUT_LINES })
       } catch {
         this.stopPolling()
         return
       }
-      // Total lines, byte length, and newest text identify fresh output
-      // without comparing whole pages.
-      const signature = `${page.totalLines}:${page.text.length}:${page.text.slice(-64)}`
-      if (signature === this.pollSignature) return
-      this.pollSignature = signature
-      this.renderPage(this.session.terminals.read(this.session.owner, this.session.id, { count: PANE_OUTPUT_LINES }))
-      this.tui.requestRender()
+      if (page.text.trimEnd() === this.tail) return
+      this.renderPage(page)
     }, PANE_POLL_MS)
   }
 
@@ -262,12 +280,30 @@ export class ShellPane extends Container {
 
   private renderPage(page: TerminalReadResult): void {
     this.tail = page.text.trimEnd()
-    this.output.setText(style.accent(this.tail))
+    this.renderOutput()
   }
 
   private appendTail(text: string): void {
     this.tail = `${this.tail}${text}`.split('\n').slice(-PANE_OUTPUT_LINES).join('\n')
-    this.output.setText(style.accent(this.tail))
+    this.renderOutput()
+  }
+
+  private renderOutput(): void {
+    let output = this.tail
+    if (this.variant === 'kali') {
+      const prompt = [...this.tail.matchAll(/^┌?──\([^\n]*㉿[^\n]*\)-\[[^\n]*\]\n└─[#$] ?/gm)].at(-1)
+      if (prompt !== undefined) {
+        this.promptText = prompt[0].trimEnd()
+        if (this.tail.slice(prompt.index + prompt[0].length).trim() === '') {
+          output = this.tail.slice(0, prompt.index).trimEnd()
+        }
+      }
+      this.prompt.setText(style.accent(this.promptText || 'kali ❯'))
+    } else {
+      this.prompt.setText('')
+    }
+    this.output.setText(style.accent(output))
+    this.tui.requestRender()
   }
 
   private renderHeader(): void {

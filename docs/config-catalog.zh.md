@@ -4382,6 +4382,8 @@ export interface Config {
   model?: string
   /** Session working directory; defaults to the invoking directory. */
   cwd?: string
+  /** Newest transcript items rendered by default; older items remain searchable. */
+  historyLimit?: number
 }
 ```
 

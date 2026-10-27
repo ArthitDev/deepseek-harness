@@ -76,9 +76,9 @@ describe('stream rendering', () => {
         line.includes('Thinking') || line.includes('ผลจริง') || line.includes('เสร็จแล้ว'),
       )).toMatchInlineSnapshot(`
         [
-          " ▸ Thinking · 16 chars · Ctrl+T",
-          " ผลจริง",
-          " - เสร็จแล้ว",
+          " ▸ Thinking · 16 chars · Ctrl+T                     │",
+          " ผลจริง                                              │",
+          " - เสร็จแล้ว                                          │",
         ]
       `)
       f.snapshot.mockClear()
@@ -260,7 +260,7 @@ describe('stream rendering', () => {
       vi.advanceTimersByTime(32)
       expect(f.snapshot).not.toHaveBeenCalled()
       f.emit({ type: 'text-delta', index: 0, text: 'old session tail' })
-      f.screen.switchAgent(f.makeAgent('next-stream-session'))
+      void f.screen.switchAgent(f.makeAgent('next-stream-session'))
       f.snapshot.mockClear()
       vi.advanceTimersByTime(32)
       expect(f.snapshot).not.toHaveBeenCalled()

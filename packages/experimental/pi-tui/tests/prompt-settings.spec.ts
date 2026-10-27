@@ -11,7 +11,7 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as AgentInstructions from '@deepseek-ai/dsh-agent-instructions'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import { createDeveloperMessage, createSystemMessage, createUserMessage, LlmAdapter, type GenerateOptions, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { createDeveloperMessage, createSystemMessage, createUserMessage, LlmAdapter, markAgentLoopRequest, type GenerateOptions, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { resolveProfiles } from '@deepseek-ai/dsh-llm-pi-ai/src/config.ts'
 import PentestModePolicy from '@deepseek-ai/dsh-pentest-executor'
@@ -41,7 +41,7 @@ describe('TUI Web prompt settings', () => {
     { initial: false, savedWeb: true },
     { initial: true, savedWeb: false },
     { initial: false, savedWeb: false },
-  ])('matches Web context from the first turn with suppression $initial and saved Web settings $savedWeb', async ({ initial, savedWeb }) => {
+  ])('retains complete TUI prompts despite suppression $initial and saved Web settings $savedWeb', async ({ initial, savedWeb }) => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-prompt-settings-'))
     const ctx = new Context()
     const wireRequests: { messages: { role: string; content: string }[] }[] = []
@@ -92,7 +92,7 @@ describe('TUI Web prompt settings', () => {
       await ctx.loader.root.update([{ id: 'include', name: 'cordis:include-test', config: { path: pathToFileURL(composition).href } }])
       await ctx.loader.await()
       expect(ctx.loader.resolve('include:tui-settings').fiber?.state).toBe(FiberState.ACTIVE)
-      expect(ctx.pentestModePolicy.current().suppressSections).toBe(initial)
+      expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'built-in guidance' })
       ctx.systemPrompt.context({ name: 'runtime:test', order: 1, text: 'Current DSH file policy: danger-full-access. Approval prompts are disabled.' })
       ctx.on('agent/pre-step', async (_payload, next) => {
@@ -129,8 +129,8 @@ describe('TUI Web prompt settings', () => {
         agent.inject(createUserMessage({ content: [{ type: 'text', text: 'another step in the first turn' }], source: { kind: 'user' } }))
       }
       const question = 'User quote: workspace rule; Current runtime context.; Mandatory Jev-first browser and computer actions'
-      const systemPrompts = new Map<boolean, unknown>()
-      const send = async (suppressed: boolean, firstTurn = false) => {
+      let systemPrompt: unknown
+      const send = async (firstTurn = false) => {
         const before = await readSaved()
         const count = adapter.requests.length
         adapter.inHistory = true
@@ -142,36 +142,27 @@ describe('TUI Web prompt settings', () => {
         expect(errors).toEqual([])
         const requests = adapter.requests.slice(count)
         expect(requests).toHaveLength(firstTurn ? 2 : 1)
-        expect(ctx.pentestModePolicy.current().suppressSections).toBe(suppressed)
+        expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
         for (const [index, request] of requests.entries()) {
           expect(request.messages[0]?.role).toBe('system')
-          if (systemPrompts.has(suppressed)) expect(request.messages[0]!.content).toEqual(systemPrompts.get(suppressed))
-          else systemPrompts.set(suppressed, request.messages[0]!.content)
+          if (systemPrompt !== undefined) expect(request.messages[0]!.content).toEqual(systemPrompt)
+          else systemPrompt = request.messages[0]!.content
           const text = request.messages.flatMap(message => message.content)
             .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
           const contexts = request.messages.filter(({ source }) =>
             source?.kind === 'agent-instructions' || source?.kind === 'runtime-context'
             || (source?.kind === 'skill-invocation' && source.name === 'jev-first-policy'))
-          expect(contexts.filter(message => message.source?.kind === 'agent-instructions')).toHaveLength(suppressed ? 0 : 1)
-          expect(contexts.some(message => message.source?.kind === 'runtime-context')).toBe(!suppressed)
-          expect(contexts.some(message => message.source?.kind === 'skill-invocation' && message.source.name === 'jev-first-policy')).toBe(!suppressed)
+          expect(contexts.filter(message => message.source?.kind === 'agent-instructions')).toHaveLength(1)
+          expect(contexts.some(message => message.source?.kind === 'runtime-context')).toBe(true)
+          expect(contexts.some(message => message.source?.kind === 'skill-invocation' && message.source.name === 'jev-first-policy')).toBe(true)
           expect(text).toContain(question)
-          expect(text.includes('built-in guidance')).toBe(!suppressed)
+          expect(text).toContain('built-in guidance')
           expect(text).toContain('preset contribution')
-          expect(text.includes('mode contribution')).toBe(!suppressed)
+          expect(text).toContain('mode contribution')
           expect(request.messages.filter(message => message.role === 'system')).toHaveLength(1)
-          expect(JSON.stringify(wireRequests[count + index]).includes('mode contribution')).toBe(!suppressed)
+          expect(JSON.stringify(wireRequests[count + index])).toContain('mode contribution')
           expect(JSON.stringify(wireRequests[count + index])).not.toContain('historical system update')
           expect(JSON.stringify(wireRequests[count + index])).not.toContain('developer marker')
-          if (suppressed) {
-            expect(request.messages[0]!.content).toEqual([{ type: 'text', text: 'preset contribution' }])
-            const wire = wireRequests[count + index]!
-            expect(wire.messages.filter(message => message.role === 'system'))
-              .toEqual([{ role: 'system', content: 'preset contribution' }])
-            expect(JSON.stringify(wire)).not.toContain('developer marker')
-            expect(JSON.stringify(wire)).not.toContain('historical system update')
-            expect(JSON.stringify(wire)).not.toContain('scoped built-in guidance')
-          }
         }
         if (firstTurn) {
           const withoutContexts = (request: GenerateOptions) => request.messages.filter(({ source }) =>
@@ -185,7 +176,8 @@ describe('TUI Web prompt settings', () => {
         expect(await readSaved()).toBe(before)
         expect(await readFile(composition, 'utf8')).toBe(originalComposition)
       }
-      await send(initial, true)
+      await send(true)
+      expect(wireRequests[0]!.messages[0]).toMatchSnapshot('complete system prompt')
       agent.session.append('developer/message', {
         turn: 2, step: 1,
         message: createDeveloperMessage({ content: [{ type: 'text', text: 'developer marker' }], source: { kind: 'session-edit' } }),
@@ -201,17 +193,15 @@ describe('TUI Web prompt settings', () => {
       restored.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'restored second turn' }], source: { kind: 'user' } }))
       await restored.agent.whenIdle()
       expect(errors).toEqual([])
-      expect(adapter.requests.at(-1)!.messages.some(message => message.source?.kind === 'agent-instructions')).toBe(!initial)
+      expect(adapter.requests.at(-1)!.messages.some(message => message.source?.kind === 'agent-instructions')).toBe(true)
       expect(JSON.stringify(wireRequests.at(-1))).not.toContain('developer marker')
-      expect(JSON.stringify(wireRequests.at(-1)).includes('mode contribution')).toBe(!initial)
+      expect(JSON.stringify(wireRequests.at(-1))).toContain('mode contribution')
       expect(JSON.stringify(wireRequests.at(-1))).not.toContain('historical system update')
-      if (initial) expect(wireRequests.at(-1)!.messages.filter(message => message.role === 'system'))
-        .toEqual([{ role: 'system', content: 'preset contribution' }])
       await restored.dispose()
-      await send(initial)
+      await send()
       for (const suppressed of [true, false, true]) {
         await save(suppressed)
-        await send(suppressed)
+        await send()
       }
       expect(agent.session.snapshotEvents().some(event => event.type === 'developer/message'
         && event.data.message.content.some(block => block.type === 'text' && block.text === 'developer marker'))).toBe(true)
@@ -246,12 +236,11 @@ describe('TUI Web prompt settings', () => {
           const systems = wire.messages.filter(message => message.role === 'system')
           expect(systems).toHaveLength(1)
           expect(systems[0]!.content).toContain(`NEW_PRESET_${id}`)
-          if (initial) expect(systems[0]!.content).toBe(`NEW_PRESET_${id}`)
           expect(JSON.stringify(wire)).not.toContain('preset contribution')
           expect(JSON.stringify(wire)).not.toContain('historical system update')
           expect(JSON.stringify(wire)).not.toContain('developer marker')
           expect(JSON.stringify(wire)).not.toContain('scoped built-in guidance')
-          expect(JSON.stringify(wire).includes('mode contribution')).toBe(!initial)
+          expect(JSON.stringify(wire)).toContain('mode contribution')
           expect(wire.messages.some(message => message.role === 'user' && message.content === question)).toBe(true)
           expect(wire.messages.some(message => message.role === 'assistant' && message.content === 'done')).toBe(true)
           expect(selected.at(-1)).toBe(id)
@@ -278,8 +267,72 @@ describe('TUI Web prompt settings', () => {
       await unlink(web)
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'fallback' }], source: { kind: 'user' } }))
       await agent.whenIdle()
-      expect(ctx.pentestModePolicy.current().suppressSections).toBe(fallback)
+      expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       expect(ctx.pentestModePolicy.current().redPrompt).toBe('mode contribution')
+      const drain = async (options: GenerateOptions) => {
+        for await (const _chunk of ctx.llm.stream(options)) { /* Drain to observe pre-dispatch failures. */ }
+      }
+      const baseline: GenerateOptions = { ...adapter.requests.at(-1)!, messages: agent.session.deriveMessages() }
+      const empty = ctx.sessions.create(SessionId('empty-system-prompt'))
+      empty.append('system/message', { turn: 1, step: 1, message: createSystemMessage('') }, { surfaceOp: 'append' })
+      for (const purpose of [undefined, 'compaction'] as const) {
+        const dispatch = (options: GenerateOptions) => drain(purpose === undefined
+          ? markAgentLoopRequest(options) : { ...options, purpose })
+        await expect(dispatch(baseline)).resolves.toBeUndefined()
+        const count = wireRequests.length
+        for (const messages of [
+          baseline.messages.slice(1),
+          [createSystemMessage('truncated'), ...baseline.messages.slice(1)],
+          [createSystemMessage(''), ...baseline.messages.slice(1)],
+          [...baseline.messages.slice(1), baseline.messages[0]!],
+          [...baseline.messages, createSystemMessage('unexpected system prompt')],
+        ]) {
+          await expect(dispatch({ ...baseline, messages })).rejects.toThrow('system prompt integrity failed')
+        }
+        await expect(dispatch({ ...baseline, system: 'alternate prompt' })).rejects.toThrow('system prompt integrity failed')
+        await expect(dispatch({ ...baseline, sessionId: SessionId('missing-session') })).rejects.toThrow('system prompt integrity failed')
+        {
+          // exactOptionalPropertyTypes: "absent" is omission, not an explicit undefined.
+          const { sessionId: _omitted, ...withoutSession } = baseline
+          await expect(dispatch(withoutSession)).rejects.toThrow('system prompt integrity failed')
+        }
+        await expect(dispatch({ ...baseline, sessionId: empty.id, messages: empty.deriveMessages() })).rejects.toThrow('system prompt integrity failed')
+        expect(wireRequests).toHaveLength(count)
+      }
+      await drain({ ...baseline, purpose: 'session-title', messages: [createSystemMessage('Write a title')] })
+      expect(wireRequests.at(-1)!.messages).toEqual([{ role: 'system', content: 'Write a title' }])
+      for (const change of ['remove', 'truncate', 'reorder'] as const) {
+        const dispose = ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+          const result = await next()
+          return { ...result, sections: change === 'remove' ? result.sections.slice(1)
+            : change === 'reorder' ? result.sections.toReversed()
+              : result.sections.map((section, index) => index === 0 ? { ...section, text: 'truncated' } : section) }
+        })
+        try {
+          const count = adapter.requests.length
+          agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `invalid assembly ${change}` }] }))
+          await agent.whenIdle()
+          const error = errors.at(-1)
+          if (!(error instanceof Error)) throw new Error('expected a prompt integrity error')
+          expect(error.message).toContain('system prompt integrity failed')
+          expect(adapter.requests).toHaveLength(count)
+        } finally { dispose() }
+      }
+      // A complete persona is itself the authored system prompt, including literal braces.
+      const complete = await ctx.agents.create({
+        sessionId: SessionId('complete-tui-prompt'), agentOptions: { provider: 'mock', model: 'mock' },
+        setup: (agentCtx) => {
+          agentCtx.systemPrompt.section({ name: 'test:complete', order: 2, text: 'FULL_PROMPT {{literal}}', complete: true, interpolate: false })
+          return Promise.resolve()
+        },
+      })
+      try {
+        const count = errors.length
+        complete.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'complete persona' }] }))
+        await complete.agent.whenIdle()
+        expect(errors).toHaveLength(count)
+        expect(wireRequests.at(-1)!.messages[0]).toEqual({ role: 'system', content: 'FULL_PROMPT {{literal}}' })
+      } finally { await complete.dispose() }
       const count = adapter.requests.length
       await writeFile(web, JSON.stringify([{ id: 'pentest-mode', config: { suppressSections: 'yes' } }]))
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'invalid' }], source: { kind: 'user' } }))

@@ -25,6 +25,8 @@ export interface Config {
   model?: string
   /** Session working directory; defaults to the invoking directory. */
   cwd?: string
+  /** Newest transcript items rendered by default; older items remain searchable. */
+  historyLimit?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -32,6 +34,7 @@ export const Config: Schema<Config> = Schema.object({
   provider: Schema.string().required(false),
   model: Schema.string().required(false),
   cwd: Schema.string().required(false),
+  historyLimit: Schema.number().step(1).min(1).default(20),
 })
 
 /**

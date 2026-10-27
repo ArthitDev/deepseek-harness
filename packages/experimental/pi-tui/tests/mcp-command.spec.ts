@@ -75,7 +75,7 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
   }
   const startInput = vi.fn<Terminal['start']>()
   const terminal: Terminal = {
-    columns: 100, rows: 40, kittyProtocolActive: false,
+    columns: 150, rows: 40, kittyProtocolActive: false,
     start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
     clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),

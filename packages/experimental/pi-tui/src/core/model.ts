@@ -14,6 +14,7 @@ import {
   type TimedStreamChunk,
 } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { recordActivity, type ActivityEntry } from './activity.js'
 
 /**
  * The TUI's producer-owned message source (session format v4 retired the
@@ -82,6 +83,8 @@ export interface ChatItem {
 /** Folded transcript state the views render: the item list plus token, route, and turn status. */
 export interface ChatModel {
   items: ChatItem[]
+  /** Recent observed operations for the Agent Debug panel. */
+  activity: ActivityEntry[]
   /** Cumulative token accounting from `assistant/message` usage records. */
   tokens: { input: number; output: number }
   /** Live session title (`session/title`), if any. */
@@ -108,7 +111,7 @@ const RESULT_PREVIEW_LIMIT = 400
  * @returns A model with no items, zeroed token counters, and no active turn.
  */
 export function createModel(): ChatModel {
-  return { items: [], tokens: { input: 0, output: 0 }, working: false }
+  return { items: [], activity: [], tokens: { input: 0, output: 0 }, working: false }
 }
 
 /**
@@ -240,6 +243,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
         const start = surfaceOp.startSeq
         const clearing = textOf(event.data.message.content).startsWith('the operator cleared')
         const end = clearing ? event.seq : surfaceOp.endSeq
+        model.activity = model.activity.filter(entry => entry.seq < start || entry.seq > end)
         model.items = model.items
           .filter(item => item.seq === undefined
             ? !clearing || item.notice === 'banner'
@@ -354,6 +358,10 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
 
       const content = event.data.message.content
       const result = textOf(content)
+      if (result) {
+        card.tool.resultPreview = preview(result, RESULT_PREVIEW_LIMIT)
+        card.tool.resultFull = result
+      }
       // A plain `Error` thrown by a tool body carries no `event.data.error`
       // (only HarnessErrors do); its failure is flagged on the result message.
       const failed = event.data.error !== undefined || event.data.message.isError === true
@@ -374,10 +382,6 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       }
 
       card.tool.status = 'ok'
-      if (result) {
-        card.tool.resultPreview = preview(result, RESULT_PREVIEW_LIMIT)
-        card.tool.resultFull = result
-      }
       const imageRefs = content
         .flatMap(block => (block.type === 'image' ? [block.attachment] : []))
       if (imageRefs.length > 0) card.tool.imageRefs = imageRefs
@@ -452,6 +456,11 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       foldPluginEvent(model, event)
       break
   }
+  const callId = event.type === 'tool/call' ? event.data.callId
+    : event.type === 'tool/result' ? event.data.message.source.callId : undefined
+  const tool = callId === undefined ? undefined
+    : model.items.findLast(item => item.tool?.callId === callId)?.tool
+  recordActivity(model.activity, event, tool)
   return model
 }
 
@@ -478,8 +487,10 @@ function foldPluginEvent(model: ChatModel, event: SessionEvent): void {
  * Inner text of the `<compacted-summary>` block a landed checkpoint frames
  * (dsh-compaction wraps the summary in a model-facing preamble and tags), or
  * the whole text when the framing is absent.
+ * @param text - Checkpoint message text, optionally wrapped in summary tags.
+ * @returns The summary text without checkpoint framing.
  */
-function compactSummaryText(text: string): string {
+export function compactSummaryText(text: string): string {
   const start = text.indexOf('<compacted-summary>')
   const end = text.lastIndexOf('</compacted-summary>')
   if (start === -1 || end === -1 || end < start) return text

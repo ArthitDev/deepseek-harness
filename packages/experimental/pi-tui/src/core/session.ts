@@ -472,69 +472,6 @@ export async function loadPersistedSession(
   }
 }
 
-/** Maximum parent generations the chain walk covers. */
-const PARENT_CHAIN_MAX_GENERATIONS = 8
-/** Maximum inherited events rendered from a parent chain (newest kept). */
-const PARENT_CHAIN_MAX_EVENTS = 4000
-/** Seq namespace base: remapped parent seqs start here, above any live seqs. */
-const PARENT_SEQ_BASE = 1_000_000
-
-/**
- * Load a fork's parent chain as replayable events, oldest generation first.
- * Fork logs persist only their own events; the inherited conversation lives
- * in the parent (and grandparent) logs, so the transcript replay needs them
- * appended ahead of the fork's own events. Each generation's seqs are
- * remapped into a disjoint high namespace so surface markers replayed from
- * one generation cannot prune another's items, and never collide with the
- * live session's seqs.
- * @param ctx - TUI context with the session-persistence service.
- * @param parentSession - the resumed session's `header.parentSession`.
- * @returns remapped events, oldest generation first; bounded by the generation and event caps.
- */
-export async function loadParentChain(ctx: Context, parentSession: SessionId): Promise<SessionEvent[]> {
-  const generations: SessionEvent[][] = []
-  const visited = new Set<string>()
-  let cursor: SessionId | undefined = parentSession
-  for (let depth = 0; cursor !== undefined && depth < PARENT_CHAIN_MAX_GENERATIONS; depth += 1) {
-    const key = String(cursor)
-    if (visited.has(key)) break
-    visited.add(key)
-    const loaded = await loadPersistedSession(ctx, key)
-    if (loaded === undefined) break
-    generations.unshift([...loaded.events])
-    cursor = loaded.header?.parentSession
-  }
-  const events: SessionEvent[] = []
-  let base = PARENT_SEQ_BASE
-  for (const generation of generations) {
-    for (const event of generation) events.push(remapParentSeqs(event, base))
-    const maxSeq = Math.max(0, ...generation.map(event => (typeof event.seq === 'number' ? event.seq : 0)))
-    base += maxSeq + 1
-  }
-  return events.length > PARENT_CHAIN_MAX_EVENTS ? events.slice(-PARENT_CHAIN_MAX_EVENTS) : events
-}
-
-/** Copy one event with its seq and surface references shifted into the parent namespace. */
-function remapParentSeqs(event: SessionEvent, base: number): SessionEvent {
-  const shifted = typeof event.seq === 'number' ? SessionSeq(base + event.seq) : undefined
-  const sources = event.sourceEventSeqs?.map(seq => SessionSeq(base + seq))
-  const surface = event.surfaceOp as { startSeq?: unknown; endSeq?: unknown } | undefined
-  const remappedSurface =
-    surface === undefined
-      ? undefined
-      : {
-        ...surface,
-        ...(typeof surface.startSeq === 'number' ? { startSeq: SessionSeq(base + surface.startSeq) } : {}),
-        ...(typeof surface.endSeq === 'number' ? { endSeq: SessionSeq(base + surface.endSeq) } : {}),
-      }
-  return {
-    ...event,
-    ...(shifted !== undefined ? { seq: shifted } : {}),
-    ...(sources !== undefined ? { sourceEventSeqs: sources } : {}),
-    ...(remappedSurface !== undefined ? { surfaceOp: remappedSurface } : {}),
-  } as SessionEvent
-}
-
 /** Persisted session headers, newest first (dsh's own persistence backend).
  * @param ctx - TUI context with the session-persistence service.
  * @returns Headers sorted newest first; empty when persistence is unavailable or listing fails.

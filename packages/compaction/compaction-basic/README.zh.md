@@ -57,6 +57,7 @@ kind: "package-reference"
         retainTokens: 2048
 ```
 
+<a id="tuning-when-condensation-starts"></a>
 ### 调整压缩开始的时机
 
 所有设置都可选。设上下文窗口为 `W`、生效请求输出上限为 `O`、余量为 `B`，默认触发阈值为 `floor(min(W × 0.8, W − O − B))`，其中 `B = 65,536` tokens。逐字保留的近期历史预算仍为 `W − O` 的 16%。下表列出全部设置；生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-compaction-basic)还包含字段类型。

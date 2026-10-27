@@ -2168,7 +2168,7 @@ interface PentestModeConfig {
 
 Depends on: [`PentestMode`](subsystems/../../packages/pentest/pentest-executor/README.md) · `Volatile` (`@deepseek-ai/cordis`)
 
-Source: [`packages/pentest/pentest-executor/src/index.ts:301`](../packages/pentest/pentest-executor/src/index.ts)
+Source: [`packages/pentest/pentest-executor/src/index.ts:302`](../packages/pentest/pentest-executor/src/index.ts)
 
 <a id="deepseek-aidsh-pentest-run"></a>
 
@@ -4380,6 +4380,8 @@ export interface Config {
   model?: string
   /** Session working directory; defaults to the invoking directory. */
   cwd?: string
+  /** Newest transcript items rendered by default; older items remain searchable. */
+  historyLimit?: number
 }
 ```
 

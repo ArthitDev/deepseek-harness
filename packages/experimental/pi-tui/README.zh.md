@@ -30,6 +30,14 @@ kind: "package-bundle"
 
 启动时先等待预设注册表和模型默认值就绪，再创建会话；缺少服务会阻止 TUI 激活。新会话使用共享 Web 设置中与所选提供方和模型绑定的预设；未绑定时使用配置的默认预设。`--preset <id>` 优先；恢复的会话保留其记录的预设。
 
+`/resume` 和 `--resume` 只回放一次所选会话的完整快照，包括继承的 fork seed。父会话 id 仅记录继承关系，渲染 transcript 时不打开父日志。祖先会话缺失不会阻止已保存的子会话显示继承消息。回放不会修改会话文件。
+
+TUI 默认仅为最新 20 个 transcript 项创建并保留视图，计入消息、思考、工具和提示。较早项目仍保留在 transcript 数据中以供搜索和导出；只有显示这些项目时才加载其视图和图片。`/expand-all` 显示所有项目，再次执行恢复限制。可将 `pi-tui` 配置行的 `historyLimit` 设为正整数来调整窗口。此限制不会截断会话日志或 Agent 的模型上下文；回放仍读取完整日志。
+
+打开已保存的对话历史时会添加一行回顾；`/recap` 可按需再次显示。回顾摘录最新的用户请求、助手回复以及活动检查点中的当前工作和下一步，最多 400 个 Unicode 码点。检查点信息单独标注，因为后续消息可能已改变这些信息。回顾读取当前派生历史，因此不包含已清除、回退或被压缩替代的消息。它不调用模型、不写入会话事件，也不添加模型上下文；不会在后台空闲时生成回顾。
+
+继承的[自动压缩后端](../../compaction/compaction-basic/README.zh.md#tuning-when-condensation-starts)独立于 20 项显示窗口管理上下文。它默认启用，在步骤之间检查 token 压力，将较早历史总结为结构化检查点，并逐字保留最近一段内容。空闲时可用 `/compact` 手动触发。摘要记录意图、文件、修复、待办工作、下一步和关键上下文；摘要仍可能遗漏细节，但原始事件保留在持久日志中。
+
 <a id="local-mcp-skills-and-plugins"></a>
 
 ## 本地 MCP、skill 与插件
@@ -92,9 +100,9 @@ dsh --profile tui --dump-config
 
 TUI 在选择模型或创建会话时读取 Web 配置档补丁中的预设覆盖值，因此 Web 绑定修改也会在这里生效。横幅和状态栏显示已挂载的预设；预设缺失时拒绝创建会话，不会在缺少其插件组合的情况下启动。
 
-TUI 在启动时及每次组装提示词前读取自身保存的 Suppress built-in prompt sections 设置；没有 TUI 覆盖值时使用 Web 设置。启用后，提供方收到的系统提示词仅包含预设贡献：全局指导和模式策略被隐藏，工作区指令、运行时上下文、Jev-first 上下文及纯文本 developer 消息也不再发送。原始消息保留在持久日志中。修改从下一次请求生效，包括恢复的会话。
+TUI 在启动时及组装提示词前强制关闭提示词抑制，即使 TUI 或 Web 已保存启用值也如此；不修改保存的文件。组装监听器不得删除、修改或重排已注册的系统段落。显式编写的完整 persona 仍作为完整提示词。在 agent-loop 和压缩请求到达适配器前，TUI 要求首条系统消息非空，且所有系统消息与会话的有效历史完全一致。系统消息缺失、截断、重排或替换时，请求直接失败，不使用降级提示词。恢复、压缩及切换预设或模型后同样检查。这些检查验证提示词经过 Harness 的传递，不保证模型服从或提供方的内部处理；辅助标题请求使用自身的提示词。
 
-`/suppress-prompt`（别名 `/suppress-promot`）打开带编号的 ON/OFF 选择列表，默认聚焦并标记当前状态。使用 ↑/↓ 或数字选择，Enter 保存，Esc 取消且不写入设置或中断正在运行的回合。`on`、`off` 和 `toggle` 仍可直接修改，`status` 只显示当前状态。命令通过 Harness 设置服务保存 TUI 配置档，保留其他设置，不修改 Web 配置档。TUI 覆盖值在重启、新建会话及切换预设后仍有效。保存失败时显示错误。
+`/suppress-prompt`（别名 `/suppress-promot`）和 `status` 显示 OFF，并注明严格系统提示词保护已锁定。`on` 和 `toggle` 被拒绝，不写入设置或中断正在运行的回合。`off` 通过 Harness 设置服务保存已关闭的 TUI 覆盖值；保存失败时显示错误。其他设置与 Web 配置档保持不变。
 
 `/mcp` 打开可搜索的 MCP 服务器列表；选择服务器会切换其全部工具。`/mcp on|off|toggle|status` 控制当前 TUI 进程的全部 MCP 工具。被停用的服务器或全局 OFF 状态会从后续模型请求中移除受影响的 `mcp__*` 工具，并拒绝旧调用。选择会跟随会话切换，但在 TUI 重启时重置。回合运行期间不允许更改。
 
@@ -104,19 +112,31 @@ TUI 在启动时及每次组装提示词前读取自身保存的 Suppress built-
 
 开关关闭时，工作区指令、运行时上下文、Jev-first 上下文及所选团队提示词从第一轮对话起即可注入，与 Web 一致。两个界面使用 Harness 提示词注册表和提供方适配器；Pi TUI 不会额外添加编码代理人格。Web 的 GUI 专用提示词章节仅用于 Web。对于支持在历史中更新系统提示词的提供方，当前提示词会合并到历史开头，替换先前的预设及团队策略，同时保留持久日志。
 
-`/team-mode` 打开带编号的 Blue、Red、Black 或 Dead 选择列表，支持方向键、数字选择、Enter 保存及 Esc 取消。也支持直接输入模式名或 `status`。状态栏显示所选模式的图标和名称。TUI 独立于 Web 保存模式；尚未选择时使用 Web 保存的模式。团队提示词文本使用 Web 保存的设置，否则使用随 TUI 交付的默认值。修改从下一次请求生效，并在重启和新建会话后保留。Suppress ON 隐藏团队提示词，但不改变所选模式；命令会提示该状态。保存失败时保留原来的选择。
+`/team-mode` 打开带编号的 Blue、Red、Black 或 Dead 选择列表，支持方向键、数字选择、Enter 保存及 Esc 取消。也支持直接输入模式名或 `status`。状态栏显示所选模式的图标和名称。TUI 独立于 Web 保存模式；尚未选择时使用 Web 保存的模式。团队提示词文本使用 Web 保存的设置，否则使用随 TUI 交付的默认值。修改从下一次请求生效，并在重启和新建会话后保留。保存失败时保留原来的选择。
 
 TUI 未指定默认推理级别时，如果提供方和模型相同，则使用 Web 保存的级别。TUI 显式设置的模型和推理级别优先。恢复会话时，从请求头恢复明确选择的推理级别；适配器默认级别仍作为提供方默认值，不会变为用户选择。
 
 `/preset` 和 `--preset` 选择列表隐藏系统预设，仅显示可用的用户预设。模型绑定和恢复的会话仍可使用系统预设。
 
-原生分栏 shell 在聊天右侧的右栏挂载一个实时 PTY 会话（`shared-win` 位于 Windows pwsh 后端，`shared-kali` 位于 kali WSL 发行版内）。`Ctrl+P` 打开该面板并在聊天与面板之间循环切换键盘焦点；按 `Esc` 把焦点交还聊天，面板继续渲染。面板轮询共享会话，因此 agent 通过 `terminal_*` 工具运行的命令会实时流入面板；操作者在获得焦点的面板输入行中键入命令——操作者与 agent 共用同一个 shell。`/shell win|kali` 在该后端上打开面板，或把已挂载的面板切换到该后端；`/shell close` 关闭面板但会话继续运行；面板挂载时状态栏显示 `⌨ shell:<variant>`。打开面板需要终端至少 100 列宽，且在任务运行期间也允许打开。关闭 TUI 时这些会话随 agent 一起释放。
+原生分栏 shell 在聊天右侧的右栏挂载一个实时 PTY 会话（`shared-win` 位于 Windows pwsh 后端，`shared-kali` 位于 kali WSL 发行版内）。`/shell` 打开使用 TUI 样式的选择列表，提供 Windows、Kali，以及面板已打开时的 Close shell。使用 ↑/↓ 或数字选择，再按 Enter 确认；Esc 取消且不中断正在运行的回合。列表默认聚焦当前后端，没有打开 shell 时聚焦 Windows。shell 关闭时，`Ctrl+P` 打开此列表；shell 已打开时，它在聊天与 shell 之间循环切换键盘焦点；按 `Esc` 把焦点交还聊天。面板轮询共享会话，因此 agent 通过 `terminal_*` 运行的命令与操作者提交的命令实时显示在一起。`/shell win|kali` 和 `/shell close` 仍可直接控制面板。面板挂载时状态栏显示 `⌨ shell:<variant>`。打开面板需要终端至少 100 列宽，且在任务运行期间也允许打开。关闭面板会保留其会话；关闭 TUI 时这些会话随 agent 一起释放。
+
+拖动竖直分隔线或中央的 `↔` 手柄可调整聊天与活动栏的宽度，shell 关闭时也可调整。在任一输入框中，`Ctrl+Alt+Left` 和 `Ctrl+Alt+Right` 每次将分隔线移动两列；浮层仍独立接收键盘输入。空间足够时每栏至少保留 30 列，较小的终端窗口则共享可用宽度。所选活动栏宽度在当前 TUI 进程内关闭并重新打开 shell 后保留，并在终端扩大后恢复。
+
+shell 输入框固定在底部，下边框与聊天中自动换行的状态栏上沿对齐，输出在其上方滚动。Kali 最近一次的原生双行提示符包含用户名、主机名、目录以及 `#` 或 `$` 标记，即使输出被清空也会保留在输入框上方。shell 输出新提示符时显示随之更新；尚未观察到提示符时显示 `kali ❯`。切换后端会重置保留的提示符。
+
+输出片段和命令完成会立即请求重绘，无需等待下一次 scrollback 轮询或按键。scrollback 轮询也会显示 agent 在共享会话中运行的命令。
+
+单个 `Agent Debug` 面板默认显示，即使没有打开 shell。`/agent-debug` 在当前 TUI 进程内切换显示，不清空历史或 shell 输入。shell 关闭时面板占满右栏，打开时与下方 shell 共享右栏；两者都隐藏时聊天恢复全宽。时间线按开始顺序保留最近 20 个操作，标记为 Agent、Tool、Shell、MCP、File、Approval 或 Retry，显示状态及根据会话时间戳计算的耗时。工具行显示命令或参数预览及结果或错误摘要。Approval 行观察等待状态和已记录的决定；Retry 行显示提供方、尝试次数、延迟、失败及结束状态。File 行只来自成功工具结果中已确认的 diff。这些行只观察事件，不执行命令或授予批准。
+
+点击条目展开或收起详情。键盘操作使用 `Ctrl+Alt+D` 聚焦、↑/↓ 选择、Enter 切换详情、PageUp/PageDown 滚动。Esc 返回之前的编辑器，不中断 agent；隐藏已聚焦面板也会恢复编辑器。详情包含参数、工具输出、错误及文件修改前后文本，每行最多 16,000 个字符；聊天中的工具卡片仍然可用。鼠标滚轮可查看较早的行。隐藏时仍继续更新；回放恢复事件历史，切换会话重置列表，rewind/clear 移除被遮蔽的行。切换 shell 后端保留当前会话的活动。面板仅显示已有事件，不推测缺少工具 diff 元数据的文件变化。
+
+shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 或 `kali`）和 `command`，将命令填入空的 shell 输入框供人工检查。例如，在 `/shell` 中选择 Windows，按 `Esc` 返回聊天，然后让 agent 使用 `shell_draft` 暂存 `Get-Date`。该工具不会执行命令、发送 PTY 输入或切换焦点。检查输入后，用 `Ctrl+P` 聚焦 shell，再自行按 Enter 提交。工具会拒绝不匹配的后端、已有输入、空命令和终端控制字符；命令文本仍可包含制表符和换行。切换后端也要求输入框为空。关闭 shell 会注销该工具，其他 agent 无法访问。现有工具 guard 仍然适用。暂存命令不是安全拒绝或批准被拒后的自动替代路径；模型仍须遵守其安全和执行策略，也可能拒绝提供命令。
 
 `/exec` 按新到旧列出本会话中 agent 执行过的 shell 命令，标注 `KALI`（经 `wsl -d kali-linux` 路由）或 `WIN`，并显示配对结果状态。选择一行会聚焦对应的 transcript 工具卡片以查看完整输出与参数。
 
 ## 命令
 
-`/exit`、`/new`、`/fork`、`/resume`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
+`/exit`、`/new`、`/fork`、`/resume`、`/recap`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/agent-debug`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
 
 `/wiki` 打开带编号的知识库选择列表，读取当前预设可见的 `knowledge_list` 工具所配置的知识库。选择知识库后，可在对话区查看 `INDEX.md` 的标题和链接、在 Obsidian 中打开该索引，或在文件管理器中打开配置的文件夹。方向键或数字选择，Enter 确认，Esc 取消。需要安装 Obsidian 并注册 `obsidian://` 协议处理程序，且 Wiki 文件夹已作为 Obsidian 库打开过。知识库不可用或打开失败时显示 TUI 通知。菜单不请求模型、不追加会话事件，也不修改提示词或 Wiki 文件。
 

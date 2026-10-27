@@ -1,0 +1,49 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`agent tool activity > expands details with mouse or keyboard and preserves them through updates > expanded activity 1`] = `
+"── Agent Debug ──                             
+› [OK] Tool · tool_0 · 1.5s                   
+{"command":"Get-Date"}                        
+                                              
+exit code: 0                                  
+full output"
+`;
+
+exports[`agent tool activity > shows call arguments and lifecycle states, then clears with the transcript > tool states and command previews 1`] = `
+"── Agent Debug ──                             
++ [RUNNING] Tool · tool_0 · 0.0s              
+{"command":"Get-Date"}                        
+
++ [OK] Tool · tool_1 · 1.5s                   
+{"command":"Get-Date"}                        
+exit code: 0                                  
+
++ [ERROR] Tool · tool_2 · 1.5s                
+{"command":"Get-Date"}                        
+command failed                                
+
++ [REJECTED] Tool · tool_3 · 1.5s             
+{"command":"Get-Date"}                        
+Approval rejected"
+`;
+
+exports[`agent tool activity > shows different event categories in one timeline > one timeline with multiple statuses 1`] = `
+"── Agent Debug ──                             
++ [RUNNING] Agent · operation · 1.5s          
+Recorded event details                        
+
++ [OK] Shell · operation · 1.5s               
+Recorded event details                        
+
++ [ERROR] MCP · operation · 1.5s              
+Recorded event details                        
+
++ [CHANGED] File · src/chat.ts                
+Recorded event details                        
+
++ [WAITING] Approval · operation · 1.5s       
+Recorded event details                        
+
++ [RETRY] Retry · operation · 1.5s            
+Recorded event details"
+`;

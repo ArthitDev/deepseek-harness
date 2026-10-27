@@ -17,7 +17,7 @@ import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
 describe('/suppress-prompt', () => {
-  it.each([false, true])('persists TUI overrides without changing Web=%s, including restart', async (webEnabled) => {
+  it.each([false, true])('locks suppression OFF without changing Web=%s, including restart', async (webEnabled) => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-suppress-command-'))
     const dir = join(home, 'profiles', 'tui')
     const bundle = join(dir, 'node_modules', 'suppression-fixture')
@@ -53,7 +53,7 @@ describe('/suppress-prompt', () => {
         return ctx
       }
       const ctx = await start()
-      expect(ctx.pentestModePolicy.current().suppressSections).toBe(webEnabled)
+      expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('suppression-command')))
       const followup = vi.spyOn(agent, 'followup')
       const startInput = vi.fn<Terminal['start']>()
@@ -65,55 +65,29 @@ describe('/suppress-prompt', () => {
       const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
       tui.start()
       const visible = () => { tui!.renderNow(); return stripVTControlCharacters(tui!.getScreenLines().join('\n')) }
-      for (const [command, enabled] of [['on', true], ['off', false], ['toggle', true], ['toggle', false]] as const) {
-        screen.submit(`/suppress-prompt ${command}`)
-        await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('suppressSections')).toBe(enabled) })
-        expect(ctx.pentestModePolicy.current().suppressSections).toBe(enabled)
-        await vi.waitFor(() => { expect(visible()).toContain(`suppress-prompt: ${enabled ? 'ON' : 'OFF'}`) })
-        // A new assembly must not restore the saved Web flag over the local selection.
-        await ctx.systemPrompt.assemble()
-        expect(ctx.pentestModePolicy.current().suppressSections).toBe(enabled)
-      }
-      for (const [command, enabled] of [['on', true], ['off', false]] as const) {
-        screen.submit(`/suppress-promot ${command}`)
-        await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('suppressSections')).toBe(enabled) })
-        expect(ctx.pentestModePolicy.current().suppressSections).toBe(enabled)
-      }
-      screen.submit('/suppress-promot status')
-      expect(visible()).toContain('suppress-prompt: OFF')
       const show = vi.spyOn(tui, 'showOverlay')
       const write = vi.spyOn(ctx.settings, 'update')
-      const input = (data: string) => startInput.mock.calls[0]?.[0](data)
-      const beforePicker = await readFile(profile.patchPath, 'utf8')
-      screen.submit('/suppress-prompt')
-      screen.submit('/suppress-prompt')
-      expect(show).toHaveBeenCalledOnce()
-      expect(visible()).toContain('Suppress built-in prompt sections')
-      expect(visible()).toContain('→ 2. OFF (current)')
-      input('1')
-      expect(visible()).toContain('→ 1. ON')
-      expect(write).not.toHaveBeenCalled()
-      expect(await readFile(profile.patchPath, 'utf8')).toBe(beforePicker)
-      input('\r')
-      await vi.waitFor(() => { expect(ctx.pentestModePolicy.current().suppressSections).toBe(true) })
-      expect(write).toHaveBeenCalledExactlyOnceWith('pentest-mode', { suppressSections: true })
-      expect(tui.hasOverlay()).toBe(false)
       const cancel = vi.spyOn(agent, 'cancel')
-      const savedOn = await readFile(profile.patchPath, 'utf8')
       screen.handleEvent(agent.session.append('turn/start', { turn: 1 }))
-      screen.submit('/suppress-prompt')
-      expect(visible()).toContain('→ 1. ON (current)')
-      input('\x1b')
-      await vi.waitFor(() => { expect(tui!.hasOverlay()).toBe(false) })
+      for (const alias of ['suppress-prompt', 'suppress-promot']) {
+        screen.submit(`/${alias}`)
+        screen.submit(`/${alias} status`)
+        expect(visible()).toContain('suppress-prompt: OFF · locked by strict system prompt protection')
+        for (const command of ['on', 'toggle']) {
+          screen.submit(`/${alias} ${command}`)
+          expect(visible()).toContain('Cannot suppress the system prompt')
+          expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
+        }
+      }
+      expect(show).not.toHaveBeenCalled()
+      expect(write).not.toHaveBeenCalled()
       expect(cancel).not.toHaveBeenCalled()
-      expect(write).toHaveBeenCalledOnce()
-      expect(await readFile(profile.patchPath, 'utf8')).toBe(savedOn)
-      screen.submit('/suppress-prompt')
-      input('\x1b[B')
-      expect(visible()).toContain('→ 2. OFF')
-      input('\r')
-      await vi.waitFor(() => { expect(ctx.pentestModePolicy.current().suppressSections).toBe(false) })
-      expect(write).toHaveBeenCalledTimes(2)
+      screen.submit('/suppress-prompt off')
+      await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('suppressSections')).toBe(false) })
+      expect(write).toHaveBeenCalledExactlyOnceWith('pentest-mode', { suppressSections: false })
+      await ctx.settings.update('pentest-mode', { suppressSections: true })
+      await ctx.systemPrompt.assemble()
+      expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       write.mockRestore()
       const saved = await readFile(profile.patchPath, 'utf8')
       screen.submit('/suppress-prompt status')
@@ -121,7 +95,7 @@ describe('/suppress-prompt', () => {
       expect(visible()).toContain('usage: /suppress-prompt [on|off|toggle|status]')
       expect(await readFile(profile.patchPath, 'utf8')).toBe(saved)
       const update = vi.spyOn(ctx.settings, 'update').mockRejectedValueOnce(new Error('synthetic save failure'))
-      screen.submit('/suppress-prompt on')
+      screen.submit('/suppress-prompt off')
       await vi.waitFor(() => { expect(visible()).toContain('command failed: synthetic save failure') })
       expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       expect(await readFile(profile.patchPath, 'utf8')).toBe(saved)

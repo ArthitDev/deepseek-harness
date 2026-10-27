@@ -19,10 +19,8 @@ import {
   hasUserContent,
   listPresets,
   listSessions,
-  loadParentChain,
   reconcileWorkspaceAttachments,
   remoteCwd,
-  replayEvents,
   resolveAgent,
   sessionSummaries,
   type ResolvedAgent,
@@ -44,6 +42,8 @@ export interface AppConfig {
   provider?: string
   model?: string
   cwd?: string
+  /** Newest transcript items rendered before older items are folded. */
+  historyLimit?: number
 }
 
 /**
@@ -177,6 +177,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     agent,
     config: {
       version: tuiVersion,
+      historyLimit: config.historyLimit ?? 20,
       ...(effectiveProvider !== undefined ? { provider: effectiveProvider } : {}),
       ...(effectiveModel !== undefined ? { model: effectiveModel } : {}),
       ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
@@ -211,25 +212,8 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   })
   const screenOwns = (id: unknown): boolean => screen.ownsSession(id)
 
-  // Replay the durable log first so the transcript paints on the first
-  // frame; only then subscribe, so no event is folded twice. Forked sessions
-  // render their parent chain's inherited tail first (the model context
-  // carries it, so the transcript shows the conversation it continued).
-  screen.replaying = true
-  try {
-    if (agent.session.header.parentSession !== undefined) {
-      for (const event of await loadParentChain(ctx, agent.session.header.parentSession)) {
-        screen.handleEvent(event)
-      }
-    }
-    for (const event of replayEvents(agent.session)) {
-      screen.handleEvent(event)
-    }
-  } finally {
-    screen.replaying = false
-  }
-  // Replay batches: one reconcile after the whole log, not per event.
-  screen.finalizeReplay()
+  // Replay the complete snapshot before subscribing, so inherited and live events paint once.
+  await screen.replayTranscript(agent)
   // ↑/↓ history: seed the editor from the replayed session transcript.
   screen.seedHistory()
   // Boot hint: tell the user persisted history is one Ctrl+R / /resume away

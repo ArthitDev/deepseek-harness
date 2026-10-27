@@ -127,7 +127,7 @@ function attemptStream(text: string, reasoning: string): AssistantStreamRecord[]
 
 describe('createModel', () => {
   it('starts an empty, idle transcript with zeroed tokens', () => {
-    expect(createModel()).toEqual({ items: [], tokens: { input: 0, output: 0 }, working: false })
+    expect(createModel()).toEqual({ items: [], activity: [], tokens: { input: 0, output: 0 }, working: false })
   })
 })
 

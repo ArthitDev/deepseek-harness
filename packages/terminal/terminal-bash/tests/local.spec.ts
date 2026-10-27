@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, parse } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -321,6 +321,18 @@ const hasPwsh = spawnSync(
 ).status === 0
 
 describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
+  it('settles a completed command on its prompt before the silence fallback', async () => {
+    const { ctx, root, agent } = await harness('danger-full-access', {
+      idleSilenceMs: 3_000, handoffGraceMs: 500, timeoutMs: 8_000,
+    }, 'pwsh')
+    const created = await ctx.terminals.spawn(agent, { type: 'shell', cwd: root })
+    const operation = ctx.terminals.startSend(agent, created.sessionId, { text: "Write-Output ('latency-' + 'check')", submit: true })
+    const result = await operation.done
+    expect(result.viewport).toContain('latency-check')
+    expect(result.waitReason).toBe('stdin_read')
+    await ctx.terminals.kill(agent, created.sessionId)
+  }, 30_000)
+
   it.each([false, true])('bootstraps a persistent pwsh, persists state, and scrubs secrets (hold command: %s)', async (holdCommand) => {
     const previous = process.env.DSH_TEST_SECRET
     process.env.DSH_TEST_SECRET = 'must-not-leak'
@@ -345,7 +357,7 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
         submit: true,
       })
       expect(['stdin_read', 'inferred_idle']).toContain((await first.done).waitReason)
-      const expected = 'keep=ok cwd=/ secret=END'
+      const expected = `keep=ok cwd=${process.platform === 'win32' ? parse(root).root : '/'} secret=END`
       const command = "Write-Output ('keep={0} cwd={1} secret={2}END' -f $env:KEEP, (Get-Location).Path, $env:DSH_TEST_SECRET)"
       expect(command).not.toContain(expected)
       const second = ctx.terminals.startSend(agent, created.sessionId, { text: command, submit: true })
@@ -380,6 +392,8 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
     // The bootstrap itself must have pinned both encodings: the session byte
     // decode is UTF-8, so an un-pinned console writing its host code page
     // garbles every non-ASCII byte that follows.
+    expect(created.motd).not.toMatch(/OutputEncoding|function prompt|Console\]::Write/)
+    expect(ctx.terminals.read(agent, created.sessionId).text).not.toMatch(/OutputEncoding|function prompt|Console\]::Write/)
     const pinned = ctx.terminals.startSend(agent, created.sessionId, {
       text: '"console=" + [Console]::OutputEncoding.WebName + " out=" + $OutputEncoding.WebName',
       submit: true,

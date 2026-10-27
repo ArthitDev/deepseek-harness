@@ -15,7 +15,8 @@
  *   Ctrl+O     toggle full tool output
  *   Ctrl+L     open the model picker
  *   Ctrl+X     open the reasoning-level picker
- *   Ctrl+P     open the shell pane; when open, cycle pane/chat focus
+ *   Ctrl+P     open the shell picker; when open, cycle pane/chat focus
+ *   Ctrl+Alt+Left/Right  move the chat/shell divider
  *   Shift+Tab  cycle mode
  */
 import { join } from 'node:path'
@@ -31,11 +32,11 @@ import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type MessageSource, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
   CombinedAutocompleteProvider,
   Container,
   Editor,
-  HStack,
   Loader,
   ScrollView,
   Text,
@@ -58,6 +59,7 @@ import {
 } from '../core/model.js'
 import { seedModelSelection } from '../core/selection.js'
 import { shortTokens } from '../core/format.js'
+import { buildRecap } from '../core/recap.js'
 import { osc52Encode } from '../core/clipboard.js'
 import { readGitState, type GitState } from '../core/git.js'
 import { buildSearchIndex } from '../core/search.js'
@@ -84,7 +86,6 @@ import {
   forkSession,
   listSessions,
   loadPersistedSession,
-  loadParentChain,
   listPresets,
   remoteCwd,
   replayEvents,
@@ -98,6 +99,8 @@ import { parseDocument } from 'yaml'
 import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
 import { ShellPane, resolveShellSession, type ShellVariant } from './shell-pane.js'
+import { ShellSplit } from './shell-split.js'
+import { ToolActivityPane } from './tool-activity.js'
 import { pickReasoningLevel } from './reasoning-picker.js'
 import { pickWiki } from './wiki.js'
 import { buildBanner } from './banner.js'
@@ -117,6 +120,8 @@ export interface ChatScreenOptions {
     model?: string
     cwd?: string
     preset?: string
+    /** Newest transcript items to render until explicitly expanded; defaults to 20. */
+    historyLimit?: number
   }
   onQuit: (resumeHint?: string) => void
   /** Called after a successful in-session agent switch (new/fork/resume). */
@@ -139,8 +144,6 @@ interface ToolPolicyRuntime {
 }
 
 const MCP_TOOL_PREFIX = 'mcp__'
-/** Fixed right-column width of the shell pane; needs a ≥100-column terminal. */
-const PANE_COLUMNS = 46
 const DIRECT_JEV_MCP_TOOL_PREFIX = 'mcp__jev__'
 const JEV_MCP_TOOL_PREFIXES = [DIRECT_JEV_MCP_TOOL_PREFIX, 'mcp__open-dev-browser__', 'mcp__open_dev_browser__']
 const JEV_POLICY_SKILL = 'jev-first-policy'
@@ -249,11 +252,14 @@ export class ChatScreen {
   private shellFocused = false
   /** Plain chat column inside the stable split root. */
   private readonly chatRoot = new VStack([])
-  /** The native two-column root; the right column collapses to zero width while closed. */
-  private screenRoot: HStack | undefined
-  /** Right-column mount point for the shell pane (empty while closed). */
-  private readonly paneSlot = new Container()
+  /** The chat and activity columns share one resizable root. */
+  private screenRoot: ShellSplit | undefined
+  /** Right column containing activity and the optional shell pane. */
+  private readonly paneSlot = new VStack([])
   private shellPane: ShellPane | undefined
+  private disposeShellDraft: (() => void) | undefined
+  private readonly toolActivity = new ToolActivityPane()
+  private agentDebugVisible = true
   private readonly editor: Editor
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
   private readonly selection: ModelSelectionRef = { current: undefined, assembled: undefined }
@@ -277,8 +283,8 @@ export class ChatScreen {
   private expandTools = false
   private atPickerOpen = false
   private reasoningPickerOpen = false
-  private suppressionPickerOpen = false
   private teamModePickerOpen = false
+  private shellPickerOpen = false
   private presetSwitching = false
   /** In-flight official slash command's abort signal (Esc interrupts it). */
   private slashAbort: AbortController | undefined
@@ -304,7 +310,7 @@ export class ChatScreen {
   /** Per-card expand override toggled by Enter in browse mode. */
   private expandedToolId: number | undefined
   /** Long-session fold: render only the newest items above this line. */
-  private readonly FOLD_THRESHOLD = 200
+  private readonly historyLimit: number
   private expandedAll = false
   private foldNotice: Text | undefined
   private lastFoldKey = ''
@@ -325,10 +331,12 @@ export class ChatScreen {
       this.disposeStream?.()
       this.disposeMcpPolicy?.()
       this.disposeSkillsPolicy?.()
+      this.disposeShellDraft?.()
       this.shellPane?.dispose()
     })
     this.agent = options.agent
     this.config = options.config
+    this.historyLimit = options.config.historyLimit ?? 20
     this.commands = this.ctx.get('commands')
     this.onAgentSwitch = options.onAgentSwitch
 
@@ -368,14 +376,8 @@ export class ChatScreen {
       new VStack([this.queueBanner, this.editor, this.statusBar]),
       { basis: 'auto', shrink: 1, minSize: 1 },
     )
-    // Native split layout: the two-column root exists for the screen's whole
-    // life. The shell pane mounts into `paneSlot`; closing empties the slot
-    // and collapses its column back to zero width, so no layout-root swap
-    // ever happens.
-    this.screenRoot = new HStack([
-      { component: this.chatRoot, basis: 0, grow: 1, minSize: 30 },
-      { component: this.paneSlot, basis: 0, shrink: 0 },
-    ])
+    this.screenRoot = new ShellSplit(this.chatRoot, this.paneSlot, this.tui)
+    this.syncSidePane()
     this.tui.setLayoutRoot(this.screenRoot)
     this.tui.setFocus(this.editor)
 
@@ -384,6 +386,23 @@ export class ChatScreen {
       // which filters kitty key-release events — do the same here, or every
       // functional key (Ctrl+C/D/T/O/L, Esc, Shift+Tab) fires twice.
       if (isKeyRelease(data)) return undefined
+      if (this.shellPickerOpen && this.tui.hasOverlay()) return undefined
+      if (!this.tui.hasOverlay() && this.toolActivity.focused && matchesKey(data, 'escape')) {
+        if (this.shellFocused) this.shellPane?.setFocused(true)
+        this.tui.setFocus(this.shellFocused && this.shellPane !== undefined ? this.shellPane.editor : this.editor)
+        return { consume: true }
+      }
+      if (!this.tui.hasOverlay()) {
+        if (matchesKey(data, 'ctrl+alt+d') && this.agentDebugVisible) {
+          if (this.shellFocused) this.shellPane?.setFocused(false)
+          this.tui.setFocus(this.toolActivity)
+          return { consume: true }
+        }
+        if (matchesKey(data, 'ctrl+alt+left') || matchesKey(data, 'ctrl+alt+right')) {
+          this.screenRoot?.resize(matchesKey(data, 'ctrl+alt+left') ? -2 : 2)
+          return { consume: true }
+        }
+      }
       // A focused shell pane's editor yields Esc back to the chat first
       if (this.shellFocused && data === '\u001b') {
         this.unfocusShellPane()
@@ -394,7 +413,7 @@ export class ChatScreen {
         this.cycleShellFocus()
         return { consume: true }
       }
-      if ((this.reasoningPickerOpen || this.suppressionPickerOpen || this.teamModePickerOpen) && this.tui.hasOverlay()) return undefined
+      if ((this.reasoningPickerOpen || this.teamModePickerOpen) && this.tui.hasOverlay()) return undefined
       if (matchesKey(data, 'escape')) {
         // A running human shell command owns Esc first (pi semantics).
         if (this.bashRunning) {
@@ -504,7 +523,7 @@ export class ChatScreen {
       if (matchesKey(data, 'enter')) {
         // Browse mode owns Enter while a tool card is focused (empty editor
         // makes plain Enter a no-op anyway); overlays own Enter themselves.
-        if (this.focusedToolId !== undefined && !this.tui.hasOverlay()) {
+        if (this.focusedToolId !== undefined && !this.tui.hasOverlay() && !this.toolActivity.focused) {
           this.toggleFocusedTool()
           return { consume: true }
         }
@@ -788,29 +807,25 @@ export class ChatScreen {
   }
 
   /**
-   * Replay a session's durable log into the transcript, with its parent
-   * chain's inherited tail first: fork sessions persist only their own
-   * events, and the model context (the fork seed) includes the inherited
-   * conversation, so the transcript shows it too.
+   * Replay the complete session snapshot, including its inherited fork seed.
+   * Parent metadata records lineage; replay never opens an ancestor's log.
+   * Existing conversation context adds a read-only recap after the replay.
    * @param agent - the live agent whose transcript is repainted.
    */
-  async replayTranscript(agent: Agent): Promise<void> {
+  replayTranscript(agent: Agent): Promise<void> {
     this.replaying = true
     try {
-      const parent = agent.session.header.parentSession
-      if (parent !== undefined) {
-        for (const event of await loadParentChain(this.ctx, parent)) {
-          this.handleEvent(event)
-        }
-      }
       for (const event of replayEvents(agent.session)) {
         this.handleEvent(event)
       }
     } finally {
       this.replaying = false
     }
+    const recap = buildRecap(agent.session.deriveMessages())
+    if (recap !== undefined) pushNotice(this.model, recap)
     // Replay batches: one reconcile after the whole log, not per event.
     this.sync()
+    return Promise.resolve()
   }
 
   /**
@@ -876,7 +891,7 @@ export class ChatScreen {
       },
       { name: 'preset', description: 'Switch the session preset' },
       { name: 'preset-create', description: 'Create a new preset from pasted text' },
-      { name: 'suppress-prompt', description: 'Suppress built-in prompt sections' },
+      { name: 'suppress-prompt', description: 'Show strict prompt protection status' },
       { name: 'mcp', description: 'Enable or disable MCP tools' },
       { name: 'jev', description: 'Enable or disable JEV tools and policy context' },
       { name: 'team-mode', description: 'Switch the team mode' },
@@ -893,7 +908,8 @@ export class ChatScreen {
       { name: 'queue', description: 'Pending inbox: list|remove <id>|clear' },
       { name: 'providers', description: 'List provider routes with model counts and key state' },
       { name: 'skills', description: 'List, enable, or disable skills' },
-      { name: 'shell', description: 'Open the shared shell (win or kali) — the agent shares it' },
+      { name: 'shell', description: 'Choose Windows, Kali, or close the shared shell' },
+      { name: 'agent-debug', description: 'Show or hide Agent Debug activity' },
       { name: 'exec', description: 'List commands the agent executed' },
       { name: 'wiki', description: 'View Wiki index or open Obsidian / Wiki folder' },
       { name: 'agents', description: 'List live subagents' },
@@ -906,6 +922,7 @@ export class ChatScreen {
         description: 'Copy to clipboard: last|tool|error|id|resume',
       },
       { name: 'retry', description: 'Re-send the last prompt after a failure' },
+      { name: 'recap', description: 'Review the latest request, reply, and active checkpoint' },
       { name: 'expand-all', description: 'Toggle folding of old messages' },
     ]
     this.editor.setAutocompleteProvider(
@@ -1231,6 +1248,14 @@ export class ChatScreen {
       this.cmdClear()
       return
     }
+    if (parsed.name === 'recap') {
+      if (parsed.raw.trim() !== '') {
+        this.pushNotice('usage: /recap', 'error')
+        return
+      }
+      this.pushNotice(buildRecap(this.agent.session.deriveMessages()) ?? 'Nothing to recap yet.')
+      return
+    }
     if (parsed.name === 'queue') {
       this.cmdQueue(parsed.raw.trim())
       return
@@ -1240,6 +1265,20 @@ export class ChatScreen {
     if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
     if (parsed.name === 'skills') return this.cmdSkills(parsed.raw.trim())
     if (parsed.name === 'shell') return this.cmdShell(parsed.raw.trim())
+    if (parsed.name === 'agent-debug') {
+      if (parsed.raw.trim() !== '') {
+        this.pushNotice('usage: /agent-debug', 'error')
+        return
+      }
+      this.agentDebugVisible = !this.agentDebugVisible
+      if (!this.agentDebugVisible && this.toolActivity.focused) {
+        if (this.shellFocused) this.shellPane?.setFocused(true)
+        this.tui.setFocus(this.shellFocused && this.shellPane !== undefined ? this.shellPane.editor : this.editor)
+      }
+      this.syncSidePane()
+      this.pushNotice(`agent debug: ${this.agentDebugVisible ? 'ON' : 'OFF'}`)
+      return
+    }
     if (parsed.name === 'exec') return this.cmdExec()
     if (parsed.name === 'wiki') return this.cmdWiki()
     if (parsed.name === 'new') return this.cmdNew()
@@ -1428,21 +1467,19 @@ export class ChatScreen {
     this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${available}/${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''} · applies to the next request`)
   }
 
-  /** Pick or set persisted TUI suppression; the shared policy applies it to subsequent requests. */
+  /** Keep suppression disabled so every TUI request retains its system prompt. */
   private async cmdSuppressPrompt(argument: string): Promise<void> {
     const action = argument.toLowerCase()
     if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
       this.pushNotice('usage: /suppress-prompt [on|off|toggle|status]', 'error')
       return
     }
-    const policy = this.ctx.get('pentestModePolicy') as { current(): { suppressSections: boolean } } | undefined
-    if (policy === undefined) {
-      this.pushNotice('prompt suppression unavailable in this profile', 'error')
+    if (action === '' || action === 'status') {
+      this.pushNotice('suppress-prompt: OFF · locked by strict system prompt protection')
       return
     }
-    const current = policy.current().suppressSections
-    if (action === 'status') {
-      this.pushNotice(`suppress-prompt: ${current ? 'ON' : 'OFF'}`)
+    if (action === 'on' || action === 'toggle') {
+      this.pushNotice('Cannot suppress the system prompt: strict system prompt protection is enabled', 'error')
       return
     }
     const settings = this.ctx.get('settings') as { update(ns: string, patch: object): Promise<void> } | undefined
@@ -1450,28 +1487,8 @@ export class ChatScreen {
       this.pushNotice('prompt suppression settings unavailable in this profile', 'error')
       return
     }
-    let enabled: boolean
-    if (action === '') {
-      if (this.suppressionPickerOpen || this.tui.hasOverlay()) return
-      this.suppressionPickerOpen = true
-      try {
-        const picked = await pickFromList(this.tui, {
-          title: 'Suppress built-in prompt sections',
-          body: '\n' + style.muted('↑/↓ choose · number jump · Enter apply · Esc cancel') + '\n',
-          initial: current ? 'on' : 'off',
-          numberKeys: true,
-          theme: { ...selectListTheme, selectedText: text => chalk.bgHex(BRAND_RED).black.bold(text) },
-          items: [
-            { value: 'on', label: `1. ON${current ? ' (current)' : ''}`, description: 'Suppress built-in prompt and supplemental context; keep the preset' },
-            { value: 'off', label: `2. OFF${current ? '' : ' (current)'}`, description: 'Include built-in prompt and supplemental context' },
-          ],
-        })
-        if (picked === undefined || this.quitting) return
-        enabled = picked === 'on'
-      } finally { this.suppressionPickerOpen = false }
-    } else enabled = action === 'on' ? true : action === 'off' ? false : !current
-    await settings.update('pentest-mode', { suppressSections: enabled })
-    this.pushNotice(`suppress-prompt: ${enabled ? 'ON' : 'OFF'} · applies to the next request`)
+    await settings.update('pentest-mode', { suppressSections: false })
+    this.pushNotice('suppress-prompt: OFF · locked by strict system prompt protection')
   }
 
   /** Pick or set the saved TUI team mode, applied to the next model request. */
@@ -2240,29 +2257,47 @@ export class ChatScreen {
   }
 
   /**
-   * The native split-pane shell: `Ctrl+P` opens or cycles focus, `/shell`
-   * toggles, and `/shell win|kali` opens or rebinds the pane to that backend.
+   * `/shell` opens a picker; explicit backend and close arguments remain supported.
+   * `Ctrl+P` opens the picker or cycles focus when the shell is already open.
    * The pane shares the agent's named PTY session, so agent-run commands
    * stream into it too. Opening is allowed while work runs — the pane is the
    * live view onto that work.
    * @param argument - `win`, `kali`, `close`, or empty.
    */
   private async cmdShell(argument: string): Promise<void> {
-    const arg = argument.trim().toLowerCase()
+    let arg = argument.trim().toLowerCase()
+    if (arg === '') {
+      if (this.tui.hasOverlay()) return
+      const owner = this.agent
+      this.shellPickerOpen = true
+      try {
+        const picked = await pickFromList(this.tui, {
+          title: 'Shell',
+          body: '↑/↓ or number · Enter select · Esc cancel',
+          items: [
+            { value: 'win', label: '1. Windows', description: 'PowerShell' },
+            { value: 'kali', label: '2. Kali', description: 'WSL shell' },
+            ...(this.shellPane !== undefined ? [{ value: 'close', label: '3. Close shell' }] : []),
+          ],
+          initial: this.shellPane?.variant ?? 'win',
+          numberKeys: true,
+        })
+        if (picked === undefined || this.disposed || this.agent !== owner) return
+        arg = picked
+      } finally {
+        this.shellPickerOpen = false
+      }
+    }
     if (arg === 'close') {
       this.closeShellPane()
       return
     }
-    if (arg !== '' && arg !== 'win' && arg !== 'kali') {
+    if (arg !== 'win' && arg !== 'kali') {
       this.pushNotice('usage: /shell [win|kali|close]', 'error')
       return
     }
-    const variant = arg === '' ? undefined : arg
+    const variant = arg
     if (this.shellPane !== undefined) {
-      if (variant === undefined) {
-        this.closeShellPane()
-        return
-      }
       if (this.shellPane.variant === variant) {
         this.focusShellPane()
         return
@@ -2274,22 +2309,64 @@ export class ChatScreen {
       this.pushNotice('shell pane needs a terminal at least 100 columns wide', 'error')
       return
     }
-    await this.openShellPane(variant ?? 'win')
+    await this.openShellPane(variant)
+  }
+
+  /** Mount the visible right-column panels without resetting their editors or scroll state. */
+  private syncSidePane(): void {
+    this.paneSlot.clear()
+    if (this.agentDebugVisible) this.paneSlot.addChild(this.toolActivity, { basis: 0, grow: 1, minSize: 2 })
+    if (this.shellPane !== undefined) this.paneSlot.addChild(this.shellPane, { basis: 0, grow: 2, minSize: 4 })
+    this.screenRoot?.setOpen(this.agentDebugVisible || this.shellPane !== undefined)
   }
 
   /** Mount the pane for one variant into the stable split root and focus it. */
   private async openShellPane(variant: ShellVariant): Promise<void> {
     try {
       const session = await resolveShellSession(this.ctx, this.agent, variant)
-      const pane = new ShellPane(this.tui, session, variant, `Shell · ${variant}`, () => { this.closeShellPane() })
-      this.paneSlot.addChild(pane)
-      this.replacePaneSlotEntry(PANE_COLUMNS)
+      const pane = new ShellPane(
+        this.tui, session, variant, `Shell · ${variant}`, () => { this.closeShellPane() },
+        width => this.statusBar.render(Math.max(1, this.tui.terminal.columns - width - 3)).length,
+      )
+      try {
+        this.disposeShellDraft = this.installShellDraft(pane)
+      } catch (error) {
+        pane.dispose()
+        throw error
+      }
       this.shellPane = pane
+      this.syncSidePane()
       this.focusShellPane()
       this.pushNotice(`shell ${variant} open on the right · Ctrl+P cycles focus, /shell close closes it`)
     } catch (error) {
       this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
     }
+  }
+
+  /** Register a human-reviewed draft handoff only while this agent's shell is open. */
+  private installShellDraft(pane: ShellPane): (() => void) | undefined {
+    const owner = this.agent
+    return owner.ctx.get('tools')?.register(defineTool({
+      name: 'shell_draft',
+      description: 'Place a command in the open TUI shell input for the user to review and submit manually. This does not execute or send terminal input, change focus, or overwrite existing input. The user must select a shell using /shell first. Use only for commands you can safely provide; do not use this to bypass a safety refusal, denied approval, or execution policy.',
+      parameters: {
+        shell: { type: 'string', enum: ['win', 'kali'], required: true, description: 'Must match the currently open shell backend.' },
+        command: { type: 'string', required: true, description: 'Command text for human review. No terminal control characters.' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      execute: (args, exec) => {
+        exec.signal.throwIfAborted()
+        if (this.disposed || this.agent !== owner || exec.agent !== owner || this.shellPane !== pane) {
+          throw new Error('this shell draft target is no longer active')
+        }
+        if (args.shell !== pane.variant) throw new Error(`open shell is ${pane.variant}; choose the matching backend before drafting`)
+        pane.stageCommand(args.command)
+        return Promise.resolve(`Draft staged in ${args.shell} shell input. Not executed. The user can review it, focus the shell with Ctrl+P, and press Enter to submit.`)
+      },
+    }))
   }
 
   /** Point the mounted pane at the other backend without touching the layout. */
@@ -2324,7 +2401,7 @@ export class ChatScreen {
   }
 
   /**
-   * `Ctrl+P`: open the default shell pane when none is mounted, otherwise
+   * `Ctrl+P`: open the shell picker when no pane is mounted, otherwise
    * cycle keyboard focus between the chat editor and the pane.
    */
   cycleShellFocus(): void {
@@ -2342,19 +2419,12 @@ export class ChatScreen {
     const pane = this.shellPane
     this.shellPane = undefined
     this.shellFocused = false
+    this.disposeShellDraft?.()
+    this.disposeShellDraft = undefined
     pane.dispose()
-    this.paneSlot.removeChild(pane)
-    this.replacePaneSlotEntry(0)
+    this.syncSidePane()
     this.tui.setFocus(this.editor)
     this.sync()
-  }
-
-  /** Resize the right column: re-add the slot entry with a new basis. */
-  private replacePaneSlotEntry(basis: number): void {
-    const root = this.screenRoot
-    if (root === undefined) return
-    root.removeChild(this.paneSlot)
-    root.addChild(this.paneSlot, { basis, shrink: 0 })
   }
 
   /** List the shell commands the agent executed, classified by execution world. */
@@ -2389,7 +2459,7 @@ export class ChatScreen {
     }
     this.expandedToolId = item.id
     this.focusedToolId = item.id
-    this.sync()
+    this.jumpToMatch(item.id)
   }
 
   private async cmdSkills(argument: string): Promise<void> {
@@ -2856,9 +2926,11 @@ export class ChatScreen {
         '  Ctrl+Z     suspend to background',
         '  Ctrl+G     edit input in $EDITOR',
         '  Ctrl+P     shell pane: open · cycle pane/chat focus (Esc leaves pane)',
+        '  /agent-debug  show or hide Agent Debug · Ctrl+Alt+D focus · ↑/↓ select · Enter details',
+        '  Ctrl+Alt+←/→  resize chat/shell split (or drag the divider)',
         '  Tab        complete paths · / slash commands · @ attach files',
         '             (empty editor: cycle tool-card focus · Enter expand)',
-        'commands: /new /fork /resume /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
+        'commands: /new /fork /resume /recap /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /shell /agent-debug /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
       ].join('\n'),
     )
   }
@@ -2897,7 +2969,7 @@ export class ChatScreen {
   /** Scroll the transcript so the matched item sits at the top, highlighted. */
   private jumpToMatch(itemId: number): void {
     // A match below the fold boundary is invisible; expand to reveal it.
-    const window = foldWindow(this.model.items.length, this.expandedAll, this.FOLD_THRESHOLD)
+    const window = foldWindow(this.model.items.length, this.expandedAll, this.historyLimit)
     if (window.key.startsWith('folded:') && itemId < window.boundary) {
       this.expandedAll = true
     }
@@ -2915,7 +2987,7 @@ export class ChatScreen {
    * exactly what the ScrollView content shows.
    */
   private measureOffset(targetId: number, width: number): number {
-    const window = foldWindow(this.model.items.length, this.expandedAll, this.FOLD_THRESHOLD)
+    const window = foldWindow(this.model.items.length, this.expandedAll, this.historyLimit)
     return visibleItemsBefore(
       targetId,
       window,
@@ -3097,7 +3169,7 @@ export class ChatScreen {
   /** Finished tool-card ids, newest last; folded cards are skipped. */
   private settledToolIds(): number[] {
     const { items } = this.model
-    const boundary = foldWindow(items.length, this.expandedAll, this.FOLD_THRESHOLD).boundary
+    const boundary = foldWindow(items.length, this.expandedAll, this.historyLimit).boundary
     const ids: number[] = []
     for (const item of items) {
       if (item.kind !== 'tool' || item.tool === undefined || item.tool.status === 'running') {
@@ -3417,7 +3489,11 @@ export class ChatScreen {
       this.views.clear()
       this.lastFoldKey = ''
     }
-    if (event.type === 'tool/result') void this.resolveImages(event)
+    if (event.type === 'tool/result' && !this.replaying) {
+      const card = this.model.items.find(item => item.tool?.callId === event.data.message.source.callId)
+      const view = card === undefined ? undefined : this.views.get(card.id)
+      if (card !== undefined && view instanceof ToolCardView) void this.resolveImages(card, view)
+    }
     if (event.type === 'turn/end' && !this.replaying) {
       const reason = (event.data as { reason?: { kind?: string } }).reason
       const startedAt = this.turnStartedAt
@@ -3471,14 +3547,8 @@ export class ChatScreen {
    * Resolve image-attachment refs from read_image results into inline
    * base64 for the tool card (best effort; the text envelope still shows).
    */
-  private async resolveImages(event: SessionEvent): Promise<void> {
-    const callId = (event.data as { message?: { source?: { callId?: string } } }).message?.source
-      ?.callId
-    if (callId === undefined) return
-    const card = this.model.items.find(
-      item => item.kind === 'tool' && item.tool?.callId === callId,
-    )
-    if (card === undefined || card.tool?.imageRefs === undefined) return
+  private async resolveImages(card: ChatItem, view: ToolCardView): Promise<void> {
+    if (card.tool?.imageRefs === undefined) return
     const attachments = this.ctx.get('attachments') as
       { readImage(ref: unknown, signal?: AbortSignal): Promise<{ data: Uint8Array }> } | undefined
     if (attachments === undefined) return
@@ -3495,8 +3565,7 @@ export class ChatScreen {
       }
     }
     if (images.length === 0) return
-    const view = this.views.get(card.id)
-    if (view instanceof ToolCardView) {
+    if (!this.disposed && this.views.get(card.id) === view) {
       view.setImages(images)
       this.sync()
     }
@@ -3558,12 +3627,17 @@ export class ChatScreen {
   private sync(refreshJobs = true): void {
     this.cancelStreamSync()
     const { items } = this.model
-    // Views for every item (the map stays complete even for folded ones, so
-    // un-folding / /expand-all is instant; only the container prunes).
-    for (let index = this.views.size; index < items.length; index++) {
+    this.toolActivity.update(this.model.activity)
+    const foldKey = foldWindow(items.length, this.expandedAll, this.historyLimit)
+    for (const id of this.views.keys()) {
+      if (id < foldKey.boundary) this.views.delete(id)
+    }
+    for (let index = foldKey.boundary; index < items.length; index++) {
       const item = items[index]
-      if (item === undefined) break
-      this.views.set(item.id, createView(item))
+      if (item === undefined || this.views.has(item.id)) continue
+      const view = createView(item)
+      this.views.set(item.id, view)
+      if (view instanceof ToolCardView) void this.resolveImages(item, view)
     }
 
     // Working loader between messages and the status bar (before the fold
@@ -3597,11 +3671,10 @@ export class ChatScreen {
     // window moved (threshold crossed, expand toggled, or session switch).
     // When unfolded, the container is append-only — just add views created
     // above (the loader, if present, must stay AFTER all views).
-    const foldKey = foldWindow(items.length, this.expandedAll, this.FOLD_THRESHOLD)
     if (foldKey.key !== this.lastFoldKey) {
       this.lastFoldKey = foldKey.key
       this.reconcileContainer(items, foldKey)
-    } else if (foldKey.key === 'none') {
+    } else if (foldKey.boundary === 0) {
       const loaderOffset = this.workingLoader !== undefined ? 1 : 0
       const firstMissing = this.messages.children.length - loaderOffset
       if (firstMissing < items.length) {

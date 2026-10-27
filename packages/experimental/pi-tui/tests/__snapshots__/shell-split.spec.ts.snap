@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the chat/shell divider > captures a drag across panes and releases it without selecting text > dragging left 1`] = `
+[
+  "chat                                      ┃ shell                                                   ",
+  "                                          ┃                                                         ",
+  "                                          ↔                                                         ",
+  "                                          ┃                                                         ",
+  "                                          ┃                                                         ",
+]
+`;
+
+exports[`the chat/shell divider > captures a drag across panes and releases it without selecting text > open split 1`] = `
+[
+  "chat                                                │ shell                                         ",
+  "                                                    │                                               ",
+  "                                                    ↔                                               ",
+  "                                                    │                                               ",
+  "                                                    │                                               ",
+]
+`;
