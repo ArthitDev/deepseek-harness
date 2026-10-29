@@ -13,6 +13,7 @@
     { "path": "../../core/session" },
     { "path": "../../core/tools" },
     { "path": "../../interaction/commands" },
+    { "path": "../../jobs/jobs" },
     { "path": "../../interaction/user-approval" },
     { "path": "../../interaction/user-questions" },
     { "path": "../../llm/llm" },
@@ -21,6 +22,7 @@
     { "path": "../../terminal/tool-terminal" },
     { "path": "../../util/native-command" },
     { "path": "../../fs/tool-fs-search" },
-    { "path": "../../skill/skill" }
+    { "path": "../../skill/skill" },
+    { "path": "../../subagent/subagent" }
   ]
 }

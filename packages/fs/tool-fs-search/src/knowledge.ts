@@ -115,9 +115,9 @@ async function resolveLibraries(roots: KnowledgeRoot[]) {
 export async function applyKnowledgeListTool(ctx: Context, roots: KnowledgeRoot[], timeoutMs: number): Promise<void> {
   if (roots.length === 0) {
     ctx.inject(['agents'], (runtime) => {
-      runtime.on('agent/pre-step', async ({ agent, signal }, next) => {
+      runtime.on('agent/pre-step', async ({ agent, turn, step, signal }, next) => {
         signal.throwIfAborted()
-        if (ctx.tools.get('knowledge_list', agent) === undefined) clearKnowledgeContexts(agent.session)
+        if (ctx.tools.get('knowledge_list', agent) === undefined) clearKnowledgeContexts(agent.session, turn, step)
         return next()
       })
     })
@@ -258,7 +258,7 @@ export async function applyKnowledgeListTool(ctx: Context, roots: KnowledgeRoot[
     runtime.on('tools/change', () => {
       if (active) for (const agent of tracked) publish(agent)
     })
-    runtime.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
+    runtime.on('agent/pre-step', async ({ agent, turn, step, signal }, next): Promise<PreStepDecision> => {
       const decision = await next()
       if (decision.kind === 'reject') return decision
       signal.throwIfAborted()
@@ -266,10 +266,10 @@ export async function applyKnowledgeListTool(ctx: Context, roots: KnowledgeRoot[
       publish(agent)
       if (!visible(agent)) {
         pending.delete(agent)
-        if (ctx.tools.get(tool.name, agent) === undefined) clearKnowledgeContexts(agent.session)
+        if (ctx.tools.get(tool.name, agent) === undefined) clearKnowledgeContexts(agent.session, turn, step)
         return decision
       }
-      clearKnowledgeContexts(agent.session, digest)
+      clearKnowledgeContexts(agent.session, turn, step, digest)
       const messages = decision.messages.filter(message => message.source.kind !== 'knowledge-context')
       if (hasKnowledgeContext(agent.session, digest)) {
         pending.delete(agent)
@@ -295,7 +295,11 @@ export async function applyKnowledgeListTool(ctx: Context, roots: KnowledgeRoot[
       unregister()
       for (const agent of tracked) {
         publish(agent)
-        if (ctx.tools.get(tool.name, agent) === undefined) clearKnowledgeContexts(agent.session)
+        if (ctx.tools.get(tool.name, agent) === undefined) {
+          const boundary = runtime.sessionProjections.stateOf(agent.session, 'turnBoundary')
+          if (boundary === undefined) throw new Error('withdrawing Wiki context on unload requires the turnBoundary projection')
+          clearKnowledgeContexts(agent.session, boundary.lastTurn + 1, 1)
+        }
       }
     })
     for (const agent of runtime.agents.list()) {
@@ -336,14 +340,14 @@ function hasKnowledgeContext(session: Session, digest: string): boolean {
     && message.source.kind === 'knowledge-context' && message.source.digest === digest)
 }
 
-function clearKnowledgeContexts(session: Session, keepDigest?: string): void {
+function clearKnowledgeContexts(session: Session, turn: number, step: number, keepDigest?: string): void {
   for (const seq of [...session.surface.nodes]) {
     // oxlint-disable-next-line typescript/no-deprecated -- Replacements require the original surface-node sequence.
     const event = session.eventAt(seq)
     if (event?.type !== 'user/message' || event.data.source.kind !== 'knowledge-context'
       || event.data.source.digest === keepDigest) continue
     session.append('developer/message', {
-      turn: 0, step: 0, message: createDeveloperMessage({ content: [], source: { kind: 'session-edit' } }),
+      turn, step, message: createDeveloperMessage({ content: [], source: { kind: 'session-edit' } }),
     }, { surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq }, sourceEventSeqs: [seq] })
   }
 }

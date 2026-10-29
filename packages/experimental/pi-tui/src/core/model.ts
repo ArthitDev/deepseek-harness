@@ -15,6 +15,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { recordActivity, type ActivityEntry } from './activity.js'
+import { TargetIndex } from './targets.js'
 
 /**
  * The TUI's producer-owned message source (session format v4 retired the
@@ -85,6 +86,8 @@ export interface ChatModel {
   items: ChatItem[]
   /** Recent observed operations for the Agent Debug panel. */
   activity: ActivityEntry[]
+  /** URL observations retained independently of the visible transcript window. */
+  targets: TargetIndex
   /** Cumulative token accounting from `assistant/message` usage records. */
   tokens: { input: number; output: number }
   /** Live session title (`session/title`), if any. */
@@ -111,7 +114,7 @@ const RESULT_PREVIEW_LIMIT = 400
  * @returns A model with no items, zeroed token counters, and no active turn.
  */
 export function createModel(): ChatModel {
-  return { items: [], activity: [], tokens: { input: 0, output: 0 }, working: false }
+  return { items: [], activity: [], targets: new TargetIndex(), tokens: { input: 0, output: 0 }, working: false }
 }
 
 /**
@@ -243,6 +246,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
         const start = surfaceOp.startSeq
         const clearing = textOf(event.data.message.content).startsWith('the operator cleared')
         const end = clearing ? event.seq : surfaceOp.endSeq
+        model.targets.removeRange(start, end)
         model.activity = model.activity.filter(entry => entry.seq < start || entry.seq > end)
         model.items = model.items
           .filter(item => item.seq === undefined
@@ -295,6 +299,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       // (goal/skill sources) is skipped.
       if (event.data.source.kind !== 'user') break
       const text = textOf(event.data.content)
+      model.targets.observe(event.seq, text, true)
       if (text) {
         model.lastUserText = text
         push({ kind: 'user', text, streaming: false, seq: event.seq })
@@ -316,6 +321,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       // compacted or pruned); replace the streamed text and seal.
       const item = currentStreaming(model, 'assistant', event.seq)
       const text = textOf(event.data.message.content)
+      model.targets.observe(event.seq, text)
       if (text) item.text = text
       item.streaming = false
       model.openAssistant = undefined
@@ -328,6 +334,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       break
     }
     case 'tool/call': {
+      model.targets.observe(event.seq, event.data.arguments)
       // ask_user_question renders through the userQuestions provider (M2),
       // not as a tool card — the model parks waiting for a human answer.
       if (event.data.name === 'ask_user_question') break
@@ -348,6 +355,9 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       break
     }
     case 'tool/result': {
+      const content = event.data.message.content
+      const result = textOf(content)
+      model.targets.observe(event.seq, result)
       const callId = event.data.message.source.callId
       const card = model.items.find(
         (item): item is ChatItem & { tool: ToolCardState } =>
@@ -356,8 +366,6 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       if (card === undefined) break
       card.streaming = false
 
-      const content = event.data.message.content
-      const result = textOf(content)
       if (result) {
         card.tool.resultPreview = preview(result, RESULT_PREVIEW_LIMIT)
         card.tool.resultFull = result

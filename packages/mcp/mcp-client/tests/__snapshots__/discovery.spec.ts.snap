@@ -1,0 +1,94 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`lazy MCP discovery > loads from YAML, searches, reads one schema, dispatches through native policy, and unloads > lazy tool schema 1`] = `
+[
+  {
+    "description": "Discover MCP tools without loading every schema. List or search tools, read the schema of one tool, then call it with its exact public name and arguments. Calls use the same permission and scope checks as native tools.",
+    "name": "mcp__fixture__discover_tools",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "list",
+            "search",
+            "schema",
+            "call",
+          ],
+          "type": "string",
+        },
+        "arguments": {
+          "additionalProperties": true,
+          "description": "Arguments matching the selected schema, for call only.",
+          "type": "object",
+        },
+        "offset": {
+          "description": "Non-negative result offset for list or search.",
+          "type": "integer",
+        },
+        "query": {
+          "description": "Search terms, matched against tool names and descriptions.",
+          "type": "string",
+        },
+        "tool": {
+          "description": "Exact public tool name returned by list or search.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+]
+`;
+
+exports[`lazy MCP discovery > loads from YAML, searches, reads one schema, dispatches through native policy, and unloads > search result 1`] = `
+{
+  "content": [
+    {
+      "text": "{"tools":[{"name":"mcp__fixture__echo","description":"Echo a supplied string"}],"total":1,"nextOffset":null}",
+      "type": "text",
+    },
+  ],
+  "isError": false,
+  "value": {
+    "nextOffset": null,
+    "tools": [
+      {
+        "description": "Echo a supplied string",
+        "name": "mcp__fixture__echo",
+      },
+    ],
+    "total": 1,
+  },
+}
+`;
+
+exports[`lazy MCP discovery > loads from YAML, searches, reads one schema, dispatches through native policy, and unloads > selected schema 1`] = `
+{
+  "content": [
+    {
+      "text": "{"name":"mcp__fixture__echo","description":"Echo a supplied string","parameters":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}",
+      "type": "text",
+    },
+  ],
+  "isError": false,
+  "value": {
+    "description": "Echo a supplied string",
+    "name": "mcp__fixture__echo",
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "text": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "text",
+      ],
+      "type": "object",
+    },
+  },
+}
+`;

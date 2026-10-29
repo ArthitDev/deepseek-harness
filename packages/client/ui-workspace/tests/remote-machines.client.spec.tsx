@@ -67,6 +67,7 @@ describe('RemoteMachineControl', () => {
         evidenceIds: [], findingIds: [], reasonForNextAction: 'Expand the mapped branch',
       }],
       coverage: {
+        checks: [],
         complete: false, nextRequiredTaskKind: 'enumerate' as const,
         phases: [
           { kind: 'discover' as const, goal: 'Map', required: true, status: 'covered' as const, taskIds: ['task-map'] },
@@ -248,7 +249,7 @@ describe('RemoteMachineControl', () => {
     const listPentestRuns = vi.fn(async () => [run])
     const loadPentestRun = vi.fn(async () => ({
       run, tasks: [], ptt: [], hypotheses: [], attempts: [], events: [], branches: [],
-      coverage: { complete: true, phases: [] },
+      coverage: { complete: true, phases: [], checks: [] },
       convergence: { stagnant: false, recentEpisodeWindow: 3, warnings: [] },
       observations: [], evidence: [], artifacts: [artifact], findings: [], graphNodes: [],
       graphEdges: [], episodes: [], toolCalls: [],

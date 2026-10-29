@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`stream rendering > restores Targets on replay, shares Debug visibility, and resets on session switch and clear > targets restored from session events without a shell 1`] = `
+"╭─ Targets ──────────────────────────────────╮
+│ Target · 1                                 │
+│ └─ https://example.test/                   │
+│    └─ Sub Target · 1                       │
+│       └─ api                               │
+│ Other · 1                                  │
+│ └─ https://docs.test/                      │
+╰────────────────────────────────────────────╯
+── Agent Debug · Tab Targets ──
++ [OK] Tool · fetch · 0.0s
+{"url":"https://example.test/api"}
+https://docs.test/"
+`;

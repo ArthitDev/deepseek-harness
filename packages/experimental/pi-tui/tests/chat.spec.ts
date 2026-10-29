@@ -17,6 +17,7 @@ import { ChatScreen } from '../src/ui/chat.ts'
 import { ShellPane, PANE_POLL_MS, type ShellPaneSession } from '../src/ui/shell-pane.ts'
 import { StatusBar, ToolCardView } from '../src/ui/views.ts'
 import { fixtureAgent } from './fixture-agent.ts'
+import * as gitState from '../src/core/git.ts'
 
 /** Wait for the fake terminal's scheduled render and read its visible text. */
 async function renderScreen(tui: TuiAltScreen): Promise<string> {
@@ -832,6 +833,8 @@ describe('the split-pane shell', () => {
   })
 
   it('opens the shared shell beside the chat, cycles focus, then toggles closed', async () => {
+    // A late Git status can add a wrapped row and move both editors during a snapshot.
+    const readGitState = vi.spyOn(gitState, 'readGitState').mockResolvedValue(undefined)
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(AgentRegistry)
@@ -994,6 +997,7 @@ describe('the split-pane shell', () => {
       expect(activity()).not.toContain('read_file')
       expect(activity()).not.toContain('Get-Date')
     } finally {
+      readGitState.mockRestore()
       tui.stop()
       await ctx.fiber.dispose()
     }

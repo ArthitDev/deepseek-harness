@@ -74,6 +74,10 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /** Eager native schemas by default; lazy exposes a searchable catalog with guarded dispatch. */
+  toolDiscovery?: 'eager' | 'lazy'
+  /** Maximum list/search matches in lazy discovery (default 8). */
+  discoveryResultLimit?: number
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -98,6 +102,10 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /** Eager native schemas by default; lazy exposes a searchable catalog with guarded dispatch. */
+  toolDiscovery?: 'eager' | 'lazy'
+  /** Maximum list/search matches in lazy discovery (default 8). */
+  discoveryResultLimit?: number
 }
 
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -128,6 +136,8 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: Reconnect,
+    toolDiscovery: z.union(['eager', 'lazy']).default('eager'),
+    discoveryResultLimit: z.number().step(1).min(1).max(20).default(8),
   }),
   z.object({
     transport: z.const('streamable-http'),
@@ -138,6 +148,8 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: Reconnect,
+    toolDiscovery: z.union(['eager', 'lazy']).default('eager'),
+    discoveryResultLimit: z.number().step(1).min(1).max(20).default(8),
   }),
 ]) as z<ConfigInput, Config>
 

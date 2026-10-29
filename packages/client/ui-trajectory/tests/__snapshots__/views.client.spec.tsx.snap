@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tab switching in ConversationRoot > renders Chat and Trajectory tabs and switches between them 1`] = `
+[
+  "Chat",
+  "Trajectory",
+]
+`;

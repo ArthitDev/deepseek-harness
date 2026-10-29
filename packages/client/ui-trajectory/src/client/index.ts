@@ -27,7 +27,6 @@ import {
 import type { TrajectorySnapshot } from './trajectory-contract.ts'
 import { registerTrajectoryToolDefinition } from './trajectory-tool-definition.ts'
 import { TrajectoryView, type TrajectoryViewInjected } from './TrajectoryView.tsx'
-import { TrajectoryGraphView } from './TrajectoryGraphView.tsx'
 
 export type { TrajectoryKey } from './locales.ts'
 export type {
@@ -111,11 +110,4 @@ export function apply(ctx: Context): void {
       }
     },
   }, TrajectoryView))
-  ctx.slots.inject('conversation.view', () => ctx.slots.register({
-    name: 'conversation.view',
-    id: 'graph',
-    order: 20,
-    locale: NS,
-    label: () => t('view.graph'),
-  }, TrajectoryGraphView))
 }

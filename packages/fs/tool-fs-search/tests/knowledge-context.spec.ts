@@ -143,6 +143,7 @@ describe('Wiki context lifecycle', () => {
     await send(agent)
     await fiber.dispose()
     expect(notices(agent)).toHaveLength(0)
+    expect(agent.session.snapshotEvents().findLast(event => event.type === 'developer/message')).toMatchObject({ data: { turn: 2, step: 1 } })
     expect(statuses).toContainEqual({ libraries: [] })
     await send(agent)
     expect(adapter.requests.at(-1)?.messages.some(message => message.role === 'developer')).toBe(false)

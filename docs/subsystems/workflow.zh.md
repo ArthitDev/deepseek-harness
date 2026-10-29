@@ -127,6 +127,10 @@ interface WorkflowRun {
 
 `dsh-client-ui-workflow-run` 通过 Conversation Node 引擎把四类事件折叠为一个 `workflow-run` Chat 节点，以 run-start 序号锚定在原工作流工具节点之后。阶段组只来自真正开始过的成员，并保留精确字符串，包括字段缺省与 `''` 的区别。Location 关闭时，缺失终点会显示为已中断。[界面包 README](../../packages/client/ui-workflow-run/README.zh.md)负责定义 disclosure、状态与同父本地导航行为。
 
+## 渗透测试覆盖与发现
+
+[pentest-run](../../packages/pentest/pentest-run/README.zh.md) 快照包含 `coverage.checks`，按 endpoint/file × risk area 保存持久检查记录，最新声明保留 evidence 引用与历史结果。`PentestFindingRecord` 可选携带根因 identity 与反证 assessment。[pentest-executor](../../packages/pentest/pentest-executor/README.zh.md) 通过 `pentest_submit_result` 提交这些字段，并将有界 coverage 历史和已有 finding assessment 传入全新 episode。Playbook 完成状态仍与穷尽安全覆盖分开。
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>

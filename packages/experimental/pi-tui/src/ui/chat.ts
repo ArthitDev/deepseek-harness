@@ -16,6 +16,7 @@
  *   Ctrl+L     open the model picker
  *   Ctrl+X     open the reasoning-level picker
  *   Ctrl+P     open the shell picker; when open, cycle pane/chat focus
+ *   Ctrl+Alt+G inspect subagent messages and tools
  *   Ctrl+Alt+Left/Right  move the chat/shell divider
  *   Shift+Tab  cycle mode
  */
@@ -28,6 +29,8 @@ import chalk from 'chalk'
 import { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { JobView } from '@deepseek-ai/dsh-jobs'
+import type {} from '@deepseek-ai/dsh-subagent'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type MessageSource, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
@@ -60,12 +63,12 @@ import {
 import { seedModelSelection } from '../core/selection.js'
 import { shortTokens } from '../core/format.js'
 import { buildRecap } from '../core/recap.js'
+import { inspectSubagent } from './subagent-viewer.js'
 import { osc52Encode } from '../core/clipboard.js'
 import { readGitState, type GitState } from '../core/git.js'
 import { buildSearchIndex } from '../core/search.js'
 import {
   AgentDefaultModelService,
-  JobsService,
   SessionProjectionsService,
 } from '../core/services.js'
 import { runRgFiles, shouldShowPath } from '../core/files.js'
@@ -266,6 +269,9 @@ export class ChatScreen {
   private disposeSelection: (() => void) | undefined
   private disposeMcpPolicy: (() => void) | undefined
   private disposeSkillsPolicy: (() => void) | undefined
+  private disposeJobs: (() => void) | undefined
+  private agentsOverlayOpen = false
+  private jobSnapshots: readonly JobView[] = []
   private mcpEnabled = true
   private jevEnabled = true
   private skillsEnabled = true
@@ -290,6 +296,8 @@ export class ChatScreen {
   private slashAbort: AbortController | undefined
   /** Last counted running background jobs (refreshed outside the chunk hot path). */
   private cachedJobsRunning: number | undefined
+  /** Successful Jev tool results do not change during assistant text streaming. */
+  private cachedJevCost: number | undefined
   /** Running delegation ids and the parent-scope filters carried by their lifecycle events. */
   private readonly subagentRuns = new Map<string, (agentCtx: Context) => boolean>()
   /** ScrollView over the transcript (Ctrl+F jump target). */
@@ -322,7 +330,9 @@ export class ChatScreen {
     this.onQuit = options.onQuit
     this.ctx = options.ctx
     this.tui = options.tui
-    this.statusBar = new StatusBar(this.tui)
+    this.statusBar = new StatusBar(this.tui, () => {
+      void this.cmdAgents().catch((error: unknown) => { this.pushNotice(`agents: ${error instanceof Error ? error.message : String(error)}`, 'error') })
+    })
     this.ctx.effect(() => () => {
       this.disposed = true
       this.statusBar.stop()
@@ -331,6 +341,7 @@ export class ChatScreen {
       this.disposeStream?.()
       this.disposeMcpPolicy?.()
       this.disposeSkillsPolicy?.()
+      this.disposeJobs?.()
       this.disposeShellDraft?.()
       this.shellPane?.dispose()
     })
@@ -386,6 +397,11 @@ export class ChatScreen {
       // which filters kitty key-release events — do the same here, or every
       // functional key (Ctrl+C/D/T/O/L, Esc, Shift+Tab) fires twice.
       if (isKeyRelease(data)) return undefined
+      if (this.agentsOverlayOpen && this.tui.hasOverlay()) return undefined
+      if (matchesKey(data, 'ctrl+alt+g') && !this.tui.hasOverlay()) {
+        void this.cmdAgents().catch((error: unknown) => { this.pushNotice(`agents: ${error instanceof Error ? error.message : String(error)}`, 'error') })
+        return { consume: true }
+      }
       if (this.shellPickerOpen && this.tui.hasOverlay()) return undefined
       if (!this.tui.hasOverlay() && this.toolActivity.focused && matchesKey(data, 'escape')) {
         if (this.shellFocused) this.shellPane?.setFocused(true)
@@ -533,7 +549,7 @@ export class ChatScreen {
         // Empty editor + settled tool cards: Tab cycles the browse focus
         // ring; with text it stays autocomplete (PathAware gate makes Tab a
         // no-op on plain words anyway).
-        if (this.editor.getText() === '' && !this.tui.hasOverlay()) {
+        if (this.editor.getText() === '' && !this.tui.hasOverlay() && !this.toolActivity.focused) {
           this.cycleToolFocus()
           return { consume: true }
         }
@@ -545,6 +561,7 @@ export class ChatScreen {
     this.showBanner()
     this.ctx.events.on('tools/change', () => { this.sync(false) }, { global: true })
     this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
+    this.listenJobs()
     this.sync()
     this.refreshGitState()
     // NOTE: the app layer already started the TUI (it must be live for the
@@ -798,6 +815,7 @@ export class ChatScreen {
     this.disposeMcpPolicy = this.installMcpPolicy()
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
+    this.listenJobs()
     await this.replayTranscript(next)
     this.seedHistory()
     this.rebuildAutocomplete()
@@ -912,7 +930,7 @@ export class ChatScreen {
       { name: 'agent-debug', description: 'Show or hide Agent Debug activity' },
       { name: 'exec', description: 'List commands the agent executed' },
       { name: 'wiki', description: 'View Wiki index or open Obsidian / Wiki folder' },
-      { name: 'agents', description: 'List live subagents' },
+      { name: 'agents', description: 'Inspect subagent messages and tools (Ctrl+Alt+G)' },
       { name: 'jobs', description: 'List background jobs' },
       { name: 'export', description: 'Write this transcript to a markdown file' },
       { name: 'rename', description: 'Rename this session' },
@@ -1120,42 +1138,44 @@ export class ChatScreen {
   }
 
   private async cmdAgents(): Promise<void> {
-    const subs = this.ctx.get('subagents') as
-      | {
-        listChildren(
-          parent: unknown,
-          signal?: AbortSignal,
-        ): Promise<
-          readonly { id: string; mode: string; activity: string; hasChildren?: boolean }[]
-        >
-      }
-      | undefined
+    if (this.agentsOverlayOpen || this.tui.hasOverlay()) return
+    const subs = this.ctx.get('subagents')
     if (subs === undefined) {
       this.pushNotice('subagent service unavailable', 'error')
       return
     }
-    const nodes = await subs.listChildren(this.agent.session.id).catch(() => [])
-    if (nodes.length === 0) {
-      this.pushNotice('no live subagents')
-      return
-    }
-    await pickFromListWithSearch(this.tui, {
-      title: 'Subagents',
-      items: nodes.map(node => ({
-        value: node.id,
-        label: `${node.mode === 'continuable' ? '◈' : '◦'} ${node.id.slice(0, 8)}`,
-        description: `${node.activity}${node.hasChildren === true ? ' · has children' : ''}`,
-      })),
-    })
+    this.agentsOverlayOpen = true
+    const owner = this.agent
+    const controller = new AbortController()
+    const stopLifecycle = this.ctx.effect(() => () => { controller.abort() }, 'subagent picker')
+    try {
+      const nodes = await subs.listDescendants(owner.id, controller.signal)
+      if (this.disposed || this.agent !== owner) return
+      if (nodes.length === 0) { this.pushNotice('no subagents'); return }
+      const picked = await pickFromListWithSearch(this.tui, {
+        title: 'Subagents · Enter inspect · Esc main agent',
+        signal: controller.signal,
+        items: nodes.map(node => ({
+          value: node.id,
+          label: `${'  '.repeat(Math.min(node.depth - 1, 6))}${node.kind === 'child' ? node.label ?? node.id.slice(0, 8) : node.id.slice(0, 8)}`,
+          description: node.kind === 'child' ? `${node.activity} · ${node.mode} · ${node.id}` : `history ${node.reason} · ${node.id}`,
+        })),
+      })
+      if (picked === undefined || controller.signal.aborted || this.agent !== owner) return
+      const node = nodes.find(node => node.id === picked)
+      if (node === undefined) return
+      if (node.kind !== 'child') { this.pushNotice(`subagent history ${node.reason}`, 'error'); return }
+      await inspectSubagent(this.ctx, this.tui, node.id, node.label ?? node.id.slice(0, 8), this.historyLimit)
+    } finally { await stopLifecycle(); this.agentsOverlayOpen = false }
   }
 
   private async cmdJobs(): Promise<void> {
-    const jobs = this.ctx.get('jobs') as JobsService | undefined
+    const jobs = this.ctx.get('jobs')
     if (jobs === undefined) {
       this.pushNotice('jobs service unavailable', 'error')
       return
     }
-    const snapshots = jobs.list(this.agent)
+    const snapshots = jobs.list(this.agent.id)
     if (snapshots.length === 0) {
       this.pushNotice('no background jobs')
       return
@@ -2595,6 +2615,7 @@ export class ChatScreen {
       && !(event.type === 'developer/message' && event.data.message.source.kind === 'session-edit'))?.seq
     const tail = nodes.at(-1)
     if (first === undefined || tail === undefined || first > tail) {
+      this.model.targets.clear()
       this.model.items = this.model.items.filter(item => item.notice === 'banner')
         .map((item, id) => ({ ...item, id }))
       this.model.openAssistant = undefined
@@ -2925,6 +2946,7 @@ export class ChatScreen {
         '  Ctrl+R     search message history · Shift+Tab cycle mode',
         '  Ctrl+Z     suspend to background',
         '  Ctrl+G     edit input in $EDITOR',
+        '  Ctrl+Alt+G inspect subagent messages and tools · Esc returns',
         '  Ctrl+P     shell pane: open · cycle pane/chat focus (Esc leaves pane)',
         '  /agent-debug  show or hide Agent Debug · Ctrl+Alt+D focus · ↑/↓ select · Enter details',
         '  Ctrl+Alt+←/→  resize chat/shell split (or drag the divider)',
@@ -3529,18 +3551,12 @@ export class ChatScreen {
     }, { global: true })
   }
 
-  /** Count the agent's running background jobs (process-local snapshot). */
-  private countRunningJobs(): number | undefined {
-    try {
-      const jobs = this.ctx.get('jobs') as JobsService | undefined
-      const snapshots = jobs?.list(this.agent)
-      if (snapshots === undefined) return undefined
-      const running = snapshots.filter(job => job.status === 'running').length
-      return running > 0 ? running : undefined
-    } catch {
-      // Jobs are optional.
-      return undefined
-    }
+  /** Observe registry lifecycle changes for the visible session without reading job output. */
+  private listenJobs(): void {
+    this.disposeJobs?.()
+    this.disposeJobs = this.ctx.get('jobs')?.events.subscribe({ owner: this.agent.id }, (event) => {
+      if (!this.disposed && event.type !== 'output' && event.type !== 'progress') this.sync()
+    })
   }
 
   /**
@@ -3624,10 +3640,15 @@ export class ChatScreen {
   }
 
   /** Create views for new items, refresh changed ones, fix the chrome. */
-  private sync(refreshJobs = true): void {
+  private sync(refreshSessionState = true): void {
     this.cancelStreamSync()
+    if (refreshSessionState) {
+      this.jobSnapshots = this.ctx.get('jobs')?.list(this.agent.id) ?? []
+      this.cachedJobsRunning = this.jobSnapshots.filter(job => job.status === 'running' || job.status === 'stopping').length || undefined
+      this.cachedJevCost = jevSessionCost(this.model.items)
+    }
     const { items } = this.model
-    this.toolActivity.update(this.model.activity)
+    this.toolActivity.update(this.model.activity, this.jobSnapshots, this.model.targets.getSnapshot())
     const foldKey = foldWindow(items.length, this.expandedAll, this.historyLimit)
     for (const id of this.views.keys()) {
       if (id < foldKey.boundary) this.views.delete(id)
@@ -3687,17 +3708,8 @@ export class ChatScreen {
       }
     }
 
-    const foldBoundary = foldKey.boundary
-    for (const item of items) {
-      if (item.id < foldBoundary) continue
-      const view = this.views.get(item.id)
-      if (view !== undefined) {
-        updateView(view, this.expandReasoning, this.expandTools, this.searchQuery)
-      }
-    }
-
-    // Browse-mode focus ring (accent border on the focused tool card).
     for (const [id, view] of this.views) {
+      updateView(view, this.expandReasoning, this.expandTools, this.searchQuery)
       if (view instanceof ToolCardView) view.setFocused(id === this.focusedToolId)
     }
 
@@ -3740,9 +3752,7 @@ export class ChatScreen {
       }
     }
 
-    // Live background-job count (process-local snapshot, refreshed outside
-    // the streaming chunk hot path — handleEvent passes refreshJobs=false).
-    if (refreshJobs) this.cachedJobsRunning = this.countRunningJobs()
+    // Registry reads and cost totals stay outside the assistant chunk hot path.
     const jobsRunning = this.cachedJobsRunning
 
     const route = this.currentRoute()
@@ -3752,7 +3762,7 @@ export class ChatScreen {
     const teamMode = TEAM_MODE_OPTIONS.find(option => option.value === teamPolicy?.current().mode)?.value
     const jevAvailable = (this.ctx.get('tools') as ToolPolicyRuntime | undefined)?.schemas?.(this.agent)
       .some(tool => isJevTool(tool.name)) ?? false
-    const jevCost = jevSessionCost(this.model.items)
+    const jevCost = this.cachedJevCost
     this.updateQueueBanner()
     const status: StatusBarData = {
       model: route.model,
@@ -3801,9 +3811,9 @@ export class ChatScreen {
       )
       this.messages.addChild(this.foldNotice)
     }
-    for (const item of items) {
-      if (item.id < window.boundary) continue
-      const view = this.views.get(item.id)
+    for (let index = window.boundary; index < items.length; index++) {
+      const item = items[index]
+      const view = item === undefined ? undefined : this.views.get(item.id)
       if (view !== undefined) this.messages.addChild(view)
     }
     if (this.workingLoader !== undefined) this.messages.addChild(this.workingLoader)

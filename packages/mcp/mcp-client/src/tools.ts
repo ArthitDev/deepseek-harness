@@ -23,6 +23,7 @@ import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@deepse
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { registerMcpDiscovery } from './discovery.ts'
 
 /** Resolved options relevant to tool bridging. */
 export interface ToolBridgeOptions {
@@ -30,6 +31,10 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Present a bounded catalog instead of every native schema. */
+  toolDiscovery?: 'eager' | 'lazy'
+  /** Maximum list/search matches in lazy mode. */
+  discoveryResultLimit?: number
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -148,6 +153,11 @@ export async function syncTools(
   try {
     for (const [publicName, definition] of definitions) {
       disposers.set(publicName, ctx.tools.register(definition))
+    }
+    if (opts.toolDiscovery === 'lazy') {
+      const name = publicToolName(opts.serverName, 'discover_tools')
+      if (definitions.has(name)) throw new Error(`MCP server '${opts.serverName}' uses the reserved lazy-discovery name '${name}'`)
+      disposers.set(name, registerMcpDiscovery(ctx, definitions, name, opts.discoveryResultLimit ?? 8))
     }
   } catch (error) {
     // A conflict on an `mcp__<serverName>__`-qualified name means a foreign

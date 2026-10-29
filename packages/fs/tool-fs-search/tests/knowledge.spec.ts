@@ -288,6 +288,48 @@ describe('Markdown knowledge discovery through Loader', () => {
     expect((await call('knowledge_list')).isError).toBe(false)
   })
 
+  it.each([true, false])('resumes a saved outdated Wiki notice with discovery enabled=%s', async (enabled) => {
+    await boot(enabled ? [{ name: 'cyber', path: wiki }] : [], true, true)
+    const requests: GenerateOptions[] = []
+    class ResumeAdapter extends LlmAdapter {
+      async *stream(request: GenerateOptions): AsyncIterable<StreamChunk> {
+        requests.push(request)
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    }
+    await ctx.plugin(AgentLoop, { agents: [] })
+    ctx.effect(() => ctx.llm.registerAdapter(['mock'], new ResumeAdapter()))
+    const original = await ctx.agentLoop.create(SessionId('old-wiki-session'), { provider: 'mock', model: 'mock' })
+    original.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Saved task before resume' }] }))
+    await original.whenIdle()
+    requests.length = 0
+    const legacy = original.session.append('user/message', createUserMessage({
+      source: { kind: 'knowledge-context', form: 'instructions', digest: 'previous-deployment-digest' },
+      content: [{ type: 'text', text: 'OUTDATED_WIKI_NOTICE' }],
+    }), { surfaceOp: 'append' })
+    const resumed = await ctx.agents.create({
+      sessionId: SessionId('resumed-old-wiki-session'), seed: original.session.snapshotEvents(),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    resumed.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue the saved task' }] }))
+    await resumed.agent.whenIdle()
+    expect(requests).toHaveLength(1)
+    const events = resumed.agent.session.snapshotEvents()
+    const replacement = events.find(event => event.type === 'developer/message')
+    expect(replacement).toMatchObject({ data: { turn: 2, step: 1 },
+      surfaceOp: { op: 'replace', startSeq: legacy.seq, endSeq: legacy.seq }, sourceEventSeqs: [legacy.seq] })
+    const oldNoticeRetained = events.some(event => event.seq === legacy.seq && event.type === 'user/message' && event.data.id === legacy.data.id)
+    const outdatedNoticeInRequest = JSON.stringify(requests[0]?.messages).includes('OUTDATED_WIKI_NOTICE')
+    expect(oldNoticeRetained).toBe(true)
+    expect(outdatedNoticeInRequest).toBe(false)
+    expect(JSON.stringify(requests[0]?.messages)).toContain('Saved task before resume')
+    const active = requests[0]?.messages.filter(message => message.role === 'user' && message.source?.kind === 'knowledge-context') ?? []
+    expect(active).toHaveLength(enabled ? 1 : 0)
+    expect({ enabled, oldNoticeRetained, outdatedNoticeInRequest,
+      replacement: replacement?.type === 'developer/message' ? { turn: replacement.data.turn, step: replacement.data.step } : undefined,
+      activeNotices: active.length }).toMatchSnapshot()
+  })
+
   it.each([
     { knowledgeRoots: [{ name: 'cyber', path: 'relative-wiki' }] },
     { knowledgeRoots: [{ name: 'Bad Name', path: 'unused' }] },

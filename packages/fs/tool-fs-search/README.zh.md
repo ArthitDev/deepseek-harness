@@ -58,7 +58,7 @@ kind: "package-reference"
 
 `knowledge_list` 只返回知识库名称、规范根路径和索引路径。`knowledge_create_note` 在选定知识库中创建一份带来源的 Markdown 草稿，并把链接加入 `INDEX.md`。两者都不会增加 system prompt 节或数据库。使用现有 `read`、`glob` 和 `grep` 工具访问返回的路径。文件修改在下次读取时可见；修改根目录配置需要重载插件。超时采用配置中的 `timeoutMs`。
 
-挂载 Agent 服务时，简短的用户角色 `knowledge-context` 通知说明如何检索和保存持久知识：列出知识库、读取 `INDEX.md`、检索相关笔记并引用来源；写入前读取 `CONTRIBUTING.md` 和模板，在可用时用 `knowledge_create_note` 创建带来源的草稿，并且绝不保存凭据、token、秘密或临时日志。通知只在有效模型历史中记录一次。压缩或清空移除通知后，下次请求会恢复；上下文溢出重试会在重试前恢复。切换 preset 使用当前配置。禁用发现功能会从有效历史中撤回通知，但保留原始日志。Wiki 启用状态独立于内置提示词抑制，preset system 文本不变。
+挂载 Agent 服务时，简短的用户角色 `knowledge-context` 通知说明如何检索和保存持久知识：列出知识库、读取 `INDEX.md`、检索相关笔记并引用来源；写入前读取 `CONTRIBUTING.md` 和模板，在可用时用 `knowledge_create_note` 创建带来源的草稿，并且绝不保存凭据、token、秘密或临时日志。通知只在有效模型历史中记录一次。压缩或清空移除通知后，下次请求会恢复；上下文溢出重试会在重试前恢复。切换 preset 使用当前配置。恢复会话时若配置发生变化，会在下次请求前替换过时的通知，并保留其原始日志记录。禁用发现功能会从有效历史中撤回通知，但保留原始日志。Wiki 启用状态独立于内置提示词抑制，preset system 文本不变。
 
 `knowledgeStatus` 会话投影为 UI 状态提供当前知识库名称，首个请求前即可显示。TUI 显示 `📚 Wiki`，Web 在输入框下方显示同一标记。Wiki 不可用或被显式拒绝时隐藏。新的 `knowledge/status` 日志事件需要支持它的读取版本。
 

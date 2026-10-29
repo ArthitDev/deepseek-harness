@@ -341,7 +341,7 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
     createSnapshotStore<SessionStatusSnapshot>(new Map()),
   )
   const useWorkspaces = emptyWorkspaces()
-  const conversation = createConversationStore().create()
+  const conversation = createConversationStore().create(SID)
   const useConversationViews = bindSnapshotSelector(
     createSnapshotStore<readonly ViewTab[]>(tabsOf(slots)),
   )
@@ -397,12 +397,10 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
       })()
       : injected
     const viewProps: ConvViewProps = { ...owner, ...standardProps }
-    const localeProps = entry.options.id === 'graph' ? { t: tZh } : {}
     return (
       <View
         {...viewProps}
         {...injectedProps}
-        {...localeProps}
         key={key}
       />
     )
@@ -435,12 +433,11 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
 }
 
 describe('plugin registration', () => {
-  it('registers trajectory and graph after chat on the ring', async () => {
+  it('registers only trajectory after chat on the ring', async () => {
     const b = await bench()
     expect(tabsOf(b.slots)).toEqual([
       { id: 'chat', label: 'Chat' },
       { id: 'trajectory', label: 'Trajectory' },
-      { id: 'graph', label: 'Graph' },
     ])
   })
 
@@ -519,11 +516,12 @@ describe('plugin registration', () => {
 })
 
 describe('tab switching in ConversationRoot', () => {
-  it('renders three tabs and switches between the trajectory ledger and graph', async () => {
+  it('renders Chat and Trajectory tabs and switches between them', async () => {
     const b = await bench()
     const view = mount(b)
     expect(screen.getByTestId('chat-body')).toBeTruthy()
-    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Chat', 'Trajectory', 'Graph'])
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toMatchSnapshot()
+    expect(screen.queryByRole('tab', { name: 'Graph' })).toBeNull()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Trajectory' }))
     expect(screen.queryByText(/turns ·/)).toBeNull()
@@ -540,14 +538,18 @@ describe('tab switching in ConversationRoot', () => {
     expect(screen.queryByTestId('chat-body')).toBeNull()
     expect(b.loadOlder).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Graph' }))
-    const graph = screen.getByLabelText('智能体工作图谱')
-    expect(graph.textContent).toContain('第 1 轮')
-    expect(graph.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0)
-    expect(graph.querySelector('.react-flow__attribution')).toBeNull()
-
     fireEvent.click(screen.getByRole('tab', { name: 'Chat' }))
+    expect(screen.getByTestId('chat-body')).toBeTruthy()
     expect(b.loadOlder).not.toHaveBeenCalled()
+  })
+
+  it('opens Chat when the saved view was Graph', async () => {
+    createConversationStore().create(SID).actions.setView('graph')
+    mount(await bench())
+
+    expect(screen.getByTestId('chat-body')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('tab', { name: 'Graph' })).toBeNull()
   })
 
   it('labels the trajectory tab in the active locale', async () => {

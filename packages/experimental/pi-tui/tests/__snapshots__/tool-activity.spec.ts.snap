@@ -9,6 +9,23 @@ exit code: 0
 full output"
 `;
 
+exports[`agent tool activity > shows Targets above Debug and scrolls the tree independently by keyboard and mouse > targets above agent activity 1`] = `
+"╭─ Targets ──────────────────────────────────╮
+│ Target · 1                                 │
+│ └─ https://example.test/                   │
+│    └─ Sub Target · 15                      │
+│       ├─ path-0                            │
+│       ├─ path-1                            │
+│       ├─ path-2                            │
+│       ├─ path-3                            │
+│       ├─ path-4                            │
+╰────────────────────────────────────────────╯
+── Agent Debug · Tab Targets ──               
+› [OK] Tool · tool_0 · 1.5s                   
+{"command":"Get-Date"}                        
+exit code: 0"
+`;
+
 exports[`agent tool activity > shows call arguments and lifecycle states, then clears with the transcript > tool states and command previews 1`] = `
 "── Agent Debug ──                             
 + [RUNNING] Tool · tool_0 · 0.0s              

@@ -2040,6 +2040,10 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /** Eager native schemas by default; lazy exposes a searchable catalog with guarded dispatch. */
+  toolDiscovery?: 'eager' | 'lazy'
+  /** Maximum list/search matches in lazy discovery (default 8). */
+  discoveryResultLimit?: number
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -2064,6 +2068,10 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /** Eager native schemas by default; lazy exposes a searchable catalog with guarded dispatch. */
+  toolDiscovery?: 'eager' | 'lazy'
+  /** Maximum list/search matches in lazy discovery (default 8). */
+  discoveryResultLimit?: number
 }
 
 /** Automatic reconnect policy for one MCP server connection. */
@@ -2079,7 +2087,7 @@ export interface ReconnectConfig {
 }
 ```
 
-来源： [`packages/mcp/mcp-client/src/index.ts:104`](../packages/mcp/mcp-client/src/index.ts)
+来源： [`packages/mcp/mcp-client/src/index.ts:112`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="deepseek-aidsh-message-feedback"></a>
 
@@ -2170,7 +2178,7 @@ interface PentestModeConfig {
 
 依赖： [`PentestMode`](subsystems/../../packages/pentest/pentest-executor/README.zh.md) · `Volatile` (`@deepseek-ai/cordis`)
 
-来源： [`packages/pentest/pentest-executor/src/index.ts:301`](../packages/pentest/pentest-executor/src/index.ts)
+来源： [`packages/pentest/pentest-executor/src/index.ts:335`](../packages/pentest/pentest-executor/src/index.ts)
 
 <a id="deepseek-aidsh-pentest-run"></a>
 
@@ -2194,7 +2202,7 @@ export interface PentestRunManagerConfig {
 }
 ```
 
-来源： [`packages/pentest/pentest-run/src/index.ts:884`](../packages/pentest/pentest-run/src/index.ts)
+来源： [`packages/pentest/pentest-run/src/index.ts:923`](../packages/pentest/pentest-run/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 

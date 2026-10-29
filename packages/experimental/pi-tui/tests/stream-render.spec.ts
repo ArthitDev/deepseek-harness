@@ -2,12 +2,13 @@ import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
-import { createMessage, LlmAttemptId, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { createMessage, createUserMessage, LlmAttemptId, ToolCallId, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
+import * as chatModel from '../src/core/model.ts'
 
 async function fixture() {
   const ctx = new Context()
@@ -43,6 +44,116 @@ async function fixture() {
 }
 
 describe('stream rendering', () => {
+  it('restores Targets on replay, shares Debug visibility, and resets on session switch and clear', async () => {
+    const f = await fixture()
+    try {
+      f.screen.handleEvent(f.agent.session.append('user/message', createUserMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'https://example.test/' }],
+      }), { surfaceOp: 'append' }))
+      const callId = ToolCallId('target-fetch')
+      f.screen.handleEvent(f.agent.session.append('tool/call', {
+        turn: 1, step: 1, callId, name: 'fetch', arguments: '{"url":"https://example.test/api"}',
+      }))
+      f.screen.handleEvent(f.agent.session.append('tool/result', {
+        turn: 1, step: 1, message: createMessage({ role: 'tool', toolCallId: callId,
+          source: { kind: 'tool', callId }, content: [{ type: 'text', text: 'https://docs.test/' }],
+        }),
+      }, { surfaceOp: 'append' }))
+      const events = f.agent.session.snapshotEvents()
+      const targets = (): string => {
+        f.text()
+        return f.tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(54).trimEnd()).join('\n').trimEnd()
+      }
+      expect(targets()).toContain('Sub Target · 1')
+      expect(targets()).toContain('Other · 1')
+      expect(targets()).toMatchSnapshot('targets restored from session events without a shell')
+      expect(f.text()).not.toContain('Shell ·')
+      const input = f.start.mock.calls[0]?.[0]
+      input?.('\x1b[100;7u')
+      input?.('\t')
+      expect(targets()).toContain('Tab Debug')
+      input?.('\x1b')
+      expect(targets()).not.toContain('Tab Debug')
+      f.screen.submit('/agent-debug')
+      expect(targets()).not.toContain('Targets')
+      f.screen.submit('/agent-debug')
+      expect(targets()).toContain('https://example.test/')
+      await f.screen.replayTranscript(f.agent)
+      expect(targets()).toContain('Other · 1')
+      expect(f.agent.session.snapshotEvents()).toEqual(events)
+      await f.screen.switchAgent(f.makeAgent('empty-targets'))
+      expect(targets()).not.toContain('Targets')
+      await f.screen.switchAgent(f.agent)
+      expect(targets()).toContain('https://example.test/')
+      f.screen.submit('/clear')
+      expect(targets()).not.toContain('Targets')
+      await f.screen.switchAgent(f.makeAgent('after-clear'))
+      await f.screen.switchAgent(f.agent)
+      expect(targets()).not.toContain('Targets')
+    } finally {
+      f.tui.stop()
+      await f.ctx.fiber.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it('refreshes Jev cost after tool results and resets it on session switches', async () => {
+    const f = await fixture()
+    try {
+      for (const [id, cost, total] of [['first', 0.001, '0.001'], ['second', 0.002, '0.003']] as const) {
+        const callId = ToolCallId(id)
+        f.screen.handleEvent(f.agent.session.append('tool/call', {
+          turn: 1, step: 1, callId, name: 'mcp__jev__jev_verify', arguments: '{}',
+        }))
+        f.screen.handleEvent(f.agent.session.append('tool/result', {
+          turn: 1, step: 1, message: createMessage({ role: 'tool',
+            source: { kind: 'tool', callId }, toolCallId: callId,
+            content: [{ type: 'text', text: JSON.stringify({ usage: { cost } }) }],
+          }),
+        }, { surfaceOp: 'append' }))
+        f.emit({ type: 'text-delta', index: 0, text: 'answer' })
+        vi.advanceTimersByTime(16)
+        expect(f.text()).toContain(`cost ${total}`)
+      }
+      await f.screen.switchAgent(f.makeAgent('no-jev-cost'))
+      expect(f.text()).not.toContain('cost 0.003')
+    } finally {
+      f.tui.stop()
+      await f.ctx.fiber.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it('updates streamed text without traversing folded history', async () => {
+    const createModel = vi.spyOn(chatModel, 'createModel')
+    const f = await fixture()
+    const created = createModel.mock.results[0]
+    createModel.mockRestore()
+    try {
+      if (created?.type !== 'return') throw new Error('ChatScreen did not create its transcript model')
+      const model = created.value
+      for (let index = 0; index < 2000; index++) {
+        f.agent.session.append('user/message', createUserMessage({
+          source: { kind: 'user' }, content: [{ type: 'text', text: `saved-${index}` }],
+        }), { surfaceOp: 'append' })
+      }
+      await f.screen.replayTranscript(f.agent)
+      const iterate = vi.spyOn(model.items, Symbol.iterator)
+      try {
+        f.emit({ type: 'text-delta', index: 0, text: 'current answer' })
+        vi.advanceTimersByTime(16)
+        expect(f.text()).toContain('current answer')
+        expect(f.text()).not.toContain('saved-0')
+        expect(iterate).not.toHaveBeenCalled()
+        expect(model.items.filter(item => item.kind === 'user')).toHaveLength(2000)
+      } finally { iterate.mockRestore() }
+    } finally {
+      f.tui.stop()
+      await f.ctx.fiber.dispose()
+      vi.useRealTimers()
+    }
+  })
+
   it('renders partial Markdown on the frame cadence and replaces it with the committed answer once', async () => {
     const f = await fixture()
     try {

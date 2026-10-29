@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`background job status in Agent Debug > observes registered jobs through a Loader composition independently of tool and turn completion > completed tool with running jobs 1`] = `
+"           │ ── Agent Debug ──                             
+           │ + [OK] Shell · pwsh · 0.0s                    
+           │ {"command":"short preview"}                   
+           │ started background job pwsh-1                 
+           │                                               
+           │ [RUNNING] Job · pwsh-1 · 4.0s                 
+           │ [RUNNING] Job · bash-1 · 4.0s                 
+           │ [RUNNING] Job · workflow-1 · 4.0s             
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           ↔                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+           │                                               
+────────── │                                               
+           │                                               
+────────── │                                               
+ normal    │                                               
+           │"
+`;

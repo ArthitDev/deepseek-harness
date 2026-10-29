@@ -6,6 +6,7 @@ import {
   MessageId,
   ReasoningEffortId,
   ToolCallId,
+  boundContextSummary,
   createDeveloperMessage,
   type AssistantStreamRecord,
   type ContentBlock,
@@ -30,6 +31,7 @@ import {
   textOf,
   type ChatItem,
 } from '../src/core/model.ts'
+import { TargetIndex } from '../src/core/targets.ts'
 
 let seqCounter = 0
 
@@ -127,7 +129,47 @@ function attemptStream(text: string, reasoning: string): AssistantStreamRecord[]
 
 describe('createModel', () => {
   it('starts an empty, idle transcript with zeroed tokens', () => {
-    expect(createModel()).toEqual({ items: [], activity: [], tokens: { input: 0, output: 0 }, working: false })
+    expect(createModel()).toEqual({ items: [], activity: [], targets: new TargetIndex(), tokens: { input: 0, output: 0 }, working: false })
+  })
+})
+
+describe('target observations', () => {
+  it('folds committed user, assistant, tool arguments and orphan tool results identically on replay', () => {
+    const events = [
+      userMessageEvent(userMessage('https://example.test/')),
+      assistantMessageEvent({ turn: 1, step: 1, stream: [], message: {
+        role: 'assistant', id: MessageId('target-answer'), source: modelSource,
+        content: blocks('https://example.test/api'),
+      } }),
+      toolCallEvent({ turn: 1, step: 1, callId: ToolCallId('target-call'), name: 'fetch', arguments: '{"url":"https://api.example.test/v1"}' }),
+      toolResultEvent({ turn: 1, step: 1, message: toolResult('no-card', 'https://docs.test/') }),
+    ]
+    const model = createModel()
+    events.forEach(event => applyEvent(model, event))
+    expect(model.targets.getSnapshot()).toEqual([
+      { url: 'https://example.test/', primary: true },
+      { url: 'https://example.test/api', primary: false },
+      { url: 'https://api.example.test/v1', primary: false },
+      { url: 'https://docs.test/', primary: false },
+    ])
+    const replay = createModel()
+    events.forEach(event => applyEvent(replay, event))
+    expect(replay.targets.getSnapshot()).toEqual(model.targets.getSnapshot())
+    const snapshot = model.targets.getSnapshot()
+    applyStreamChunk(model, { type: 'text-delta', index: 0, text: 'https://partial.test' })
+    expect(model.targets.getSnapshot()).toBe(snapshot)
+    applyEvent(model, userMessageEvent(userMessage('https://injected.test/', {
+      kind: 'pi-tui', form: 'notice', summary: boundContextSummary('injected'),
+    })))
+    expect(model.targets.getSnapshot()).toBe(snapshot)
+    applyEvent(model, userMessageEvent(userMessage('https://summary.test/', {
+      kind: 'compact-checkpoint', compactionId: 'targets-compact',
+    } as CompactionCheckpointSource)))
+    expect(model.targets.getSnapshot()).toBe(snapshot)
+    applyEvent(model, developerMessageEvent('rewound', { op: 'replace', startSeq: events[1]!.seq, endSeq: events[3]!.seq }))
+    expect(model.targets.getSnapshot()).toEqual([{ url: 'https://example.test/', primary: true }])
+    applyEvent(model, developerMessageEvent('the operator cleared', { op: 'replace', startSeq: events[0]!.seq, endSeq: events[0]!.seq }))
+    expect(model.targets.getSnapshot()).toEqual([])
   })
 })
 

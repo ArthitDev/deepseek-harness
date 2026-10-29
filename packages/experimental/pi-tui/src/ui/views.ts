@@ -345,7 +345,7 @@ export class ToolCardView implements Component {
             : tool.resultPreview
         // Full output: keep every line, each truncated to the inner width,
         // capped at a generous height for very large results.
-        const fullLines = body.split('\n').slice(0, 50)
+        const fullLines = body.split('\n', 50)
         for (const line of fullLines) {
           pushBody(style.toolResult(highlightMatches(line, this.query)))
         }
@@ -404,7 +404,7 @@ export class ToolCardView implements Component {
       const MAX = 80
       if (file.oldText === null) {
         // New file: every line added.
-        for (const line of file.newText.split('\n').slice(0, MAX)) {
+        for (const line of file.newText.split('\n', MAX)) {
           lines.push(`${border} ${truncate(DIFF_ADDED(`+ ${line}`))}`)
         }
         continue
@@ -475,8 +475,9 @@ export interface StatusBarData {
 export class StatusBar extends Loader {
   private data: StatusBarData = {}
   private animating = false
+  private agentsHit: { x: number; y: number; width: number } | undefined
 
-  constructor(tui: ViewportTUI) {
+  constructor(tui: ViewportTUI, private readonly onInspectAgents?: () => void) {
     super(tui, style.spinner, style.workingLabel, '', {
       frames: ['◐', '◓', '◑', '◒'], intervalMs: 120,
     })
@@ -497,6 +498,7 @@ export class StatusBar extends Loader {
   }
 
   override render(width: number): string[] {
+    this.agentsHit = undefined
     if (width <= 1) return ['']
     const data = this.data
     const spinner = this.getRenderedIndicator()
@@ -506,6 +508,7 @@ export class StatusBar extends Loader {
     // same color as its value so each reads as one chip.
     const text = chalk.hex('#c7d0da')
     const parts: string[] = [chalk.hex(BRAND_RED).bold('⧉ Shield Break')]
+    let agentsPart: string | undefined
     if (data.model !== undefined) parts.push(`🤖 ${chalk.cyan(data.model)}`)
     if (data.effort !== undefined) {
       const hot = data.effort === 'max' || data.effort === 'xhigh'
@@ -565,7 +568,8 @@ export class StatusBar extends Loader {
     }
     if (data.jobsRunning !== undefined && data.jobsRunning > 0) parts.push(chalk.cyan(`${spinner} ${data.jobsRunning} jobs`))
     if (data.subagentsRunning !== undefined && data.subagentsRunning > 0) {
-      parts.push(chalk.cyan(`${spinner} ${data.subagentsRunning} agents`))
+      agentsPart = chalk.cyan(`${spinner} ${data.subagentsRunning} agents`)
+      parts.push(agentsPart)
     }
     if (data.queuePending !== undefined && data.queuePending > 0) parts.push(chalk.yellow(`⏳ ${data.queuePending}`))
     // Greedy-pack segments across lines on the thin ` · ` separator; wrap
@@ -588,10 +592,25 @@ export class StatusBar extends Loader {
         current = part
         currentWidth = partWidth
       }
+      if (part === agentsPart) this.agentsHit = { x: currentWidth - partWidth, y: lines.length, width: Math.min(partWidth, width) }
     }
     if (current !== '') lines.push(current)
     // A single segment wider than the terminal still needs a hard cut.
     return lines.map(line => truncateToWidth(line, width))
+  }
+
+  /**
+   * Open the subagent picker only for the rendered agent-count segment.
+   * @param event - Component-relative mouse position and gesture.
+   * @returns Whether the agent-count gesture was consumed.
+   */
+  handleMouse(event: TuiMouseEvent): ReturnType<Container['handleMouse']> {
+    const hit = this.agentsHit
+    if (this.onInspectAgents === undefined || hit === undefined || event.button !== 'left' || event.shift
+      || (event.type !== 'press' && event.type !== 'click') || event.y !== hit.y || event.x < hit.x || event.x >= hit.x + hit.width) return undefined
+    if (event.type === 'click') this.onInspectAgents()
+    return { handled: true, target: { component: this, originX: event.screenX - event.x, originY: event.screenY - event.y,
+      width: event.width, height: event.height } }
   }
 
   override invalidate(): void {

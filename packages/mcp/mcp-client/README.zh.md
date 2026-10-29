@@ -61,6 +61,8 @@ kind: "package-reference"
 | `toolCallTimeoutMs` | `60,000` | 每次 `tools/call` 或资源请求的超时 |
 | `maxInstructionBytes` | `32,768` | 包括服务器归属信息在内的服务器指令 UTF-8 字节上限；超出时连接失败 |
 | `failOnStartupError` | `false` | 初始连接或工具同步失败时拒绝插件激活 |
+| `toolDiscovery` | `eager` | `lazy` 用 `mcp__<serverName>__discover_tools` 代替原生模型 schema |
+| `discoveryResultLimit` | `8` | lazy 模式下 list/search 的分页大小，范围为 1 到 20 |
 | `reconnect.enabled` | `true` | 连接丢失后自动重新连接 |
 | `reconnect.initialDelayMs` | `500` | 首次重连延迟；每次连续失败尝试翻倍 |
 | `reconnect.maxDelayMs` | `30,000` | 退避上限；同时是重置尝试预算所需的正常运行时长 |
@@ -71,6 +73,8 @@ kind: "package-reference"
 启动后，服务器的工具会以 `mcp__<serverName>__<tool>` 形式出现——试着用一条提示词调用其中一个。如果初始连接失败，harness 仍会启动，但该服务器的工具不会出现，并会记录一条错误。设置 `failOnStartupError: true` 会拒绝插件激活；[app-boot 的启动策略](../../boot/app-boot/README.zh.md)仍允许可选 MCP 配置项失败，而不中止 harness。
 
 ### 工具命名与共存
+
+设置 `toolDiscovery: lazy` 后，使用 discovery 工具的 `list`、`search`、`schema` 和 `call` 动作。目录结果返回准确的公开名称和描述；只有 `schema` 返回单个参数 schema。`offset` 对 list/search 结果分页。原生定义仍然注册；调用以原名称、参数、agent、取消信号和根调用 ID 再次进入 ToolRuntime，因此工具限制与审批检查仍然生效。富内容结果保留，generation 刷新或卸载会同时移除目录和 schema 过滤器。allow-list 排除 discovery 时会保留获准的原生 schema。Lazy 模式保留上游名称 `discover_tools`；已发布此名称的服务器必须使用 eager 模式。schema 精简适用于原生展示；PTC 生成的 SDK 仍列出原生工具。默认 eager 模式不变。目录模式参考 [Strix](https://github.com/usestrix/strix) 实现；参见 [NOTICE](NOTICE) 和[许可证](LICENSE.strix)。
 
 模型看到每个工具都带有稳定的服务器限定名称：`mcp__<serverName>__<rawName>`，例如 `mcp__github__create_issue`——与 Claude Code 和 Codex 使用的命名形态相同。只要服务器保持相同的工具名称，名称就保持不变，因此会话历史与权限规则在重启和重载后仍然有效。两个服务器可以同时提供名为 `search` 的工具，分别以 `mcp__github__search` 和 `mcp__web__search` 共存。
 
@@ -118,6 +122,7 @@ kind: "package-reference"
 | [`src/connection.ts`](src/connection.ts) | 连接监督器：客户端世代、重连策略、尝试预算、dispose（资源释放） |
 | [`src/server-context.ts`](src/server-context.ts) | 资源提供方注册与字面服务器指令 |
 | [`src/tools.ts`](src/tools.ts) | 工具桥接：发现、命名、注册交换、执行、图片投影 |
+| [`src/discovery.ts`](src/discovery.ts) | 延迟目录查询、原生分派与模型 schema 过滤 |
 | [`src/transport.ts`](src/transport.ts) | 传输工厂：带清洗环境的 stdio spawn、Streamable HTTP |
 | — | 不发布运行时不变式伴生入口；MCP 世代会通过工具注册表发挥作用，但桥接在异步重新同步后不提供独立的服务器工具映射快照。 |
 
@@ -161,15 +166,15 @@ SDK 通过旧版通知或现代协议订阅接收工具列表变化。监督器�
 
 #### 模型看到什么
 
-发现成功后，SDK 接受的 MCP 工具以原生工具名称 `mcp__<serverName>__<rawName>`（或其确定性规范化形式）出现，携带服务器描述和输入 schema。重新同步会替换注册代；释放或重连预算耗尽会移除工具。未声明 tools 能力的服务器以空工具集连接。
+在默认 eager 模式下，SDK 接受的 MCP 工具以原生工具名称 `mcp__<serverName>__<rawName>`（或其确定性规范化形式）出现，携带服务器描述和输入 schema。Lazy 模式呈现一个 `mcp__<serverName>__discover_tools` schema；list/search 返回目录条目，schema 返回一个工具的参数，call 通过原生工具分派。重新同步会替换注册代；释放或重连预算耗尽会移除工具。未声明 tools 能力的服务器以空工具集连接。
 
 #### Token 影响
 
-工具注册期间，工具描述与输入 schema 会进入每次请求；重新同步会替换而非累积 schema，服务器限定名称也会为每个工具定义和调用增加 token。已配置客户端还会启用[共享资源工具与服务器名称提示词](../mcp-resources/README.zh.md#model-experience)。
+Eager 模式在每次请求中包含所有已注册工具的描述与输入 schema。Lazy 模式在原生请求中包含目录 schema，选中的描述与 schema 通过目录调用进入历史。重新同步会替换而非累积 schema。已配置客户端还会启用[共享资源工具与服务器名称提示词](../mcp-resources/README.zh.md#model-experience)。
 
 #### KV Cache 影响
 
-已发现工具集合及其 schema 不变时，工具定义前缀保持稳定。增加、移除、重命名或更改工具的重新同步会替换定义，并可能使从第一个变化的 schema token 起的复用失效；恢复未变列表的重连会生成完全相同的定义，前缀保持稳定。
+Eager 模式在已发现工具集合及其 schema 不变时保持工具定义前缀稳定；定义变化可能使从第一个变化的 schema token 起的复用失效。Lazy 模式在原生工具变化时保持相同的目录 schema，目录结果追加到历史。恢复未变列表的重连会生成完全相同的定义。
 
 ### 工具调用历史与结果
 

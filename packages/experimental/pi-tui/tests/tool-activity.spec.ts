@@ -1,9 +1,11 @@
 import { stripVTControlCharacters } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tui'
+import { JobId, type JobView } from '@deepseek-ai/dsh-jobs'
 import type { ActivityEntry } from '../src/core/activity.ts'
 import type { ToolCardStatus } from '../src/core/model.ts'
 import { ToolActivityPane } from '../src/ui/tool-activity.ts'
+import { TargetIndex } from '../src/core/targets.ts'
 
 function call(id: number, status: ToolCardStatus = 'running'): ActivityEntry {
   return {
@@ -46,6 +48,77 @@ function text(pane: ToolActivityPane, width = 46): string {
 
 describe('agent tool activity', () => {
   afterEach(() => { vi.restoreAllMocks() })
+  it('shows Targets above Debug and scrolls the tree independently by keyboard and mouse', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+    const pane = new ToolActivityPane()
+    const index = new TargetIndex()
+    index.observe(1, 'https://example.test/', true)
+    index.observe(2, Array.from({ length: 15 }, (_, id) => `https://example.test/path-${id}`).join(' ') + ' https://docs.test/')
+    const row = call(0, 'ok')
+    pane.update([row], [], index.getSnapshot())
+    const { tui, frame, input } = fixture(pane, 46, 18)
+    tui.setFocus(pane)
+    try {
+      expect(frame()).toContain('╭─ Targets')
+      expect(frame()).toContain('Target · 1')
+      expect(frame()).toContain('tool_0')
+      expect(frame()).toMatchSnapshot('targets above agent activity')
+      input('\t')
+      input('\x1b[F')
+      expect(frame()).toContain('Other · 1')
+      expect(frame()).toContain('https://docs.test/')
+      expect(frame()).not.toContain('Target · 1')
+      input('\r')
+      expect(frame()).not.toContain('full output')
+      input('\x1b[H')
+      expect(frame()).toContain('Target · 1')
+      input('\x1b[6~')
+      expect(frame()).not.toContain('Target · 1')
+      input('\x1b[5~')
+      input('\x1b[B')
+      input('\x1b[A')
+      expect(frame()).toContain('Target · 1')
+      for (let step = 0; step < 24; step++) input('\x1b[<65;3;4M')
+      expect(frame()).toContain('https://docs.test/')
+      input('\t')
+      input('\r')
+      expect(frame()).toContain('full output')
+      const fresh = new TargetIndex()
+      fresh.observe(1, 'https://next.test/', true)
+      pane.update([], [], fresh.getSnapshot())
+      expect(frame()).toContain('https://next.test/')
+      pane.update([])
+      expect(frame()).not.toContain('Targets')
+    } finally { tui.stop() }
+  })
+
+  it.each([46, 15, 2, 1])('keeps the Targets frame within %i columns', (width) => {
+    const pane = new ToolActivityPane()
+    pane.update([], [], [{ url: `https://example.test/${'คำ'.repeat(40)}`, primary: true }])
+    expect(text(pane, width).split('\n').every(line => visibleWidth(line) <= width)).toBe(true)
+  })
+
+  it('keeps every active job and the latest 20 settled statuses without repeating command text', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+    const pane = new ToolActivityPane()
+    const job = (id: string, status: JobView['status']): JobView => ({
+      id: JobId(id), kind: 'any-producer', label: 'do not duplicate this long command', status,
+      startedAt: 1000, ...(status === 'running' || status === 'stopping' ? {} : { finishedAt: 1500 }),
+      output: { total: 0, earliest: 0 },
+    })
+    const jobs = [job('old-running', 'running'), ...Array.from({ length: 23 }, (_, id) => job(`finished-${id}`, 'completed')),
+      job('old-stopping', 'stopping')]
+    pane.update([], jobs)
+    const output = text(pane, 100)
+    expect(output.match(/\[COMPLETED\]/g)).toHaveLength(20)
+    expect(output).toContain('[RUNNING] Job · old-running · 1.0s')
+    expect(output).toContain('[STOPPING] Job · old-stopping · 1.0s')
+    expect(output).not.toMatch(/finished-[012]\b/)
+    expect(output).not.toContain('do not duplicate')
+    pane.update([], [])
+    expect(text(pane)).toContain('No activity yet.')
+  })
+
   it('shows call arguments and lifecycle states, then clears with the transcript', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2000)
     const pane = new ToolActivityPane()

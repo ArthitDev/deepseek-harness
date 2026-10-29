@@ -20,3 +20,29 @@ exports[`Markdown knowledge discovery through Loader > records discovery as one 
   },
 }
 `;
+
+exports[`Markdown knowledge discovery through Loader > resumes a saved outdated Wiki notice with discovery enabled=false 1`] = `
+{
+  "activeNotices": 0,
+  "enabled": false,
+  "oldNoticeRetained": true,
+  "outdatedNoticeInRequest": false,
+  "replacement": {
+    "step": 1,
+    "turn": 2,
+  },
+}
+`;
+
+exports[`Markdown knowledge discovery through Loader > resumes a saved outdated Wiki notice with discovery enabled=true 1`] = `
+{
+  "activeNotices": 1,
+  "enabled": true,
+  "oldNoticeRetained": true,
+  "outdatedNoticeInRequest": false,
+  "replacement": {
+    "step": 1,
+    "turn": 2,
+  },
+}
+`;

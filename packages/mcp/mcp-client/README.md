@@ -61,6 +61,8 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `toolCallTimeoutMs` | `60,000` | Timeout per `tools/call` or resource request |
 | `maxInstructionBytes` | `32,768` | Maximum UTF-8 bytes of server instructions including attribution; an oversized value rejects the connection |
 | `failOnStartupError` | `false` | Reject plugin activation when the initial connection or tool synchronization fails |
+| `toolDiscovery` | `eager` | `lazy` replaces native model schemas with `mcp__<serverName>__discover_tools` |
+| `discoveryResultLimit` | `8` | List/search page size in lazy mode, from 1 to 20 |
 | `reconnect.enabled` | `true` | Reconnect automatically after a lost connection |
 | `reconnect.initialDelayMs` | `500` | First reconnect delay; doubles per consecutive failed attempt |
 | `reconnect.maxDelayMs` | `30,000` | Backoff ceiling; also the uptime after which the attempt budget resets |
@@ -71,6 +73,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 After startup, the server's tools appear as `mcp__<serverName>__<tool>` — try a prompt that uses one. If the initial connection fails, the harness still starts but no tools from that server appear, and an error is logged. Setting `failOnStartupError: true` rejects plugin activation; [app-boot's startup policy](../../boot/app-boot/README.md) still permits an optional MCP entry to fail without aborting the harness.
 
 ### Tool naming and coexistence
+
+With `toolDiscovery: lazy`, use the discovery tool's `list`, `search`, `schema`, and `call` actions. Catalog results return exact public names and descriptions; only `schema` returns one parameter schema. `offset` paginates list/search results. Native definitions remain registered: calls re-enter ToolRuntime with the original name, arguments, agent, cancellation, and root call ID, so tool restrictions and approval checks still apply. Rich result content is retained, and generation refresh/unload withdraws both the catalog and its schema filter. An allow-list excluding discovery retains the allowed native schemas. Lazy mode reserves the upstream name `discover_tools`; a server already publishing that name must use eager mode. Schema reduction applies to native presentation; PTC's generated SDK still lists native tools. The default eager mode is unchanged. The catalog pattern is adapted from [Strix](https://github.com/usestrix/strix); see [NOTICE](NOTICE) and [license](LICENSE.strix).
 
 The model sees each tool under a stable server-qualified name: `mcp__<serverName>__<rawName>`, for example `mcp__github__create_issue` — the same naming shape Claude Code and Codex use. Names stay stable while the server keeps the same tool name, so session history and permission rules survive restarts and reloads. Two servers can both offer a tool named `search` and coexist as `mcp__github__search` and `mcp__web__search`.
 
@@ -118,6 +122,7 @@ This section explains the design decisions behind the bridge and points at the c
 | [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, disposal |
 | [`src/server-context.ts`](src/server-context.ts) | Resource-provider registration and literal server instructions |
 | [`src/tools.ts`](src/tools.ts) | Tool bridge: discovery, naming, registration swap, execution, image projection |
+| [`src/discovery.ts`](src/discovery.ts) | Lazy catalog queries, native dispatch, and model schema filtering |
 | [`src/transport.ts`](src/transport.ts) | Transport factory: stdio spawn with scrubbed env, Streamable HTTP |
 | — | No runtime invariant companion is published; MCP generations contribute through the tool registry, but the bridge exposes no independent server-to-tool snapshot after an asynchronous resync. |
 
@@ -161,15 +166,15 @@ Read these pages when the package-level contract is not enough. They move from t
 
 #### What the model sees
 
-After discovery succeeds, SDK-admitted MCP tools appear as native tools named `mcp__<serverName>__<rawName>` (or their deterministic normalized form), with the server description and input schema. A re-sync replaces the generation; disposal or an exhausted reconnect budget removes it. A server without the tools capability connects with an empty tool set.
+In default eager mode, SDK-admitted MCP tools appear as native tools named `mcp__<serverName>__<rawName>` (or their deterministic normalized form), with the server description and input schema. Lazy mode presents one `mcp__<serverName>__discover_tools` schema; list/search return catalog entries, schema returns one tool's parameters, and call dispatches through the native tool. A re-sync replaces the generation; disposal or an exhausted reconnect budget removes it. A server without the tools capability connects with an empty tool set.
 
 #### Token effect
 
-The tool descriptions and input schemas enter every request while the tools are registered; re-syncs replace rather than accumulate schemas, and the server-qualified name adds tokens to every tool definition and call. A configured client also enables the [shared resource tools and server-name prompt](../mcp-resources/README.md#model-experience).
+Eager mode includes every registered tool's description and input schema in each request. Lazy mode includes the catalog schema in native requests, with selected descriptions and schemas entering history through catalog calls. Re-syncs replace rather than accumulate schemas. A configured client also enables the [shared resource tools and server-name prompt](../mcp-resources/README.md#model-experience).
 
 #### KV Cache effect
 
-The tool-definition prefix stays stable while the discovered set and schemas are unchanged. A re-sync that adds, removes, renames, or changes a tool replaces definitions and may invalidate reuse from the first changed schema token onward; a reconnect that recovers an unchanged list reproduces identical definitions and stays prefix-stable.
+Eager mode keeps the tool-definition prefix stable while the discovered set and schemas are unchanged; changed definitions may invalidate reuse from the first changed schema token. Lazy mode retains the same catalog schema across native tool changes, while catalog results append to history. Reconnecting with an unchanged list reproduces identical definitions.
 
 ### Tool-call history and results
 

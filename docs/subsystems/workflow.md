@@ -127,6 +127,10 @@ The top-level `dsh-tool-workflow` consumer projects display facts into its calli
 
 `dsh-client-ui-workflow-run` folds the four events through the Conversation Node engine into one `workflow-run` Chat node anchored at the run-start sequence, after the original workflow tool node. Phase groups come only from actual member starts and preserve exact strings, including the distinction between an omitted phase and `''`. Closed Locations turn missing terminal facts into interrupted presentation. The [UI package README](../../packages/client/ui-workflow-run/README.md) owns disclosure, status, and same-parent local navigation behavior.
 
+## Pentest coverage and findings
+
+The [pentest-run](../../packages/pentest/pentest-run/README.md) snapshot includes `coverage.checks`, a durable endpoint/file × risk-area ledger whose latest claims retain evidence references and prior outcomes. `PentestFindingRecord` optionally carries root-cause identity and a counterevidence assessment. [pentest-executor](../../packages/pentest/pentest-executor/README.md) submits these fields through `pentest_submit_result` and passes bounded coverage history plus existing finding assessments into fresh episodes. Playbook completion remains separate from exhaustive security coverage.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>

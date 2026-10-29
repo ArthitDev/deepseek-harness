@@ -138,8 +138,8 @@ export function pickFromList(
  * top match; Esc cancels. `shouldShow` gates per-item visibility (e.g. the
  * hidden-file policy); `footerTotal` feeds the count line.
  * @param tui - the live TUI; the search overlay shows as a centered overlay.
- * @param options - the title, optional body, items, and per-item visibility gate.
- * @returns the picked item's value, or undefined when cancelled (Esc).
+ * @param options - the title, optional body, items, visibility gate, and optional cancellation signal.
+ * @returns the picked item's value, or undefined on Esc or signal cancellation.
  */
 export function pickFromListWithSearch(
   tui: TUI,
@@ -148,9 +148,11 @@ export function pickFromListWithSearch(
     body?: string
     items: ListPickItem[]
     shouldShow?: (query: string, item: ListPickItem) => boolean
+    signal?: AbortSignal
   },
 ): Promise<string | undefined> {
   return new Promise((resolve) => {
+    if (options.signal?.aborted === true) { resolve(undefined); return }
     const search = new Input()
     const list = new SelectList(
       options.items,
@@ -163,10 +165,12 @@ export function pickFromListWithSearch(
     let handle: ReturnType<TUI['showOverlay']> | undefined
     const onSelect = (item: { value: string; label: string; description?: string }): void => {
       if (item.value === '__nomatch__') return // placeholder is not a pick
+      options.signal?.removeEventListener('abort', onCancel)
       handle?.hide()
       resolve(item.value)
     }
     const onCancel = (): void => {
+      options.signal?.removeEventListener('abort', onCancel)
       handle?.hide()
       resolve(undefined)
     }
@@ -184,6 +188,7 @@ export function pickFromListWithSearch(
       options.shouldShow ?? (() => true),
     )
     handle = tui.showOverlay(panel, { width: '70%', maxHeight: '70%' })
+    options.signal?.addEventListener('abort', onCancel, { once: true })
     tui.requestRender()
   })
 }
