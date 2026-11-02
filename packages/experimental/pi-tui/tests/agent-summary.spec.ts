@@ -35,7 +35,7 @@ describe('Agent Debug summaries', () => {
     ] } as never))
     foldAgentSummary(summary, event('turn/end', { turn: 1, reason: { kind: 'completed' } }, 3500))
 
-    expect(summary.calls).toEqual({ pending: new Set(), completed: 0, failed: 1, cancelled: 1, stopped: 0 })
+    expect(summary.calls).toEqual({ pending: new Map(), completed: 0, failed: 1, cancelled: 1, stopped: 0 })
     const text = formatAgentSummary(summary, 4000)
     expect(text).toContain('task: Inspect the service')
     expect(text).toContain('last tool: grep')
@@ -48,6 +48,114 @@ describe('Agent Debug summaries', () => {
     expect(formatAgentSummary(summary, 6000)).toContain('calls: none')
     expect(formatAgentSummary(summary, 6000)).toContain('usage: unknown')
     expect(formatAgentSummary(summary, 6000)).toContain('task: Inspect the service')
+  })
+
+  it('summarizes matched request, first-token, and root tool timings across retry and replay', () => {
+    const events: SessionEvent[] = [
+      event('turn/start', { turn: 3 }, 1000),
+      event('step/start', { turn: 3, step: 1 }, 1200),
+      event('assistant/attempt', { turn: 3, step: 1, stream: [] }, 1250),
+      event('assistant/attempt', { turn: 3, step: 1, stream: [{ type: 'chunk', time: 1400,
+        chunk: { type: 'text-delta', index: 0, text: 'a' } }] }, 1450),
+      event('assistant/attempt', { turn: 3, step: 1, stream: [{ type: 'chunk', time: 1500,
+        chunk: { type: 'text-delta', index: 0, text: 'b' } }] }, 1500),
+      event('assistant/message', { turn: 3, step: 1,
+        message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [] }), stream: [
+          { type: 'chunk', time: 1700, chunk: { type: 'text-delta', index: 0, text: 'c' } },
+        ], usage: { inputTokens: 2, outputTokens: 1 } }, 2200),
+      event('tool/call', { turn: 3, step: 1, callId: ToolCallId('first'), name: 'read_file', arguments: '{}' }, 2300),
+      event('tool/call', { turn: 3, step: 1, callId: ToolCallId('second'), name: 'write_file', arguments: '{}' }, 2400),
+      event('tool/result', { turn: 3, step: 1, message: createMessage({ role: 'tool',
+        source: { kind: 'tool', callId: ToolCallId('first') }, toolCallId: ToolCallId('first'), content: [] }) }, 2800),
+      event('tool/result', { turn: 3, step: 1, message: createMessage({ role: 'tool',
+        source: { kind: 'tool', callId: ToolCallId('second') }, toolCallId: ToolCallId('second'), content: [] }) }, 2900),
+      event('step/end', { turn: 3, step: 1 }, 3000),
+      event('step/start', { turn: 3, step: 2 }, 3100),
+      event('assistant/message', { turn: 3, step: 2,
+        message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [] }), stream: [
+          { type: 'chunk', time: 3500, chunk: { type: 'text-delta', index: 0, text: 'd' } },
+        ] }, 3700),
+      event('step/end', { turn: 3, step: 2 }, 3800),
+      event('turn/end', { turn: 3, reason: { kind: 'completed' } }, 3900),
+    ]
+    const summary = events.reduce((current, item) => {
+      foldAgentSummary(current, item)
+      return current
+    }, createAgentSummary())
+
+    expect(summary.preStepMs).toBe(200)
+    expect(summary.requestSumMs).toBe(1600)
+    expect(summary.requestSamples).toBe(2)
+    expect(summary.ttftSumMs).toBe(600)
+    expect(summary.ttftSamples).toBe(2)
+    expect(summary.toolSumMs).toBe(1000)
+    expect(summary.toolSamples).toBe(2)
+    expect(formatAgentSummary(summary)).toContain('request sum: 1600ms (2)')
+    expect(formatAgentSummary(summary)).toContain('TTFT avg: 300ms (2)')
+    expect(formatAgentSummary(summary)).toContain('tool sum: 1000ms (2)')
+    expect(formatAgentSummary(rebuildAgentSummary(events))).toBe(formatAgentSummary(summary))
+  })
+
+  it('sums overlapping root tool calls only and ignores unmatched or duplicate results', () => {
+    const summary = createAgentSummary()
+    const rawPluginEvent = (type: string, data: Record<string, unknown>, time: number): SessionEvent =>
+      ({ type, data, seq: SessionSeq(seq++), time }) as SessionEvent
+    foldAgentSummary(summary, event('turn/start', { turn: 1 }, 0))
+    foldAgentSummary(summary, event('step/start', { turn: 1, step: 1 }, 0))
+    foldAgentSummary(summary, event('assistant/message', { turn: 1, step: 1,
+      message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [] }), stream: [] }, 5))
+    foldAgentSummary(summary, event('tool/call', { turn: 1, step: 1, callId: ToolCallId('a'), name: 'a', arguments: '{}' }, 10))
+    foldAgentSummary(summary, event('tool/call', { turn: 1, step: 1, callId: ToolCallId('b'), name: 'b', arguments: '{}' }, 20))
+    foldAgentSummary(summary, event('tool/call', { turn: 1, step: 1, callId: ToolCallId('root'), name: 'ptc', arguments: '{}' }, 30))
+    foldAgentSummary(summary, rawPluginEvent('tool/ptc-dispatch-start', {
+      rootCallId: ToolCallId('root'), parentCallId: ToolCallId('root'), subCallId: 'root:ptc:0', name: 'sub', arguments: {},
+    }, 40))
+    foldAgentSummary(summary, rawPluginEvent('tool/ptc-dispatch', {
+      rootCallId: ToolCallId('root'), parentCallId: ToolCallId('root'), subCallId: 'root:ptc:0', name: 'sub', arguments: {},
+      isError: false,
+    }, 80))
+    const result = (callId: string, time: number) => event('tool/result', { turn: 1, step: 1,
+      message: createMessage({ role: 'tool', source: { kind: 'tool', callId: ToolCallId(callId) },
+        toolCallId: ToolCallId(callId), content: [] }) }, time)
+    foldAgentSummary(summary, result('root', 90))
+    foldAgentSummary(summary, result('a', 90))
+    foldAgentSummary(summary, result('b', 100))
+    foldAgentSummary(summary, result('a', 101))
+    foldAgentSummary(summary, result('unmatched', 102))
+    foldAgentSummary(summary, event('step/end', { turn: 1, step: 1 }, 105))
+    foldAgentSummary(summary, event('turn/end', { turn: 1, reason: { kind: 'completed' } }, 110))
+
+    expect(summary.preStepMs).toBe(0)
+    expect(summary.toolSumMs).toBe(220)
+    expect(summary.toolSamples).toBe(3)
+    expect(formatAgentSummary(summary)).toContain('tool sum: 220ms (3)')
+    expect(summary.toolSumMs).toBeGreaterThan(summary.endedAt! - summary.startedAt!)
+  })
+
+  it('keeps missing and aborted timing samples unknown and resets timing on the next turn', () => {
+    expect(formatAgentSummary(createAgentSummary('task only'))).not.toContain('pre-step')
+    const summary = createAgentSummary()
+    foldAgentSummary(summary, event('turn/start', { turn: 1 }, 1000))
+    foldAgentSummary(summary, event('step/start', { turn: 1, step: 1 }, 1000))
+    foldAgentSummary(summary, event('tool/call', { turn: 1, step: 1, callId: ToolCallId('pending'), name: 'read', arguments: '{}' }, 1150))
+    foldAgentSummary(summary, event('step/end', { turn: 1, step: 1 }, 1200))
+    foldAgentSummary(summary, event('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'legacy' } } }, 1300))
+    expect(formatAgentSummary(summary)).toContain('pre-step: 0ms')
+    expect(formatAgentSummary(summary)).toContain('request sum: unknown')
+    expect(formatAgentSummary(summary)).toContain('TTFT avg: unknown')
+    expect(formatAgentSummary(summary)).toContain('tool sum: unknown')
+    expect(formatAgentSummary(summary)).toContain('1 cancelled')
+
+    foldAgentSummary(summary, event('assistant/message', { turn: 1, step: 1,
+      message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [] }), stream: [
+        { type: 'chunk', time: 1320, chunk: { type: 'text-delta', index: 0, text: 'late' } },
+      ] }, 1350))
+    expect(summary.requestSamples).toBe(0)
+
+    foldAgentSummary(summary, event('turn/start', { turn: 2 }, 2000))
+    expect(formatAgentSummary(summary)).toContain('pre-step: unknown')
+    expect(formatAgentSummary(summary)).toContain('request sum: unknown')
+    expect(formatAgentSummary(summary)).toContain('tool sum: unknown')
   })
 
   it('rebuilds current facts from events that survive a rewind marker', () => {

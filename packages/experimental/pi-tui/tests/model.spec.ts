@@ -515,6 +515,147 @@ describe('tool card folding', () => {
     expect(model.items).toHaveLength(0)
   })
 
+  it('updates the first duplicate result while activity uses the last duplicate card', () => {
+    const model = createModel()
+    applyEvent(model, toolCallEvent({
+      turn: 1, step: 1, callId: ToolCallId('duplicate'), name: 'first-tool', arguments: '{}',
+    }))
+    applyEvent(model, toolCallEvent({
+      turn: 1, step: 2, callId: ToolCallId('duplicate'), name: 'last-tool', arguments: '{"last":true}',
+    }))
+
+    applyEvent(model, toolResultEvent({
+      turn: 1, step: 1, message: toolResult('duplicate', 'first result'),
+    }))
+
+    expect(model.items.map(item => item.tool?.status)).toEqual(['ok', 'running'])
+    expect(model.items[0]?.tool?.resultFull).toBe('first result')
+    expect(model.activity[0]?.status).toBe('running')
+    expect(model.activity[0]?.tool).toBe(model.items[1]?.tool)
+
+    applyEvent(model, toolResultEvent({
+      turn: 1, step: 2, message: toolResult('duplicate', 'repeated result'),
+    }))
+    applyEvent(model, toolCallEvent({
+      turn: 1, step: 3, callId: ToolCallId('question'), name: 'ask_user_question', arguments: '{}',
+    }))
+    applyEvent(model, toolResultEvent({ turn: 1, step: 3, message: toolResult('missing', 'orphan') }))
+
+    expect(model.items.map(item => item.tool?.resultFull)).toEqual(['repeated result', undefined])
+    expect(model.items).toHaveLength(2)
+    expect(model.activity[0]?.status).toBe('running')
+  })
+
+  it('rebuilds the tool index after the item array is replaced and re-densified', () => {
+    const model = createModel()
+    for (const [step, name] of [[1, 'first'], [2, 'middle'], [3, 'last']] as const) {
+      applyEvent(model, toolCallEvent({
+        turn: 1, step, callId: ToolCallId('duplicate'), name, arguments: '{}',
+      }))
+    }
+
+    model.items = model.items
+      .filter(item => item.tool?.callId !== 'duplicate' || item.tool.name === 'middle')
+      .map((item, index) => item.id === index ? item : { ...item, id: index })
+    applyEvent(model, toolResultEvent({
+      turn: 1, step: 2, message: toolResult('duplicate', 'retained result'),
+    }))
+
+    expect(model.items).toHaveLength(1)
+    expect(model.items[0]).toMatchObject({ id: 0, tool: { name: 'middle', status: 'ok', resultFull: 'retained result' } })
+    expect(model.activity[0]?.status).toBe('ok')
+  })
+
+  it('rebuilds after rewind prunes duplicate endpoints and re-densifies the retained card', () => {
+    const model = createModel()
+    const first = toolCallEvent({
+      turn: 1, step: 1, callId: ToolCallId('duplicate'), name: 'first', arguments: '{}',
+    })
+    const middle = toolCallEvent({
+      turn: 1, step: 2, callId: ToolCallId('duplicate'), name: 'middle', arguments: '{}',
+    })
+    const last = toolCallEvent({
+      turn: 1, step: 3, callId: ToolCallId('duplicate'), name: 'last', arguments: '{}',
+    })
+    applyEvent(model, first)
+    applyEvent(model, middle)
+    applyEvent(model, last)
+    applyEvent(model, developerMessageEvent(
+      'the operator rewound to the question below; its later exchange is shadowed in the log',
+      { op: 'replace', startSeq: first.seq, endSeq: first.seq },
+    ))
+    applyEvent(model, developerMessageEvent(
+      'the operator rewound to the question below; its later exchange is shadowed in the log',
+      { op: 'replace', startSeq: last.seq, endSeq: last.seq },
+    ))
+
+    applyEvent(model, toolResultEvent({
+      turn: 1, step: 2, message: toolResult('duplicate', 'retained result'),
+    }))
+
+    expect(model.items.filter(item => item.kind === 'tool')).toHaveLength(1)
+    expect(model.items[0]).toMatchObject({
+      id: 0, tool: { name: 'middle', status: 'ok', resultFull: 'retained result' },
+    })
+  })
+
+  it('clears an indexed card before a later call reuses its id', () => {
+    const model = createModel()
+    const oldCall = toolCallEvent({
+      turn: 1, step: 1, callId: ToolCallId('reused'), name: 'old', arguments: '{}',
+    })
+    applyEvent(model, oldCall)
+    applyEvent(model, developerMessageEvent(
+      'the operator cleared the conversation; the earlier surface is shadowed in the log',
+      { op: 'replace', startSeq: oldCall.seq, endSeq: oldCall.seq },
+    ))
+    applyEvent(model, toolCallEvent({
+      turn: 2, step: 1, callId: ToolCallId('reused'), name: 'new', arguments: '{}',
+    }))
+    applyEvent(model, toolResultEvent({
+      turn: 2, step: 1, message: toolResult('reused', 'new result'),
+    }))
+
+    expect(model.items).toHaveLength(2)
+    expect(model.items[0]).toMatchObject({ id: 0, kind: 'notice' })
+    expect(model.items[1]).toMatchObject({
+      id: 1, tool: { name: 'new', status: 'ok', resultFull: 'new result' },
+    })
+  })
+
+  it('keeps result lookup item reads linear after transcript array replacement', () => {
+    const model = createModel()
+    const count = 64
+    for (let index = 0; index < count; index++) {
+      applyEvent(model, toolCallEvent({
+        turn: 1, step: index + 1, callId: ToolCallId(`call-${index}`), name: 'read_file', arguments: '{}',
+      }))
+    }
+
+    const cards = [...model.items]
+    let itemReads = 0
+    model.items = new Proxy(model.items, {
+      get(target, property) {
+        if (typeof property === 'string' && /^(0|[1-9]\d*)$/.test(property)) itemReads++
+        if (property === 'length') return target.length
+        if (property === Symbol.iterator) return target[Symbol.iterator]
+        if (property === 'find') return target.find
+        if (property === 'findLast') return target.findLast
+        if (typeof property === 'string' && /^(0|[1-9]\d*)$/.test(property)) return target[Number(property)]
+        return undefined
+      },
+    })
+    for (let index = 0; index < count; index++) {
+      applyEvent(model, toolResultEvent({
+        turn: 1, step: index + 1, message: toolResult(`call-${index}`, 'ok'),
+      }))
+    }
+
+    expect(itemReads).toBe(count)
+    expect(model.items.length).toBe(count)
+    expect(cards.every(item => item.tool?.status === 'ok')).toBe(true)
+  })
+
   it('creates a running card keyed by callId', () => {
     const model = createModel()
     applyEvent(

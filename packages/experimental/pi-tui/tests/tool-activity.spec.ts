@@ -6,6 +6,7 @@ import type { ActivityEntry } from '../src/core/activity.ts'
 import type { ToolCardStatus } from '../src/core/model.ts'
 import { ToolActivityPane } from '../src/ui/tool-activity.ts'
 import { TargetIndex } from '../src/core/targets.ts'
+import { style } from '../src/ui/theme.ts'
 
 function call(id: number, status: ToolCardStatus = 'running'): ActivityEntry {
   return {
@@ -165,6 +166,57 @@ describe('agent tool activity', () => {
       expect(frame()).toContain('https://next.test/')
       pane.update([])
       expect(frame()).not.toContain('Targets')
+    } finally { tui.stop() }
+  })
+
+  it('reuses rendered Target rows while the URL snapshot and render state stay unchanged', () => {
+    const pane = new ToolActivityPane()
+    const index = new TargetIndex()
+    index.observe(1, 'https://example.test/根', true)
+    index.observe(2, Array.from({ length: 24 }, (_, id) => `https://example.test/根/段-${id}/葉`).join(' '))
+    pane.update([], [], index.getSnapshot())
+    const { tui, dimensions, frame, input } = fixture(pane, 100, 35)
+    const renderRow = vi.spyOn(style, 'toolName')
+    const renderSelected = vi.spyOn(style, 'accent')
+    try {
+      const before = frame()
+      expect(renderRow).toHaveBeenCalled()
+      renderRow.mockClear()
+      for (let iteration = 0; iteration < 5; iteration++) expect(frame()).toBe(before)
+      expect(renderRow).not.toHaveBeenCalled()
+
+      dimensions.columns = 80
+      expect(frame()).not.toBe(before)
+      expect(renderRow).toHaveBeenCalled()
+      renderRow.mockClear()
+      tui.setFocus(pane)
+      input('\t')
+      input('\x1b[B')
+      expect(frame()).toContain('›')
+      expect(renderRow).toHaveBeenCalled()
+
+      renderRow.mockClear()
+      renderSelected.mockClear()
+      input('\r')
+      expect(frame()).not.toContain('%E6%AE%B5-0')
+      expect(renderSelected).toHaveBeenCalled()
+      input('\r')
+      expect(frame()).toContain('%E6%AE%B5-0')
+
+      renderRow.mockClear()
+      const reordered = [...index.getSnapshot()]
+      const root = reordered.shift()!
+      pane.update([], [], [root, ...reordered.reverse()])
+      const reorderedFrame = frame()
+      expect(reorderedFrame).toContain('%E6%AE%B5-23')
+      expect(renderRow).toHaveBeenCalled()
+
+      pane.update([], [], [])
+      expect(frame()).not.toContain('Targets')
+      pane.update([], [], index.getSnapshot())
+      renderRow.mockClear()
+      expect(frame()).toContain('https://example.test/')
+      expect(renderRow).toHaveBeenCalled()
     } finally { tui.stop() }
   })
 

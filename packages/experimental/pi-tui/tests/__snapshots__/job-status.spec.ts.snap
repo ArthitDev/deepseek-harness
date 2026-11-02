@@ -4,7 +4,7 @@ exports[`background job status in Agent Debug > observes registered jobs through
 "           │ ── Agent Debug ──                             
            │ Main Agent · last tool: pwsh · calls: 0       
            │ pending, 1 completed, 0 failed, 0 cancelled, 0
-           │ stopped · usage: unknown                      
+           │ stopped · tool sum: 0ms (1) · usage: unknown  
            │                                               
            │ + [OK] Shell · pwsh · 0.0s                    
            │ {"command":"short preview"}                   

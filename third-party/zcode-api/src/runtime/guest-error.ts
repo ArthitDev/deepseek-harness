@@ -1,5 +1,5 @@
 /**
- * guest-error.ts — provenance test for errors thrown by third-party captcha
+ * guest-error.ts — origin-separation test for errors thrown by third-party captcha
  * SDK code ("guest" scripts) running inside the in-process happy-dom solver.
  *
  * Under Bun the guest scripts execute in the HOST realm (happy-dom's VM

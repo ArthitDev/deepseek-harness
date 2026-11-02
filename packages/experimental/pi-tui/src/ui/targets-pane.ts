@@ -101,6 +101,13 @@ export class TargetsPane extends VStack {
   private collapsed = new Set<string>()
   private paneCollapsed = false
   private selected: string | undefined
+  private renderedRows: {
+    rows: readonly TargetRow[]
+    width: number
+    focused: boolean
+    selected: string | undefined
+    lines: string[]
+  } | undefined
   /** Whether the containing Debug pane routes navigation to this tree. */
   focused = false
   /** The tree scrollport, independent of the tool timeline. */
@@ -127,12 +134,7 @@ export class TargetsPane extends VStack {
     this.addChild(header, { basis: 'auto', shrink: 0 })
     const output: Component = {
       invalidate: () => {},
-      render: width => this.rows.map((row) => {
-        const selected = this.focused && this.selected === row.key
-        const marker = row.expandable ? this.collapsed.has(row.key) ? '▸' : '▾' : ' '
-        const text = truncateToWidth(`${selected ? '›' : ' '} ${row.prefix}${marker} ${row.label}`, Math.max(0, width - 4))
-        return truncateToWidth(`${style.muted('│')} ${(selected ? style.accent : style.toolName)(text)}${' '.repeat(Math.max(0, width - visibleWidth(text) - 3))}${style.muted('│')}`, width)
-      }),
+      render: width => this.renderRows(width),
       handleMouse: (event) => {
         if (event.type !== 'press' || event.button !== 'left') return undefined
         const row = this.rows[event.y]
@@ -146,6 +148,20 @@ export class TargetsPane extends VStack {
     this.scroll = new ScrollView(output, { overscroll: 'contain' })
     this.addChild(this.scroll, { basis: 'auto', grow: 1, shrink: 1, minSize: 1, visible: () => !this.paneCollapsed })
     this.addChild({ invalidate: () => {}, render: width => rule(width, false) }, { basis: 'auto', shrink: 0, visible: () => !this.paneCollapsed })
+  }
+
+  private renderRows(width: number): string[] {
+    const cached = this.renderedRows
+    if (cached?.rows === this.rows && cached.width === width && cached.focused === this.focused
+      && cached.selected === this.selected) return cached.lines
+    const lines = this.rows.map((row) => {
+      const selected = this.focused && this.selected === row.key
+      const marker = row.expandable ? this.collapsed.has(row.key) ? '▸' : '▾' : ' '
+      const text = truncateToWidth(`${selected ? '›' : ' '} ${row.prefix}${marker} ${row.label}`, Math.max(0, width - 4))
+      return truncateToWidth(`${style.muted('│')} ${(selected ? style.accent : style.toolName)(text)}${' '.repeat(Math.max(0, width - visibleWidth(text) - 3))}${style.muted('│')}`, width)
+    })
+    this.renderedRows = { rows: this.rows, width, focused: this.focused, selected: this.selected, lines }
+    return lines
   }
 
   /**
@@ -193,6 +209,7 @@ export class TargetsPane extends VStack {
     if (this.collapsed.has(row.key)) this.collapsed.delete(row.key)
     else this.collapsed.add(row.key)
     this.rows = rowsOf(this.tree, this.collapsed)
+    this.renderedRows = undefined
   }
 
   private focusMouse(component: Component, event: TuiMouseEvent): TuiMouseDispatchResult {
@@ -218,6 +235,7 @@ export class TargetsPane extends VStack {
     this.urls = urls
     this.tree = targetBranches(urls)
     this.rows = rowsOf(this.tree, this.collapsed)
+    this.renderedRows = undefined
     if (!this.rows.some(row => row.key === this.selected)) this.selected = undefined
     if (urls.length === 0) this.focused = false
   }

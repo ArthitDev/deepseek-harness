@@ -911,11 +911,12 @@ describe('/clear transcript', () => {
         expect(cleared).not.toContain('turn aborted')
         expect(cleared).not.toContain('already clear')
         expect(cleared.match(/session cleared/g)).toHaveLength(1)
-        expect(cleared.split('\n').filter(line => line.includes('session cleared')).map(line => line.trim())).toMatchInlineSnapshot(`
-          [
-            "» session cleared — same session, fresh context    │",
-          ]
-        `)
+        expect(cleared.split('\n').filter(line => line.includes('session cleared'))
+          .map(line => line.split('│')[0]!.trim())).toMatchInlineSnapshot(`
+            [
+              "» session cleared — same session, fresh context",
+            ]
+          `)
         expect(screen.currentSessionId).toBe(session.id)
         expect(session.deriveMessages()).toEqual(history === 'empty' ? [] : [system])
         if (history !== 'hidden-context' && history !== 'wiki-context') expect(session.snapshotEvents()).toEqual(before)

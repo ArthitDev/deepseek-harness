@@ -108,6 +108,31 @@ export interface ChatModel {
 
 const ARGS_PREVIEW_LIMIT = 200
 const RESULT_PREVIEW_LIMIT = 400
+type ToolCard = ChatItem & { tool: ToolCardState }
+type ToolCardMatches = { first: ToolCard; last: ToolCard }
+
+// A replacement transcript gets a fresh index without retaining the old array.
+const toolCardIndexes = new WeakMap<ChatItem[], Map<string, ToolCardMatches>>()
+
+function isToolCard(item: ChatItem): item is ToolCard {
+  return item.kind === 'tool' && item.tool !== undefined
+}
+
+function indexToolCard(index: Map<string, ToolCardMatches>, item: ChatItem): void {
+  if (!isToolCard(item)) return
+  const existing = index.get(item.tool.callId)
+  if (existing === undefined) index.set(item.tool.callId, { first: item, last: item })
+  else existing.last = item
+}
+
+function toolCardIndex(items: ChatItem[]): Map<string, ToolCardMatches> {
+  const cached = toolCardIndexes.get(items)
+  if (cached !== undefined) return cached
+  const index = new Map<string, ToolCardMatches>()
+  for (const item of items) indexToolCard(index, item)
+  toolCardIndexes.set(items, index)
+  return index
+}
 
 /**
  * Create an empty transcript model.
@@ -228,6 +253,8 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
     const withId: ChatItem = { ...item, id: nextId }
     nextId += 1
     model.items.push(withId)
+    const index = toolCardIndexes.get(model.items)
+    if (index !== undefined) indexToolCard(index, withId)
     return withId
   }
 
@@ -359,10 +386,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       const result = textOf(content)
       model.targets.observe(event.seq, result)
       const callId = event.data.message.source.callId
-      const card = model.items.find(
-        (item): item is ChatItem & { tool: ToolCardState } =>
-          item.kind === 'tool' && item.tool !== undefined && item.tool.callId === callId,
-      )
+      const card = toolCardIndex(model.items).get(callId)?.first
       if (card === undefined) break
       card.streaming = false
 
@@ -466,8 +490,7 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
   }
   const callId = event.type === 'tool/call' ? event.data.callId
     : event.type === 'tool/result' ? event.data.message.source.callId : undefined
-  const tool = callId === undefined ? undefined
-    : model.items.findLast(item => item.tool?.callId === callId)?.tool
+  const tool = callId === undefined ? undefined : toolCardIndex(model.items).get(callId)?.last.tool
   recordActivity(model.activity, event, tool)
   return model
 }
