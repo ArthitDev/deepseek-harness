@@ -54,14 +54,8 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
     }
     return decision
   }, { prepend: true })
-  const refreshing = new WeakSet<object>()
-  ctx.on('system-prompt/assemble', async (assembly, context, next) => {
-    if (!refreshing.has(context) && await sync()) {
-      // Section selection precedes this waterfall; reassemble once when settings change.
-      refreshing.add(context)
-      try { return await ctx.systemPrompt.assemble(context) }
-      finally { refreshing.delete(context) }
-    }
+  ctx.on('system-prompt/prepare', async () => { await sync() })
+  ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
     const sections = structuredClone(assembly.sections)
     const result = await next()
     let previous = -1

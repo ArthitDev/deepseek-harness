@@ -23405,7 +23405,7 @@
       },
       "names": [],
       "sources": [
-        "packages/pentest/pentest-executor/src/index.ts:34"
+        "packages/pentest/pentest-executor/src/index.ts:35"
       ]
     },
     {
@@ -38652,7 +38652,7 @@
         "packages/core/tools/src/index.ts#ToolRestriction"
       ],
       "sources": [
-        "packages/core/tools/src/index.ts:701"
+        "packages/core/tools/src/index.ts:727"
       ]
     },
     {
@@ -70082,7 +70082,7 @@
       },
       "names": [],
       "sources": [
-        "packages/pentest/pentest-executor/src/index.ts:35"
+        "packages/pentest/pentest-executor/src/index.ts:36"
       ]
     },
     {
@@ -72924,7 +72924,7 @@
         "packages/experimental/pi-tui/src/ui/chat.ts#SkillCatalogEntry"
       ],
       "sources": [
-        "packages/experimental/pi-tui/src/ui/chat.ts:163"
+        "packages/experimental/pi-tui/src/ui/chat.ts:170"
       ]
     },
     {
@@ -103863,7 +103863,7 @@
         "packages/experimental/pi-tui/src/ui/chat.ts#SkillCatalogSource"
       ],
       "sources": [
-        "packages/experimental/pi-tui/src/ui/chat.ts:168"
+        "packages/experimental/pi-tui/src/ui/chat.ts:175"
       ]
     },
     {

@@ -1,0 +1,11 @@
+version: 1
+scenario: compaction-system-integrity
+profile: headless
+composition: compaction-system-integrity
+recording: authored
+platform: pwsh
+header:
+  class: compaction-system-integrity
+  pin: true
+  changes: 1
+  promptChanges: 3

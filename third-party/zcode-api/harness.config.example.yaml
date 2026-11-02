@@ -1,0 +1,11 @@
+server:
+  host: "127.0.0.1"
+  port: 18080
+auth:
+  proxyApiKey: "__GENERATE_PROXY_API_KEY__"
+provider: zai
+plan: start-plan
+defaultModel: glm-5.3-flash
+models:
+  - glm-5.3
+  - glm-5.3-flash

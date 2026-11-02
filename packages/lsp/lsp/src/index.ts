@@ -7,7 +7,7 @@
  * {@link Lsp.registerProvider} validates and conflict-checks everything before mutating, so an
  * invalid or conflicting registration publishes nothing, and its disposer releases every
  * reservation together. Selection routes a query by the file's final extension; it never depends on
- * registration order. The seam exposes exactly the four operations and no JSON-RPC escape hatch.
+ * registration order. The service exposes four navigation operations and file diagnostics; it has no JSON-RPC escape hatch.
  * @module @deepseek-ai/dsh-lsp
  */
 
@@ -16,6 +16,8 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { LspProviderId } from './brand.ts'
 import type {
   LspProvider,
+  LspDiagnosticsRequest,
+  LspDiagnosticsResult,
   LspQueryRequest,
   LspQueryResult,
   LspService,
@@ -24,10 +26,15 @@ import type {
 export { LspProviderId } from './brand.ts'
 export type {
   LspHover,
+  LspDiagnostic,
+  LspDiagnosticsRequest,
+  LspDiagnosticsResult,
+  LspDiagnosticsStatus,
   LspLocation,
   LspOperation,
   LspPosition,
   LspProvider,
+  LspProviderDiagnostics,
   LspProviderQuery,
   LspQueryRequest,
   LspQueryResult,
@@ -146,6 +153,17 @@ export class Lsp extends Service implements LspService {
       throw new LspError(`no LSP provider handles "${request.filePath}"`, 'LSP_UNAVAILABLE')
     }
     return route.provider.query({ ...request, languageId: route.languageId }, signal)
+  }
+
+  async diagnostics(request: LspDiagnosticsRequest, signal?: AbortSignal): Promise<LspDiagnosticsResult> {
+    const route = this.routes.get(finalExtension(request.filePath))
+    if (route === undefined) {
+      throw new LspError(`no LSP provider handles "${request.filePath}"`, 'LSP_UNAVAILABLE')
+    }
+    if (route.provider.diagnostics === undefined) {
+      throw new LspError(`LSP provider "${route.provider.id}" does not provide diagnostics`, 'LSP_UNAVAILABLE')
+    }
+    return route.provider.diagnostics({ ...request, languageId: route.languageId }, signal)
   }
 }
 

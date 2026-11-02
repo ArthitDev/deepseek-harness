@@ -27,6 +27,8 @@ export interface Config {
   cwd?: string
   /** Newest transcript items rendered by default; older items remain searchable. */
   historyLimit?: number
+  /** Quiet time after a recognized background-job prompt before Agent Debug warns. */
+  jobInputWarningDelayMs?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -35,6 +37,7 @@ export const Config: Schema<Config> = Schema.object({
   model: Schema.string().required(false),
   cwd: Schema.string().required(false),
   historyLimit: Schema.number().step(1).min(1).default(20),
+  jobInputWarningDelayMs: Schema.number().step(1).min(1).default(15000),
 })
 
 /**

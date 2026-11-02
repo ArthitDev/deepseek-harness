@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { createScope } from '@deepseek-ai/dsh-scope'
 import LlmRuntime, { createUserMessage, ToolCallId, HarnessError, type ContentBlock  } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -79,6 +80,32 @@ describe('ToolRuntime', () => {
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.tools.map(t => t.name)).toEqual(['echo'])
     expect(renderPrompt(assembly)).toContain('emit its structured tool call immediately')
+  })
+
+  it('contributes tool workflow guidance only while tools are visible', async () => {
+    const ctx = await setup()
+    try {
+      const key = {}
+      let scoped!: Context
+      await ctx.plugin(Object.assign((inner: Context) => { scoped = createScope(inner, key).ctx },
+        { inject: ['tools', 'systemPrompt'] }))
+      const guidance = async () => (await ctx.systemPrompt.assemble({ scope: key })).sections
+        .find(section => section.name === 'tools:calling')?.text
+      expect(await guidance()).toBe('')
+      const dispose = ctx.tools.register(echoTool)
+      const schemas = ctx.tools.schemas()
+      expect(await guidance()).toMatchSnapshot('tool workflow guidance')
+      expect(ctx.tools.schemas()).toEqual(schemas)
+      const restore = scoped.tools.restrict({ deny: ['echo'] })
+      expect(await guidance()).toBe('')
+      expect(ctx.tools.schemas()).toEqual(schemas)
+      restore()
+      expect(await guidance()).toContain('Run independent calls together')
+      dispose()
+      expect(await guidance()).toBe('')
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it('schemas() drops host callbacks — they must never reach the model', async () => {

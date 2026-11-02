@@ -1578,6 +1578,31 @@
     },
     {
       "doc": "docs/subsystems/lsp.md",
+      "symbol": "LspDiagnostic",
+      "source": "packages/lsp/lsp/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/lsp.md",
+      "symbol": "LspDiagnosticsStatus",
+      "source": "packages/lsp/lsp/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/lsp.md",
+      "symbol": "LspDiagnosticsResult",
+      "source": "packages/lsp/lsp/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/lsp.md",
+      "symbol": "LspDiagnosticsRequest",
+      "source": "packages/lsp/lsp/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/lsp.md",
+      "symbol": "LspProviderDiagnostics",
+      "source": "packages/lsp/lsp/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/lsp.md",
       "symbol": "LspLocation",
       "source": "packages/lsp/lsp/src/types.ts"
     },

@@ -35,7 +35,7 @@ interface ChildPresetFace {
 
 /** Read whichever preset service the composition mounts, preferring the composed roster. */
 function childPresetsOf(ctx: Context): ChildPresetFace | undefined {
-  return (ctx.get('agentPresets') as ChildPresetFace | undefined)
+  return ctx.get('agentPresets')
     ?? (ctx.get('agentPresetRegistry') as ChildPresetFace | undefined)
 }
 
@@ -239,6 +239,7 @@ export async function applyChildComposition(
   if (composition.persona !== undefined) {
     childCtx.systemPrompt.section({
       name: 'deployment:persona-prefix',
+      version: '1',
       order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       text: composition.persona,
     })

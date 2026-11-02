@@ -32,6 +32,24 @@ function handle(message) {
     case 'textDocument/definition':
       process.stdout.write(frame({ id: message.id, result: [location(0), location(1)] }))
       break
+    case 'textDocument/didOpen': {
+      const document = message.params.textDocument
+      process.stdout.write(frame({
+        method: 'textDocument/publishDiagnostics',
+        params: {
+          uri: document.uri,
+          version: document.version,
+          diagnostics: [{
+            range: { start: { line: 0, character: 6 }, end: { line: 0, character: 11 } },
+            severity: 2,
+            code: 'fixture-warning',
+            source: 'fixture',
+            message: 'deterministic fixture warning',
+          }],
+        },
+      }))
+      break
+    }
     case 'shutdown':
       process.stdout.write(frame({ id: message.id, result: null }))
       break

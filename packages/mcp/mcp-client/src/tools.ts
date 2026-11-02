@@ -14,8 +14,10 @@
 
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
+import { stripVTControlCharacters } from 'node:util'
 import { specTypeSchemas, type Client, type ImageContent } from '@modelcontextprotocol/client'
 import type { Context } from '@deepseek-ai/cordis'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { isImageAdmissionError } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -140,10 +142,10 @@ export async function syncTools(
       inputSchema: tool.inputSchema,
       outputSchema: tool.outputSchema,
       taskRequired: tool.execution?.taskSupport === 'required',
-      call: (args, execution) => client.callTool(
+      call: (args, execution) => callMcpTool(ctx, execution, onprogress => client.callTool(
         { name: tool.name, arguments: args },
-        { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
-      ),
+        { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool, onprogress },
+      )),
     }))
   }
 
@@ -169,6 +171,44 @@ export async function syncTools(
     return new Map()
   }
   return disposers
+}
+
+async function callMcpTool(
+  ctx: Context,
+  execution: ToolExecution,
+  call: (onprogress: NonNullable<NonNullable<Parameters<Client['callTool']>[1]>['onprogress']>) => Promise<unknown>,
+): Promise<unknown> {
+  let settled = false
+  try {
+    return await call((update) => {
+      if (settled || execution.signal.aborted || !Number.isFinite(update.progress) || update.progress < 0) return
+      const total = update.total
+      if (total !== undefined && (!Number.isFinite(total) || total <= 0)) return
+      const message = typeof update.message === 'string'
+        ? stripVTControlCharacters(update.message).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, 160)
+        : undefined
+      const progress = {
+        progress: update.progress,
+        ...(total === undefined ? {} : { total }),
+        ...(message === undefined ? {} : { message }),
+      }
+      const callbacks = ctx.events.dispatch('emit', [
+        scopeTarget(ctx.tools, execution.agent), 'tools/progress', execution, progress,
+      ])
+      for (const callback of callbacks) {
+        try {
+          const returned: unknown = callback(execution, progress)
+          void Promise.resolve(returned).catch((error: unknown) => {
+            ctx.logger.warn(`mcp-client: progress observer failed: ${String(error)}`)
+          })
+        } catch (error: unknown) {
+          ctx.logger.warn(`mcp-client: progress observer failed: ${String(error)}`)
+        }
+      }
+    })
+  } finally {
+    settled = true
+  }
 }
 
 /** Fields read from canonical content, including policy-owned value replacements. */

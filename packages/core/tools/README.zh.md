@@ -137,6 +137,8 @@ ctx.tools.register(defineTool({
 
 工具插件调用 `ctx.tools.register()`，其 schema 会自动流入提示词组装。`tools/pre-execute` 是可重排的允许／拒绝／询问门禁；`ctx.tools.guard()` 在其后添加单调的拥有方策略；`tools/execute` 为超时、重试或指标包装规范化后的规范分发；`tools/post-execute` 可以替换内容或值、通过反馈阻止，或附加有序上下文；`tools/result` 观测不可变的最终结果。MCP 服务器发现工具后，用服务器的 schema 调用 `ctx.tools.register()`。
 
+使用方可通过有类型的 `tools/progress` 事件观察单次已准入调用的临时更新。每条通知都关联到对应执行并遵循其 agent 作用域；进度只存在于当前进程，不会延长调用超时，也不会写入 Session 历史。
+
 </details>
 
 -----
@@ -162,11 +164,11 @@ ctx.tools.register(defineTool({
 
 #### 模型看到什么
 
-在普通模式下，模型会看到每个可见定义的确切名称、描述与 JSON Schema；已交付定义记录在生成的[工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tools)中。agent 作用域的限制、遮蔽与扩展注册会改变该 agent 的最终工具集合。
+在普通模式下，模型会看到每个可见定义的确切名称、描述与 JSON Schema；已交付定义记录在生成的[工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tools)中。agent 作用域的限制、遮蔽与扩展注册会改变该 agent 的最终工具集合。 工具可见时，`tools:calling` section 会说明结构化调用、修改前读取文件与项目指令、复用现有模式，以及同步受影响的调用方和配置。tools package 会将此 section 注册为版本  1，供已交付 profile 的准入检查使用。它建议并行执行独立调用、按顺序执行存在依赖或修改共享文件的调用、检查错误、通过返回的定位信息取回被截断的输出，并区分后台启动与完成。它要求运行相关检查，如实报告已验证和未验证的结果。这些指引也适用于 PTC 和 `both` 模式；不会改变 schema、执行策略或并发限制。
 
 #### Token 影响
 
-每次请求的固定成本与可见定义成正比。隐藏工具的限制会为该 agent 移除其全部 schema 成本。
+每次请求的固定成本与可见定义成正比；工具可见时还包含一个固定的工作流指引 section。隐藏工具的限制会为该 agent 移除其全部 schema 成本。
 
 #### KV Cache 影响
 

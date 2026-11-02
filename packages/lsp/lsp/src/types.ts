@@ -3,14 +3,14 @@
  * {@link LspError} taxonomy and the {@link LspProviderId} brand factory are runtime and live in
  * `index.ts`. Positions and ranges are zero-based UTF-16, matching the protocol; the model-facing
  * tool owns the one-based cursor convention. The seam exposes no protocol types, process or document
- * controls, or generic JSON-RPC escape hatch — only the four semantic operations.
+ * controls, or generic JSON-RPC escape hatch — four semantic navigation operations and a separate file-scoped diagnostics request.
  * @module @deepseek-ai/dsh-lsp/types
  */
 
 import type { LspProviderId } from './brand.ts'
 
 /**
- * The four semantic queries the seam and model expose. A closed union: adding an operation is a
+ * The four semantic navigation queries the seam and model expose. A closed union: adding an operation is a
  * compile-enforced change across the seam, providers, and the tool. Symbols and call hierarchy are
  * not operations here; they need different schemas.
  */
@@ -72,6 +72,37 @@ export interface LspHover {
   readonly range?: LspRange
 }
 
+/** Normalized diagnostic reported for one opened document version. */
+export interface LspDiagnostic {
+  readonly range: LspRange
+  readonly severity: 'error' | 'warning' | 'information' | 'hint' | 'unknown'
+  readonly message: string
+  readonly source?: string
+  readonly code?: string | number
+}
+
+/** Freshness of one on-demand publish-diagnostics observation. */
+export type LspDiagnosticsStatus = 'current' | 'unverified' | 'not-reported' | 'changed' | 'invalid'
+
+/** One bounded publish-diagnostics observation for the exact source bytes read by the provider. */
+export interface LspDiagnosticsResult {
+  readonly workspaceUri: string
+  readonly fileUri: string
+  readonly providerId: LspProviderId
+  readonly documentVersion: number
+  readonly documentDigest: string
+  readonly observedAt: string
+  readonly status: LspDiagnosticsStatus
+  readonly diagnostics: readonly LspDiagnostic[]
+  readonly omitted: number
+}
+
+/** A diagnostics request shares file routing and workspace selection with navigation, without a cursor. */
+export interface LspDiagnosticsRequest {
+  readonly filePath: string
+  readonly workspaceRoot: string
+}
+
 /**
  * The closed result union. Navigation operations (`goToDefinition`, `findReferences`,
  * `goToImplementation`) normalize to `locations`; `hover` normalizes to content or `null`.
@@ -104,11 +135,23 @@ export interface LspProvider {
    * @returns the normalized, closed-union result.
    */
   query(request: LspProviderQuery, signal?: AbortSignal): Promise<LspQueryResult>
+  /**
+   * Optional publish-diagnostics capability. The seam reports `LSP_UNAVAILABLE` when absent.
+   * @param request - the resolved file request and provider language id.
+   * @param signal - optional caller cancellation.
+   * @returns one bounded observation with explicit freshness status.
+   */
+  diagnostics?(request: LspProviderDiagnostics, signal?: AbortSignal): Promise<LspDiagnosticsResult>
+}
+
+/** Diagnostics request with the language id selected from the same extension route as navigation. */
+export interface LspProviderDiagnostics extends LspDiagnosticsRequest {
+  readonly languageId: string
 }
 
 /**
  * The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query
- * execution; exposes exactly the four operations and no protocol escape hatch.
+ * execution; exposes four navigation operations plus file diagnostics and no protocol escape hatch.
  */
 export interface LspService {
   /**
@@ -127,4 +170,11 @@ export interface LspService {
    * @returns the normalized, closed-union result.
    */
   query(request: LspQueryRequest, signal?: AbortSignal): Promise<LspQueryResult>
+  /**
+   * Select a provider by the file extension and request diagnostics; a provider without this optional capability throws `LSP_UNAVAILABLE`.
+   * @param request - the file and workspace paths.
+   * @param signal - optional cancellation forwarded to the selected provider.
+   * @returns a bounded observation with explicit freshness status.
+   */
+  diagnostics(request: LspDiagnosticsRequest, signal?: AbortSignal): Promise<LspDiagnosticsResult>
 }

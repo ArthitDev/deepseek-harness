@@ -42,6 +42,7 @@ import {
   type CwdPathMode,
   type NormalizeContext,
   extractSnapshotSpillPaths,
+  normalizeDiagnosticObservedAt,
   normalizeSessionLog,
   normalizeSessionSnapshots,
   normalizeStdout,
@@ -1172,6 +1173,7 @@ export function stabilizeRefreshLog(
     }
     if (typeof record.time === 'number') previousEventTime = record.time
   }
+  normalizeDiagnosticObservedAt(records)
   return records.map(record => JSON.stringify(record)).join('\n') + '\n'
 }
 

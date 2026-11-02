@@ -29,7 +29,7 @@ Use goal tools for one long-running completion objective in the current session.
 
 Use the workflow tool ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration: you write a JavaScript script (the tool description documents the exact format) that fans work out across many subagents with phases and structured results. For one or two delegations, prefer plain subagent calls.
 
-Use subagent in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set `run_in_background: false` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.
+Use subagent in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Sequence dependent work after its prerequisite results are available; coordinate edits to shared files. Set `run_in_background: false` when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message; avoid busy-polling. Review the returned evidence, changes, and checks before integrating the result.
 
 ## Writing code for run_code
 
@@ -170,7 +170,7 @@ interface ToolArgsMap {
   subagent: {
     /** A short (3-5 word) description of the delegated task, for display. */
     description: string;
-    /** The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. */
+    /** The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work. */
     prompt: string;
     /** Whether to run in the background and return a durable subagent id immediately. Defaults to true. Set false to wait for the result when your next action depends on it. */
     run_in_background?: boolean;
@@ -179,7 +179,7 @@ interface ToolArgsMap {
   subagent_fork: {
     /** A short (3-5 word) description of the delegated task, for display. */
     description: string;
-    /** The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new. */
+    /** The task for the subagent. It already sees this conversation's completed turns, so build on them freely. Include new instructions and evidence from the current in-flight turn, which it cannot see. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work. */
     prompt: string;
   } & Record<string, JsonValue>;
   /** Echo template text such as {{item}}, {{model}}, or {{ item }} without substitution. */

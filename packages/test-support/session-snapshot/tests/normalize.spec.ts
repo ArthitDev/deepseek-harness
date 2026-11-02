@@ -292,6 +292,71 @@ describe('normalizeSessionLog', () => {
     expect(out).not.toContain('999')
   })
 
+  it('stabilizes only matching lsp_diagnostics headers and their request copies', () => {
+    const observedAt = '2026-11-02T03:04:05.678Z'
+    const callId = 'diagnostics-call'
+    const generated = `Diagnostics fresh; provider fixture; version 3; digest abc; observed ${observedAt}.\n1:2 warning: issue\nDiagnostics body; provider user; version 1; digest note; observed ${observedAt}.`
+    const matchingResult = {
+      type: 'tool/result',
+      data: { message: { content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: generated }] }] } },
+    }
+    const requestCopy = {
+      type: 'request/header',
+      data: { header: { messages: [{ role: 'tool', content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: generated }] }] }] } },
+    }
+    const unrelatedResult = {
+      type: 'tool/result',
+      data: { message: { content: [{ type: 'tool-result', toolCallId: 'other-call', content: [{ type: 'text', text: generated }] }] } },
+    }
+    const userText = { type: 'user/message', data: { content: [{ type: 'text', text: `User mentioned ${observedAt}.` }] } }
+    const input = [
+      header({}),
+      JSON.stringify({ type: 'tool/call', data: { callId, name: 'lsp_diagnostics', arguments: '{}' } }),
+      JSON.stringify(matchingResult),
+      JSON.stringify(requestCopy),
+      JSON.stringify(unrelatedResult),
+      JSON.stringify(userText),
+    ].join('\n')
+
+    const output = normalizeSessionLog(input, ctx)
+    expect(output.split('observed 1970-01-01T00:00:00.000Z.')).toHaveLength(3)
+    expect(output).toContain(`User mentioned ${observedAt}.`)
+    const bodyHeader = `Diagnostics body; provider user; version 1; digest note; observed ${observedAt}.`
+    expect(output.split(bodyHeader)).toHaveLength(4)
+    expect(output.split(`observed ${observedAt}.`)).toHaveLength(5)
+  })
+
+  it('leaves generated-looking timestamps unchanged without a diagnostics call', () => {
+    const observedAt = '2026-11-02T03:04:05.678Z'
+    const result = JSON.stringify({
+      type: 'tool/result',
+      data: { message: { content: [{ type: 'tool-result', toolCallId: 'some-call', content: [{ type: 'text', text: `Diagnostics fresh; provider fixture; version 3; digest abc; observed ${observedAt}.` }] }] } },
+    })
+    expect(normalizeSessionLog(`${header({})}\n${result}\n`, ctx)).toContain(observedAt)
+  })
+
+  it('stabilizes V4 producer-owned tool messages in results and request history', () => {
+    const observedAt = '2026-11-02T03:04:05.678Z'
+    const callId = 'diagnostics-v4-call'
+    const text = `Diagnostics current; provider fixture; version 1; digest abc; observed ${observedAt}.`
+    const result = {
+      role: 'tool',
+      source: { kind: 'tool', callId },
+      toolCallId: callId,
+      content: [{ type: 'text', text }],
+    }
+    const input = [
+      header({}),
+      JSON.stringify({ type: 'tool/call', data: { callId, name: 'lsp_diagnostics', arguments: '{}' } }),
+      JSON.stringify({ type: 'tool/result', data: { message: result } }),
+      JSON.stringify({ type: 'request/header', data: { header: { messages: [result] } } }),
+    ].join('\n')
+
+    const output = normalizeSessionLog(input, ctx)
+    expect(output.split('observed 1970-01-01T00:00:00.000Z.')).toHaveLength(3)
+    expect(output).not.toContain(observedAt)
+  })
+
   it('normalizes a projected event without adding a persistence envelope', () => {
     const projected = JSON.stringify({ type: 'turn/start', data: { turn: 1 } })
     const out = normalizeSessionLog(`${header({})}\n${projected}\n`, ctx)

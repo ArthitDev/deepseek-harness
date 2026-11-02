@@ -19,12 +19,16 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "prepare:primary-runtime": "tsx scripts/primary-runtime/prepare.ts",
-    "sb:start": "node scripts/sb-manager.cjs start --v6 --exec auto --backend http://127.0.0.1:20128/v1",
-    "sb:stop": "node scripts/sb-manager.cjs stop",
-    "sb:status": "node scripts/sb-manager.cjs status",
-    "sb:restart": "node scripts/sb-manager.cjs restart",
-    "sb:test": "node scripts/sb-executor-test.cjs",
-    "zcode:start": "node scripts/sb-auto-start.cjs start",
+    "sb:start": "node scripts/sb-transport.cjs start",
+    "sb:stop": "node scripts/sb-transport.cjs stop",
+    "sb:status": "node scripts/sb-transport.cjs status",
+    "sb:restart": "node scripts/sb-transport.cjs restart",
+    "sb:test": "node --test scripts/tests/sb-transport.test.cjs scripts/tests/sb-arsenal.test.cjs",
+    "zcode:start": "node scripts/sb-auto-start.cjs start-zcode",
+    "zcode:setup": "node scripts/sb-auto-start.cjs setup-zcode",
+    "zcode:test": "node --test scripts/tests/zcode-proxy.test.cjs scripts/tests/zcode-direct-setup.test.cjs scripts/tests/zcode-solver.test.cjs scripts/tests/zcode-metrics.test.cjs",
+    "zcode:metrics": "node scripts/zcode-metrics.cjs",
+    "antigravity:test": "node --test scripts/tests/antigravity-proxy.test.cjs",
     "zcode:status": "node scripts/sb-auto-start.cjs status",
     "zcode:stop": "node scripts/sb-auto-start.cjs stop",
     "build": "tsx scripts/build.ts",
@@ -213,7 +217,7 @@
     "postinstall": "node scripts/install-lefthook.mjs",
     "predev": "node scripts/sb-auto-start.cjs start --background",
     "prestart": "node scripts/sb-auto-start.cjs start --background",
-    "sb:install": "node scripts/sb-auto-start.cjs install"
+    "sb:install": "node scripts/sb-transport.cjs start"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "workspace:*",

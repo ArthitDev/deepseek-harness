@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tui'
+import { Text, TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tui'
 import { JobId, type JobView } from '@deepseek-ai/dsh-jobs'
 import type { ActivityEntry } from '../src/core/activity.ts'
 import type { ToolCardStatus } from '../src/core/model.ts'
@@ -24,8 +24,9 @@ function call(id: number, status: ToolCardStatus = 'running'): ActivityEntry {
 
 function fixture(pane: ToolActivityPane, width = 46, rows = 100) {
   const start = vi.fn<Terminal['start']>()
+  const dimensions = { columns: width }
   const terminal: Terminal = {
-    columns: width, rows, kittyProtocolActive: false,
+    get columns() { return dimensions.columns }, rows, kittyProtocolActive: false,
     start, stop: () => {}, drainInput: async () => {}, write: () => {},
     moveBy: () => {}, hideCursor: () => {}, showCursor: () => {}, clearLine: () => {},
     clearFromCursor: () => {}, clearScreen: () => {}, setTitle: () => {}, setProgress: () => {},
@@ -38,7 +39,7 @@ function fixture(pane: ToolActivityPane, width = 46, rows = 100) {
     return stripVTControlCharacters(tui.getScreenLines().join('\n')).trimEnd()
   }
   const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
-  return { tui, terminal, frame, input }
+  return { tui, terminal, dimensions, frame, input }
 }
 
 function text(pane: ToolActivityPane, width = 46): string {
@@ -48,6 +49,78 @@ function text(pane: ToolActivityPane, width = 46): string {
 
 describe('agent tool activity', () => {
   afterEach(() => { vi.restoreAllMocks() })
+  it('reuses wrapped activity rows while the visible content and width stay unchanged', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+    const pane = new ToolActivityPane()
+    pane.update(Array.from({ length: 20 }, (_, id) => {
+      const row = call(id, 'ok')
+      row.tool!.argsPreview = '測試คำสั่ง'.repeat(40)
+      return row
+    }))
+    const { tui, frame } = fixture(pane, 46, 16)
+    const render = vi.spyOn(Text.prototype, 'render')
+    try {
+      const before = frame()
+      render.mockClear()
+      for (let index = 0; index < 100; index++) expect(frame()).toBe(before)
+      expect(render.mock.calls.length).toBeLessThanOrEqual(200)
+    } finally { tui.stop() }
+  })
+  it('refreshes cached rows after in-place changes, expansion, selection and resizing', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(3500)
+    const pane = new ToolActivityPane()
+    const row = call(0)
+    row.time = 1000
+    pane.update([row])
+    const { tui, dimensions, frame } = fixture(pane, 46, 18)
+    try {
+      expect(frame()).toContain('2.5s')
+      now.mockReturnValue(4000)
+      expect(frame()).toContain('3.0s')
+      row.status = 'error'
+      row.label = 'failed operation'
+      row.endedAt = 4500
+      row.tool!.argsPreview = 'changed arguments'
+      row.tool!.errorText = 'changed error'
+      row.tool!.resultFull = 'first result line\nchanged full output'
+      now.mockReturnValue(9000)
+      expect(frame()).toContain('[ERROR]')
+      expect(frame()).toContain('failed operation · 3.5s')
+      expect(frame()).toContain('changed arguments')
+      expect(frame()).toContain('changed error')
+      expect(frame()).not.toContain('changed full output')
+      pane.focused = true
+      expect(frame()).toContain('›')
+      pane.handleInput('\r')
+      expect(frame()).toContain('changed full output')
+      row.tool!.resultFull += '\nnew output'
+      expect(frame()).toContain('new output')
+      dimensions.columns = 19
+      expect(frame().split('\n').every(line => visibleWidth(line) <= 19)).toBe(true)
+      dimensions.columns = 46
+      expect(frame()).toContain('failed operation · 3.5s')
+      pane.focused = false
+      expect(frame()).toContain('−')
+      expect(frame()).not.toContain('›')
+    } finally { tui.stop() }
+  })
+  it('discards cached rows when the timeline changes sessions', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+    const pane = new ToolActivityPane()
+    const row = call(0, 'ok')
+    pane.update([row])
+    const { tui, frame } = fixture(pane)
+    const render = vi.spyOn(Text.prototype, 'render')
+    try {
+      frame()
+      pane.update([])
+      expect(frame()).toContain('No activity yet.')
+      pane.update([row])
+      render.mockClear()
+      expect(frame()).toContain('tool_0')
+      expect(render.mock.calls.length).toBeGreaterThan(1)
+    } finally { tui.stop() }
+  })
   it('shows Targets above Debug and scrolls the tree independently by keyboard and mouse', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2000)
     const pane = new ToolActivityPane()
@@ -70,6 +143,9 @@ describe('agent tool activity', () => {
       expect(frame()).not.toContain('Target · 1')
       input('\r')
       expect(frame()).not.toContain('full output')
+      expect(frame()).toContain('Targets ▸')
+      input('\r')
+      expect(frame()).toContain('Targets ▾')
       input('\x1b[H')
       expect(frame()).toContain('Target · 1')
       input('\x1b[6~')
@@ -98,6 +174,128 @@ describe('agent tool activity', () => {
     expect(text(pane, width).split('\n').every(line => visibleWidth(line) <= width)).toBe(true)
   })
 
+  it('collapses the whole Targets box by mouse and reopens it from the focused header', () => {
+    const pane = new ToolActivityPane()
+    pane.update([call(0, 'ok')], [], [{ url: 'https://example.test/', primary: true }])
+    const { tui, frame, input } = fixture(pane, 64, 18)
+    try {
+      const debugRow = () => frame().split('\n').findIndex(line => line.includes('Agent Debug'))
+      const expandedHeight = debugRow()
+      input('\x1b[<0;4;1M')
+      input('\x1b[<0;4;1m')
+      expect(frame()).toContain('Targets ▸')
+      expect(frame()).not.toContain('https://example.test/')
+      expect(frame()).toContain('tool_0')
+      expect(debugRow()).toBe(1)
+      expect(tui.getFocusedComponent()).toBe(pane)
+      input('\r')
+      expect(frame()).toContain('Targets ▾')
+      expect(frame()).toContain('https://example.test/')
+      expect(debugRow()).toBe(expandedHeight)
+      expect(frame()).not.toContain('full output')
+      input(' ')
+      expect(frame()).not.toContain('https://example.test/')
+      input('\x1b[C')
+      expect(frame()).toContain('https://example.test/')
+      input('\t')
+      input('\r')
+      expect(frame()).toContain('full output')
+    } finally { tui.stop() }
+  })
+
+  it('keeps collapsed branches through URL updates and navigates their parents with arrow keys', () => {
+    const pane = new ToolActivityPane()
+    const index = new TargetIndex()
+    index.observe(1, 'https://example.test/', true)
+    index.observe(2, 'https://example.test/api/v1 https://example.test/api/v2')
+    pane.update([], [], index.getSnapshot())
+    const { tui, frame, input } = fixture(pane, 64, 18)
+    tui.setFocus(pane)
+    try {
+      frame()
+      input('\t')
+      input('\x1b[B')
+      input('\x1b[C')
+      input('\x1b[C')
+      input('\r')
+      expect(frame()).toContain('▸ Sub Target · 2')
+      expect(frame()).not.toContain('v1')
+      index.observe(3, 'https://example.test/new/v3')
+      pane.update([], [], index.getSnapshot())
+      expect(frame()).toContain('▸ Sub Target · 3')
+      expect(frame()).not.toContain('v3')
+      expect(frame()).toMatchSnapshot('collapsed sub target after discovery')
+      input(' ')
+      expect(frame()).toContain('v1')
+      expect(frame()).toContain('v3')
+      input('\x1b[C')
+      input('\x1b[D')
+      expect(frame()).toContain('▸ api')
+      expect(frame()).not.toContain('v1')
+      expect(frame()).toContain('v3')
+      input('\x1b[D')
+      input('\x1b[D')
+      expect(frame()).not.toContain('v3')
+      input('\x1b[D')
+      input('\x1b[D')
+      expect(frame()).not.toContain('Sub Target')
+      input('\x1b[C')
+      expect(frame()).toContain('▸ Sub Target')
+      input('\x1b[C')
+      input('\x1b[C')
+      expect(frame()).toContain('▸ api')
+      expect(frame()).toContain('v3')
+      pane.update([])
+      expect(frame()).not.toContain('Targets')
+      pane.update([], [], index.getSnapshot())
+      expect(frame()).toContain('v1')
+    } finally { tui.stop() }
+  })
+
+  it('toggles nested branches by mouse without collapsing siblings', () => {
+    const pane = new ToolActivityPane()
+    const index = new TargetIndex()
+    index.observe(1, 'https://example.test/', true)
+    index.observe(2, 'https://example.test/api/v1 https://example.test/other/v2')
+    pane.update([], [], index.getSnapshot())
+    const { tui, frame, input } = fixture(pane, 64, 18)
+    const click = (label: string) => {
+      const y = frame().split('\n').findIndex(line => line.includes(label))
+      expect(y).toBeGreaterThanOrEqual(0)
+      input(`\x1b[<0;8;${y + 1}M`)
+      input(`\x1b[<0;8;${y + 1}m`)
+    }
+    try {
+      click('▾ api')
+      expect(frame()).toContain('▸ api')
+      expect(frame()).not.toContain('v1')
+      expect(frame()).toContain('v2')
+      click('▸ api')
+      expect(frame()).toContain('v1')
+      click('Sub Target')
+      expect(frame()).not.toContain('v1')
+      expect(frame()).not.toContain('v2')
+      click('Sub Target')
+      expect(frame()).toContain('v1')
+      expect(frame()).toContain('v2')
+      click('▾ api')
+      input('\r')
+      expect(frame()).toContain('v1')
+      index.observe(3, Array.from({ length: 9 }, (_, id) => `https://example.test/path-${id}/item-${id}`).join(' '))
+      pane.update([], [], index.getSnapshot())
+      frame()
+      input('\x1b[F')
+      expect(frame()).toContain('item-8')
+      click('▾ path-8')
+      expect(frame()).not.toContain('item-8')
+      expect(frame()).toContain('item-7')
+      input('\r')
+      expect(frame()).toContain('▾ path-8')
+      input('\x1b[C')
+      expect(frame()).toContain('item-8')
+    } finally { tui.stop() }
+  })
+
   it('keeps every active job and the latest 20 settled statuses without repeating command text', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2000)
     const pane = new ToolActivityPane()
@@ -117,6 +315,25 @@ describe('agent tool activity', () => {
     expect(output).not.toContain('do not duplicate')
     pane.update([], [])
     expect(text(pane)).toContain('No activity yet.')
+  })
+
+  it('renders bounded job and MCP progress without reading job output', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+    const pane = new ToolActivityPane()
+    const row = call(1)
+    row.category = 'MCP'
+    row.status = 'executing'
+    row.progress = { progress: 3, message: 'working' }
+    const job: JobView = {
+      id: JobId('subagent-1'), kind: 'subagent', label: 'child', status: 'running',
+      progress: 'Inspecting files', startedAt: 1000, output: { total: 4096, earliest: 0 },
+    }
+    pane.update([row], [job])
+    const rendered = text(pane, 28)
+    expect(rendered).toContain('Progress 3')
+    expect(rendered).toContain('Inspecting files')
+    expect(rendered).not.toContain('4096')
+    expect(rendered.split('\n').every(line => visibleWidth(line) <= 28)).toBe(true)
   })
 
   it('shows call arguments and lifecycle states, then clears with the transcript', () => {
@@ -144,15 +361,37 @@ describe('agent tool activity', () => {
   it('follows new calls and lets the mouse wheel review earlier entries', () => {
     const pane = new ToolActivityPane()
     const items = Array.from({ length: 10 }, (_, id) => call(id))
-    pane.update(items)
+    pane.update(items, [], [], 'task: inspect service · elapsed: 1.0s')
     const { tui, frame, input } = fixture(pane, 46, 8)
     try {
       expect(frame()).toContain('tool_9')
-      pane.update([...items, call(10)])
+      const expandedItems = [...items, call(10)]
+      pane.update(expandedItems, [], [], 'task: inspect service · elapsed: 2.0s')
       expect(frame()).toContain('tool_10')
       for (let index = 0; index < 4; index++) input('\x1b[<64;2;3M')
       expect(frame()).not.toContain('tool_10')
       expect(frame()).toContain('Agent Debug')
+      pane.update(expandedItems, [], [], 'task: inspect service · elapsed: 3.0s')
+      expect(frame()).not.toContain('tool_10')
+      items[8]!.progress = { progress: 3, total: 10, message: 'still running' }
+      pane.update(expandedItems, [], [], 'task: inspect service · elapsed: 4.0s')
+      expect(frame()).not.toContain('tool_10')
+      expect(frame()).toContain('still running')
+    } finally { tui.stop() }
+  })
+
+  it('maps mouse rows after the wrapped Main Agent summary prefix', () => {
+    const pane = new ToolActivityPane()
+    pane.update([call(0, 'ok'), call(1, 'ok')], [], [], 'task: inspect the service')
+    const { tui, frame, input } = fixture(pane, 64, 14)
+    tui.setFocus(pane)
+    try {
+      const row = frame().split('\n').findIndex(line => line.includes('tool_1'))
+      expect(row).toBeGreaterThanOrEqual(0)
+      input(`\x1b[<0;2;${row + 1}M`)
+      input(`\x1b[<0;2;${row + 1}m`)
+      expect(frame()).toContain('full output')
+      expect(frame()).toContain('task: inspect the service')
     } finally { tui.stop() }
   })
 

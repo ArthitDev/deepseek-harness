@@ -1,0 +1,7 @@
+node_modules/
+config.yaml
+.env*
+*.log
+dist/
+zcode-proxy*
+src/proxy/captcha-worker-entry.bundle.js

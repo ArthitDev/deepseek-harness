@@ -15,6 +15,11 @@
 
 - id: system-prompt
   config:
+    preserveSections: true
+    requiredSections:
+      tools:calling: '1'
+      deployment:persona-prefix: '1'
+      deployment:persona-suffix: '1'
     includeHarnessIdentity: false
     personaSuffix: Your working directory is {{cwd}}.
     personaPrefix: >-
@@ -78,6 +83,9 @@
     # and stops it without leaving the browser surface.
     - id: pentest-loop
       name: '@deepseek-ai/dsh-pentest-executor/loop'
+
+    - id: pentest-assistance
+      name: '@deepseek-ai/dsh-pentest-executor/assistance'
 
     # Host-owned deterministic recon engine: recon_scan / recon_get_evidence
     # tools plus the reconRuns Remote namespace the Recon tab reads.
@@ -591,17 +599,43 @@
 
 # Antigravity through the in-repo proxy (packages/experimental/pi-tui/
 # tools/antigravity-proxy): the zero-download default. `setup.mjs` starts the
-# proxy on 127.0.0.1:8877 and walks the Google sign-in once; the same row in
+# proxy on 127.0.0.1:18877 and walks the Google sign-in once; the same row in
 # the pi-tui bundle covers the TUI. A home patch naming llm-pi-ai overrides
 # this row by id with its own roster.
 - id: llm-pi-ai
   name: '@deepseek-ai/dsh-llm-pi-ai'
   config:
     providers:
+      zcode-direct:
+        displayName: ZCode Direct
+        api: openai-completions
+        apiKeyEnv: ZCODE_DIRECT_API_KEY
+        baseURL: http://127.0.0.1:18080/v1
+        baseURLPortEnv: ZCODE_PORT
+        reasoning: low
+        compat:
+          thinkingFormat: zai
+        models:
+          - id: glm-5.3
+            name: GLM 5.3 (ZCode Direct)
+            contextWindow: 1000000
+            maxTokens: 128000
+            input: [text]
+            reasoningEfforts: { low: low, medium: medium, high: high, xhigh: xhigh }
+          - id: glm-5.3-flash
+            name: GLM 5.3 Flash (ZCode Direct)
+            contextWindow: 1000000
+            maxTokens: 128000
+            input: [text, image]
+            reasoningEfforts: { low: low, medium: medium, high: high, xhigh: xhigh }
       antigravity:
         displayName: Antigravity (Google)
         api: openai-completions
-        baseURL: http://127.0.0.1:8877/v1
+        baseURL: http://127.0.0.1:18877/v1
+        baseURLPortEnv: ANTIGRAVITY_PORT
+        # Local SDK placeholder; Google OAuth stays in the proxy.
+        headers:
+          Authorization: Bearer local-antigravity
         models:
           - id: gemini-3.1-pro
             name: Gemini 3.1 Pro

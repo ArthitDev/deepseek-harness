@@ -246,7 +246,14 @@ describe('SystemPrompt', () => {
 
     it('registers the harness identity and the configured deployment persona', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt, { personaPrefix: 'You are Shield Break Harness.' })
+      await ctx.plugin(SystemPrompt, {
+        personaPrefix: 'You are Shield Break Harness.',
+        requiredSections: {
+          'harness:identity': '1',
+          'deployment:persona-prefix': '1',
+          'deployment:persona-suffix': '1',
+        },
+      })
 
       const assembly = await ctx.systemPrompt.assemble()
       expect(assembly.sections.map(s => s.name)).toEqual([
@@ -271,6 +278,10 @@ describe('SystemPrompt', () => {
       await ctx.plugin(SystemPrompt, {
         includeHarnessIdentity: false,
         personaPrefix: 'You are a helpful software engineer assistant.',
+        requiredSections: {
+          'deployment:persona-prefix': '1',
+          'deployment:persona-suffix': '1',
+        },
       })
 
       const assembly = await ctx.systemPrompt.assemble()

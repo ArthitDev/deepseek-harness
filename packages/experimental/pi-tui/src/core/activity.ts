@@ -7,12 +7,13 @@ import type { ToolCardState } from './model.js'
 export interface ActivityEntry {
   seq: number
   key: string
-  category: 'Agent' | 'Tool' | 'Shell' | 'MCP' | 'File' | 'Approval' | 'Retry'
-  status: 'running' | 'ok' | 'error' | 'rejected' | 'waiting' | 'retry' | 'changed' | 'cancelled' | 'stopped'
+  category: 'Agent' | 'Tool' | 'Shell' | 'MCP' | 'File' | 'Approval' | 'Retry' | 'Sub Agent'
+  status: 'queued' | 'preparing' | 'executing' | 'running' | 'ok' | 'error' | 'rejected' | 'waiting' | 'retry' | 'changed' | 'cancelled' | 'stopped'
   label: string
   detail: string
   time: number
   endedAt?: number
+  progress?: { progress: number; total?: number; message?: string }
   tool?: ToolCardState
 }
 
@@ -26,15 +27,38 @@ export function recordActivity(entries: ActivityEntry[], event: SessionEvent, to
   const add = (entry: Omit<ActivityEntry, 'seq' | 'time'>) => {
     entries.push({ ...entry, seq: event.seq, time: event.time })
   }
-  if (event.type === 'tool/call' && tool !== undefined) {
-    add({ key: `tool:${tool.callId}`, category: tool.name.startsWith('mcp__') ? 'MCP'
-      : /^(terminal_|bash$|pwsh$|shell$)/.test(tool.name) ? 'Shell' : 'Tool',
-    status: 'running', label: tool.name, detail: event.data.arguments, tool })
+  if (event.type === 'assistant/message') {
+    for (const row of entries) {
+      if (row.category === 'Retry' && row.endedAt === undefined) {
+        row.status = 'ok'
+        row.endedAt = event.time
+      }
+    }
+    for (const block of event.data.message.content) {
+      if (block.type !== 'tool-call') continue
+      add({ key: `tool:${block.id}`, category: activityCategory(block.name), status: 'queued',
+        label: block.name, detail: block.arguments })
+    }
+  } else if (event.type === 'tool/call' && tool !== undefined) {
+    const row = entries.find(entry => entry.key === `tool:${tool.callId}`)
+    if (row !== undefined) {
+      row.status = 'preparing'
+      row.seq = event.seq
+      row.time = event.time
+      row.label = tool.name
+      row.detail = event.data.arguments
+      row.tool = tool
+    } else {
+      add({ key: `tool:${tool.callId}`, category: activityCategory(tool.name),
+        status: 'preparing', label: tool.name, detail: event.data.arguments, tool })
+    }
   } else if (event.type === 'tool/result' && tool !== undefined) {
     const row = entries.find(entry => entry.key === `tool:${tool.callId}`)
     if (row !== undefined) {
-      row.status = tool.status
+      row.status = event.data.error?.code === 'ABORTED' || event.data.error?.code === 'ABORTED_BEFORE_DISPATCH'
+        ? 'cancelled' : tool.status
       row.endedAt = event.time
+      delete row.progress
     }
     for (const diff of tool.diffs ?? []) {
       add({ key: `file:${event.seq}:${diff.path}`, category: 'File', status: 'changed',
@@ -51,6 +75,7 @@ export function recordActivity(entries: ActivityEntry[], event: SessionEvent, to
     for (const row of entries) {
       if (row.endedAt !== undefined) continue
       row.endedAt = event.time
+      delete row.progress
       if (row.category === 'Agent') {
         row.status = status
         row.detail = reason.kind === 'error' ? `${reason.error.code}: ${reason.error.message}` : reason.kind
@@ -58,13 +83,6 @@ export function recordActivity(entries: ActivityEntry[], event: SessionEvent, to
         row.status = status
       } else {
         row.status = reason.kind === 'aborted' ? 'cancelled' : 'stopped'
-      }
-    }
-  } else if (event.type === 'assistant/message') {
-    for (const row of entries) {
-      if (row.category === 'Retry' && row.endedAt === undefined) {
-        row.status = 'ok'
-        row.endedAt = event.time
       }
     }
   } else if (event.type === 'approval/asked') {
@@ -89,9 +107,29 @@ export function recordActivity(entries: ActivityEntry[], event: SessionEvent, to
         provider?: unknown
         delayMs?: unknown
         failure?: { message?: unknown; code?: unknown }
+        subCallId?: unknown
+        name?: unknown
+        arguments?: unknown
+        isError?: unknown
+        error?: { code?: unknown }
       }
     }
-    if (raw.type === 'llm/retry' && typeof raw.data.retryId === 'string'
+    if (raw.type === 'tool/ptc-dispatch-start' && typeof raw.data.subCallId === 'string'
+      && typeof raw.data.name === 'string') {
+      add({ key: `ptc:${raw.data.subCallId}`, category: activityCategory(raw.data.name), status: 'preparing',
+        label: raw.data.name,
+        detail: typeof raw.data.arguments === 'string' ? raw.data.arguments : JSON.stringify(raw.data.arguments),
+      })
+    } else if (raw.type === 'tool/ptc-dispatch' && typeof raw.data.subCallId === 'string') {
+      const subCallId = raw.data.subCallId
+      const row = entries.find(entry => entry.key === `ptc:${subCallId}`)
+      if (row !== undefined) {
+        row.status = raw.data.isError !== true ? 'ok'
+          : raw.data.error?.code === 'ABORTED' || raw.data.error?.code === 'ABORTED_BEFORE_DISPATCH' ? 'cancelled' : 'error'
+        row.endedAt = event.time
+        delete row.progress
+      }
+    } else if (raw.type === 'llm/retry' && typeof raw.data.retryId === 'string'
       && typeof raw.data.retry === 'number' && typeof raw.data.provider === 'string'
       && typeof raw.data.delayMs === 'number') {
       for (const row of entries) {
@@ -112,4 +150,9 @@ export function recordActivity(entries: ActivityEntry[], event: SessionEvent, to
     // Other plugin events do not contribute activity rows.
   }
   entries.splice(0, Math.max(0, entries.length - 20))
+}
+
+function activityCategory(name: string): ActivityEntry['category'] {
+  return name.startsWith('mcp__') ? 'MCP'
+    : /^(terminal_|bash$|pwsh$|shell$)/.test(name) ? 'Shell' : 'Tool'
 }

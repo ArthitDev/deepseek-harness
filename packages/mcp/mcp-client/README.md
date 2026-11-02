@@ -88,6 +88,8 @@ The model sees each tool under a stable server-qualified name: `mcp__<serverName
 
 When the model calls an MCP tool, the call runs against the remote server with a per-call timeout (default 60 seconds) and can be cancelled like any other tool call. The result comes back as ordinary text in block order; resource links appear as text with their name and URI. If the server reports an error, the call fails visibly — the model does not see a fake success.
 
+Valid SDK `onprogress` values emit process-local `tools/progress` events scoped to the executing agent. The bridge strips terminal control characters from string messages and caps them at 160 characters; updates do not reset the per-call timeout or enter Session history.
+
 Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
 
 ### Startup, updates, and reconnection

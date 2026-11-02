@@ -10,7 +10,7 @@ import { LspInstance, readHostSource } from '@deepseek-ai/dsh-lsp-stdio'
 import { encodeMessage } from '@deepseek-ai/dsh-lsp-stdio'
 import type { ConnectionSpawner, ConnectionWriter } from '@deepseek-ai/dsh-lsp-stdio/src/connection.ts'
 import type { InstanceSpec } from '@deepseek-ai/dsh-lsp-stdio/src/instance.ts'
-import type { LspProviderQuery, LspQueryResult } from '@deepseek-ai/dsh-lsp'
+import { LspProviderId, type LspProviderDiagnostics, type LspProviderQuery, type LspQueryResult } from '@deepseek-ai/dsh-lsp'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { spawnSubprocess } from '@deepseek-ai/dsh-subprocess-local/src/spawn.ts'
 
@@ -53,10 +53,14 @@ function makeInstance(
     cwd: ws,
     workspaceUri: pathToFileURL(ws).href,
     env: { ...scrubbedParentEnv(), ...env },
+    providerId: LspProviderId('fixture'),
     configuration: { setting: 42 },
     initializationOptions: { init: true },
     maxMessageBytes: 16_000_000,
     maxStderrBytes: 100_000,
+    diagnosticsTimeoutMs: 100,
+    maxDiagnostics: 200,
+    maxDiagnosticBytes: 128_000,
     shutdownTimeoutMs: 200,
     killGraceMs: 200,
     ...overrides,
@@ -80,6 +84,31 @@ async function run(instance: LspInstance, operation: LspProviderQuery['operation
   return instance.query(query(operation), source, signal)
 }
 
+/** Run diagnostics against the fixture file after reading it through the host filesystem. */
+async function runDiagnostics(instance: LspInstance, signal?: AbortSignal) {
+  const workspace = { target: await fs.resolve(ws), canonicalPath: ws, fileUrl: pathToFileURL(ws).href }
+  const source = await readHostSource(fs, 'a.ts', workspace, 4_000_000)
+  const request: LspProviderDiagnostics = { filePath: 'a.ts', workspaceRoot: ws, languageId: 'typescript' }
+  return instance.diagnostics(request, source, signal)
+}
+
+async function makeDiagnosticsInstance(
+  env: Record<string, string> = {},
+  overrides: Partial<InstanceSpec> = {},
+): Promise<LspInstance> {
+  const instance = makeInstance(env, overrides)
+  await run(instance)
+  return instance
+}
+
+const diagnostic = {
+  range: { start: { line: 0, character: 2 }, end: { line: 0, character: 3 } },
+  severity: 1,
+  source: 'fixture',
+  code: 'E1',
+  message: 'bad value',
+}
+
 /** Build an instance whose "server" is an inline node script (for teardown-escalation control). */
 function scriptInstance(script: string, overrides: Partial<InstanceSpec> = {}): LspInstance {
   const instance = new LspInstance({
@@ -88,10 +117,14 @@ function scriptInstance(script: string, overrides: Partial<InstanceSpec> = {}): 
     cwd: ws,
     workspaceUri: pathToFileURL(ws).href,
     env: scrubbedParentEnv(),
+    providerId: LspProviderId('script'),
     configuration: null,
     initializationOptions: null,
     maxMessageBytes: 16_000_000,
     maxStderrBytes: 100_000,
+    diagnosticsTimeoutMs: 100,
+    maxDiagnostics: 200,
+    maxDiagnosticBytes: 128_000,
     shutdownTimeoutMs: 150,
     killGraceMs: 150,
     ...overrides,
@@ -110,6 +143,68 @@ const RESPONDING_SERVER =
   + '}});'
 
 const locJson = () => JSON.stringify({ uri: pathToFileURL(join(ws, 'a.ts')).href, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } } })
+
+describe('LspInstance diagnostics', () => {
+  it('matches the exact version, increments versions after navigation, and accepts exact empty reports', async () => {
+    const instance = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: JSON.stringify([diagnostic]) })
+    await expect(runDiagnostics(instance)).resolves.toMatchObject({
+      providerId: 'fixture', documentVersion: 2, status: 'current',
+      diagnostics: [{ severity: 'error', message: 'bad value', source: 'fixture', code: 'E1', range: diagnostic.range }],
+      omitted: 0,
+    })
+    await expect(runDiagnostics(instance)).resolves.toMatchObject({ documentVersion: 3, status: 'current' })
+    const empty = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: '[]' })
+    await expect(runDiagnostics(empty)).resolves.toMatchObject({ status: 'current', diagnostics: [] })
+  })
+
+  it('labels unversioned reports and never turns stale or wrong-URI silence into clean', async () => {
+    const unversioned = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: JSON.stringify([diagnostic]), LSP_FAKE_DIAGNOSTICS_MODE: 'unversioned' })
+    await expect(runDiagnostics(unversioned)).resolves.toMatchObject({ status: 'unverified', diagnostics: [{ message: 'bad value' }] })
+    for (const mode of ['stale', 'wrong-uri', 'silence']) {
+      const instance = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: '[]', LSP_FAKE_DIAGNOSTICS_MODE: mode })
+      await expect(runDiagnostics(instance)).resolves.toMatchObject({ status: 'not-reported', diagnostics: [] })
+    }
+  })
+
+  it('labels invalid versions and malformed exact entries instead of reporting them as clean', async () => {
+    const badVersion = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: '[]', LSP_FAKE_DIAGNOSTICS_MODE: 'invalid-version' })
+    await expect(runDiagnostics(badVersion)).resolves.toMatchObject({ status: 'invalid', diagnostics: [] })
+    const malformed = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: JSON.stringify([{
+      ...diagnostic,
+      range: { ...diagnostic.range, start: { line: -1, character: 0 } },
+    }]) })
+    await expect(runDiagnostics(malformed)).resolves.toMatchObject({ status: 'invalid', diagnostics: [], omitted: 1 })
+  })
+
+  it('deduplicates and bounds diagnostics when retaining a notification', async () => {
+    const instance = await makeDiagnosticsInstance({
+      LSP_FAKE_DIAGNOSTICS: JSON.stringify([diagnostic, diagnostic, { ...diagnostic, message: 'other' }]),
+    }, { maxDiagnostics: 1 })
+    await expect(runDiagnostics(instance)).resolves.toMatchObject({
+      status: 'current', diagnostics: [{ message: 'bad value' }], omitted: 1,
+    })
+  })
+
+  it('enforces the exact serialized-field byte cap and counts an oversized single diagnostic', async () => {
+    const normalized = {
+      range: diagnostic.range, severity: 'error', message: diagnostic.message,
+      source: diagnostic.source, code: diagnostic.code,
+    }
+    const exact = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: JSON.stringify([diagnostic]) }, {
+      maxDiagnosticBytes: Buffer.byteLength(JSON.stringify(normalized)),
+    })
+    await expect(runDiagnostics(exact)).resolves.toMatchObject({ status: 'current', diagnostics: [normalized], omitted: 0 })
+    const tiny = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: JSON.stringify([diagnostic]) }, { maxDiagnosticBytes: 1 })
+    await expect(runDiagnostics(tiny)).resolves.toMatchObject({ status: 'current', diagnostics: [], omitted: 1 })
+  })
+
+  it('serializes concurrent diagnostics and allocates a new document version for each open', async () => {
+    const instance = await makeDiagnosticsInstance({ LSP_FAKE_DIAGNOSTICS: '[]' })
+    const results = await Promise.all([runDiagnostics(instance), runDiagnostics(instance)])
+    expect(results.map(result => result.documentVersion).sort()).toEqual([2, 3])
+    expect(results.every(result => result.status === 'current')).toBe(true)
+  })
+})
 
 describe('LspInstance server-request handling', () => {
   it('answers workspace/configuration with the static config per item', async () => {

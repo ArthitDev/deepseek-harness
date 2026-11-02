@@ -1,5 +1,5 @@
 ---
-description: "The stdio language-server provider for ctx.lsp: configured server commands, extension mappings, and bounded transient-open queries, for users and maintainers composing local code navigation."
+description: "The stdio language-server provider for ctx.lsp: configured commands, extension mappings, navigation, and bounded diagnostics, for users and maintainers composing local language servers."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use `dsh-lsp-stdio` to give agents definitions, references, implementations, and hover from explicitly configured local language servers. It maps file extensions to language identifiers, starts one server per workspace on demand, and reads each queried file afresh without retaining document state between queries. Language-server processes and source reads share the mounted filesystem and subprocess environment. The package does not install servers or provide a sandbox: deployments supply commands, mappings, and any required confinement. Queries are serialized per server and workspace, while different workspaces can run in parallel.
+Use `dsh-lsp-stdio` to give agents definitions, references, implementations, hover, and on-demand diagnostics from explicitly configured local language servers. It maps file extensions to language identifiers, starts one server per workspace on demand, and reads each requested file afresh. Diagnostics report the opened document version and digest, plus whether the server returned a current, unverified, missing, changed, or invalid report. Language-server processes and source reads share the mounted filesystem and subprocess environment. The package does not install servers or provide a sandbox.
 
 ## Table of Contents
 
@@ -57,6 +57,10 @@ The `servers` record maps each stable provider id to one server command. The pro
 | `maxMessageBytes` | `16000000` | Largest single framed message accepted from the server |
 | `maxStderrBytes` | `1000000` | Largest stderr tail retained for diagnostics |
 | `maxDocumentBytes` | `4000000` | Largest source file this host opens |
+| `diagnosticsTimeoutMs` | `5000` | Maximum time to wait for initialization and a diagnostics publish |
+| `diagnosticsOperationTimeoutMs` | `30000` | Maximum time for diagnostics canonicalization, queueing, reads, and server work |
+| `maxDiagnostics` | `200` | Maximum normalized findings retained per file |
+| `maxDiagnosticBytes` | `128000` | Maximum serialized diagnostic fields retained per result |
 | `shutdownTimeoutMs` | `5000` | Graceful `shutdown`/`exit` budget before escalation |
 | `killGraceMs` | `2000` | Request-cancel and SIGTERM→SIGKILL escalation grace |
 
@@ -64,11 +68,11 @@ The `servers` record maps each stable provider id to one server command. The pro
 
 ### What a query does
 
-On the first query for a workspace, the provider launches one server process for that workspace and keeps it pooled. Each query reads the current source through `ctx.fs`, opens it in the server (`textDocument/didOpen`), runs the requested operation, and closes it — so the server always sees current text and no document state persists between calls. Queries to one server and workspace run one at a time; different workspaces run in parallel. If the pooled process fails before or during a read-only query, the provider retries that query once on a fresh process.
+On the first query for a workspace, the provider launches one server process for that workspace and keeps it pooled. Each navigation query reads the current source through `ctx.fs`, opens it in the server, runs the requested operation, and closes it. A diagnostics request opens one versioned document, waits for a matching publish notification, closes it, then rereads the source; if the bytes changed, the result contains no findings and has status `changed`. The full diagnostics operation has its own timeout, while `diagnosticsTimeoutMs` bounds initialization and the publish wait. Queries to one server and workspace run one at a time; different workspaces can run in parallel.
 
 ### Observable success and failures
 
-A successful navigation returns normalized locations, and hover returns normalized text or a no-hover notice; empty results are successful no-result responses. The query fails when the server does not support the operation or the transient open/close synchronization (`LSP_UNSUPPORTED_OPERATION`), when the source is missing, non-regular, non-UTF-8, oversized, or outside the canonical workspace (rejected before the server starts), or when the server returns a malformed payload (`LSP_MALFORMED_RESPONSE`). A hard-killed harness leaves servers running until they exit on their own — graceful shutdown happens only through service disposal.
+A successful navigation returns normalized locations, and hover returns normalized text or a no-hover notice. Diagnostics distinguishes exact-version `current` reports from unversioned `unverified` reports; `current` means the matching version was observed at that time, not that the report is complete or a replacement for tests. Silence is `not-reported`, malformed entries produce `invalid`, and a changed source produces `changed` with findings suppressed. None of these states proves the file is clean. Unsupported transient open/close synchronization fails with `LSP_UNSUPPORTED_OPERATION`; an operation-wide timeout fails with `LSP_DIAGNOSTICS_TIMEOUT`. A hard-killed harness leaves servers running until they exit on their own — graceful shutdown happens only through service disposal.
 
 ### Security boundary
 
@@ -87,7 +91,7 @@ This section explains the design decisions behind the provider and where the cod
 ### Design philosophy
 
 - **Generic host, not a catalog.** Deployments configure commands and mappings explicitly; presets belong in `cordis.yml` overlays, not in this package.
-- **Compatibility-first transient open.** Every query runs `didOpen` (version 1, full text) → request → `didClose`, so the server always sees current bytes and the first version needs no `didChange`, content cache, or document LRU.
+- **Compatibility-first transient open.** Every query runs `didOpen` (a monotonically increasing document version and full text) → request → `didClose`, so the server always sees current bytes and no `didChange`, content cache, or document LRU is needed.
 - **Read before spawn.** The source is resolved, contained, and byte-bounded inside the workspace queue before any process is created, so a queued query sees current bytes when its turn starts and an invalid source cannot leave an idle process pooled.
 - **One pooled process per canonical workspace.** Instances are single-flighted per `(server id, canonical workspace target)`; a transport failure retries the read-only query once on a fresh process after awaiting disposal.
 - **Per-workspace serialization.** One abortable queue per workspace serializes source-read/open/query/close lifecycles; distinct workspaces run in parallel, and a cancellation that fails to stop a server terminates only that instance.

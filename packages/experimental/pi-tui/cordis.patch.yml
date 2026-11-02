@@ -17,6 +17,10 @@
   config:
     agents: []
 
+- id: spill-policy
+  config:
+    maxInlineTokens: 4096
+
 # ── dsh-pi-tui rows ─────────────────────────────────────────────────────────
 
 - insert:
@@ -103,6 +107,9 @@
     - id: pentest-loop
       name: '@deepseek-ai/dsh-pentest-executor/loop'
 
+    - id: pentest-assistance
+      name: '@deepseek-ai/dsh-pentest-executor/assistance'
+
     - id: recon-engine
       name: '@deepseek-ai/dsh-recon-engine'
       config:
@@ -123,7 +130,7 @@
       name: '@deepseek-ai/dsh-remote-machines'
 
     # Antigravity through the in-repo proxy (tools/antigravity-proxy): the
-    # zero-download default. `setup.mjs` starts the proxy on 127.0.0.1:8877
+    # zero-download default. `setup.mjs` starts the proxy on 127.0.0.1:18877
     # and walks the Google sign-in in the browser once. A deployment
     # preferring the external CLIProxyAPI gateway overrides this row by id —
     # a home patch replaces the whole config, so such a row restates its own
@@ -132,10 +139,36 @@
       name: '@deepseek-ai/dsh-llm-pi-ai'
       config:
         providers:
+          zcode-direct:
+            displayName: ZCode Direct
+            api: openai-completions
+            apiKeyEnv: ZCODE_DIRECT_API_KEY
+            baseURL: http://127.0.0.1:18080/v1
+            baseURLPortEnv: ZCODE_PORT
+            reasoning: low
+            compat:
+              thinkingFormat: zai
+            models:
+              - id: glm-5.3
+                name: GLM 5.3 (ZCode Direct)
+                contextWindow: 1000000
+                maxTokens: 128000
+                input: [text]
+                reasoningEfforts: { low: low, medium: medium, high: high, xhigh: xhigh }
+              - id: glm-5.3-flash
+                name: GLM 5.3 Flash (ZCode Direct)
+                contextWindow: 1000000
+                maxTokens: 128000
+                input: [text, image]
+                reasoningEfforts: { low: low, medium: medium, high: high, xhigh: xhigh }
           antigravity:
             displayName: Antigravity (Google)
             api: openai-completions
-            baseURL: http://127.0.0.1:8877/v1
+            baseURL: http://127.0.0.1:18877/v1
+            baseURLPortEnv: ANTIGRAVITY_PORT
+            # Local SDK placeholder; the proxy owns Google OAuth and never forwards this header.
+            headers:
+              Authorization: Bearer local-antigravity
             models:
               - id: gemini-3.1-pro
                 name: Gemini 3.1 Pro

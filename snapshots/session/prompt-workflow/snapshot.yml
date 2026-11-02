@@ -1,0 +1,11 @@
+version: 1
+scenario: prompt-workflow
+profile: headless
+composition: prompt-workflow
+recording: authored
+platform: pwsh
+header:
+  class: prompt-workflow
+  pin: true
+  childSystemPrompts: [1]
+  childToolSchemas: [1]

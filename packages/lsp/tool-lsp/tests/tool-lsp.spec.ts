@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import Lsp, { LspProviderId, type LspProvider, type LspProviderQuery, type LspQueryResult } from '@deepseek-ai/dsh-lsp'
+import Lsp, { LspProviderId, type LspDiagnosticsResult, type LspProvider, type LspProviderQuery, type LspQueryResult } from '@deepseek-ai/dsh-lsp'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import { DEFAULT_LSP_TOOL_TIMEOUT_MS, LSP_PROMPT_TEXT } from '@deepseek-ai/dsh-tool-lsp'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -47,11 +47,11 @@ const resolvedWorkspaceRoot = resolve('/virtual/real-workspace')
 const resolvedWorkspaceUri = pathToFileURL(resolvedWorkspaceRoot).href
 const workspaceAlias = resolve('/virtual/workspace-alias')
 /** `cwd: null` means "no agent" (tests LSP_WORKSPACE_REQUIRED); a string is the session cwd. */
-function call(ctx: Context, args: unknown, cwd: string | null = workspaceRoot) {
+function call(ctx: Context, args: unknown, cwd: string | null = workspaceRoot, name = 'lsp') {
   return ctx.tools.execute({
     signal: testToolSignal,
     callId: `c-${++seq}` as never,
-    name: 'lsp',
+    name,
     arguments: args,
     ...cwd !== null ? { agent: { session: { header: { cwd } } } as never } : {},
   })
@@ -67,6 +67,7 @@ describe('tool-lsp registration', () => {
   it('registers the lsp tool and its prompt section', async () => {
     const { ctx } = await mount(stubProvider(() => okLocations))
     expect(ctx.tools.get('lsp')).toBeDefined()
+    expect(ctx.tools.get('lsp_diagnostics')).toBeDefined()
     const prompt = await ctx.systemPrompt.assemble()
     const text = prompt.sections.map(s => s.text).join('\n')
     expect(text).toContain(LSP_PROMPT_TEXT)
@@ -110,6 +111,30 @@ describe('tool-lsp registration', () => {
 })
 
 describe('tool-lsp execution', () => {
+  it('renders diagnostics with freshness and document identity', async () => {
+    const result: LspDiagnosticsResult = {
+      workspaceUri: 'file:///workspace', fileUri: 'file:///workspace/a.ts', providerId: LspProviderId('stub'),
+      documentVersion: 7, documentDigest: 'sha256', observedAt: '2026-11-02T00:00:00.000Z',
+      status: 'unverified', diagnostics: [{
+        severity: 'warning', message: 'check this', source: 'ts', code: 1,
+        range: { start: { line: 2, character: 3 }, end: { line: 2, character: 5 } },
+      }], omitted: 2,
+    }
+    const provider: LspProvider = {
+      id: LspProviderId('stub'), extensionToLanguage: { '.ts': 'typescript' },
+      query: () => Promise.resolve(okLocations),
+      diagnostics: () => Promise.resolve(result),
+    }
+    const { ctx } = await mount(provider)
+    const output = await call(ctx, { file_path: 'a.ts' }, workspaceRoot, 'lsp_diagnostics')
+    expect(output).toMatchObject({ isError: false, value: result })
+    const first = output.content[0]
+    if (first === undefined || first.type !== 'text') throw new Error('expected a text block first')
+    expect(first.text).toContain('Diagnostics unverified')
+    expect(first.text).toContain('file:///workspace/a.ts')
+    expect(first.text).toContain('2 diagnostics omitted.')
+  })
+
   it('converts one-based coordinates and passes the session cwd as workspaceRoot', async () => {
     const provider = stubProvider(() => okLocations)
     const { ctx } = await mount(provider)

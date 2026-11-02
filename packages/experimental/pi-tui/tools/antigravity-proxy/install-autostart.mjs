@@ -4,10 +4,8 @@
 // The directory defaults to $CLIPROXY_DIR, else ~/.dsh/cliproxy.
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, resolve } from 'node:path'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const cliproxyDir = resolve(
   process.argv[2] ?? process.env.CLIPROXY_DIR ?? join(homedir(), '.dsh', 'cliproxy'),
 )

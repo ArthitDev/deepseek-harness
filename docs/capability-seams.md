@@ -285,6 +285,7 @@ flowchart LR
   svc_pentestRunController["ctx.pentestRunController<br/>Penetration-test run Remote controller"]
   svc_pentestModePolicy["ctx.pentestModePolicy<br/>Team-mode execution policy"]
   svc_pentestLoop["ctx.pentestLoop<br/>Penetration-test control loop"]
+  svc_pentestAssistance["ctx.pentestAssistance<br/>Run-wide request accounting and progress assistance"]
   svc_webSearchPolicy["ctx.webSearchPolicy<br/>Global web-search policy"]
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
@@ -364,6 +365,7 @@ flowchart LR
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
+  pkg_pentest_executor --> svc_pentestAssistance
   pkg_pentest_executor --> svc_pentestLoop
   pkg_pentest_executor --> svc_pentestModePolicy
   pkg_pentest_run --> svc_pentestRunController
@@ -693,6 +695,7 @@ flowchart LR
 | `ctx.pentestRunController` | `core` | [`pentest-run`](../packages/pentest/pentest-run) | - | - | - | Projects canonical run snapshots and operator mutations onto the generated pentestRuns Remote namespace. |
 | `ctx.pentestModePolicy` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | Owns the persisted Red, Blue, or Black Team mode and contributes its mode-specific operating prompt to ordinary Sessions. |
 | `ctx.pentestLoop` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | Owns at most one host-process control loop per run while durable progress remains in the pentestRuns service across restarts. |
+| `ctx.pentestAssistance` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | Shares target request limits across episodes, bounds advisory reviews, and retrieves source-attributed Wiki and run evidence. |
 | `ctx.webSearchPolicy` | `core` | [`tool-web`](../packages/web/tool-web) | - | - | - | Owns the persisted Always-use-web-search setting read by preset-scoped Web tools without forcing search in the default mode. |
 
 Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.

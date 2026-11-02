@@ -43,3 +43,33 @@
             models:
               - id: deepseek-v4-flash
               - id: deepseek-v4-pro
+
+    - id: pi-tui-context-capture
+      name: '../../../packages/experimental/pi-tui/tests/fixtures/context-capture.mjs'
+      disabled: !!js process.env.DSH_CONTEXT_CAPTURE_TEST !== '1'
+
+- id: bash-sandbox
+  name: '@deepseek-ai/dsh-bash-sandbox'
+  disabled: !!js process.platform === 'win32' && process.env.DSH_CONTEXT_CAPTURE_TEST !== '1'
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32' && process.env.DSH_CONTEXT_CAPTURE_TEST !== '1'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32' || process.env.DSH_CONTEXT_CAPTURE_TEST === '1'
+
+- id: pwsh-sandbox
+  name: '@deepseek-ai/dsh-pwsh-sandbox'
+  disabled: !!js process.platform !== 'win32' || process.env.DSH_CONTEXT_CAPTURE_TEST === '1'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots: !!js "process.env.DSH_CONTEXT_CAPTURE_TEST === '1' ? [] : [{ name: 'default', path: dshHomePath('knowledge'), bootstrap: true }]"
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  disabled: !!js process.env.DSH_CONTEXT_CAPTURE_TEST === '1'

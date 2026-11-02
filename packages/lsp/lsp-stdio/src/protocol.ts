@@ -72,6 +72,14 @@ export interface WireServerCapabilities {
   readonly referencesProvider?: WireProviderCapability
   readonly implementationProvider?: WireProviderCapability
   readonly hoverProvider?: WireProviderCapability
+  readonly diagnosticProvider?: WireProviderCapability
+}
+
+/** Raw publish-diagnostics notification params. Every field is untrusted process output. */
+export interface WirePublishDiagnosticsParams {
+  readonly uri?: unknown
+  readonly version?: unknown
+  readonly diagnostics?: unknown
 }
 
 /** The `initialize` result envelope. */

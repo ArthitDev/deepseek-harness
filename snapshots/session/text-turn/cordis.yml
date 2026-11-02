@@ -42,6 +42,12 @@
 - id: system-prompt
   name: '@deepseek-ai/dsh-system-prompt'
   config:
+    preserveSections: true
+    requiredSections:
+      tools:calling: '1'
+      deployment:persona-prefix: '1'
+      deployment:persona-suffix: '1'
+      harness:identity: '1'
     personaPrefix: |
       You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
 

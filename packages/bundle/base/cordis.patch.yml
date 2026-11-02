@@ -509,6 +509,12 @@
     - id: system-prompt
       name: '@deepseek-ai/dsh-system-prompt'
       config:
+        preserveSections: true
+        requiredSections:
+          tools:calling: '1'
+          deployment:persona-prefix: '1'
+          deployment:persona-suffix: '1'
+          harness:identity: '1'
         personaPrefix: ''
 
     # Agents created at startup. The base stays empty; raw overlays may create

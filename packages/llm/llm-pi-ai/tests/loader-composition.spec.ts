@@ -1,8 +1,8 @@
 /** Profile patch edits and credential updates reach the next real adapter request. */
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -37,9 +37,9 @@ afterEach(async () => {
 })
 
 /** Boot the dormant composition: a bare `llm-pi-ai` row with no config at all. */
-async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }> {
+async function loadComposition(directPatch = ''): Promise<{ ctx: Context; settingsPath: string }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-pi-composition-'))
-  await writeFile(join(root, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_COMPOSITION_KEY: key-from-store\n', { mode: 0o600 })
+  await writeFile(join(root, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_COMPOSITION_KEY: key-from-store\n  ZCODE_DIRECT_API_KEY: fake-direct-key\n', { mode: 0o600 })
 
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -53,7 +53,7 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
     '- id: llm-pi-ai',
     "  name: '@deepseek-ai/dsh-llm-pi-ai'",
     '',
-  ].join('\n'))
+  ].join('\n') + directPatch)
 
   const ctx = new Context()
   context = ctx
@@ -83,6 +83,43 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
 }
 
 describe('llm-pi-ai real dormant composition', () => {
+  it.each([
+    ['tui', 'zcode-direct', 'glm-5.3', 'ZCODE_PORT'], ['tui', 'zcode-direct', 'glm-5.3-flash', 'ZCODE_PORT'],
+    ['web', 'zcode-direct', 'glm-5.3', 'ZCODE_PORT'], ['web', 'zcode-direct', 'glm-5.3-flash', 'ZCODE_PORT'],
+    ['tui', 'antigravity', 'gemini-3.5-flash', 'ANTIGRAVITY_PORT'], ['web', 'antigravity', 'gemini-3.5-flash', 'ANTIGRAVITY_PORT'],
+  ])('loads the shipped %s %s preset and streams %s without a router', async (surface, provider, model, portEnv) => {
+    const server = await mockServer([{ events: textEvents }])
+    vi.stubEnv(portEnv, new URL(server.url).port)
+    vi.stubEnv('ZCODE_DIRECT_API_KEY', '')
+    const bundle = surface === 'tui' ? 'packages/experimental/pi-tui/cordis.patch.yml' : 'packages/bundle/web-app/cordis.patch.yml'
+    const lines = (await readFile(resolve(import.meta.dirname, '../../../..', bundle), 'utf8')).split('\n')
+    const start = lines.findIndex(line => line.trim() === `${provider}:`)
+    expect(start).toBeGreaterThan(-1)
+    const indent = lines[start]!.search(/\S/)
+    let end = start + 1
+    while (end < lines.length && (!lines[end]!.trim() || lines[end]!.search(/\S/) > indent)) end++
+    const directPatch = '  config:\n    providers:\n' + lines.slice(start, end).map(line => '      ' + line.slice(indent)).join('\n') + '\n'
+    const { ctx } = await loadComposition(directPatch)
+    expect(ctx.llm.listProviders().map(item => item.id)).toEqual([provider])
+    expect((await ctx.llm.resolveModelInfo(provider, model)).context?.contextWindow).toBe(1_000_000)
+    const result = await assemble(ctx, { provider, model, messages: [] })
+    expect(result.message.content).toMatchInlineSnapshot(`
+      [
+        {
+          "text": "hello",
+          "type": "text",
+        },
+      ]
+    `)
+    expect(server.paths).toEqual(['/v1/chat/completions'])
+    expect(server.headers[0]?.authorization).toBe(provider === 'zcode-direct' ? 'Bearer fake-direct-key' : 'Bearer local-antigravity')
+    expect(server.requests[0]).toMatchObject({ model })
+    if (provider === 'zcode-direct') {
+      expect((await ctx.llm.resolveModelInfo(provider, model)).reasoning?.defaultEffort).toBe('low')
+      expect(server.requests[0]).toMatchObject({ thinking: { type: 'enabled' } })
+    }
+  })
+
   it('boots with zero routes and registers one the moment settings supply a profile', async () => {
     vi.stubEnv('PI_COMPOSITION_KEY', '')
     const server = await mockServer([{ events: textEvents }])

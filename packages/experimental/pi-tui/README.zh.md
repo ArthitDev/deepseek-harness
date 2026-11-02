@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`dsh-pi-tui` 是 Shield Break Harness 的终端入口：驱动 Web profile 同一 agent 运行时的全屏 TUI。会话保存在共享的 `~/.dsh/sessions` 存储中，这里开启的会话可以在 Web GUI 中重新打开，反之亦然。TUI 渲染流式 Markdown、可折叠思考过程与工具卡片，并在进程内挂载 agent preset、渗透测试控制面（`/runs`、`/recon`）与已保存的 SSH 机器（`/machines`）。使用 `dsh tui` 启动 —— 源码检出先运行 `tools/antigravity-proxy/setup.mjs` 创建 `tui` profile。`--resume`、`--preset`、`--machine` 分别选择会话、preset 与执行目标。需要交互式终端。
+`dsh-pi-tui` 在 Web profile 的 agent 运行时上提供全屏终端界面。会话保存在 `~/.dsh/sessions`，可在 TUI 与 Web 之间重新打开。它渲染流式 Markdown、思考与工具卡片，并提供 agent preset、渗透测试控制（`/runs`、`/recon`）和已保存的 SSH 机器（`/machines`）。安装 `tui` profile 后，在交互式终端中运行 `dsh tui`。`--resume`、`--preset` 和 `--machine` 分别选择会话、preset 和执行目标。Antigravity 需要单独执行[设置步骤](#connect-antigravity)。
 
 ## 目录
 
@@ -30,11 +30,23 @@ kind: "package-bundle"
 
 启动时先等待预设注册表和模型默认值就绪，再创建会话；缺少服务会阻止 TUI 激活。新会话使用共享 Web 设置中与所选提供方和模型绑定的预设；未绑定时使用配置的默认预设。`--preset <id>` 优先；恢复的会话保留其记录的预设。
 
+源码检出在每次交互式启动时于后台启动透明 SB 转发服务。[内置 ZCode 代理](../../../third-party/zcode-api/INTEGRATION.md)在首次实际发出 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求时启动；选择其他提供方不会启动 ZCode 辅助进程。同一 TUI 进程中的并发请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。健康服务会被复用，并在 TUI 关闭后继续运行。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
+
+`pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式请参阅 [ZCode 集成](../../../third-party/zcode-api/INTEGRATION.md)。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
+
+迁移到另一台机器时，复制包含 `scripts/` 和 `third-party/` 的完整检出，安装 Node `^22.19 || >=24`、pnpm 与 Bun，再运行 `pnpm install`、`pnpm zcode:setup` 和 `pnpm build`。单独安装并配置系统 9router，注册目标机器的 ZCode 端点与密钥，并在该机器登录 ZCode。提供方路径为 Harness → 9router → ZCode → 提供方；可选 SB 转发位于 Harness 与 9router 之间。下文列出的本地集成必须另行恢复；仅复制 npm TUI 包不包含检出级启动脚本。
+
+`pnpm sb:start` 在仅限本机的 `18899` 端口启动无需额外依赖的 OpenAI 转发服务；`sb:status`、`sb:stop` 和 `sb:restart` 仅管理身份已验证且进程已记录的服务。`sb:install` 是 start 的别名，不创建操作系统启动任务。`SB_PORT`、`SB_BACKEND`（默认 `http://127.0.0.1:20128/v1`）、`SB_TIMEOUT_MS`（上游空闲超时，默认 120000）和 `DSH_HOME` 可覆盖部署设置。`GET /health` 返回服务身份与后端配置，不检查上游凭据。日志位于 `<DSH_HOME>/logs/sb-transport-<port>.log`，默认使用 `~/.dsh`。端口被其他服务占用时显示启动提示，不修改已有监听进程。
+
+SB 原样转发 `/v1/*`、请求体、凭据、工具与流式响应，不改写提示词、不侦察也不执行命令。默认转发调用方的路由器凭据，除非显式设置 `SB_BACKEND_KEY`。提供方 base URL 设为 `http://127.0.0.1:18899/v1` 才使用此转发；已有直连 9router 路由保持直连。请求限制为 32 MiB，上游故障返回 502 或 504，客户端断开时取消转发，不重试模型请求。响应头 `Server-Timing` 测量上游返回响应头之前的时间，不代表模型总延迟。`pnpm sb:test` 使用本地 mock 验证迁移与转发，不验证真实提供方。TUI 和 `sb:*` 命令不启动旧版 `sb-proxy-v6.cjs` 流程。此转发无需 Skill、Wiki 或 Kali，它们仍属于本地集成。
+
 `/resume` 和 `--resume` 只回放一次所选会话的完整快照，包括继承的 fork seed。父会话 id 仅记录继承关系，渲染 transcript 时不打开父日志。祖先会话缺失不会阻止已保存的子会话显示继承消息。回放不会修改会话文件。
 
-TUI 默认仅为最新 20 个 transcript 项创建并保留视图，计入消息、思考、工具和提示。流式更新仅刷新保留的视图，并复用最近一次的会话费用总额。较早项目仍保留在 transcript 数据中以供搜索和导出；只有显示这些项目时才加载其视图和图片。`/expand-all` 显示所有项目，再次执行恢复限制。可将 `pi-tui` 配置行的 `historyLimit` 设为正整数来调整窗口。此限制不会截断会话日志或 Agent 的模型上下文；回放仍读取完整日志。
+TUI 默认仅为最新 20 个 transcript 项创建并保留视图，计入消息、思考、工具和提示。流式更新仅刷新保留的视图，并复用最近一次的会话费用总额。Agent Debug 在渲染文本和宽度未变时，为每个保留的活动缓存一条换行结果；活动移除时释放其缓存。较早项目仍保留在 transcript 数据中以供搜索和导出；只有显示这些项目时才加载其视图和图片。`/expand-all` 显示所有项目，再次执行恢复限制。可将 `pi-tui` 配置行的 `historyLimit` 设为正整数来调整窗口。此限制不会截断会话日志或 Agent 的模型上下文；回放仍读取完整日志。
 
 打开已保存的对话历史时会添加一行回顾；`/recap` 可按需再次显示。回顾摘录最新的用户请求、助手回复以及活动检查点中的当前工作和下一步，最多 400 个 Unicode 码点。检查点信息单独标注，因为后续消息可能已改变这些信息。回顾读取当前派生历史，因此不包含已清除、回退或被压缩替代的消息。它不调用模型、不写入会话事件，也不添加模型上下文；不会在后台空闲时生成回顾。
+
+`/context` 会打开只读视图，比较本进程中最近一次观察到的主循环请求、会话当前保留内容，以及排队的下一步和下一轮输入。视图会分别标记固定密度估算值、token-meter 压力、供应商用量、未知值和输出预留；扁平化系统提示各部分的来源与大小仍未知。`requiredSections` 仅作为注册要求显示，不代表某个 section 已发送。每个活动 Session 只保留数值元数据，不显示提示词、消息正文、工具参数或凭据。恢复的 Session 在本进程中有请求到达模型之前不会显示上次请求捕获。
 
 继承的[自动压缩后端](../../compaction/compaction-basic/README.zh.md#tuning-when-condensation-starts)独立于 20 项显示窗口管理上下文。它默认启用，在步骤之间检查 token 压力，将较早历史总结为结构化检查点，并逐字保留最近一段内容。空闲时可用 `/compact` 手动触发。摘要记录意图、文件、修复、待办工作、下一步和关键上下文；摘要仍可能遗漏细节，但原始事件保留在持久日志中。
 
@@ -102,7 +114,7 @@ dsh --profile tui --dump-config
 
 TUI 在选择模型或创建会话时读取 Web 配置档补丁中的预设覆盖值，因此 Web 绑定修改也会在这里生效。横幅和状态栏显示已挂载的预设；预设缺失时拒绝创建会话，不会在缺少其插件组合的情况下启动。
 
-TUI 在启动时及组装提示词前强制关闭提示词抑制，即使 TUI 或 Web 已保存启用值也如此；不修改保存的文件。组装监听器不得删除、修改或重排已注册的系统段落。显式编写的完整 persona 仍作为完整提示词。在 agent-loop 和压缩请求到达适配器前，TUI 要求首条系统消息非空，且所有系统消息与会话的有效历史完全一致。系统消息缺失、截断、重排或替换时，请求直接失败，不使用降级提示词。恢复、压缩及切换预设或模型后同样检查。这些检查验证提示词经过 Harness 的传递，不保证模型服从或提供方的内部处理；辅助标题请求使用自身的提示词。
+TUI 在启动时以及每次组装读取 provider 前的按作用域筛选 `system-prompt/prepare` 事件中强制关闭提示词抑制；不修改已保存的 TUI 或 Web 文件。组装监听器不得删除、修改或重排已注册的系统段落。显式编写的完整 persona 仍作为完整提示词。在 agent-loop 和压缩请求到达适配器前，TUI 要求首条系统消息非空，且所有系统消息与会话的有效历史完全一致。系统消息缺失、截断、重排或替换时，请求直接失败，不使用降级提示词。恢复、压缩及切换预设或模型后同样检查。这些检查验证提示词经过 Harness 的传递，不保证模型服从或提供方的内部处理；辅助标题请求使用自身的提示词。
 
 `/suppress-prompt`（别名 `/suppress-promot`）和 `status` 显示 OFF，并注明严格系统提示词保护已锁定。`on` 和 `toggle` 被拒绝，不写入设置或中断正在运行的回合。`off` 通过 Harness 设置服务保存已关闭的 TUI 覆盖值；保存失败时显示错误。其他设置与 Web 配置档保持不变。
 
@@ -130,11 +142,15 @@ shell 输入框固定在底部，下边框与聊天中自动换行的状态栏�
 
 单个 `Agent Debug` 面板默认显示，即使没有打开 shell。`/agent-debug` 在当前 TUI 进程内切换显示，不清空历史或 shell 输入。shell 关闭时面板占满右栏，打开时与下方 shell 共享右栏；两者都隐藏时聊天恢复全宽。时间线按开始顺序保留最近 20 个操作，标记为 Agent、Tool、Shell、MCP、File、Approval 或 Retry，显示状态及根据会话时间戳计算的耗时。工具行显示命令或参数预览及结果或错误摘要。Approval 行观察等待状态和已记录的决定；Retry 行显示提供方、尝试次数、延迟、失败及结束状态。File 行只来自成功工具结果中已确认的 diff。这些行只观察事件，不执行命令或授予批准。
 
-观察到 HTTP(S) URL 时，Debug 上方显示可滚动的 `Targets` 框，即使未打开 shell 也随 `/agent-debug` 一起显示或隐藏。`Target` 收录用户直接消息中的 URL；`Sub Target` 将同一主机名或其子域中的新 URL 按路径分层；`Other` 收录无关 URL。新 URL 来自已提交的助手文本和工具参数/结果，不包含注入上下文和流式增量。显示值移除凭据、查询参数和片段后去重，会话事件保持原样。回放会恢复观察记录，不受聊天窗口的 20 条限制和压缩影响；clear/rewind 移除被覆盖来源，切换会话重置树。框最多显示 10 行，支持独立的鼠标滚轮滚动。按 `Ctrl+Alt+D` 后，Tab 在 Debug 和 Targets 间切换；方向键、PageUp/PageDown 和 Home/End 滚动树。这些观察到的链接不会触发扫描或授权执行。
+实时 MCP 调用只显示服务器报告的进度，TUI 不会自行推算百分比。实时工具行依次显示 `queued` → `preparing` → `executing` → 结束状态；重放只恢复记录中的 `queued`、`preparing` 和结束状态，不显示进度。后台作业保留独立的注册表状态行。Sub Agent 行显示最近一次已确认操作；点击该行或按 Enter 可打开现有子代理检查器。点击 `N agents` 或按 `Ctrl+Alt+G` 可搜索子代理历史。
+
+观察到 HTTP(S) URL 时，Debug 上方显示可滚动的 `Targets` 框，即使未打开 shell 也随 `/agent-debug` 一起显示或隐藏。`Target` 收录用户直接消息中的 URL；`Sub Target` 将同一主机名或其子域中的新 URL 按路径分层；`Other` 收录无关 URL。新 URL 来自已提交的助手文本和工具参数/结果，不包含注入上下文和流式增量。显示值移除凭据、查询参数和片段后去重，会话事件保持原样。回放会恢复观察记录，不受聊天窗口的 20 条限制和压缩影响；clear/rewind 移除被覆盖来源，切换会话重置树。框最多显示 10 行，支持独立的鼠标滚轮滚动。点击 `Targets` 标题可将整个框收起为一行；点击分组或路径分支可切换其子节点。按 `Ctrl+Alt+D` 后，Tab 在 Debug 和 Targets 间切换，首次选择标题。Up/Down 选择可见行，Enter/Space 切换所选节点，Left 收起或选择父节点，Right 展开或选择第一个子节点。PageUp/PageDown 和 Home/End 滚动树。新 URL 到达时，已收起的分支保持关闭；清空目标集或将其替换为没有重叠 URL 的新集合会重置收起状态。这些观察到的链接不会触发扫描或授权执行。
 
 后台作业在同一面板内显示为独立的简短状态行，例如 `[RUNNING] Job · pwsh-102 · 4.0s`；现有命令预览保持不变。工具成功或回合结束不会结束这些行。注册表事件即时更新 RUNNING、STOPPING、COMPLETED、FAILED 和 KILLED，即使 Debug 或 shell 隐藏也持续更新；状态栏统计运行中和停止中的作业。显示当前会话的所有活动作业及最近 20 个已结束作业，也包括无所有者作业。切换会话会重新绑定订阅，`/jobs` 使用同一会话 id。支持所有已注册的类型和后端，无需解析命令文本；注册表之外的脱离进程无法观察。作业行使用进程内注册表快照，不回放历史，也不读取输出、消耗 Agent 的读取游标或控制执行。
 
 点击条目展开或收起详情。键盘操作使用 `Ctrl+Alt+D` 聚焦、↑/↓ 选择、Enter 切换详情、PageUp/PageDown 滚动。Esc 返回之前的编辑器，不中断 agent；隐藏已聚焦面板也会恢复编辑器。详情包含参数、工具输出、错误及文件修改前后文本，每行最多 16,000 个字符；聊天中的工具卡片仍然可用。鼠标滚轮可查看较早的行。隐藏时仍继续更新；回放恢复事件历史，切换会话重置列表，rewind/clear 移除被遮蔽的行。切换 shell 后端保留当前会话的活动。面板仅显示已有事件，不推测缺少工具 diff 元数据的文件变化。
+
+Agent Debug 也会根据已接受的事件显示 Main Agent 和基于会话的 Sub Agent 摘要：任务、最近工具、调用计数、耗时、已测得的用量，以及可用时的 todo 进度。对于已注册的后台作业，TUI 使用不会消耗读取游标的 `readAt` 观察有界输出尾部。已识别的密码、口令、确认或继续提示必须持续安静 `jobInputWarningDelayMs`（默认 15,000 毫秒），TUI 才会在作业行旁显示仅供观察的警告。警告不包含提示或输出文本，也不会发送输入。
 
 shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 或 `kali`）和 `command`，将命令填入空的 shell 输入框供人工检查。例如，在 `/shell` 中选择 Windows，按 `Esc` 返回聊天，然后让 agent 使用 `shell_draft` 暂存 `Get-Date`。该工具不会执行命令、发送 PTY 输入或切换焦点。检查输入后，用 `Ctrl+P` 聚焦 shell，再自行按 Enter 提交。工具会拒绝不匹配的后端、已有输入、空命令和终端控制字符；命令文本仍可包含制表符和换行。切换后端也要求输入框为空。关闭 shell 会注销该工具，其他 agent 无法访问。现有工具 guard 仍然适用。暂存命令不是安全拒绝或批准被拒后的自动替代路径；模型仍须遵守其安全和执行策略，也可能拒绝提供命令。
 
@@ -142,7 +158,7 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 
 ## 命令
 
-`/exit`、`/new`、`/fork`、`/resume`、`/recap`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/agent-debug`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
+`/exit`、`/new`、`/fork`、`/resume`、`/recap`、`/context`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/agent-debug`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
 
 `/wiki` 打开带编号的知识库选择列表，读取当前预设可见的 `knowledge_list` 工具所配置的知识库。选择知识库后，可在对话区查看 `INDEX.md` 的标题和链接、在 Obsidian 中打开该索引，或在文件管理器中打开配置的文件夹。方向键或数字选择，Enter 确认，Esc 取消。需要安装 Obsidian 并注册 `obsidian://` 协议处理程序，且 Wiki 文件夹已作为 Obsidian 库打开过。知识库不可用或打开失败时显示 TUI 通知。菜单不请求模型、不追加会话事件，也不修改提示词或 Wiki 文件。
 
@@ -164,15 +180,19 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 
 ## 连接 Antigravity
 
-TUI 自带 Antigravity 代理（零依赖，就在本仓库内），全新克隆无需其他下载，也不需要 Antigravity CLI —— 只需一个 Google 账号。一条命令：
+源码检出包含独立的 Antigravity 代理，无需额外依赖或 Antigravity CLI。安装并构建 harness 后，在每台新机器的 harness 根目录运行以下设置命令。账号所有者必须完成 Google 登录；启动 `dsh tui` 不会运行此设置或打开登录页面：
 
 ```
 node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
 ```
 
-脚本会在 profile 缺失时创建 `tui` profile、安装静默自启动器、启动端点，并在浏览器中打开一次 Google 登录；轮换后的令牌保存在代理自己的状态文件中，之后自动刷新。Antigravity provider 已内置于 TUI bundle，`dsh tui` → `/model` 直接列出其 Gemini 模型，无需 `/provider` 步骤（源码检出用 `node --import tsx/esm apps/cli/src/bin.ts tui` 启动）。Antigravity 配额与 Google 服务条款照常适用。登录过期时重跑脚本（或打开 `http://127.0.0.1:8877/auth/login`）即可。
+设置会在缺失时创建 `tui` profile，复用健康代理或在 `127.0.0.1:18877` 启动代理，并打开 Google 登录。Windows 还会安装静默的启动文件夹启动器；Linux 和 macOS 需要自行配置服务管理器以随登录启动。使用 `--no-browser` 仅打印本地登录 URL，或使用 `--dry-run` 查看设置而不作更改。初次启动输出追加到 `~/.dsh/logs/antigravity-proxy.log`（`DSH_HOME` 可覆盖 harness 主目录）。
 
-若部署偏好外部 CLIProxyAPI 网关：下载后运行 `cliproxy --antigravity-login`（打开浏览器一次），在 `/provider` 注册 provider（`name: antigravity`、`endpoint: http://127.0.0.1:8317/v1`、`protocol: openai-completions`、`key: shield-break`），再用 `node tools/antigravity-proxy/install-autostart.mjs` 随登录常驻 —— 在 home patch 中命名 `llm-pi-ai` 行会按 id 替换本 bundle 的代理 roster。
+Google 令牌归此代理所有，保存在 `~/.gemini/antigravity-proxy-token.json`，设置 `ANTIGRAVITY_TOKEN_FILE` 时使用该路径。令牌按需刷新；移动源码不会移动账号凭据或用户 profile patch。请在目标机器上单独登录。TUI bundle 提供 `18877/v1` 路由和供客户端使用的本地占位 header；Google 认证始终由代理处理。已有 home 或 profile 覆盖优先，因此指向 `8317/v1` 的路由仍使用 CLIProxyAPI。Antigravity 代理停止或未认证时，仅其模型请求失败，其他 TUI provider 仍可使用。Antigravity 配额和 Google 条款照常适用。
+
+代理将文本和函数调用转发为 OpenAI SSE，保留函数结果和签名回放，也支持非流式 JSON。生成前会发现账号的 Cloud Code 项目。`pnpm antigravity:test` 使用本地上游 fixture 检查迁移和这些交互，包括已安装 pi-ai 客户端的工具往返。真实 Google 登录和模型可用性需由账号所有者验证。
+
+在 Windows 上部署外部 CLIProxyAPI 时，下载其二进制并运行 `cli-proxy-api.exe --antigravity-login`。通过 `/provider` 注册它自己的端点和已配置的 API key；内置代理的本地占位值不是 CLIProxyAPI 凭据。运行 `node packages/experimental/pi-tui/tools/antigravity-proxy/install-autostart.mjs <cliproxy-directory>` 安装启动项。针对 `llm-pi-ai` 的 home patch 会按 id 替换 bundle 的 provider 配置。
 
 <a id="dev-note"></a>
 
@@ -190,7 +210,7 @@ node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
 
 #### Token 影响
 
-仅会话内容：TUI 自身不注册任何常驻 prompt 段落，被回退的对话也继续在持久日志中遮蔽（经 `/rewind` 与 `/clear` 标记）。
+TUI 自身不注册任何常驻 prompt 段落。其 spill 策略对每个适用的工具结果最多保留估算的 4,096 个 token，包含恢复提示；完整结果仍可从 spill 存储读取。小结果和直接 `read` 结果保留现有策略行为。压缩默认值及模型公布的上下文窗口保持不变；被回退的对话继续在持久日志中遮蔽（经 `/rewind` 与 `/clear` 标记）。
 
 #### KV Cache 影响
 

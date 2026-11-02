@@ -696,6 +696,28 @@ Types: [Scoped](scope.zh.md)
 
 Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
+<a id="toolsprogress--emit"></a>
+
+#### `tools/progress` — emit
+
+Report transient progress for one admitted execution. Notifications are process-local, scoped to `exec.agent`, and never change its timeout. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's updates.
+
+```ts cordis-catalog
+/**
+ * Report transient progress for one admitted execution. Notifications are
+ * process-local, scoped to `exec.agent`, and never change its timeout.
+ * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's updates.
+ * @param exec - the exact registered execution receiving progress.
+ * @param update - server- or provider-reported progress values.
+ * @mode emit
+ */
+'tools/progress'(this: Scoped<ToolRuntime>, exec: Readonly<ToolExecution>, update: ToolProgress): undefined
+```
+
+Types: [Scoped](scope.zh.md)
+
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
+
 <a id="toolsptc-dispatch-log--waterfall"></a>
 
 #### `tools/ptc-dispatch-log` — waterfall

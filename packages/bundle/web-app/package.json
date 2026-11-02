@@ -28,8 +28,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/startup.js",
+    "lib/*.js",
     "cordis.patch.yml",
     "presets/standard.patch.yml",
     "presets/ptc.patch.yml",
@@ -44,6 +43,7 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-agent-presets": "workspace:^",
     "@deepseek-ai/dsh-api-job-controller": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",

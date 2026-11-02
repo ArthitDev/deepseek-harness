@@ -27,6 +27,7 @@ import {
 } from './core/session.js'
 import { defaultModelSelection } from './core/web-settings.js'
 import { installWebPromptSettings } from './core/prompt-settings.js'
+import { ensureSbProxy, installZcodeStartup } from './core/zcode-proxy.js'
 import { ClipboardTerminal } from './ui/clipboard-terminal.js'
 import { pickSession } from './ui/session-picker.js'
 import { pickFromListWithSearch } from './ui/overlays.js'
@@ -44,6 +45,7 @@ export interface AppConfig {
   cwd?: string
   /** Newest transcript items rendered before older items are folded. */
   historyLimit?: number
+  jobInputWarningDelayMs?: number
 }
 
 /**
@@ -53,7 +55,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   if (process.env.PI_TUI_DEBUG !== undefined) {
     console.error('[pi-tui debug] config =', JSON.stringify(config))
   }
-  const cmdline = ctx.get('cmdlineArgs') as { get(): readonly string[] } | undefined
+  const cmdline = ctx.get('cmdlineArgs')
   const args = parseArgs(cmdline?.get() ?? [])
 
   // YAML scalars like `undefined` arrive as the string "undefined"; treat
@@ -81,6 +83,21 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     throw new Error('dsh-pi-tui needs an interactive terminal (stdout is not a TTY)')
   }
 
+  const proxyStartupAbort = new AbortController()
+  const profile = ctx.get('profileContext') as { installAnchor: string }
+  const startupWarnings: string[] = []
+  let pushProxyWarning = (warning: string): void => { startupWarnings.push(warning) }
+  const proxyStartups = [
+    ensureSbProxy(profile.installAnchor, proxyStartupAbort.signal)
+      .then(() => undefined, () => 'SB transport startup failed. Direct providers remain available. Run pnpm sb:status and check the SB log or port conflict.'),
+  ]
+  installZcodeStartup(ctx, profile.installAnchor, () => {
+    pushProxyWarning('ZCode proxy startup failed. Use /model to select another provider. Run pnpm zcode:setup and check ZCode login.')
+  })
+  ctx.effect(() => async () => {
+    proxyStartupAbort.abort()
+    await Promise.all(proxyStartups)
+  })
   await installWebPromptSettings(ctx)
 
   const terminal = new ClipboardTerminal()
@@ -178,6 +195,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     config: {
       version: tuiVersion,
       historyLimit: config.historyLimit ?? 20,
+      jobInputWarningDelayMs: config.jobInputWarningDelayMs ?? 15000,
       ...(effectiveProvider !== undefined ? { provider: effectiveProvider } : {}),
       ...(effectiveModel !== undefined ? { model: effectiveModel } : {}),
       ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
@@ -219,6 +237,14 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   // Boot hint: tell the user persisted history is one Ctrl+R / /resume away
   // (after replay, so the hint lands below the transcript, above live input).
   screen.pushRecentSessionHint()
+
+  pushProxyWarning = (warning) => { screen.pushNotice(warning, 'error') }
+  for (const warning of startupWarnings) pushProxyWarning(warning)
+  for (const startup of proxyStartups) {
+    void startup.then((warning) => {
+      if (!proxyStartupAbort.signal.aborted && warning !== undefined) screen.pushNotice(warning, 'error')
+    })
+  }
 
   ctx.on('session/event', (session, event) => {
     if (screenOwns(session.id)) {

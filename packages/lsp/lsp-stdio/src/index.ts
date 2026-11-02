@@ -15,11 +15,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { LspError, LspProviderId } from '@deepseek-ai/dsh-lsp'
 import type {
+  LspDiagnosticsResult,
+  LspProviderDiagnostics,
   LspProvider,
   LspProviderQuery,
   LspQueryResult,
 } from '@deepseek-ai/dsh-lsp'
-import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { deadline, MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { createHash } from 'node:crypto'
 import { abortable, abortError } from './abort.ts'
 import { canonicalizeWorkspace, readHostSource } from './host.ts'
 import type { HostWorkspace } from './host.ts'
@@ -49,6 +52,10 @@ export const inject = ['fs', 'lsp', 'subprocess']
 const DEFAULT_MAX_MESSAGE_BYTES = 16_000_000
 const DEFAULT_MAX_STDERR_BYTES = 1_000_000
 const DEFAULT_MAX_DOCUMENT_BYTES = 4_000_000
+const DEFAULT_DIAGNOSTICS_TIMEOUT_MS = 5_000
+const DEFAULT_DIAGNOSTICS_OPERATION_TIMEOUT_MS = 30_000
+const DEFAULT_MAX_DIAGNOSTICS = 200
+const DEFAULT_MAX_DIAGNOSTIC_BYTES = 128_000
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000
 const DEFAULT_KILL_GRACE_MS = 2_000
 
@@ -72,6 +79,14 @@ export interface LspLocalServerConfig {
   maxStderrBytes?: number
   /** Largest source file this host will open (bytes). Default 4000000. */
   maxDocumentBytes?: number
+  /** Maximum time spent waiting for initialize and a diagnostics publish (ms). Default 5000. */
+  diagnosticsTimeoutMs?: number
+  /** Maximum time for canonicalization, queueing, reads, and diagnostics (ms). Default 30000. */
+  diagnosticsOperationTimeoutMs?: number
+  /** Maximum normalized diagnostics returned for one document. Default 200. */
+  maxDiagnostics?: number
+  /** Maximum serialized diagnostic fields retained per result (bytes). Default 128000. */
+  maxDiagnosticBytes?: number
   /** Graceful `shutdown`/`exit` budget before escalation (ms). Default 5000. */
   shutdownTimeoutMs?: number
   /** Request-cancel and SIGTERM→SIGKILL grace (ms). Default 2000. */
@@ -98,6 +113,10 @@ const LspLocalServerConfig: z<LspLocalServerConfig> = z.object({
   maxMessageBytes: z.number().default(DEFAULT_MAX_MESSAGE_BYTES),
   maxStderrBytes: z.number().default(DEFAULT_MAX_STDERR_BYTES),
   maxDocumentBytes: z.number().default(DEFAULT_MAX_DOCUMENT_BYTES),
+  diagnosticsTimeoutMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_DIAGNOSTICS_TIMEOUT_MS),
+  diagnosticsOperationTimeoutMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_DIAGNOSTICS_OPERATION_TIMEOUT_MS),
+  maxDiagnostics: z.number().default(DEFAULT_MAX_DIAGNOSTICS),
+  maxDiagnosticBytes: z.number().default(DEFAULT_MAX_DIAGNOSTIC_BYTES),
   shutdownTimeoutMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_SHUTDOWN_TIMEOUT_MS),
   killGraceMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_KILL_GRACE_MS),
 })
@@ -191,12 +210,16 @@ function validateServerConfig(providerId: string, resolved: ResolvedServerConfig
   // nonpositive value would let a server that ignores shutdown hang disposal forever. Fail at load.
   assertTimer(providerId, 'shutdownTimeoutMs', resolved.shutdownTimeoutMs)
   assertTimer(providerId, 'killGraceMs', resolved.killGraceMs)
+  assertTimer(providerId, 'diagnosticsTimeoutMs', resolved.diagnosticsTimeoutMs)
+  assertTimer(providerId, 'diagnosticsOperationTimeoutMs', resolved.diagnosticsOperationTimeoutMs)
   // Byte caps must be positive: a nonpositive stderr cap defeats the retained-tail bound
   // (`slice(-0)` keeps everything), `maxMessageBytes: 0` makes every response fatal, and a bad
   // document cap fails later in the read path instead of at load.
   assertPositiveInteger(providerId, 'maxStderrBytes', resolved.maxStderrBytes)
   assertPositiveInteger(providerId, 'maxMessageBytes', resolved.maxMessageBytes)
   assertPositiveInteger(providerId, 'maxDocumentBytes', resolved.maxDocumentBytes)
+  assertPositiveInteger(providerId, 'maxDiagnostics', resolved.maxDiagnostics)
+  assertPositiveInteger(providerId, 'maxDiagnosticBytes', resolved.maxDiagnosticBytes)
 }
 
 /** Reject a timer value Node would clamp instead of scheduling as configured. */
@@ -211,6 +234,11 @@ function assertPositiveInteger(providerId: string, name: string, value: number):
   if (!Number.isInteger(value) || value < 1) {
     throw new Error(`lsp-stdio: servers.${providerId}.${name} must be a positive integer`)
   }
+}
+
+/** Hash UTF-8 source text to compare the opened revision with the file at result time. */
+function digest(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
 }
 
 /** A pooled generic provider: one server process per canonical workspace, created on demand. */
@@ -261,15 +289,7 @@ class LocalLspProvider implements LspProvider {
     // Honor an already-aborted signal before provider I/O so a canceled request never starts a server.
     this.assertActive(signal)
     const querySignal = this.querySignal(signal)
-    const workspaceResult = canonicalizeWorkspace(this.fs, request.workspaceRoot, querySignal)
-    const workspaceLookup = workspaceResult.then(() => undefined, () => undefined)
-    this.workspaceLookups.add(workspaceLookup)
-    let workspace: HostWorkspace
-    try {
-      workspace = await workspaceResult
-    } finally {
-      this.workspaceLookups.delete(workspaceLookup)
-    }
+    const workspace = await this.resolveWorkspace(request.workspaceRoot, querySignal)
     this.assertActive(querySignal)
     const workspaceKey = workspace.target.targetKey
     return this.enqueue(workspaceKey, querySignal, async () => {
@@ -312,6 +332,70 @@ class LocalLspProvider implements LspProvider {
         instance = this.instanceFor(workspaceKey, workspace)
       }
     })
+  }
+
+  async diagnostics(request: LspProviderDiagnostics, signal?: AbortSignal): Promise<LspDiagnosticsResult> {
+    this.assertActive(signal)
+    const operationDeadline = deadline(undefined, this.config.diagnosticsOperationTimeoutMs, 'LSP_DIAGNOSTICS_OPERATION')
+    const operationSignal = signal === undefined
+      ? AbortSignal.any([this.lifetime.signal, operationDeadline.signal])
+      : AbortSignal.any([signal, this.lifetime.signal, operationDeadline.signal])
+    try {
+      const workspace = await this.resolveWorkspace(request.workspaceRoot, operationSignal)
+      this.assertActive(operationSignal)
+      const key = workspace.target.targetKey
+      return await this.enqueue(key, operationSignal, async () => {
+        const source = await this.trackWorkspaceOperation(
+          readHostSource(this.fs, request.filePath, workspace, this.config.maxDocumentBytes, operationSignal),
+          operationSignal,
+        )
+        this.assertActive(operationSignal)
+        operationSignal.throwIfAborted()
+        let instance = this.instanceFor(key, workspace)
+        for (let attempt = 0; ; attempt++) {
+          const outcome = await Promise.allSettled([instance.diagnostics(request, source, operationSignal)])
+          if (instance.dead) {
+            const closed = await Promise.allSettled([instance.dispose()])
+            this.evictIfCurrent(key, instance)
+            if (closed[0].status === 'rejected') throw closed[0].reason
+          }
+          const result = outcome[0]
+          if (result.status === 'fulfilled') {
+            const current = await this.trackWorkspaceOperation(
+              readHostSource(this.fs, request.filePath, workspace, this.config.maxDocumentBytes, operationSignal),
+              operationSignal,
+            )
+            if (current.fileUrl !== source.fileUrl || digest(current.text) !== result.value.documentDigest) {
+              return { ...result.value, status: 'changed', diagnostics: [], omitted: 0 }
+            }
+            return result.value
+          }
+          if (attempt > 0 || !instance.isTransportFailure(result.reason)) throw result.reason
+          this.assertActive(operationSignal)
+          instance = this.instanceFor(key, workspace)
+        }
+      })
+    } catch (error) {
+      if (operationDeadline.signal.aborted && !signal?.aborted && !this.lifetime.signal.aborted) {
+        throw new LspError('LSP diagnostics timed out during its workspace operation', 'LSP_DIAGNOSTICS_TIMEOUT')
+      }
+      throw error
+    } finally {
+      operationDeadline[Symbol.dispose]()
+    }
+  }
+
+  /** Track workspace-bound I/O until it settles so disposal waits for read cancellation cleanup. */
+  private async resolveWorkspace(workspaceRoot: string, signal: AbortSignal): Promise<HostWorkspace> {
+    return await this.trackWorkspaceOperation(canonicalizeWorkspace(this.fs, workspaceRoot, signal), signal)
+  }
+
+  /** Keep the actual operation owned through settlement, even if the caller stops waiting on abort. */
+  private async trackWorkspaceOperation<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+    const tracked = operation.then(() => undefined, () => undefined)
+    this.workspaceLookups.add(tracked)
+    void tracked.then(() => { this.workspaceLookups.delete(tracked) })
+    return await abortable(operation, signal)
   }
 
   /** Serialize one complete query lifecycle for a canonical workspace. */
@@ -357,6 +441,10 @@ class LocalLspProvider implements LspProvider {
       maxStderrBytes: this.config.maxStderrBytes,
       shutdownTimeoutMs: this.config.shutdownTimeoutMs,
       killGraceMs: this.config.killGraceMs,
+      providerId: this.id,
+      diagnosticsTimeoutMs: this.config.diagnosticsTimeoutMs,
+      maxDiagnostics: this.config.maxDiagnostics,
+      maxDiagnosticBytes: this.config.maxDiagnosticBytes,
     }
     return new LspInstance(spec, this.spawner)
   }

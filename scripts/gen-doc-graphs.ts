@@ -882,6 +882,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns at most one host-process control loop per run while durable progress remains in the pentestRuns service across restarts.',
   },
   {
+    key: 'pentestAssistance',
+    pkg: 'pentest-executor',
+    title: 'Run-wide request accounting and progress assistance',
+    mode: 'core',
+    note: 'Shares target request limits across episodes, bounds advisory reviews, and retrieves source-attributed Wiki and run evidence.',
+  },
+  {
     key: 'webSearchPolicy',
     pkg: 'tool-web',
     title: 'Global web-search policy',

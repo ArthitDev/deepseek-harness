@@ -19,7 +19,8 @@
  *   const { startDaemon, stopDaemon } = require('./sb-auto-start.cjs')
  */
 
-const { spawn, execSync } = require("child_process");
+const { spawn, spawnSync, execSync } = require("child_process");
+const { createHash, randomBytes } = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
@@ -45,7 +46,7 @@ function detectEnvironment() {
     kaliAvailable: false,
     nodeAvailable: true,
     zcodeDir: null,
-    zcodePort: parseInt(process.env.ZCODE_PORT || "8080"),
+    zcodePort: parseInt(process.env.ZCODE_PORT || "18080"),
   };
 
   // Detect harness root (walk up from this script)
@@ -93,14 +94,7 @@ function detectEnvironment() {
     if (fs.existsSync(wp)) { env.wikiDir = wp; break; }
   }
 
-  // Detect workspace
-  // ZCode starter proxy (GLM coding plan): auto-detected next to the harness
-  // or under E:; overridden by ZCODE_DIR.
-  env.zcodeDir = process.env.ZCODE_DIR
-    || [path.join(env.harnessRoot || process.cwd(), "..", "Zcode-9Route-Proxy", "zcode-api"),
-        "E:/Zcode-9Route-Proxy/zcode-api", "C:/Zcode-9Route-Proxy/zcode-api"]
-      .map((p) => (p ? path.resolve(p) : null))
-      .find((p) => p && fs.existsSync(path.join(p, "src", "index.ts"))) || null;
+  env.zcodeDir = resolveZcodeDir(env.harnessRoot || path.resolve(__dirname, ".."));
   env.workspaceDir = process.env.SB_WORKSPACE
     || path.join(env.scriptsDir || process.cwd(), "exec-workspace");
 
@@ -258,10 +252,113 @@ function stopAll() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ZCODE STARTER PROXY (GLM coding plan on 127.0.0.1:8080)
+// ZCODE STARTER PROXY (GLM coding plan on 127.0.0.1:18080)
 // ═══════════════════════════════════════════════════════════════
 
 let zcodeProcess = null;
+
+/**
+ * Select the bundled proxy unless ZCODE_DIR explicitly overrides it.
+ * @param {string} harnessRoot Harness checkout root.
+ * @param {string} [override] Alternate source directory.
+ * @returns {string|null} Absolute source directory, or null when its entry is missing.
+ */
+function resolveZcodeDir(harnessRoot, override = process.env.ZCODE_DIR) {
+  const directory = path.resolve(override || path.join(harnessRoot, "third-party", "zcode-api"));
+  return fs.existsSync(path.join(directory, "src", "index.ts")) ? directory : null;
+}
+
+function zcodeWorkerFingerprint(directory, revision) {
+  const hash = createHash("sha256").update(`${process.platform}\0${process.arch}\0${revision}\0`);
+  const addFile = (relative) => {
+    hash.update(relative).update("\0");
+    const filename = path.join(directory, relative);
+    if (fs.existsSync(filename)) hash.update("file\0").update(fs.readFileSync(filename));
+    else hash.update("missing");
+    hash.update("\0");
+  };
+  const addSources = (relative) => {
+    for (const entry of fs.readdirSync(path.join(directory, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const child = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) addSources(child);
+      else if (/\.(?:[cm]?[jt]s|json)$/.test(entry.name) && !/\.(?:test|spec)\.[cm]?[jt]s$|\.bundle\.[cm]?js$/.test(entry.name)) addFile(child);
+    }
+  };
+  for (const relative of ["package.json", "bun.lock", "bun.lockb", "scripts/build-fork-worker.ts"]) addFile(relative);
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, "package.json"), "utf8"));
+  for (const name of Object.keys(manifest.dependencies || {}).sort()) addFile(`node_modules/${name}/package.json`);
+  addSources("src");
+  return hash.digest("hex");
+}
+
+/**
+ * Prepare or reuse a source- and runtime-matched worker without replacing account configuration.
+ * @param {{zcodeDir: string|null}} env Selected proxy source directory.
+ * @param {boolean} [silent] Suppress successful setup output.
+ * @throws {Error} When dependencies, compilation, or local config creation fail.
+ */
+function prepareZcodeProxy(env, silent = false) {
+  if (!env.zcodeDir) throw new Error("Bundled ZCode proxy missing: third-party/zcode-api/src/index.ts");
+  const manifest = JSON.parse(fs.readFileSync(path.join(env.zcodeDir, "package.json"), "utf8"));
+  const commands = [];
+  if (Object.keys(manifest.dependencies || {}).some(name =>
+    !fs.existsSync(path.join(env.zcodeDir, "node_modules", name, "package.json")))) {
+    commands.push(["install", "--production", "--frozen-lockfile", "--ignore-scripts"]);
+  }
+  for (const args of commands) {
+    const result = spawnSync("bun", args, {
+      cwd: env.zcodeDir,
+      stdio: silent ? "ignore" : "inherit",
+      windowsHide: true,
+      timeout: 120_000,
+    });
+    if (result.error || result.status !== 0) {
+      throw new Error(`ZCode setup failed: bun ${args.join(" ")} (${result.error?.message || result.status})`);
+    }
+  }
+  const revision = spawnSync("bun", ["--revision"], { encoding: "utf8", windowsHide: true, timeout: 10_000 });
+  if (revision.error || revision.status !== 0 || !revision.stdout.trim()) throw new Error("Cannot determine ZCode Bun revision");
+  const fingerprint = zcodeWorkerFingerprint(env.zcodeDir, revision.stdout.trim());
+  const bundlePath = path.join(env.zcodeDir, "src", "proxy", "captcha-worker-entry.bundle.js");
+  const cachePath = path.join(env.zcodeDir, ".cache", "captcha-worker-build.json");
+  let cached;
+  try { cached = JSON.parse(fs.readFileSync(cachePath, "utf8")); }
+  catch (error) {
+    if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+  }
+  const bundleHash = () => fs.existsSync(bundlePath) ? createHash("sha256").update(fs.readFileSync(bundlePath)).digest("hex") : null;
+  if (commands.length > 0 || !fs.existsSync(bundlePath) || fs.statSync(bundlePath).size === 0 ||
+    cached?.fingerprint !== fingerprint || cached?.bundleHash !== bundleHash()) {
+    const result = spawnSync("bun", ["run", "scripts/build-fork-worker.ts"], {
+      cwd: env.zcodeDir, stdio: silent ? "ignore" : "inherit", windowsHide: true, timeout: 120_000,
+    });
+    if (result.error || result.status !== 0) {
+      throw new Error(`ZCode setup failed: bun run scripts/build-fork-worker.ts (${result.error?.message || result.status})`);
+    }
+    if (!fs.existsSync(bundlePath) || fs.statSync(bundlePath).size === 0) {
+      throw new Error("ZCode CAPTCHA worker build produced no bundle");
+    }
+    // A concurrent source edit must force another build rather than validate stale output.
+    if (zcodeWorkerFingerprint(env.zcodeDir, revision.stdout.trim()) === fingerprint) {
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+      const temporary = `${cachePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+      try {
+        fs.writeFileSync(temporary, JSON.stringify({ fingerprint, bundleHash: bundleHash() }), { flag: "wx" });
+        fs.renameSync(temporary, cachePath);
+      } finally {
+        fs.rmSync(temporary, { force: true });
+      }
+    }
+  }
+  const configPath = path.join(env.zcodeDir, "config.yaml");
+  if (!fs.existsSync(configPath)) {
+    const template = fs.readFileSync(path.join(__dirname, "..", "third-party", "zcode-api", "harness.config.example.yaml"), "utf8");
+    fs.writeFileSync(configPath, template.replace("__GENERATE_PROXY_API_KEY__", randomBytes(32).toString("hex")), {
+      flag: "wx", mode: 0o600,
+    });
+    if (!silent) console.log(`[SB Auto] Created ${configPath}; configure its proxyApiKey in 9router and log in to ZCode on this machine`);
+  }
+}
 
 function zcodeAlive(port) {
   return new Promise((resolve) => {
@@ -278,7 +375,7 @@ function zcodeAlive(port) {
 
 async function startZcodeProxy(env, silent = false) {
   if (!env.zcodeDir) {
-    if (!silent) console.log("[SB Auto] ZCode starter not found (optional — skipping)");
+    console.error("[SB Auto] Bundled ZCode proxy not found: third-party/zcode-api");
     return false;
   }
   const alive = await zcodeAlive(env.zcodePort);
@@ -286,9 +383,21 @@ async function startZcodeProxy(env, silent = false) {
     if (!silent) console.log(`[SB Auto] ZCode proxy already running on :${env.zcodePort}`);
     return true;
   }
+  try {
+    prepareZcodeProxy(env, silent);
+  } catch (error) {
+    console.error("[SB Auto] ZCode setup failed:", error.message);
+    return false;
+  }
   if (!silent) console.log(`[SB Auto] Starting ZCode proxy from ${env.zcodeDir}`);
-  zcodeProcess = spawn("bun", ["run", "src/index.ts", "serve"], {
+  zcodeProcess = spawn("bun", ["run", "src/index.ts", "serve", path.join(env.zcodeDir, "config.yaml")], {
     cwd: env.zcodeDir,
+    env: {
+      ...process.env,
+      ZCODE_PROXY_PORT: String(env.zcodePort),
+      ZCODE_CAPTCHA_WORKER: path.join(env.zcodeDir, "src", "proxy", "captcha-worker-entry.bundle.js"),
+      ZCODE_CAPTCHA_REQUIRE_WORKER: "1",
+    },
     stdio: "ignore",
     detached: true,
     windowsHide: true,
@@ -562,8 +671,41 @@ async function install() {
 if (require.main === module) {
   const command = process.argv[2] || "status";
   const background = process.argv.includes("--background");
+  // ZCode-only launches need no SB/Kali discovery or WSL wake-up.
+  const zcodeEnvironment = () => ({
+    zcodeDir: resolveZcodeDir(path.resolve(__dirname, "..")),
+    zcodePort: Number(process.env.ZCODE_PORT || 18080),
+  });
 
   switch (command) {
+    case "start-zcode":
+      startZcodeProxy(zcodeEnvironment(), true).then((ready) => {
+        if (!ready) {
+          stopZcodeProxy();
+          throw new Error("ZCode proxy not ready; run pnpm zcode:setup and check this machine's ZCode login");
+        }
+        // The proxy is shared with 9router and outlives the invoking TUI.
+        zcodeProcess?.unref();
+      }).catch((error) => {
+        console.error("[SB Auto]", error.message);
+        process.exitCode = 1;
+      });
+      break;
+
+    case "setup-zcode":
+      try {
+        const env = zcodeEnvironment();
+        prepareZcodeProxy(env);
+        const sync = spawnSync("bun", ["run", path.join(__dirname, "zcode-direct-setup.mjs"), env.zcodeDir], {
+          stdio: "inherit", windowsHide: true, timeout: 35_000,
+        });
+        if (sync.error || sync.status !== 0) throw new Error("Direct credential setup failed; check the ZCode config and harness credential store");
+      } catch (error) {
+        console.error("[SB Auto] ZCode setup failed:", error.message);
+        process.exitCode = 1;
+      }
+      break;
+
     case "start":
       if (background) {
         // Spawn detached daemon
@@ -616,6 +758,8 @@ Usage:
   node sb-auto-start.cjs status         Check health
   node sb-auto-start.cjs restart        Restart
   node sb-auto-start.cjs install        Install auto-start hooks
+  node sb-auto-start.cjs setup-zcode    Install bundled ZCode dependencies and build CAPTCHA worker
+  node sb-auto-start.cjs start-zcode    Ensure only ZCode is running, then exit
 
 Environment variables:
   SB_PORT=18899                         Proxy port
@@ -625,10 +769,13 @@ Environment variables:
   SB_WIKI_DIR=/path/to/wiki             Override wiki directory
   SB_HEALTH_INTERVAL=30000              Health check interval (ms)
   SB_INSTALL_TASK=1                     Also install Task Scheduler (Windows)
+  ZCODE_DIR=/path/to/zcode-api           Override bundled ZCode source directory
+  ZCODE_PORT=18080                      ZCode proxy port
 `);
       break;
   }
 }
 
 // Export for module use
-module.exports = { startDaemon, stopDaemon, status, install, detectEnvironment, startProxy, checkPortAlive };
+module.exports = { startDaemon, stopDaemon, status, install, detectEnvironment, startProxy, checkPortAlive,
+  resolveZcodeDir, prepareZcodeProxy, startZcodeProxy, stopZcodeProxy };

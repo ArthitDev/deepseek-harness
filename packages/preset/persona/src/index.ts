@@ -62,12 +62,14 @@ export const Config: z<Config> = z.object({
 export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => ctx.systemPrompt.section({
     name: PERSONA_PREFIX_SECTION,
+    version: '1',
     order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
     text: config.prefix,
     ...(config.complete ? { complete: true } : {}),
   }), 'persona.section()')
   ctx.effect(() => ctx.systemPrompt.section({
     name: PERSONA_SUFFIX_SECTION,
+    version: '1',
     order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX'),
     text: config.suffix ?? '',
   }), 'persona.suffix()')

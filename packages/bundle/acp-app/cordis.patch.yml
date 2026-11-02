@@ -2,6 +2,12 @@
 
 - id: system-prompt
   config:
+    preserveSections: true
+    requiredSections:
+      tools:calling: '1'
+      deployment:persona-prefix: '1'
+      deployment:persona-suffix: '1'
+      harness:identity: '1'
     personaSuffix: Your working directory is {{cwd}}.
     personaPrefix: >-
       You are a coding agent powered by the {{model}} model.

@@ -40,6 +40,8 @@ dsh --profile web --no-open --port 8080
 
 已保存的模型选择覆盖组合默认值。设置卡接受兼容 Messages 的 API 地址与凭据引用。
 
+在此 checkout 中，首次 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求会启动或复用内置 ZCode 代理。每个 Web Host 的并发请求共用一次启动尝试；启动期间，其他提供商和 GUI 仍可使用。启动失败时只记录一次警告，请求仍委派给配置的端点。关闭 Web 会取消尚未完成的启动辅助进程，但共享代理会继续运行。直连预设默认为 `reasoning: low`；覆盖方式与前置要求请参阅[本机 ZCode 设置](../../../third-party/zcode-api/INTEGRATION.md)。
+
 ### 配置
 
 大多数用户不需要设置这些；命令行 flag 会提供给下面四个设置——`--host`、`--port` 与 `--trusted-host` 来自本次调用，`--no-open` 仅对本次调用关闭浏览器交接：
@@ -95,6 +97,7 @@ URL 行与浏览器交接都是就绪信号：监督方一观察到该行就发�
 |---|---|
 | [`src/index.ts`](src/index.ts) | `web-app` 粘合插件：dist 解析、LAN 信任采样、提示词段落、bash 变量、URL 行、浏览器交接 |
 | [`src/startup.ts`](src/startup.ts) | `web-startup` 提供方：`--host`、`--port`、`--trusted-host`、`--no-open`、`--help` |
+| [`src/proxy-startup.ts`](src/proxy-startup.ts) | Web/TUI 共享的代理启动和取消逻辑，通过 `./startup` 导出 |
 | [`cordis.patch.yml`](cordis.patch.yml) | Web patch：重述的基础值、Web 宿主行、浏览器名录、preset 注册表 |
 | [`presets/`](presets) | 每个随发行版交付的 preset（`standard`、`ptc`、`minimal`、`cordis`）各一条 `@deepseek-ai/dsh-agent-preset` 声明，各自一个补丁文件 |
 | — | 不发布运行时不变式伴生入口；每项贡献（frontend-static 子插件、提示词段落、bashEnv 注册）都会随 fiber 由注册表释放，且每个所属注册表的包负责该关系的不变式；本包不持有需要审计的可变状态。 |
@@ -149,6 +152,7 @@ Web 上下文标明对话界面与 URL，但不指定模型 persona。Web 上下
 这些限制告诉你在不常见的环境下会遇到什么——源码 checkout、SSH 会话或严格网络。它们是当前包约束，不是通用的浏览器对比或任务积压。
 
 - **前端必须已构建**——源码 checkout 需要先运行 `pnpm run build`；dist 缺失时启动会以构建提示停止，且没有从源码直接服务的回退路径。
+- **自动启动 ZCode 需要 checkout 中的脚本和内置代理**。只安装本包不会配置这些文件或账户凭据。启动失败后，请修复设置并重启 Web，或手动启动代理。
 - **LAN 地址只在启动时采样一次**——启动后的网卡变化不会重新公告；打印的 LAN URL 始终与采样结果一致。
 - **只能观察到交接的启动**——GUI 只报告浏览器被请求打开，而不是它确实打开了；之后的浏览器退出永远不会上报，打印的 URL 是你的手动回退路径。
 - **SSH 会话保留 URL 但跳过浏览器交接**——打印的 URL 指向远端宿主机 loopback 端点；SSH 客户端或编辑器必须暴露并打开本地转发地址。

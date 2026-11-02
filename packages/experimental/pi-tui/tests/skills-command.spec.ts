@@ -122,9 +122,9 @@ it('/skills disables discovery and invocation, then restores them', async () => 
       block.type === 'text' && block.text.includes('Skill "fixture-skill" is disabled'))).toBe(true)
     expect(await runSkill(OTHER_SKILL.name)).toMatchObject({ isError: false, value: 'loaded' })
 
-    screen.switchAgent(second)
+    await screen.switchAgent(second)
     expect(await sourceKinds(second)).toEqual(['skill-catalog', 'skill-invocation', 'user'])
-    screen.switchAgent(agent)
+    await screen.switchAgent(agent)
     screen.submit('/skills status')
     expect(await visible(tui)).toContain('skills: ON · 1/2 skill(s) available')
     screen.submit('/skills')
@@ -142,10 +142,10 @@ it('/skills disables discovery and invocation, then restores them', async () => 
     expect(denied.isError).toBe(true)
     expect(JSON.stringify(denied.content)).toContain('Skills are disabled in this TUI')
 
-    screen.switchAgent(second)
+    await screen.switchAgent(second)
     expect(await toolNames(second)).not.toContain('skill')
     expect(await sourceKinds(second)).toEqual(['user'])
-    screen.switchAgent(agent)
+    await screen.switchAgent(agent)
 
     screen.submit('/skills status')
     expect(await visible(tui)).toContain('skills: OFF · 0/2 skill(s) available')

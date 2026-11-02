@@ -22,8 +22,10 @@ export class ApiSessionNotFound extends Error {}
 
 /** Session identity whose lifecycle belongs to subagent routing. */
 export class ApiSessionSubagentOwnership extends Error {
-  /** @param sessionId - identity reserved to subagent routing. */
-  constructor(readonly sessionId: SessionId) {
+  constructor(
+    /** Identity reserved to subagent routing. */
+    readonly sessionId: SessionId,
+  ) {
     super(`session "${sessionId}" is a subagent session; use subagent delivery`)
   }
 }
@@ -31,8 +33,11 @@ export class ApiSessionSubagentOwnership extends Error {
 /** Explicit-id creation attempted to adopt a Session under another cwd. */
 export class ApiSessionCwdConflict extends Error {
   constructor(
+    /** Identity the creation attempt tried to adopt. */
     readonly sessionId: SessionId,
+    /** cwd the creation attempt requested. */
     readonly requestedCwd: string,
+    /** cwd already recorded on that Session, when any. */
     readonly existingCwd: string | undefined,
   ) {
     super(
@@ -46,8 +51,11 @@ export class ApiSessionCwdConflict extends Error {
 /** Explicit-id creation attempted to adopt a Session under another preset. */
 export class ApiSessionPresetConflict extends Error {
   constructor(
+    /** Identity the creation attempt tried to adopt. */
     readonly sessionId: SessionId,
+    /** agent preset the creation attempt requested. */
     readonly requestedPreset: string,
+    /** agent preset already recorded on that Session, when any. */
     readonly existingPreset: string | undefined,
   ) {
     super(

@@ -21,13 +21,20 @@ afterEach(async () => {
   for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
 })
 
-async function harness(capable = new MockAdapter(Array.from({ length: 8 }, () => textResponse('ok')))) {
+async function harness(
+  capable = new MockAdapter(Array.from({ length: 8 }, () => textResponse('ok'))),
+  preserveSections = false,
+  requiredSections?: Record<string, string>,
+) {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
-  await ctx.plugin(SystemPrompt, { personaPrefix: '', personaSuffix: '' })
+  await ctx.plugin(SystemPrompt, {
+    personaPrefix: '', personaSuffix: '', includeHarnessIdentity: false, preserveSections,
+    ...(requiredSections === undefined ? {} : { requiredSections }),
+  })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
@@ -36,9 +43,8 @@ async function harness(capable = new MockAdapter(Array.from({ length: 8 }, () =>
   ctx.llm.registerAdapter(['capable'], capable)
   ctx.llm.registerAdapter(['plain'], plain)
   let prompt = 'prompt one'
-  ctx.on('system-prompt/assemble', async (_assembly, _context, next) => ({
-    ...await next(), sections: [{ name: 'test', text: prompt, order: 0 }],
-  }))
+  ctx.systemPrompt.section({ name: 'test', order: 0, text: () => prompt })
+  ctx.systemPrompt.suppressSections({ except: () => ['test'] })
   const selection: ModelSelectionRef = { current: { provider: 'capable', model: 'model' }, assembled: undefined }
   const agent = await ctx.agentLoop.create(SessionId('admission'), { provider: 'capable', model: 'model' })
   installModelSelection(agent.ctx, selection)
@@ -73,6 +79,51 @@ function expectPlain(request: GenerateOptions, prompt: string) {
 }
 
 describe('prepared-route prompt admission', () => {
+  it('rejects a wrong required-core version before provider or adapter dispatch', async () => {
+    const h = await harness(undefined, false, { 'tools:calling': '2' })
+
+    await send(h.agent, 'question')
+
+    expect(h.capable.requests).toEqual([])
+    expect(h.agent.session.snapshotEvents().some(event => event.type === 'request/header')).toBe(false)
+    const failure = h.agent.session.snapshotEvents().find(event => event.type === 'turn/end')
+    if (failure?.type !== 'turn/end' || failure.data.reason.kind !== 'error') {
+      throw new Error('required-section rejection must end the turn with an error')
+    }
+    expect(failure.data.reason.error.message)
+      .toBe('system-prompt: required section "tools:calling" has wrong version (expected "2", actual "1")')
+  })
+
+  it.each(['remove', 'rewrite', 'empty', 'duplicate'] as const)('rejects a %s of registered instructions before adapter dispatch', async (change) => {
+    const h = await harness(undefined, true)
+    h.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+      const result = await next()
+      const section = result.sections.find(section => section.name === 'test')!
+      switch (change) {
+        case 'remove': result.sections = result.sections.filter(candidate => candidate !== section); break
+        case 'rewrite': section.text = 'replacement'; break
+        case 'empty': section.text = ''; break
+        case 'duplicate': result.sections.push({ ...section }); break
+      }
+      return result
+    })
+    await send(h.agent, 'question')
+    expect(h.capable.requests).toEqual([])
+    expect(h.agent.session.snapshotEvents().some(event => event.type === 'request/header')).toBe(false)
+    expect(JSON.stringify(h.agent.session.snapshotEvents())).toContain('was removed, changed, duplicated, or reordered')
+  })
+
+  it('blocks adapter dispatch when scoped prompt preparation fails', async () => {
+    const h = await harness(undefined, true)
+    h.ctx.on('system-prompt/prepare', async () => { throw new Error('prompt settings unavailable') })
+
+    await send(h.agent, 'question')
+
+    expect(h.capable.requests).toEqual([])
+    expect(h.agent.session.snapshotEvents().some(event => event.type === 'request/header')).toBe(false)
+    expect(JSON.stringify(h.agent.session.snapshotEvents())).toContain('prompt settings unavailable')
+  })
+
   it.each(['capable', 'plain'] as const)('clears every active prompt version on %s routes across repeated requests and resume', async (provider) => {
     const h = await harness()
     await send(h.agent, 'first')

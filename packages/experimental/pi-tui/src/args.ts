@@ -124,6 +124,7 @@ Commands:
   /skills [on|off|toggle|status]   list and toggle skills or control them all
   /shell [win|kali]        shared shell overlay — the agent shares the session
   /exec                    list the shell commands the agent executed
+  /context                 inspect last request, current context, and queued input
   /agents                 list live subagents
   /jobs                   list background jobs
   /export                 write this transcript to a markdown file

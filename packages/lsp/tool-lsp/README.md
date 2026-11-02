@@ -1,5 +1,5 @@
 ---
-description: "The model-facing lsp tool: four read-only code-navigation operations with one-based UTF-16 cursor coordinates, bounded results, and hover text, for users and maintainers composing model code navigation."
+description: "The model-facing lsp and lsp_diagnostics tools: precise navigation plus bounded file diagnostics with explicit freshness, for users and maintainers composing model code navigation."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-tool-lsp` lets a model navigate code through one read-only `lsp` tool: open a symbol's definition, find references and implementations, or read hover documentation. Requests use one-based UTF-16 line and character positions. Navigation results are bounded, grouped by file, and labeled when locations are omitted or text is truncated; hover results are normalized and distinguish missing information from errors. The package requires a configured LSP provider and a session workspace root. Choose it when textual search is ambiguous or a change needs precise symbol relationships; ordinary navigation should continue to use `search` and `read`.
+`dsh-tool-lsp` lets a model navigate code through `lsp` and inspect one file through `lsp_diagnostics`. Navigation uses one-based UTF-16 cursor coordinates and returns bounded locations or hover text. Diagnostics returns document identity and an explicit freshness status with bounded findings. The package requires a configured LSP provider and a session workspace root. Use navigation when textual search is ambiguous, and check edited files' diagnostics before reporting completion; ordinary navigation should continue to use `search` and `read`.
 
 ## Table of Contents
 
@@ -29,11 +29,11 @@ An agent uses `lsp` when textual matches are ambiguous or before a change that n
 
 ### The tool
 
-`lsp` takes `operation` (`goToDefinition`, `findReferences`, `goToImplementation`, or `hover`), `file_path`, `line`, and `character`. `line` and `character` are positive one-based UTF-16 cursor coordinates; an off-symbol position may return no results. `findReferences` always includes the declaration, so impact analysis never misses the defining site. Provider choice, language id, workspace root, limits, timeout, and executable stay outside model input.
+`lsp` takes `operation` (`goToDefinition`, `findReferences`, `goToImplementation`, or `hover`), `file_path`, `line`, and `character`. `line` and `character` are positive one-based UTF-16 cursor coordinates; an off-symbol position may return no results. `findReferences` always includes the declaration. `lsp_diagnostics` takes only `file_path` and returns a bounded observation for that workspace file. Provider choice, language id, workspace root, limits, timeout, and executable stay outside model input.
 
 ### What the model gets back
 
-Navigation returns `path:line:character` locations grouped by file (one-based); hover returns normalized text or a no-hover notice. Empty locations and no hover are successful no-result responses. Results are capped first by `maxLocations` and then by `maxResultChars`, with omission and truncation markers inside the complete cap; the caps affect only presentation, not the canonical result value.
+Navigation returns `path:line:character` locations grouped by file (one-based); hover returns normalized text or a no-hover notice. `lsp_diagnostics` returns workspace and file URIs, provider id, document version and digest, observation time, status, bounded findings, and omitted count. `current` means an exact-version publish observed at that time; it does not guarantee report completeness or replace tests. `unverified`, `not-reported`, `changed`, and `invalid` do not establish that a file is clean. Navigation is capped by `maxLocations` and `maxResultChars`; diagnostics is capped by `maxResultChars` in its rendered text.
 
 ### Configuration
 
@@ -105,7 +105,7 @@ One system-prompt section (first-party order 2200) positions LSP as a precision 
 ##### Verbatim guidance
 
 ```markdown
-Use search/read for ordinary navigation. Use lsp when textual matches are ambiguous or before a change requires precise definitions, implementations, or references. Positions are one-based line and character (UTF-16) at the cursor; an off-symbol position may return no results. findReferences always includes the declaration.
+Use search/read for ordinary navigation. Use lsp when textual matches are ambiguous or before a change requires precise definitions, implementations, or references. Use lsp_diagnostics for relevant edited files and before reporting completion. Diagnostics may be stale, unverified, or unavailable; never treat silence as clean. Positions are one-based line and character (UTF-16) at the cursor; an off-symbol position may return no results. findReferences always includes the declaration.
 ```
 
 #### Token effect
@@ -134,7 +134,7 @@ Prefix-stable while the visible tool definition and order are unchanged; registr
 
 #### What the model sees
 
-File-grouped `path:line:character` location lines or normalized hover text, capped first by `maxLocations` and then by `maxResultChars`; omission and truncation markers are included inside the complete character cap. These caps affect only Native/model presentation, not the canonical value. Empty results use distinct `No results.` / `No hover information.` lines.
+File-grouped `path:line:character` location lines or normalized hover text, capped first by `maxLocations` and then by `maxResultChars`; omission and truncation markers are included inside the complete character cap. Diagnostic output is capped by `maxResultChars` and retains freshness and document identity in the returned value. Empty navigation results use distinct `No results.` / `No hover information.` lines.
 
 #### Token effect
 

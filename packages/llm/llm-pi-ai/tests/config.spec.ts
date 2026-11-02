@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'vitest'
+import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { assertServiceable, Config, resolveProfiles, type Options } from '../src/config.ts'
+
+describe('endpoint port environment', () => {
+  const providers = { local: { api: 'openai-completions', baseURL: 'http://127.0.0.1:18080/v1', baseURLPortEnv: 'LOCAL_PORT', models: [{ id: 'm' }] } }
+
+  it('uses the launch snapshot precedence and preserves the endpoint path', () => {
+    const environment = createLaunchEnvironmentSnapshot([
+      { source: 'project-env', path: '/work/.env', values: { LOCAL_PORT: '19000' } },
+      { source: 'process', values: { LOCAL_PORT: '19001' } },
+    ])
+    expect(resolveProfiles(providers, 'strict', environment).get('local')?.baseURL).toBe('http://127.0.0.1:19001/v1')
+    expect(providers.local.baseURL).toBe('http://127.0.0.1:18080/v1')
+    expect(resolveProfiles(providers).get('local')?.baseURL).toBe(providers.local.baseURL)
+    const empty = createLaunchEnvironmentSnapshot([{ source: 'process', values: { LOCAL_PORT: '' } }])
+    expect(resolveProfiles(providers, 'strict', empty).get('local')?.baseURL).toBe(providers.local.baseURL)
+  })
+
+  it.each(['0', '65536', '-1', '1.5', 'abc', '18080/path', ' 19000', '19000\n'])('refuses invalid port %s without including its value', (port) => {
+    const environment = createLaunchEnvironmentSnapshot([{ source: 'process', values: { LOCAL_PORT: port } }])
+    expect(() => resolveProfiles(providers, 'strict', environment)).toThrow('llm-pi-ai: provider "local" LOCAL_PORT must be a port from 1 through 65535')
+  })
+
+  it('rejects invalid references and missing or non-HTTP explicit endpoints', () => {
+    expect(() => resolveProfiles({ local: { ...providers.local, baseURLPortEnv: 'bad-name!' } })).toThrow('must name an environment variable')
+    expect(() => resolveProfiles({ local: { ...providers.local, baseURLPortEnv: 'LOCAL_PORT\n' } })).toThrow('must name an environment variable')
+    expect(() => resolveProfiles({ local: { baseURLPortEnv: 'LOCAL_PORT' } })).toThrow('requires an explicit baseURL')
+    expect(() => resolveProfiles({ local: { ...providers.local, baseURL: 'invalid' } })).toThrow('requires a valid baseURL')
+    expect(() => resolveProfiles({ local: { ...providers.local, baseURL: 'file:///tmp/model' } })).toThrow('requires an HTTP or HTTPS baseURL')
+  })
+})
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>

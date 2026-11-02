@@ -63,7 +63,7 @@ describe.skipIf(!hasPwsh)('tool-pwsh through a real Loader composition', () => {
       schemaHasRunInBackground: true,
       promptHasSection: true,
     })
-    expect(report?.promptTextHash).toMatchInlineSnapshot('"7668d91500220f8f1c6c85a0b94072fcc521e09f8f666fe1c0a1fbb68de95219"')
+    expect(report?.promptTextHash).toMatchInlineSnapshot('"c01abf413b19792a03bf94eaac45b653a17c8ce6a7b0989a9cc9319a860d2fa2"')
     expect(report?.foregroundText).toBe('loader-ok\n')
     expect(report?.backgroundText).toContain('loader-bg-ok')
     expect(report?.backgroundText).toContain('[status: completed, exit code: 0]')

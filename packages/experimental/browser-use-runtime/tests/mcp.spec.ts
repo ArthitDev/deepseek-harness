@@ -74,7 +74,7 @@ async function load(exclusive = false, mode?: string, toolCallTimeoutMs?: number
     } }],
   ])
   const configPath = join(root, 'cordis.yml')
-  await writeFile(configPath, JSON.stringify([...modules.keys()].map(name => ({ id: name, name, config: name === 'loop' ? { agents: [] } : name === 'prompt' && toolOrder !== undefined ? { toolOrder } : {} }))))
+  await writeFile(configPath, JSON.stringify([...modules.keys()].map(name => ({ id: name, name, config: name === 'loop' ? { agents: [] } : name === 'prompt' ? { preserveSections: true, ...toolOrder === undefined ? {} : { toolOrder } } : {} }))))
   const ctx = new Context()
   contexts.push(ctx)
   ctx.baseUrl = pathToFileURL(root).href + '/'
@@ -325,6 +325,7 @@ describe('Session MCP Loader composition', () => {
 
   it('denies inherited browser resources and instructions while keeping unrelated MCP servers usable', async () => {
     const { ctx, root } = await load(true)
+    ctx.systemPrompt.section({ name: 'unrelated:guidance', order: 300, text: 'Unrelated prompt section.' })
     await ctx.plugin(McpResources)
     ctx.mcpResources.register('docs', { request: async () => ({ contents: [{ uri: 'docs://memo', text: 'Independent document.' }] }) })
     const parent = await ctx.agents.create({ sessionId: SessionId('resource-parent') })
@@ -336,6 +337,7 @@ describe('Session MCP Loader composition', () => {
     const blocked = await warm(ctx, child.agent)
     expect(blocked.tools.some(tool => tool.name === TOOL)).toBe(false)
     expect(renderPrompt(blocked)).not.toContain('BROWSER_FIXTURE_INSTRUCTION')
+    expect(renderPrompt(blocked)).toContain('Unrelated prompt section.')
     expect(renderPrompt(blocked)).toContain('browser-fixture')
     for (const name of ['list_mcp_resources', 'list_mcp_resource_templates', 'read_mcp_resource']) {
       expect((await resource(ctx, child.agent, name)).isError).toBe(true)

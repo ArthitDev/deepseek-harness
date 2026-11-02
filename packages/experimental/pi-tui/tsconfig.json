@@ -6,6 +6,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../../bundle/web-app" },
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
@@ -17,6 +18,7 @@
     { "path": "../../interaction/user-approval" },
     { "path": "../../interaction/user-questions" },
     { "path": "../../llm/llm" },
+    { "path": "../../llm/token-meter" },
     { "path": "../../terminal/terminal" },
     { "path": "../../terminal/terminal-bash" },
     { "path": "../../terminal/tool-terminal" },

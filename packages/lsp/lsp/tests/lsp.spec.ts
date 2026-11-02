@@ -7,6 +7,7 @@ import Lsp, {
   type LspProvider,
   type LspProviderQuery,
   type LspQueryResult,
+  type LspDiagnosticsResult,
 } from '@deepseek-ai/dsh-lsp'
 
 /** A scripted provider that records the queries it receives. */
@@ -58,6 +59,34 @@ describe('finalExtension', () => {
 })
 
 describe('Lsp registration', () => {
+  it('routes diagnostics through the file extension and releases the capability on disposal', async () => {
+    const { lsp } = await mountLsp()
+    const result: LspDiagnosticsResult = {
+      workspaceUri: 'file:///ws', fileUri: 'file:///ws/a.ts', providerId: LspProviderId('ts'),
+      documentVersion: 1, documentDigest: 'digest', observedAt: '2026-11-02T00:00:00.000Z',
+      status: 'current', diagnostics: [], omitted: 0,
+    }
+    let seen: unknown
+    const provider: LspProvider = {
+      id: LspProviderId('ts'), extensionToLanguage: { '.ts': 'typescript' },
+      query: () => Promise.resolve({ kind: 'locations', locations: [], resolvedWorkspaceUri: 'file:///ws' }),
+      diagnostics(request) { seen = request; return Promise.resolve(result) },
+    }
+    const dispose = lsp.registerProvider(provider)
+    await expect(lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: '/ws' })).resolves.toEqual(result)
+    expect(seen).toEqual({ filePath: 'a.ts', workspaceRoot: '/ws', languageId: 'typescript' })
+    dispose()
+    await expect(lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: '/ws' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'LSP_UNAVAILABLE' }))
+  })
+
+  it('reports LSP_UNAVAILABLE when a routed provider omits diagnostics', async () => {
+    const { lsp } = await mountLsp()
+    lsp.registerProvider(makeProvider('ts', { '.ts': 'typescript' }))
+    await expect(lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: '/ws' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'LSP_UNAVAILABLE' }))
+  })
+
   it('registers a provider and routes a query to it, then releases on dispose', async () => {
     const { lsp } = await mountLsp()
     const provider = makeProvider('ts', { '.ts': 'typescript' })

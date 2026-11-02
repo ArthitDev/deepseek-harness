@@ -70,6 +70,12 @@ describe('dsh-sdk-minimal bundle', () => {
       streamIdleTimeoutMs: 172800000,
     })
     expect(rows.find(row => row.id === 'system-prompt')?.config).toEqual({
+      preserveSections: true,
+      requiredSections: {
+        'tools:calling': '1',
+        'deployment:persona-prefix': '1',
+        'deployment:persona-suffix': '1',
+      },
       includeHarnessIdentity: false,
       includeRuntimeContext: false,
       personaPrefix: { __jsExpr: "process.env.DSH_SYSTEM_PROMPT ?? 'You are a helpful software engineer assistant.'" },

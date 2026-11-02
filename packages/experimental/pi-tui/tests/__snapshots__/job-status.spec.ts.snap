@@ -2,6 +2,10 @@
 
 exports[`background job status in Agent Debug > observes registered jobs through a Loader composition independently of tool and turn completion > completed tool with running jobs 1`] = `
 "           │ ── Agent Debug ──                             
+           │ Main Agent · last tool: pwsh · calls: 0       
+           │ pending, 1 completed, 0 failed, 0 cancelled, 0
+           │ stopped · usage: unknown                      
+           │                                               
            │ + [OK] Shell · pwsh · 0.0s                    
            │ {"command":"short preview"}                   
            │ started background job pwsh-1                 
@@ -9,10 +13,6 @@ exports[`background job status in Agent Debug > observes registered jobs through
            │ [RUNNING] Job · pwsh-1 · 4.0s                 
            │ [RUNNING] Job · bash-1 · 4.0s                 
            │ [RUNNING] Job · workflow-1 · 4.0s             
-           │                                               
-           │                                               
-           │                                               
-           │                                               
            │                                               
            │                                               
            │                                               

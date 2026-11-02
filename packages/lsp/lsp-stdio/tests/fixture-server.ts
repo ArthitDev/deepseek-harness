@@ -25,7 +25,7 @@
  * Run: node fixture-server.ts (Node's erasable TypeScript syntax support).
  */
 
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
 
 const enc = process.env.LSP_FAKE_ENCODING ?? 'utf-16'
 const sync: unknown = process.env.LSP_FAKE_SYNC !== undefined ? JSON.parse(process.env.LSP_FAKE_SYNC) : 1
@@ -135,12 +135,18 @@ function handle(message: { id?: number; method?: string; params?: unknown; resul
     process.exit(0)
   }
   if (method === 'textDocument/didOpen') {
+    const crashOnceMarker = process.env.LSP_FAKE_CRASH_ON_OPEN_ONCE
+    if (crashOnceMarker !== undefined && !existsSync(crashOnceMarker)) {
+      appendFileSync(crashOnceMarker, 'crashed\n')
+      process.exit(1)
+    }
     if (crashOnOpen) process.exit(1)
     if (openMarker !== undefined) {
       const params = message.params as { textDocument?: { text?: unknown } } | undefined
       appendFileSync(openMarker, `${JSON.stringify(params?.textDocument?.text)}\n`)
     }
     if (onOpen !== undefined) emitServerRequest(onOpen)
+    publishFakeDiagnostics(message.params)
     return
   }
   if (method === 'initialized') {
@@ -163,6 +169,33 @@ function handle(message: { id?: number; method?: string; params?: unknown; resul
   }
   // Unknown request with an id: answer null so the client never stalls.
   if (id !== undefined) send({ id, result: null })
+}
+
+/** Emit configurable diagnostics after didOpen to exercise exact-version and stale-report handling. */
+function publishFakeDiagnostics(params: unknown): void {
+  const raw = process.env.LSP_FAKE_DIAGNOSTICS
+  const mode = process.env.LSP_FAKE_DIAGNOSTICS_MODE ?? 'current'
+  if (raw === undefined || mode === 'silence') return
+  const document = (params as { textDocument?: { uri?: unknown; version?: unknown } } | undefined)?.textDocument
+  if (typeof document?.uri !== 'string' || typeof document.version !== 'number') return
+  const uri = mode === 'wrong-uri' ? `${document.uri}.other` : document.uri
+  const version = mode === 'stale' ? Math.max(0, document.version - 1)
+    : mode === 'invalid-version' ? 'invalid'
+      : mode === 'unversioned' ? undefined : document.version
+  const diagnostics: unknown = JSON.parse(raw)
+  const notify = (): void => {
+    send({
+      method: 'textDocument/publishDiagnostics',
+      params: {
+        uri,
+        ...(version === undefined ? {} : { version }),
+        diagnostics,
+      },
+    })
+  }
+  const delay = Number(process.env.LSP_FAKE_DIAGNOSTICS_DELAY_MS ?? 0)
+  if (delay > 0) setTimeout(notify, delay)
+  else notify()
 }
 
 /** Append one teardown event when the fixture is configured to expose process ordering. */

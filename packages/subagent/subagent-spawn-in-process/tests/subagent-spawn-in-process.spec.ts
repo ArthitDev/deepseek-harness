@@ -36,7 +36,9 @@ async function mountInvariants(ctx: Context): Promise<void> {
 async function setup(script: Script) {
   const ctx = new Context()
   const adapter = new MockAdapter(script)
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, {
+    systemPrompt: { requiredSections: { 'deployment:persona-prefix': '1', 'deployment:persona-suffix': '1' } },
+  })
   await mountInvariants(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)

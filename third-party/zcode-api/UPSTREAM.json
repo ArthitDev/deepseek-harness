@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/TriDefender/zcode-api",
+  "commit": "4ecbe78beead9202ef457d17861efa9a057a5d71",
+  "version": "4.8.6",
+  "license": "CC-BY-NC-SA-4.0",
+  "copied": ["src/", "scripts/build-fork-worker.ts", "package.json", "bun.lock", "tsconfig.json", "LICENSE", "config.example.yaml"],
+  "localChanges": [
+    "Fail worker builds with a nonzero exit status when Bun reports unsuccessful compilation.",
+    "Enforce process-wide CAPTCHA solve concurrency with expiring queue waits and reject queued work on shutdown.",
+    "Wait for per-solve worker termination before releasing its concurrency slot.",
+    "Expose authenticated aggregate process and CAPTCHA diagnostics; pool statistics do not mutate token storage."
+  ]
+}

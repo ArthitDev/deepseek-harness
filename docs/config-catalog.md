@@ -1624,6 +1624,8 @@ export interface PiAiProviderProfile {
   api?: string
   /** Endpoint for this route's models; defaults to the installed catalog's endpoint. */
   baseURL?: string
+  /** Optional launch-environment variable replacing only the explicit baseURL port; unset or empty keeps that URL. */
+  baseURLPortEnv?: string
   /**
    * This route's model catalog. Omission serves the installed catalog for the
    * route unchanged; an explicit list replaces it, each entry defaulting its
@@ -1866,7 +1868,7 @@ export type PiAiThinkingTokenBudgetField = NonNullable<OpenAICompletionsCompat['
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:222`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:225`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 
@@ -1993,6 +1995,14 @@ export interface LspLocalServerConfig {
   maxStderrBytes?: number
   /** Largest source file this host will open (bytes). Default 4000000. */
   maxDocumentBytes?: number
+  /** Maximum time spent waiting for initialize and a diagnostics publish (ms). Default 5000. */
+  diagnosticsTimeoutMs?: number
+  /** Maximum time for canonicalization, queueing, reads, and diagnostics (ms). Default 30000. */
+  diagnosticsOperationTimeoutMs?: number
+  /** Maximum normalized diagnostics returned for one document. Default 200. */
+  maxDiagnostics?: number
+  /** Maximum serialized diagnostic fields retained per result (bytes). Default 128000. */
+  maxDiagnosticBytes?: number
   /** Graceful `shutdown`/`exit` budget before escalation (ms). Default 5000. */
   shutdownTimeoutMs?: number
   /** Request-cancel and SIGTERM→SIGKILL grace (ms). Default 2000. */
@@ -2000,7 +2010,7 @@ export interface LspLocalServerConfig {
 }
 ```
 
-Source: [`packages/lsp/lsp-stdio/src/index.ts:82`](../packages/lsp/lsp-stdio/src/index.ts)
+Source: [`packages/lsp/lsp-stdio/src/index.ts:97`](../packages/lsp/lsp-stdio/src/index.ts)
 
 <a id="deepseek-aidsh-mcp-client"></a>
 
@@ -2176,7 +2186,7 @@ interface PentestModeConfig {
 
 Depends on: [`PentestMode`](subsystems/../../packages/pentest/pentest-executor/README.md) · `Volatile` (`@deepseek-ai/cordis`)
 
-Source: [`packages/pentest/pentest-executor/src/index.ts:335`](../packages/pentest/pentest-executor/src/index.ts)
+Source: [`packages/pentest/pentest-executor/src/index.ts:338`](../packages/pentest/pentest-executor/src/index.ts)
 
 <a id="deepseek-aidsh-pentest-run"></a>
 
@@ -3421,6 +3431,10 @@ Source: [`packages/subagent/subagent-spawn-in-process/src/index.ts:25`](../packa
 ```ts config-catalog
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.personaPrefix} for its contract). */
 export interface Config {
+  /** Reject changed, missing, duplicated, or reordered effective registered sections after the waterfall (default false). */
+  preserveSections?: boolean
+  /** Require these registered section names and exact versions before provider evaluation (default empty). */
+  requiredSections?: Record<string, string>
   /** Include the factual runtime-host label before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
@@ -3444,7 +3458,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:247`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:260`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 
@@ -3735,7 +3749,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/lsp/tool-lsp/src/index.ts:57`](../packages/lsp/tool-lsp/src/index.ts)
+Source: [`packages/lsp/tool-lsp/src/index.ts:61`](../packages/lsp/tool-lsp/src/index.ts)
 
 <a id="deepseek-aidsh-tool-present"></a>
 
@@ -4099,7 +4113,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'ptc' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:675`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:701`](../packages/core/tools/src/index.ts)
 
 <a id="deepseek-aidsh-typert-loader"></a>
 
@@ -4194,7 +4208,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:44`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:45`](../packages/bundle/web-app/src/index.ts)
 
 <a id="deepseek-aidsh-web-fetch-http"></a>
 
@@ -4390,6 +4404,8 @@ export interface Config {
   cwd?: string
   /** Newest transcript items rendered by default; older items remain searchable. */
   historyLimit?: number
+  /** Quiet time after a recognized background-job prompt before Agent Debug warns. */
+  jobInputWarningDelayMs?: number
 }
 ```
 

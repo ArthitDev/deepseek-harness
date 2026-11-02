@@ -18,6 +18,7 @@ import PentestModePolicy from '@deepseek-ai/dsh-pentest-executor'
 import * as Persona from '@deepseek-ai/dsh-persona'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { installWebPromptSettings } from '../src/core/prompt-settings.ts'
+import { installContextCapture, readContextSnapshot } from '../src/core/context.ts'
 import { forkSession } from '../src/core/session.ts'
 
 class RecordingAdapter extends LlmAdapter {
@@ -72,7 +73,7 @@ describe('TUI Web prompt settings', () => {
       }
       if (savedWeb) await save(initial)
       const fallback = savedWeb ? false : initial
-      await mountAgentLoopTestDependencies(ctx)
+      await mountAgentLoopTestDependencies(ctx, { systemPrompt: { preserveSections: true } })
       await ctx.plugin(LocalFileSystem, { cwd: root })
       ctx.provide('profileContext', { name: 'tui', home: root })
       await ctx.plugin(Loader)
@@ -80,7 +81,10 @@ describe('TUI Web prompt settings', () => {
       ctx.loader.builtins['mode-test'] = PentestModePolicy
       ctx.loader.builtins['instructions-test'] = AgentInstructions
       ctx.loader.builtins['tui-settings-test'] = {
-        name: 'tui-settings-test', inject: ['pentestModePolicy', 'systemPrompt'], apply: installWebPromptSettings,
+        name: 'tui-settings-test', inject: ['pentestModePolicy', 'systemPrompt'], apply: async (context: Context) => {
+          installContextCapture(context)
+          await installWebPromptSettings(context)
+        },
       }
       const composition = join(root, 'cordis.yml')
       await writeFile(composition, JSON.stringify([
@@ -177,6 +181,13 @@ describe('TUI Web prompt settings', () => {
         expect(await readFile(composition, 'utf8')).toBe(originalComposition)
       }
       await send(true)
+      const captured = readContextSnapshot(ctx, agent.session, agent.inbox).lastRequest
+      expect(captured).toMatchObject({ provider: 'mock', model: 'mock', generation: 2 })
+      expect(captured?.messageTokens).toBeGreaterThan(0)
+      expect(captured?.categories.agentInstructions.count).toBe(1)
+      expect(captured?.categories.runtimeContext.count).toBeGreaterThan(0)
+      expect(JSON.stringify(captured)).not.toContain(question)
+      expect(JSON.stringify(captured)).not.toContain('Mandatory Jev-first browser and computer actions')
       expect(wireRequests[0]!.messages[0]).toMatchSnapshot('complete system prompt')
       agent.session.append('developer/message', {
         turn: 2, step: 1,
@@ -352,7 +363,7 @@ describe('TUI Web prompt settings', () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-team-prompt-surface-'))
     const ctx = new Context()
     try {
-      await mountAgentLoopTestDependencies(ctx)
+      await mountAgentLoopTestDependencies(ctx, { systemPrompt: { preserveSections: true } })
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'other built-in guidance' })
       const patchPath = join(root, 'profile.patch.yml')
       ctx.provide('profileContext', { name: surface, home: root, patchPath })

@@ -9,30 +9,35 @@
  *   POST /v1/chat/completions   (streaming + non-streaming)
  *
  * Auth: the proxy owns its Google OAuth chain end to end. `GET /auth/login`
- * starts a loopback flow with the public Gemini CLI client (the same client
- * the open-source gemini-cli embeds) and `GET /oauth/callback` exchanges the
+ * starts a loopback flow with the embedded Antigravity OAuth client,
+ * and `GET /oauth/callback` exchanges the
  * code; rotated tokens persist only to the proxy's own state file
  * (~/.gemini/antigravity-proxy-token.json, override with ANTIGRAVITY_TOKEN_FILE).
  * No Antigravity CLI installation or seed file is involved.
  *
- * Endpoints: GET /health, /v1/models, POST /v1/chat/completions (streaming
- * accepted, folded to one JSON response), GET /auth/login, /auth/status,
+ * Endpoints: GET /health, /v1/models, POST /v1/chat/completions (JSON or SSE),
+ * GET /auth/login, /auth/status,
  * GET /oauth/callback.
  *
- * Env: PORT (8877), HOST (127.0.0.1), ANTIGRAVITY_TOKEN_FILE,
- *      ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET
+ * Env: ANTIGRAVITY_PORT (18877), HOST (127.0.0.1), ANTIGRAVITY_TOKEN_FILE,
+ *      ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET,
+ *      ANTIGRAVITY_API_BASE, ANTIGRAVITY_OAUTH_TOKEN_URL, ANTIGRAVITY_TIMEOUT_MS.
+ * Endpoint overrides are for trusted local simulations; they receive OAuth credentials.
  */
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { readFileSync, writeFileSync, renameSync, chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { toCloudCodeRequest, replyCloudCode } from './protocol.mjs'
 
-const PORT = Number(process.env.PORT ?? 8877)
+const PORT = Number(process.env.ANTIGRAVITY_PORT ?? 18877)
+if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) throw new Error('Invalid ANTIGRAVITY_PORT')
 const HOST = process.env.HOST ?? '127.0.0.1'
 const TOKEN_STATE_FILE = process.env.ANTIGRAVITY_TOKEN_FILE
   ?? join(homedir(), '.gemini', 'antigravity-proxy-token.json')
-const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const OAUTH_TOKEN_URL = process.env.ANTIGRAVITY_OAUTH_TOKEN_URL ?? 'https://oauth2.googleapis.com/token'
 // The Antigravity CLI's own embedded OAuth client (present in every agy
 // binary, not a per-user credential); stored split-encoded to match how the
 // upstream CLI and the opencode plugin both ship it.
@@ -43,7 +48,8 @@ const DEFAULT_CLIENT_ID = Buffer.from(
 const DEFAULT_CLIENT_SECRET = ['GOCSPX-K58FWR486Ld', 'LJ1mLB8sXC4z6qDAf'].join('')
 const CLIENT_ID = process.env.ANTIGRAVITY_CLIENT_ID ?? DEFAULT_CLIENT_ID
 const CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET ?? DEFAULT_CLIENT_SECRET
-const CCA_BASE = 'https://daily-cloudcode-pa.googleapis.com'
+const CCA_BASE = process.env.ANTIGRAVITY_API_BASE ?? 'https://daily-cloudcode-pa.googleapis.com'
+const REQUEST_TIMEOUT_MS = Number(process.env.ANTIGRAVITY_TIMEOUT_MS ?? 60_000)
 const REFRESH_SKEW_MS = 120_000
 
 const log = (...parts) => console.log('[antigravity-proxy]', ...parts)
@@ -76,16 +82,16 @@ function initToken() {
     log(`ERROR: no refresh_token in ${TOKEN_STATE_FILE}. Delete it and re-run to re-authenticate.`)
     process.exit(1)
   }
-  auth.ok = Boolean(tokenState.access_token) && Date.now() < tokenState.expiry - REFRESH_SKEW_MS
-  log(`state file OK: ${TOKEN_STATE_FILE}${auth.ok ? '' : ' (access expired — it refreshes on the next request)'}`)
+  auth.ok = true
+  log(`state file OK: ${TOKEN_STATE_FILE}`)
 }
 
 function persistToken() {
   const wrapped = { token: tokenState, auth_method: 'oauth' }
   try {
     mkdirSync(dirname(TOKEN_STATE_FILE), { recursive: true })
-    const tmp = `${TOKEN_STATE_FILE}.tmp`
-    writeFileSync(tmp, JSON.stringify(wrapped))
+    const tmp = `${TOKEN_STATE_FILE}.${randomBytes(8).toString('hex')}.tmp`
+    writeFileSync(tmp, JSON.stringify(wrapped), { flag: 'wx', mode: 0o600 })
     renameSync(tmp, TOKEN_STATE_FILE)
     try { chmodSync(TOKEN_STATE_FILE, 0o600) } catch { /* best effort on Windows */ }
   } catch (error) {
@@ -95,11 +101,12 @@ function persistToken() {
 
 // One loopback login at a time; the state parameter rejects forged callbacks.
 let pendingAuth
+const callbackUrl = () => `http://127.0.0.1:${server.address().port}/oauth/callback`
 
 function buildAuthUrl(state) {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
-    redirect_uri: `http://127.0.0.1:${PORT}/oauth/callback`,
+    redirect_uri: callbackUrl(),
     response_type: 'code',
     scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
     access_type: 'offline',
@@ -112,12 +119,13 @@ function buildAuthUrl(state) {
 async function exchangeAuthCode(code) {
   const response = await fetch(OAUTH_TOKEN_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
-      redirect_uri: `http://127.0.0.1:${PORT}/oauth/callback`,
+      redirect_uri: callbackUrl(),
       grant_type: 'authorization_code',
     }),
   })
@@ -138,13 +146,15 @@ async function exchangeAuthCode(code) {
 
 let refreshInFlight
 async function ensureAccessToken() {
+  if (!tokenState?.refresh_token) throw Object.assign(new Error('not authenticated; open /auth/login'), { statusCode: 503 })
   const expires = expiryToMs(tokenState.expiry)
   if (tokenState.access_token && Date.now() < expires - REFRESH_SKEW_MS) {
     return tokenState.access_token
   }
-  refreshInFlight ??= (async () => {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = (async () => {
     log('refreshing access token …')
-    const body = JSON.stringify({
+    const body = new URLSearchParams({
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       refresh_token: tokenState.refresh_token,
@@ -152,95 +162,85 @@ async function ensureAccessToken() {
     })
     const response = await fetch(OAUTH_TOKEN_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     })
     if (!response.ok) {
-      const detail = await response.text().catch(() => '')
-      refreshInFlight = undefined
       auth.ok = false
       auth.error = `OAuth refresh failed (HTTP ${response.status}) — open http://127.0.0.1:${PORT}/auth/login to re-authenticate`
-      log('ERROR:', auth.error, detail.slice(0, 200))
+      await response.body?.cancel()
+      log('ERROR:', auth.error)
       throw new Error(auth.error)
     }
     const payload = await response.json()
+    if (typeof payload.access_token !== 'string' || !payload.access_token) throw new Error('OAuth refresh returned no access token')
     tokenState.access_token = payload.access_token
     if (payload.refresh_token !== undefined) tokenState.refresh_token = payload.refresh_token
     tokenState.expiry = Date.now() + (payload.expires_in ?? 3600) * 1000
     persistToken()
-    refreshInFlight = undefined
     auth.ok = true
     auth.error = undefined
     return tokenState.access_token
   })()
-  return refreshInFlight
+  try { return await refreshInFlight } finally { refreshInFlight = undefined }
 }
 
-/** POST one Cloud Code Assist call and return its raw JSON/SSE body text. */
-async function callCloudCode(model, apiKey, messages, stream) {
+let projectInFlight
+async function ensureProject(accessToken, signal) {
+  if (tokenState.project_id) return tokenState.project_id
+  if (projectInFlight) return projectInFlight
+  projectInFlight = (async () => {
+    const post = async (operation, body) => {
+      const response = await fetch(`${CCA_BASE}/v1internal:${operation}`, {
+        method: 'POST', signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify(body),
+      })
+      if (!response.ok) {
+        await response.body?.cancel()
+        throw new Error(`Cloud Code ${operation} failed (HTTP ${response.status})`)
+      }
+      return response.json()
+    }
+    const projectFrom = result => {
+      const value = result.cloudaicompanionProject ?? result.projectId ?? result.project
+      return typeof value === 'string' ? value : value?.id
+    }
+    const loaded = await post('loadCodeAssist', { metadata: { ideType: 'ANTIGRAVITY' } })
+    let project = projectFrom(loaded)
+    if (!project) {
+      const tier = loaded.allowedTiers?.find(item => item.isDefault)?.id ?? loaded.currentTier?.id ?? 'free-tier'
+      for (let attempt = 0; attempt < 5 && !project; attempt++) {
+        if (attempt) await sleep(1000, undefined, { signal })
+        const onboarded = await post('onboardUser', { tier_id: tier, metadata: { ide_type: 'ANTIGRAVITY' } })
+        project = projectFrom(onboarded.response ?? onboarded)
+      }
+    }
+    if (typeof project !== 'string' || !project.trim()) throw new Error('Cloud Code did not return a project; complete Antigravity account setup and retry')
+    tokenState.project_id = project
+    persistToken()
+    return project
+  })()
+  try { return await projectInFlight } finally { projectInFlight = undefined }
+}
+
+/** POST Cloud Code Assist with OAuth; caller keys are never forwarded to Google. */
+async function callCloudCode(body, translated, signal) {
   const accessToken = await ensureAccessToken()
-  const systemText = messages.filter(m => m.role === 'system').map(m => m.content).join('\n')
-  const contents = messages
-    .filter(m => m.role !== 'system')
-    .map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
-    }))
+  const project = await ensureProject(accessToken, signal)
   const payload = {
-    model,
-    project: tokenState.project_id ?? undefined,
-    request: {
-      contents,
-      ...(systemText !== '' ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
-      generationConfig: { maxOutputTokens: 8192 },
-    },
+    model: body.model, project, requestId: `agent-${randomBytes(16).toString('hex')}`,
+    request: translated,
   }
-  const response = await fetch(`${CCA_BASE}/v1internal:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`, {
-    method: 'POST',
+  return fetch(`${CCA_BASE}/v1internal:${body.stream === true ? 'streamGenerateContent?alt=sse' : 'generateContent'}`, {
+    method: 'POST', signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
-      'X-Goog-Api-Key': apiKey,
-      ...(tokenState.project_id !== undefined ? { 'x-tenant-id': tokenState.project_id } : {}),
     },
     body: JSON.stringify(payload),
   })
-  const text = await response.text()
-  return { status: response.status, text, stream }
-}
-
-/** Fold Cloud Code Assist SSE/JSON into one OpenAI chat-completions response. */
-function toOpenAiResponse(bodyText, model) {
-  let text = ''
-  const chunks = []
-  for (const raw of bodyText.split('\n')) {
-    const line = raw.trim()
-    if (!line.startsWith('data:')) continue
-    const payload = line.slice(5).trim()
-    if (payload === '' || payload === '[DONE]') continue
-    try { chunks.push(JSON.parse(payload)) } catch { /* skip malformed SSE frames */ }
-  }
-  const root = chunks.length === 1 ? chunks[0] : { responses: chunks }
-  const sources = chunks.length > 0 ? chunks : [JSON.parse(bodyText)]
-  for (const source of sources) {
-    for (const candidate of source.response?.candidates ?? []) {
-      for (const part of candidate.content?.parts ?? []) {
-        if (typeof part.text === 'string') text += part.text
-      }
-    }
-  }
-  return {
-    id: `chatcmpl-${Date.now()}`,
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model,
-    choices: [{
-      index: 0,
-      message: { role: 'assistant', content: text },
-      finish_reason: 'stop',
-    }],
-    usage: root.response?.usageMetadata ?? undefined,
-  }
 }
 
 const KNOWN_MODELS = [
@@ -252,15 +252,15 @@ const KNOWN_MODELS = [
 ]
 
 const server = http.createServer(async (request, response) => {
-  const url = new URL(request.url, `http://${request.headers.host}`)
   try {
+    const url = new URL(request.url, `http://127.0.0.1:${PORT}`)
     if (url.pathname === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(JSON.stringify({ status: 'ok', service: 'antigravity-proxy', authenticated: auth.ok }))
       return
     }
     if (url.pathname === '/auth/login') {
-      pendingAuth = { state: randomBytes(16).toString('hex') }
+      pendingAuth = { state: randomBytes(16).toString('hex'), expires: Date.now() + 300_000 }
       response.writeHead(302, { Location: buildAuthUrl(pendingAuth.state) })
       response.end()
       return
@@ -270,18 +270,19 @@ const server = http.createServer(async (request, response) => {
       const code = url.searchParams.get('code')
       const state = url.searchParams.get('state')
       const page = (title, body) => {
-        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        response.end(`<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font-family:sans-serif;background:#111;color:#eee;text-align:center;padding-top:15vh"><h1>${title}</h1><p>${body}</p></body>`)
+        response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
+        response.end(`${title}\n\n${body}`)
       }
       if (problem) {
         pendingAuth = undefined
         page('Antigravity proxy — sign-in failed', `Google returned: ${problem}. Close this tab and try again.`)
         return
       }
-      if (!code || !pendingAuth || state !== pendingAuth.state) {
+      if (!code || !pendingAuth || state !== pendingAuth.state || Date.now() > pendingAuth.expires) {
         page('Antigravity proxy — invalid callback', 'Missing or mismatched OAuth state. Start again from /auth/login.')
         return
       }
+      pendingAuth = undefined
       try {
         await exchangeAuthCode(code)
         pendingAuth = undefined
@@ -307,7 +308,7 @@ const server = http.createServer(async (request, response) => {
       return
     }
     if (url.pathname === '/v1/chat/completions' && request.method === 'POST') {
-      if (!auth.ok || !tokenState) {
+      if (!tokenState?.refresh_token) {
         response.writeHead(503, { 'Content-Type': 'application/json' })
         response.end(JSON.stringify({
           error: {
@@ -319,31 +320,48 @@ const server = http.createServer(async (request, response) => {
         return
       }
       let body = ''
-      for await (const chunk of request) body += chunk
-      const { model = 'gemini-3-flash', messages = [], stream = false } = JSON.parse(body)
-      const apiKey = request.headers.authorization?.replace(/^Bearer\s+/i, '') ?? 'antigravity'
-      const { status, text } = await callCloudCode(model, apiKey, messages, stream === true)
-      if (status >= 400) {
-        response.writeHead(status, { 'Content-Type': 'application/json' })
-        response.end(JSON.stringify({ error: { message: text.slice(0, 400), type: 'upstream_error', code: status } }))
+      let bytes = 0
+      const decoder = new TextDecoder()
+      for await (const chunk of request) {
+        bytes += chunk.length
+        if (bytes > 32 * 1024 * 1024) throw Object.assign(new Error('request body exceeds 32 MiB'), { statusCode: 413 })
+        body += decoder.decode(chunk, { stream: true })
+      }
+      body += decoder.decode()
+      let parsed
+      try { parsed = JSON.parse(body) } catch { throw Object.assign(new Error('invalid request JSON'), { statusCode: 400 }) }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Object.assign(new Error('request must be an object'), { statusCode: 400 })
+      const translated = toCloudCodeRequest(parsed)
+      const disconnected = new AbortController()
+      response.once('close', () => disconnected.abort())
+      const signal = AbortSignal.any([disconnected.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+      const upstream = await callCloudCode(parsed, translated, signal)
+      if (!upstream.ok) {
+        await upstream.body?.cancel()
+        response.writeHead(upstream.status, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({ error: { message: `Cloud Code request failed (HTTP ${upstream.status})`, type: 'upstream_error', code: upstream.status } }))
         return
       }
-      response.writeHead(200, { 'Content-Type': 'application/json' })
-      response.end(JSON.stringify(toOpenAiResponse(text, model)))
+      await replyCloudCode(upstream, response, parsed)
       return
     }
     response.writeHead(404, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ error: { message: `unknown path ${url.pathname}` } }))
   } catch (error) {
     log('request failed:', error.message)
-    response.writeHead(502, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({ error: { message: String(error.message ?? error), type: 'proxy_error' } }))
+    if (response.destroyed) return
+    const payload = { error: { message: String(error.message ?? error), type: 'proxy_error' } }
+    if (response.headersSent) response.end(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`)
+    else {
+      response.writeHead(error.statusCode ?? (error.name === 'TimeoutError' ? 504 : 502), { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify(payload))
+    }
   }
 })
 
 initToken()
 server.listen(PORT, HOST, () => {
-  log(`listening on http://${HOST}:${PORT}`)
+  log(`listening on http://${HOST}:${server.address().port}`)
   log(`token state: ${TOKEN_STATE_FILE}`)
   if (!auth.ok) log(`not authenticated yet — open http://127.0.0.1:${PORT}/auth/login in a browser once`)
 })

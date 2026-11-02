@@ -287,6 +287,7 @@ flowchart LR
   svc_pentestRunController["ctx.pentestRunController<br/>Penetration-test run Remote controller"]
   svc_pentestModePolicy["ctx.pentestModePolicy<br/>Team-mode execution policy"]
   svc_pentestLoop["ctx.pentestLoop<br/>Penetration-test control loop"]
+  svc_pentestAssistance["ctx.pentestAssistance<br/>Run-wide request accounting and progress assistance"]
   svc_webSearchPolicy["ctx.webSearchPolicy<br/>Global web-search policy"]
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
@@ -366,6 +367,7 @@ flowchart LR
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
+  pkg_pentest_executor --> svc_pentestAssistance
   pkg_pentest_executor --> svc_pentestLoop
   pkg_pentest_executor --> svc_pentestModePolicy
   pkg_pentest_run --> svc_pentestRunController
@@ -695,6 +697,7 @@ flowchart LR
 | `ctx.pentestRunController` | `core` | [`pentest-run`](../packages/pentest/pentest-run) | - | - | - | 将规范运行快照和 operator mutation 投影到生成的 `pentestRuns` Remote 命名空间。 |
 | `ctx.pentestModePolicy` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 保存持久化的红队、蓝队或黑队模式，并把对应模式的操作提示词贡献给普通 Session。 |
 | `ctx.pentestLoop` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 每个运行最多拥有一个 Host 进程内控制循环；重启后持久进度仍保留在 `pentestRuns` 服务中。 |
+| `ctx.pentestAssistance` | `core` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 跨 episode 共享目标请求限制，约束建议性评审，并检索保留来源引用的 Wiki 和运行证据。 |
 | `ctx.webSearchPolicy` | `core` | [`tool-web`](../packages/web/tool-web) | - | - | - | 保存持久化的“始终使用 Web 搜索”设置，供 preset 作用域的 Web 工具读取，同时不会在默认模式下强制搜索。 |
 
 维护模式：混合模式。服务从 Cordis 声明中发现；接口、实现和消费方角色在 `scripts/gen-doc-graphs.ts` 中分类，并设有完整性守卫。

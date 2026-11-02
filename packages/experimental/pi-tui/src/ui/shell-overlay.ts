@@ -96,7 +96,7 @@ export async function openShellOverlay(
   const output = new Text('', 0, 0)
   const editor = new Editor(tui, editorTheme, { paddingX: 1 })
   const abort = new AbortController()
-  const container = new ShellOverlay(editor, () => close())
+  const container = new ShellOverlay(editor, () => { close() })
   container.addChild(output)
   container.addChild(editor)
   const handle = tui.showOverlay(container, { width: '90%', maxHeight: '80%' })

@@ -102,6 +102,24 @@ function registerEcho(ctx: Context, name = 'echo'): unknown[] {
   return calls
 }
 
+describe('tool workflow guidance across presentation modes', () => {
+  it.each(['native', 'ptc', 'both'] as const)('preserves visible tools and workflow guidance in %s mode', async (mode) => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    try {
+      registerEcho(ctx)
+      const schemas = ctx.tools.schemas()
+      const assembly = await systemPrompt.assemble()
+      expect(assembly.sections.find(section => section.name === 'tools:calling')?.text)
+        .toContain('A background acknowledgement confirms a start, not completion')
+      expect(ctx.tools.schemas()).toEqual(schemas)
+      expect(assembly.tools.map(tool => tool.name)).toEqual(mode === 'native'
+        ? ['echo'] : mode === 'ptc' ? [RUN_CODE_NAME] : ['echo', RUN_CODE_NAME])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
 /** A structural fake of the owning agent: captures session appends. */
 function fakeAgent(): { agent: Agent; events: { type: string; data: unknown }[] } {
   const events: { type: string; data: unknown }[] = []

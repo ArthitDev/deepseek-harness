@@ -12,7 +12,7 @@ seam 与模型恰好公开 4 项语义查询；该联合是闭合的，因此新
 
 ```ts type-equiv
 /**
- * The four semantic queries the seam and model expose. A closed union: adding an operation is a
+ * The four semantic navigation queries the seam and model expose. A closed union: adding an operation is a
  * compile-enforced change across the seam, providers, and the tool. Symbols and call hierarchy are
  * not operations here; they need different schemas.
  */
@@ -67,6 +67,56 @@ interface LspQueryRequest {
  */
 interface LspProviderQuery extends LspQueryRequest {
   /** The LSP language id for `filePath`, from this provider's extension mapping. */
+  readonly languageId: string
+}
+```
+
+## 诊断
+
+诊断使用与导航相同的提供方选择和工作区，但只请求一个文件，不需要光标。结果包含源文件身份、摘要、观察时间和明确状态。`current` 表示观察时服务端发布了匹配文档版本的报告；`unverified`、`not-reported`、`changed` 和 `invalid` 都不能说明文件没有问题。
+
+```ts type-equiv
+/** Normalized diagnostic reported for one opened document version. */
+interface LspDiagnostic {
+  readonly range: LspRange
+  readonly severity: 'error' | 'warning' | 'information' | 'hint' | 'unknown'
+  readonly message: string
+  readonly source?: string
+  readonly code?: string | number
+}
+```
+
+```ts type-equiv
+/** Freshness of one on-demand publish-diagnostics observation. */
+type LspDiagnosticsStatus = 'current' | 'unverified' | 'not-reported' | 'changed' | 'invalid'
+```
+
+```ts type-equiv
+/** One bounded publish-diagnostics observation for the exact source bytes read by the provider. */
+interface LspDiagnosticsResult {
+  readonly workspaceUri: string
+  readonly fileUri: string
+  readonly providerId: LspProviderId
+  readonly documentVersion: number
+  readonly documentDigest: string
+  readonly observedAt: string
+  readonly status: LspDiagnosticsStatus
+  readonly diagnostics: readonly LspDiagnostic[]
+  readonly omitted: number
+}
+```
+
+```ts type-equiv
+/** A diagnostics request shares file routing and workspace selection with navigation, without a cursor. */
+interface LspDiagnosticsRequest {
+  readonly filePath: string
+  readonly workspaceRoot: string
+}
+```
+
+```ts type-equiv
+/** Diagnostics request with the language id selected from the same extension route as navigation. */
+interface LspProviderDiagnostics extends LspDiagnosticsRequest {
   readonly languageId: string
 }
 ```
@@ -134,13 +184,20 @@ interface LspProvider {
    * @returns the normalized, closed-union result.
    */
   query(request: LspProviderQuery, signal?: AbortSignal): Promise<LspQueryResult>
+  /**
+   * Optional publish-diagnostics capability. The seam reports `LSP_UNAVAILABLE` when absent.
+   * @param request - the resolved file request and provider language id.
+   * @param signal - optional caller cancellation.
+   * @returns one bounded observation with explicit freshness status.
+   */
+  diagnostics?(request: LspProviderDiagnostics, signal?: AbortSignal): Promise<LspDiagnosticsResult>
 }
 ```
 
 ```ts type-equiv
 /**
  * The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query
- * execution; exposes exactly the four operations and no protocol escape hatch.
+ * execution; exposes four navigation operations plus file diagnostics and no protocol escape hatch.
  */
 interface LspService {
   /**
@@ -159,6 +216,13 @@ interface LspService {
    * @returns the normalized, closed-union result.
    */
   query(request: LspQueryRequest, signal?: AbortSignal): Promise<LspQueryResult>
+  /**
+   * Select a provider by the file extension and request diagnostics; a provider without this optional capability throws `LSP_UNAVAILABLE`.
+   * @param request - the file and workspace paths.
+   * @param signal - optional cancellation forwarded to the selected provider.
+   * @returns a bounded observation with explicit freshness status.
+   */
+  diagnostics(request: LspDiagnosticsRequest, signal?: AbortSignal): Promise<LspDiagnosticsResult>
 }
 ```
 
@@ -176,7 +240,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.lsp` — `LspService`
 
-The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query execution; exposes exactly the four operations and no protocol escape hatch.
+The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query execution; exposes four navigation operations plus file diagnostics and no protocol escape hatch.
 
 ```ts cordis-catalog
 /**
@@ -196,6 +260,14 @@ registerProvider(provider: LspProvider): () => void
  * @returns the normalized, closed-union result.
  */
 query(request: LspQueryRequest, signal?: AbortSignal): Promise<LspQueryResult>
+
+/**
+ * Select a provider by the file extension and request diagnostics; a provider without this optional capability throws `LSP_UNAVAILABLE`.
+ * @param request - the file and workspace paths.
+ * @param signal - optional cancellation forwarded to the selected provider.
+ * @returns a bounded observation with explicit freshness status.
+ */
+diagnostics(request: LspDiagnosticsRequest, signal?: AbortSignal): Promise<LspDiagnosticsResult>
 ```
 
 Source: [`packages/lsp/lsp/src/types.ts`](../../packages/lsp/lsp/src/types.ts)

@@ -10,6 +10,8 @@ import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
 
+export { ensureSbProxy, ensureZcodeProxy, installZcodeStartup } from './proxy-startup.ts'
+
 /** Stable Cordis plugin name. */
 export const name = 'web-startup'
 

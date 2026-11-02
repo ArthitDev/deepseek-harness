@@ -1,0 +1,183 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`compaction region transaction > replays every active system update when compacting across it 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "ORIGINAL SYSTEM",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+    "source": {
+      "kind": "system-prompt",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture user 1",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+    "source": {
+      "kind": "user",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture assistant 1",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+    "source": {
+      "kind": "model",
+      "model": "test-model",
+      "provider": "test-model",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "UPDATED SYSTEM
+Keep every project instruction.",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+    "source": {
+      "kind": "system-prompt",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture assistant 2",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+    "source": {
+      "kind": "model",
+      "model": "test-model",
+      "provider": "test-model",
+    },
+  },
+]
+`;
+
+exports[`compaction region transaction > replays every active system update when compacting after it 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "ORIGINAL SYSTEM",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+    "source": {
+      "kind": "system-prompt",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "UPDATED SYSTEM
+Keep every project instruction.",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+    "source": {
+      "kind": "system-prompt",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture user 3",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+    "source": {
+      "kind": "user",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture assistant 3",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+    "source": {
+      "kind": "model",
+      "model": "test-model",
+      "provider": "test-model",
+    },
+  },
+]
+`;
+
+exports[`compaction region transaction > replays every active system update when compacting before it 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "ORIGINAL SYSTEM",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+    "source": {
+      "kind": "system-prompt",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture user 1",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+    "source": {
+      "kind": "user",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture fixture assistant 1",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+    "source": {
+      "kind": "model",
+      "model": "test-model",
+      "provider": "test-model",
+    },
+  },
+  {
+    "content": [
+      {
+        "text": "UPDATED SYSTEM
+Keep every project instruction.",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+    "source": {
+      "kind": "system-prompt",
+    },
+  },
+]
+`;

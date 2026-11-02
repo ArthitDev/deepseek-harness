@@ -17,6 +17,8 @@ const fixtureServer = fileURLToPath(new URL('./fixture-server.ts', import.meta.u
 
 let root: string
 let ws: string
+const mountedContexts: Context[] = []
+const testReleases: Array<() => void> = []
 
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), 'lsp-local-')))
@@ -26,7 +28,14 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  for (const release of testReleases.splice(0)) release()
+  const cleanup = await Promise.allSettled(mountedContexts.splice(0).map(ctx => ctx.fiber.dispose()))
   await rm(root, { recursive: true, force: true })
+  const failures: unknown[] = []
+  for (const result of cleanup) {
+    if (result.status === 'rejected') failures.push(result.reason)
+  }
+  if (failures.length > 0) throw new AggregateError(failures, 'LSP lifecycle test cleanup failed')
 })
 
 /** One fake stdio server entry with optional behavior and host-bound overrides. */
@@ -66,6 +75,7 @@ async function mount(
   } finally {
     registrationSpy?.mockRestore()
   }
+  mountedContexts.push(ctx)
   return ctx
 }
 
@@ -79,6 +89,190 @@ function locationJson(line: number): unknown {
 }
 
 describe('lsp-stdio end to end over a fake server', () => {
+  it('bounds workspace canonicalization and waits for its abort cleanup', async () => {
+    const ctx = await mount({}, { diagnosticsOperationTimeoutMs: 80 })
+    const fs = ctx.fs
+    const resolve = fs.resolve.bind(fs)
+    const started = Promise.withResolvers<AbortSignal>()
+    const release = Promise.withResolvers<undefined>()
+    testReleases.push(() => {
+      release.resolve(undefined)
+    })
+    vi.spyOn(fs, 'resolve').mockImplementation(async (path, options) => {
+      if (path !== ws) return await resolve(path, options)
+      const signal = options?.signal
+      if (signal === undefined) throw new Error('workspace lookup missing operation timeout')
+      started.resolve(signal)
+      return await rejectWhenAborted(signal, release.promise)
+    })
+
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })
+    const timedOut = expect(pending).rejects.toThrow(expect.objectContaining({ code: 'LSP_DIAGNOSTICS_TIMEOUT' }))
+    const signal = await started.promise
+    await timedOut
+    expect(signal.aborted).toBe(true)
+    release.resolve(undefined)
+    await ctx.fiber.dispose()
+  })
+
+  it('tracks a diagnostics workspace lookup through provider disposal', async () => {
+    const ctx = await mount()
+    const fs = ctx.fs
+    const resolve = fs.resolve.bind(fs)
+    const started = Promise.withResolvers<AbortSignal>()
+    const release = Promise.withResolvers<undefined>()
+    testReleases.push(() => {
+      release.resolve(undefined)
+    })
+    vi.spyOn(fs, 'resolve').mockImplementation(async (path, options) => {
+      if (path !== ws) return await resolve(path, options)
+      const signal = options?.signal
+      if (signal === undefined) throw new Error('workspace lookup missing provider lifetime signal')
+      started.resolve(signal)
+      return await rejectWhenAborted(signal, release.promise)
+    })
+
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })
+    const outcome = pending.then(() => undefined, (error: unknown) => error)
+    const signal = await started.promise
+    let disposed = false
+    const disposing = ctx.fiber.dispose().then(() => { disposed = true })
+      .then(() => undefined, (error: unknown) => error)
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(signal.aborted).toBe(true)
+    expect(disposed).toBe(false)
+    release.resolve(undefined)
+    expect(await outcome).toMatchObject({ code: 'LSP_DISPOSED' })
+    expect(await disposing).toBeUndefined()
+  })
+
+  it('bounds the final source reread and does not return findings after timeout', async () => {
+    const diagnostic = { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, message: '漢' }
+    const ctx = await mount({ LSP_FAKE_DIAGNOSTICS: JSON.stringify([diagnostic]) }, {
+      diagnosticsOperationTimeoutMs: 100,
+      maxDiagnosticBytes: JSON.stringify({ range: diagnostic.range, severity: 'unknown', message: diagnostic.message }).length,
+    })
+    await expect(ctx.lsp.query(query('goToDefinition'))).resolves.toMatchObject({ kind: 'locations' })
+    const fs = ctx.fs
+    const streamText = fs.streamText.bind(fs)
+    let calls = 0
+    const rereadStarted = Promise.withResolvers<AbortSignal>()
+    vi.spyOn(fs, 'streamText').mockImplementation(async (target, signal) => {
+      calls++
+      if (calls === 2) {
+        if (signal === undefined) throw new Error('final source reread missing operation timeout')
+        rereadStarted.resolve(signal)
+        return (async function* () { await rejectWhenAborted(signal); yield '' })()
+      }
+      return await streamText(target, signal)
+    })
+
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })
+    const timedOut = expect(pending).rejects.toThrow(expect.objectContaining({ code: 'LSP_DIAGNOSTICS_TIMEOUT' }))
+    const signal = await rereadStarted.promise
+    await timedOut
+    expect(signal.aborted).toBe(true)
+    await expect(ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })).resolves.toMatchObject({
+      status: 'current', diagnostics: [], omitted: 1,
+    })
+  })
+
+  it('rereads the source after a delayed publish and suppresses findings when it changed', async () => {
+    const marker = join(root, 'opened.jsonl')
+    const ctx = await mount({
+      LSP_FAKE_DIAGNOSTICS: JSON.stringify([{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, message: 'old' }]),
+      LSP_FAKE_DIAGNOSTICS_DELAY_MS: '100',
+      LSP_FAKE_OPEN_MARKER: marker,
+    }, { diagnosticsTimeoutMs: 1000 })
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })
+    await vi.waitFor(async () => {
+      expect(await readFile(marker, 'utf8')).toContain('const x = 1')
+    })
+    await writeFile(join(ws, 'a.ts'), 'const x = 2\n')
+    await expect(pending).resolves.toMatchObject({ status: 'changed', diagnostics: [], omitted: 0 })
+    await ctx.fiber.dispose()
+  })
+
+  it('bounds silent diagnostics and recovers the pooled instance for the next navigation', async () => {
+    const ctx = await mount({ LSP_FAKE_DIAGNOSTICS: '[]', LSP_FAKE_DIAGNOSTICS_MODE: 'silence' }, { diagnosticsTimeoutMs: 80 })
+    await expect(ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws }))
+      .resolves.toMatchObject({ status: 'not-reported', diagnostics: [] })
+    await expect(ctx.lsp.query(query('goToDefinition')))
+      .resolves.toMatchObject({ kind: 'locations', locations: [] })
+    await ctx.fiber.dispose()
+  })
+
+  it('bounds diagnostics queued behind a navigation request that does not settle', async () => {
+    const marker = join(root, 'opened.jsonl')
+    const ctx = await mount({ LSP_FAKE_HANG: '1', LSP_FAKE_OPEN_MARKER: marker }, { diagnosticsOperationTimeoutMs: 100 })
+    const navigation = ctx.lsp.query(query('goToDefinition'))
+    const navigationFailed = expect(navigation).rejects.toThrow()
+    await vi.waitFor(async () => {
+      expect(await readFile(marker, 'utf8')).toContain('const x = 1')
+    })
+    await expect(ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws }))
+      .rejects.toThrow(expect.objectContaining({ code: 'LSP_DIAGNOSTICS_TIMEOUT' }))
+    const disposing = ctx.fiber.dispose()
+    await navigationFailed
+    await disposing
+  })
+
+  it('isolates simultaneous diagnostics across canonical workspaces', async () => {
+    const second = join(root, 'second')
+    await mkdir(second)
+    await writeFile(join(second, 'a.ts'), 'const z = 2\n')
+    const ctx = await mount({
+      LSP_FAKE_DIAGNOSTICS: JSON.stringify([{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, message: 'found' }]),
+    })
+    const [first, other] = await Promise.all([
+      ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws }),
+      ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: second }),
+    ])
+    expect(first).toMatchObject({ status: 'current', documentVersion: 1, fileUri: pathToFileURL(join(ws, 'a.ts')).href })
+    expect(other).toMatchObject({ status: 'current', documentVersion: 1, fileUri: pathToFileURL(join(second, 'a.ts')).href })
+    await ctx.fiber.dispose()
+  })
+
+  it('serializes concurrent diagnostics in one workspace and retries a crashed read-only operation', async () => {
+    const crashOnceMarker = join(root, 'crashed-once')
+    const ctx = await mount({
+      LSP_FAKE_DIAGNOSTICS: '[]',
+      LSP_FAKE_CRASH_ON_OPEN_ONCE: crashOnceMarker,
+    }, { diagnosticsTimeoutMs: 1000 })
+    const [first, second] = await Promise.all([
+      ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws }),
+      ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws }),
+    ])
+    expect([first.documentVersion, second.documentVersion]).toEqual([1, 2])
+    expect([first.status, second.status]).toEqual(['current', 'current'])
+    await expect(ctx.lsp.query(query('goToDefinition'))).resolves.toMatchObject({ kind: 'locations', locations: [] })
+    await ctx.fiber.dispose()
+  })
+
+  it('settles abort and disposal without leaving a pending diagnostics waiter', async () => {
+    const marker = join(root, 'opened.jsonl')
+    const ctx = await mount({ LSP_FAKE_DIAGNOSTICS: '[]', LSP_FAKE_DIAGNOSTICS_MODE: 'silence', LSP_FAKE_OPEN_MARKER: marker }, { diagnosticsTimeoutMs: 2000 })
+    const controller = new AbortController()
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws }, controller.signal)
+    await vi.waitFor(async () => {
+      expect(await readFile(marker, 'utf8')).toContain('const x = 1')
+    })
+    controller.abort(new Error('test abort'))
+    await expect(pending).rejects.toThrow('test abort')
+    await ctx.fiber.dispose()
+  })
+
+  it('unloads the provider while a diagnostics waiter is pending and awaits process teardown', async () => {
+    const marker = join(root, 'opened.jsonl')
+    const ctx = await mount({ LSP_FAKE_DIAGNOSTICS: '[]', LSP_FAKE_DIAGNOSTICS_MODE: 'silence', LSP_FAKE_OPEN_MARKER: marker }, { diagnosticsTimeoutMs: 2000 })
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })
+    await vi.waitFor(async () => {
+      expect(await readFile(marker, 'utf8')).toContain('const x = 1')
+    })
+    const disposal = ctx.fiber.dispose()
+    await expect(pending).rejects.toThrow()
+    await disposal
+  })
   it('routes different extensions to independent configured servers', async () => {
     await writeFile(join(ws, 'a.py'), 'x = 1\n')
     const ctx = new Context()
@@ -433,6 +627,9 @@ describe('lsp-stdio end to end over a fake server', () => {
     const resolve = fs.resolve.bind(fs)
     const started = Promise.withResolvers<AbortSignal>()
     const release = Promise.withResolvers<undefined>()
+    testReleases.push(() => {
+      release.resolve(undefined)
+    })
     vi.spyOn(fs, 'resolve').mockImplementation(async (path, options) => {
       if (path !== ws) return await resolve(path, options)
       const signal = options?.signal
@@ -442,16 +639,18 @@ describe('lsp-stdio end to end over a fake server', () => {
     })
 
     const pending = ctx.lsp.query(query('goToDefinition'))
+    const outcome = pending.then(() => undefined, (error: unknown) => error)
     const signal = await started.promise
     let disposed = false
     const disposing = ctx.fiber.dispose().then(() => { disposed = true })
+    const disposalOutcome = disposing.then(() => undefined, (error: unknown) => error)
     await new Promise<void>(resolve => setImmediate(resolve))
 
     expect(signal.aborted).toBe(true)
     expect(disposed).toBe(false)
     release.resolve(undefined)
-    await expect(pending).rejects.toThrow('provider is disposed')
-    await expect(disposing).resolves.toBeUndefined()
+    expect(await outcome).toMatchObject({ code: 'LSP_DISPOSED' })
+    expect(await disposalOutcome).toBeUndefined()
   })
 
   it('aborts a queued source stream when the provider is disposed', async () => {
@@ -474,6 +673,35 @@ describe('lsp-stdio end to end over a fake server', () => {
     await expect(pending).rejects.toThrow('provider is disposed')
     await expect(disposing).resolves.toBeUndefined()
     expect(signal.aborted).toBe(true)
+  })
+
+  it('waits for diagnostics source-read abort cleanup before provider disposal settles', async () => {
+    const ctx = await mount({ LSP_FAKE_DEF: 'null' })
+    const fs = ctx.fs
+    const started = Promise.withResolvers<AbortSignal>()
+    const release = Promise.withResolvers<undefined>()
+    testReleases.push(() => {
+      release.resolve(undefined)
+    })
+    vi.spyOn(fs, 'streamText').mockImplementation(async (_target, signal) => {
+      if (signal === undefined) throw new Error('diagnostics source read missing operation signal')
+      started.resolve(signal)
+      return await rejectWhenAborted(signal, release.promise)
+    })
+
+    const pending = ctx.lsp.diagnostics({ filePath: 'a.ts', workspaceRoot: ws })
+    const outcome = pending.then(() => undefined, (error: unknown) => error)
+    const signal = await started.promise
+    let disposed = false
+    const disposing = ctx.fiber.dispose().then(() => { disposed = true })
+    const disposalOutcome = disposing.then(() => undefined, (error: unknown) => error)
+    await new Promise<void>(resolve => setImmediate(resolve))
+
+    expect(signal.aborted).toBe(true)
+    expect(await outcome).toMatchObject({ code: 'LSP_DISPOSED' })
+    expect(disposed).toBe(false)
+    release.resolve(undefined)
+    expect(await disposalOutcome).toBeUndefined()
   })
 
   it('waits for every owned teardown before aggregating instance failures', async () => {

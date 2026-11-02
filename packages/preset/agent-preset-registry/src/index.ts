@@ -63,7 +63,11 @@ export class AgentPresetRegistry extends TypertRemoteService {
   private readonly bindings = new WeakMap<ScopeKey, Binding>()
   private readonly switches = new Map<string, Promise<unknown>>()
 
-  constructor(ctx: Context, public config: Config) {
+  constructor(
+    ctx: Context,
+    /** Validated registry configuration (default preset and the preset table). */
+    public config: Config,
+  ) {
     super(ctx, 'agentPresetRegistry', { namespace: 'agentPresetRegistry' })
     this.owner = ctx
     ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })

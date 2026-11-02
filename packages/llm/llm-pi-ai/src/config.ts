@@ -13,6 +13,7 @@
  * @module dsh-llm-pi-ai/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
+import type { LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 
 import type { CacheRetention, ChatTemplateKwargValue, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
 import z from '@deepseek-ai/schemastery'
@@ -102,6 +103,8 @@ export interface PiAiProviderProfile {
   api?: string
   /** Endpoint for this route's models; defaults to the installed catalog's endpoint. */
   baseURL?: string
+  /** Optional launch-environment variable replacing only the explicit baseURL port; unset or empty keeps that URL. */
+  baseURLPortEnv?: string
   /**
    * This route's model catalog. Omission serves the installed catalog for the
    * route unchanged; an explicit list replaces it, each entry defaulting its
@@ -328,6 +331,7 @@ const profile = z.object({
   displayName: z.string(),
   api: z.union(supportedProtocols()),
   baseURL: z.string(),
+  baseURLPortEnv: z.string(),
   models: z.array(modelProfile),
   modelOverrides: z.dict(modelOverride),
   compat: compatProfile,
@@ -405,18 +409,40 @@ function assertValidHeaders(provider: string, headers: Readonly<Record<string, s
  * routes. An omitted dict resolves to the empty, dormant route set.
  * @param providers - configured provider profiles keyed by route.
  * @param validation - writes require a complete catalog; stored reads retain catalog diagnostics.
+ * @param environment - launch snapshot used for configured endpoint port overrides; omitted keeps explicit ports.
  * @returns validated profiles in configuration order.
  */
 export function resolveProfiles(
   providers: Readonly<Record<string, PiAiProviderProfile>> | undefined,
   validation: 'strict' | 'deferred' = 'strict',
+  environment?: LaunchEnvironmentSnapshot,
 ): Map<string, ResolvedPiAiProviderProfile> {
   if (Array.isArray(providers)) {
     throw new Error('llm-pi-ai: providers is now a dict keyed by provider route, not an array of profiles')
   }
   const entries = Object.entries(providers ?? {})
   const resolved = new Map<string, ResolvedPiAiProviderProfile>()
-  for (const [provider, source] of entries) {
+  for (const [provider, profile] of entries) {
+    const source = { ...profile }
+    if (source.baseURLPortEnv !== undefined) {
+      if (!/^[A-Za-z_]/.test(source.baseURLPortEnv) || /\W/.test(source.baseURLPortEnv)) {
+        throw new Error(`llm-pi-ai: provider "${provider}" baseURLPortEnv must name an environment variable`)
+      }
+      if (source.baseURL === undefined) throw new Error(`llm-pi-ai: provider "${provider}" baseURLPortEnv requires an explicit baseURL`)
+      if (!URL.canParse(source.baseURL)) throw new Error(`llm-pi-ai: provider "${provider}" baseURLPortEnv requires a valid baseURL`)
+      const endpoint = new URL(source.baseURL)
+      if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
+        throw new Error(`llm-pi-ai: provider "${provider}" baseURLPortEnv requires an HTTP or HTTPS baseURL`)
+      }
+      const port = environment?.get(source.baseURLPortEnv)?.value
+      if (port !== undefined && port !== '') {
+        if (/\D/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+          throw new Error(`llm-pi-ai: provider "${provider}" ${source.baseURLPortEnv} must be a port from 1 through 65535`)
+        }
+        endpoint.port = port
+        source.baseURL = endpoint.href
+      }
+    }
     rejectRemovedFields(provider, source)
     if (provider.length === 0) throw new Error('llm-pi-ai: provider names must be non-empty')
     if (source.baseURL !== undefined && source.baseURL.length === 0) {

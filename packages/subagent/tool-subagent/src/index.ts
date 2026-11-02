@@ -250,6 +250,10 @@ async function settleForegroundRun(run: SubagentRun): Promise<ForegroundToolResu
  * @returns the tool `description` and the `prompt` parameter description.
  */
 function providerWording(inheritsConversation: boolean): { description: string; promptDescription: string } {
+  const handoff = ' State the objective and success criteria, relevant paths or URLs and known evidence, '
+    + 'scope and file ownership, whether you need findings, changes, or both, and the expected output. '
+    + 'Ask for sources, changed files, checks run, and unresolved issues as applicable. '
+    + 'When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work.'
   if (inheritsConversation) {
     return {
       description:
@@ -260,7 +264,8 @@ function providerWording(inheritsConversation: boolean): { description: string; 
         + 'You receive its result, not its intermediate steps.',
       promptDescription:
         'The task for the subagent. It already sees this conversation\'s completed turns, so build on them '
-        + 'freely and state only what is new.',
+        + 'freely. Include new instructions and evidence from the current in-flight turn, which it cannot see.'
+        + handoff,
     }
   }
   return {
@@ -272,7 +277,8 @@ function providerWording(inheritsConversation: boolean): { description: string; 
       + 'complete, standalone prompt: it does not see this conversation.',
     promptDescription:
       'The complete, self-contained task for the subagent. It does not share this '
-      + 'conversation\'s context, so include everything it needs.',
+      + 'conversation\'s context, so include everything it needs.'
+      + handoff,
   }
 }
 
@@ -601,10 +607,7 @@ export function apply(ctx: Context, config: Config, session?: Session): void {
         order: runtimeCtx.systemPrompt.getSectionOrder('TOOL_SUBAGENT'),
         text: context => mounted === undefined || runtimeCtx.tools.get(toolName, context.scope) === undefined
           ? ''
-          : `SUBAGENT EXECUTION
-Default: ${toolName} runs in background start independent delegations together in one assistant message continue useful work while they run — do NOT idle or poll
-Exception (foreground): run_in_background: false ONLY when next action directly depends on this subagent's result
-Notification: background run settles → runtime sends notice with: - outcome - final assistant message → do NOT busy-poll, wait for the notice`,
+          : `Use ${toolName} in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Sequence dependent work after its prerequisite results are available; coordinate edits to shared files. Set \`run_in_background: false\` when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message; avoid busy-polling. Review the returned evidence, changes, and checks before integrating the result.`,
       })
     }
   }

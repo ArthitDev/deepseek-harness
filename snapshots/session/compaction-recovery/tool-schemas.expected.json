@@ -349,7 +349,7 @@
           },
           "prompt": {
             "type": "string",
-            "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs."
+            "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
           },
           "run_in_background": {
             "type": "boolean",
@@ -374,7 +374,7 @@
           },
           "prompt": {
             "type": "string",
-            "description": "The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new."
+            "description": "The task for the subagent. It already sees this conversation's completed turns, so build on them freely. Include new instructions and evidence from the current in-flight turn, which it cannot see. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
           }
         },
         "required": [
@@ -965,7 +965,7 @@
             },
             "prompt": {
               "type": "string",
-              "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs."
+              "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
             },
             "run_in_background": {
               "type": "boolean",
@@ -990,7 +990,7 @@
             },
             "prompt": {
               "type": "string",
-              "description": "The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new."
+              "description": "The task for the subagent. It already sees this conversation's completed turns, so build on them freely. Include new instructions and evidence from the current in-flight turn, which it cannot see. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
             }
           },
           "required": [

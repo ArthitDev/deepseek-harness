@@ -41,6 +41,9 @@ const PATH_TAG_RE = /(<path>)([^<]*)(<\/path>)/g
 const ADDITIONAL_INSTRUCTIONS_PATH_RE = /(Additional instructions from: )([^\r\n]+)/g
 const EMBEDDED_EVENT_TIME_RE = /^(  "time": )\d+(?=,\r?$)/gm
 const EVENT_READ_OMITTED_BYTES_RE = /(\r?\n\r?\n\(Omitted )\d+( bytes\.)/g
+const DIAGNOSTIC_OBSERVED_AT_RE
+  = /^(Diagnostics [^\r\n]*; observed )\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\.(?=\r?\n|$)/
+const STABLE_DIAGNOSTIC_OBSERVED_AT = '1970-01-01T00:00:00.000Z'
 const EVENT_READ_TARGET_REGION_RE
   = /^Session [^\r\n]+ — [^\r\n]+\r?\nTarget event seq \d+:\r?\n```json\r?\n\{\r?\n[\s\S]*?(?=\r?\n```(?:\r?\n|$)|\r?\n\r?\n\(Omitted )/
 const PATH_TEXT_BOUNDARY_RE = /[\s<>'"`()\[\]{},;:!?=]/
@@ -399,7 +402,49 @@ export function normalizeSessionLog(
     }
     return scrubValue(record, ctx, cwdPathMode, identityMode) as Record<string, unknown>
   })
+  normalizeDiagnosticObservedAt(records)
   return records.map(r => JSON.stringify(r)).join('\n') + '\n'
+}
+
+/** Stabilize diagnostic timestamps only in results correlated with lsp_diagnostics calls.
+ * @param records - parsed Session records to update in place.
+ */
+export function normalizeDiagnosticObservedAt(records: Record<string, unknown>[]): void {
+  const diagnosticCallIds = new Set<string>()
+  for (const record of records) {
+    if (record.type !== 'tool/call' || record.data === null || typeof record.data !== 'object') continue
+    const data = record.data as Record<string, unknown>
+    if (data.name === 'lsp_diagnostics' && typeof data.callId === 'string') diagnosticCallIds.add(data.callId)
+  }
+  if (diagnosticCallIds.size === 0) return
+
+  const normalizeText = (value: string): string => value.replace(
+    DIAGNOSTIC_OBSERVED_AT_RE,
+    `$1${STABLE_DIAGNOSTIC_OBSERVED_AT}.`,
+  )
+  const visit = (value: unknown, correlated = false): void => {
+    if (value === null || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, correlated)
+      return
+    }
+    const object = value as Record<string, unknown>
+    const source = object.source
+    const modernToolResult = object.role === 'tool'
+      && source !== null && typeof source === 'object'
+      && (source as Record<string, unknown>).kind === 'tool'
+    const matchesCall = (object.type === 'tool-result' || modernToolResult)
+      && typeof object.toolCallId === 'string'
+      && diagnosticCallIds.has(object.toolCallId)
+    const shouldNormalize = correlated || matchesCall
+    for (const [key, child] of Object.entries(object)) {
+      if (typeof child === 'string' && shouldNormalize && key === 'text') object[key] = normalizeText(child)
+      else visit(child, shouldNormalize)
+    }
+  }
+  for (const record of records) {
+    if (record.type === 'tool/result' || record.type === 'request/header') visit(record)
+  }
 }
 
 /**

@@ -139,6 +139,63 @@ The [pentest-run](../../packages/pentest/pentest-run/README.md) snapshot include
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxpentestassistance--pentestassistance"></a>
+
+### `ctx.pentestAssistance` — `PentestAssistance`
+
+Host plugin shared by the TUI and Web profile.
+
+```ts cordis-catalog
+/**
+ * Read the current assistance settings without changing the shared namespace.
+ * @returns Live values from the shared settings namespace.
+ */
+current(): AssistanceSettings
+
+/**
+ * Add accounting to a fresh executor without replacing its existing guard.
+ * @param agentCtx - Executor-scoped context.
+ * @param lease - Run and target identities of this episode.
+ * @param sessionId - Executor session whose delegated descendants inherit the accounting.
+ */
+install(agentCtx: Context, lease: PentestTaskLease, sessionId: SessionId): void
+
+/**
+ * Read shared accounting and the last reviewer outcome for an existing run.
+ * @param runId - Canonical run identity.
+ * @returns Shared target states and the bounded review ledger.
+ */
+async status(runId: string): Promise<{ targets: readonly TargetAssistanceState[]; review?: ProgressReviewState }>
+
+/**
+ * Read advice only when it reviews the latest completed episode in this snapshot.
+ * @param snapshot - Snapshot used to schedule the next executor.
+ * @returns Evidence-linked advice, or undefined after newer work or a failed review.
+ */
+adviceFor(snapshot: PentestRunSnapshot): { episodeId: string; recommendation: string } | undefined
+
+/**
+ * Search on demand and cache only complete, source-attributed retrieval results.
+ * @param runId - Run whose evidence may be searched.
+ * @param query - Literal search terms.
+ * @param signal - Optional cancellation.
+ * @returns Bounded Wiki and evidence passages, never raw artifacts.
+ */
+async search(runId: string, query: string, signal?: AbortSignal): Promise<AssistanceMemoryResult>
+
+/**
+ * Invoke a tool-restricted reviewer only after evidence stagnation and within its own quota.
+ * @param snapshot - Canonical state already loaded by the control cycle.
+ * @param agentOptions - Existing Supervisor model route.
+ * @param signal - Parent loop cancellation.
+ */
+reviewIfNeeded(snapshot: PentestRunSnapshot, agentOptions: AgentOptions, signal?: AbortSignal): Promise<void>
+```
+
+Types: [AgentOptions](core.md) · [AssistanceMemoryResult](../../packages/pentest/pentest-executor/README.md) · [AssistanceSettings](../../packages/pentest/pentest-executor/README.md) · [PentestRunSnapshot](../../packages/pentest/pentest-run/README.md) · [PentestTaskLease](../../packages/pentest/pentest-run/README.md) · [ProgressReviewState](../../packages/pentest/pentest-executor/README.md) · [SessionId](core.md) · [TargetAssistanceState](../../packages/pentest/pentest-executor/README.md)
+
+Source: [`packages/pentest/pentest-executor/src/assistance.ts`](../../packages/pentest/pentest-executor/src/assistance.ts)
+
 <a id="ctxpentestloop--pentestloopservice"></a>
 
 ### `ctx.pentestLoop` — `PentestLoopService`

@@ -9,16 +9,26 @@ exit code: 0
 full output"
 `;
 
+exports[`agent tool activity > keeps collapsed branches through URL updates and navigates their parents with arrow keys > collapsed sub target after discovery 1`] = `
+"╭─ Targets ▾ · Enter toggle · Tab Debug ───────────────────────╮
+│   ▾ Target · 1                                               │
+│   └─ ▾ https://example.test/                                 │
+│ ›    └─ ▸ Sub Target · 3                                     │
+╰──────────────────────────────────────────────────────────────╯
+── Agent Debug · Tab Targets ──                                 
+No activity yet. Send a task in chat."
+`;
+
 exports[`agent tool activity > shows Targets above Debug and scrolls the tree independently by keyboard and mouse > targets above agent activity 1`] = `
-"╭─ Targets ──────────────────────────────────╮
-│ Target · 1                                 │
-│ └─ https://example.test/                   │
-│    └─ Sub Target · 15                      │
-│       ├─ path-0                            │
-│       ├─ path-1                            │
-│       ├─ path-2                            │
-│       ├─ path-3                            │
-│       ├─ path-4                            │
+"╭─ Targets ▾ ────────────────────────────────╮
+│   ▾ Target · 1                             │
+│   └─ ▾ https://example.test/               │
+│      └─ ▾ Sub Target · 15                  │
+│         ├─   path-0                        │
+│         ├─   path-1                        │
+│         ├─   path-2                        │
+│         ├─   path-3                        │
+│         ├─   path-4                        │
 ╰────────────────────────────────────────────╯
 ── Agent Debug · Tab Targets ──               
 › [OK] Tool · tool_0 · 1.5s                   

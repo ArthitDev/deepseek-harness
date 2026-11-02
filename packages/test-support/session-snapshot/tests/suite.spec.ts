@@ -1131,6 +1131,31 @@ describe('refreshFixtureReplacements', () => {
 })
 
 describe('stabilizeRefreshLog', () => {
+  it('normalizes observed times only for refreshed diagnostics results', () => {
+    const observedAt = '2026-11-02T03:04:05.678Z'
+    const callId = 'diagnostics-call'
+    const diagnosticText = `Diagnostics current; provider fixture; version 1; digest abc; observed ${observedAt}.`
+    const message = {
+      role: 'tool',
+      source: { kind: 'tool', callId },
+      toolCallId: callId,
+      content: [{ type: 'text', text: diagnosticText }],
+    }
+    const fresh = [
+      JSON.stringify({ type: 'session', id: 'same', createdAt: 1 }),
+      JSON.stringify({ type: 'tool/call', data: { callId, name: 'lsp_diagnostics', arguments: '{}' } }),
+      JSON.stringify({ type: 'tool/result', data: { message } }),
+      JSON.stringify({ type: 'request/header', data: { header: { messages: [message] } } }),
+      JSON.stringify({ type: 'user/message', data: { content: [{ type: 'text', text: `User mentioned ${observedAt}.` }] } }),
+    ].join('\n')
+
+    const output = stabilize(fresh, fresh)
+
+    expect(output.split('observed 1970-01-01T00:00:00.000Z.')).toHaveLength(3)
+    expect(output).toContain(`User mentioned ${observedAt}.`)
+    expect(output).not.toContain(diagnosticText)
+  })
+
   it('preserves unpacked member times when refresh first packs a chunk run', () => {
     const fresh = [
       '{"type":"session","id":"same","createdAt":200}',

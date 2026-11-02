@@ -32,6 +32,12 @@ kind: "package-reference"
 
 配置拥有固定开场白、runtime 上下文、部署 persona 前缀与后缀与工具顺序；其余一切来自已注册的贡献。
 
+`requiredSections` 在准备和 scope 覆盖合并后、读取段落文本或调用变量、工具和抑制回调前检查注册。抑制和 complete 提示词仍通过此注册检查。启用 `preserveSections: true` 时，所选必需段落的模板非空，就必须渲染为非空；有意设置的空模板仍然有效。可选的 `version` 是注册 metadata，不会改变渲染后的提示词文本。
+
+已发布的 profile 对 `tools:calling` 和两个部署 persona 段要求版本 `'1'`。启用 `harness:identity` 的 profile 也要求该版本。这些段落的带作用域 shadow 必须声明相同版本；此检查不会认证段落文本。
+
+工具、模式、skill、MCP 和 runtime 上下文贡献仍取决于实际组合的能力，因此 profile 不会将它们列为通用必需提示段。
+
 ```yaml
 - name: '@deepseek-ai/dsh-system-prompt'
   config:
@@ -43,6 +49,8 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
+| `requiredSections` | `{}` | 在准备和 scope 覆盖合并后、调用段落文本、变量或工具提供方以及抑制回调前，要求每个具名的有效注册都携带部署配置的确切 `version`。缺少版本或版本不匹配都会拒绝组装。抑制和完整提示词选择不会跳过注册检查。 |
+| `preserveSections` | `false` | 在 waterfall 中保留本次组装选中的每个有效注册段：名称、贡献文本、插值标记和相对顺序。先应用抑制和 complete 段选择。独立使用时默认关闭；已发布的 profile 会启用它。使用 waterfall 后的变量插值时，所选必需段的非空模板必须渲染为非空。仍可添加段、工具、上下文并路由变量。 |
 | `includeHarnessIdentity` | `true` | 是否包含顺序为 −1000 的事实标签 `Runtime host: Shield Break Harness.`。它不指定模型身份或 persona。设为 false 可省略该标签。 |
 | `includeRuntimeContext` | `true` | 是否在组装中包含有序动态 runtime 上下文 |
 | `personaPrefix` | `''` | 全局 persona 前缀模板，顺序为 `0`，位于第一方指导之前 |
@@ -63,6 +71,8 @@ ctx.systemPrompt.section({
 })
 ```
 
+在 deployment 需要固定版本时，为该注册设置 `version`。
+
 在段上设置 `interpolate: false` 可原样保留文本，包括生成的工具文档中的 `{{…}}` 组。其他段默认执行变量插值。
 
 ### 贡献提示词变量
@@ -81,7 +91,9 @@ ctx.systemPrompt.variable('cwd', ({ agent }) => agent?.session.header.cwd)
 
 `suppressRuntimeContext()` 移除调用作用域的所有动态运行时上下文贡献，但不禁用拥有底层事实的服务；多个抑制器独立组合，当不再存在抑制器时该 effect 会恢复上下文。
 
-`suppressSections()` 在每次组装时重新计算动态允许列表。未定义的允许列表停用对应抑制器；空列表隐藏所有受过滤的段落。使用 `globalOnly: true` 时，预设作用域中的贡献仍然可见。
+`suppressSections()` 在每次组装时重新计算动态允许列表。未定义的允许列表停用对应抑制器；空列表隐藏所有受过滤的段落。回调 provider 会依次收到作用域段名称、组装上下文和全部有效段名称。使用 `globalOnly: true` 时，预设作用域中的贡献仍然可见。
+
+按作用域筛选的 `system-prompt/prepare` serial 事件会在读取 provider 值、抑制决策和段选择之前运行。可用它刷新会影响下一次组装的设置；监听器失败时不会继续评估 provider。单独的 `system-prompt/assemble` waterfall 会在这些输入解析后运行。
 
 -----
 
@@ -95,7 +107,7 @@ ctx.systemPrompt.variable('cwd', ({ agent }) => agent?.session.header.cwd)
 
 ### 设计理念
 
-该包是一个注册表加一条协作式组装流水线。一次 `assemble()` 调用把全局层与所请求作用域的层合并，分离工具参数，先按数值再按名称规范化段顺序，运行按作用域筛选的 `system-prompt/assemble` waterfall，把有效的 complete 段恢复为唯一的提示词段，并实施任何当前生效的运行时上下文抑制器。段与动态上下文是独立的输入：段成为提示词文本，而上下文在循环下成为模型历史中带来源的 user 角色快照。工具 schema 按设计属于组装结果——「模型获知自己能做什么」是一个连贯整体，尽管适配器把 schema 作为独立 wire 字段传输。
+该包是一个注册表加一条协作式组装流水线。一次 `assemble()` 调用先运行按作用域筛选的 `system-prompt/prepare` serial 事件，再把全局层与所请求作用域的层合并，分离工具参数，先按数值再按名称规范化段顺序，运行按作用域筛选的 `system-prompt/assemble` waterfall，把有效的 complete 段恢复为唯一的提示词段，并实施任何当前生效的运行时上下文抑制器。段与动态上下文是独立的输入：段成为提示词文本，而上下文在循环下成为模型历史中带来源的 user 角色快照。工具 schema 按设计属于组装结果——「模型获知自己能做什么」是一个连贯整体，尽管适配器把 schema 作为独立 wire 字段传输。
 
 ### 源码地图
 
@@ -106,7 +118,7 @@ ctx.systemPrompt.variable('cwd', ({ agent }) => agent?.session.header.cwd)
 
 ### 组装与渲染
 
-组装分两阶段完成求值与渲染：`assemble()` 返回文本已求值但尚未插值的段、有序工具 schema，以及每个已注册变量按当前上下文求得的值；`renderPrompt()` 对未设置 `interpolate: false` 的段插值 `{{variable}}` 引用、删除空段并用空行连接——严格规则：未知引用、已注册但无值的引用或格式错误的完整组都会抛出，因为格式错误的提示词比明确失败更糟。`toolOrder` 在 waterfall 分发前规范化收集到的工具（注册顺序只是插件加载产物）；修改列表的 waterfall 监听器对其输出的确定性负责。
+组装分两阶段完成求值与渲染：`assemble()` 返回文本已求值但尚未插值的段、有序工具 schema，以及每个已注册变量按当前上下文求得的值。对 `assemble()` 返回的组装结果，`renderPrompt()` 会对未设置 `interpolate: false` 的段插值 `{{variable}}` 引用，删除可选空段并用空行连接。启用 preservation 时，所选必需段的非空模板在最终插值后必须保持非空；这些段中的格式错误、未知或无值引用只会报告段落名称。其他插值失败保留详细诊断。`toolOrder` 在 waterfall 分发前规范化收集到的工具（注册顺序只是插件加载产物）；修改列表的 waterfall 监听器对其输出的确定性负责。
 
 ### 作用域
 
@@ -177,6 +189,8 @@ schema token 在每次请求中重复。限制工具会为该 agent 移除其全
 - **插值文本不支持行内转义语法**：整段需要保留字面花括号时，使用 `interpolate: false`。
 - **`toolOrder` 配置错误在提示词组装（首轮）时出现，而不是启动时**：只有形状违规会在配置加载时抛出。
 
+
+- **Required section 版本用于标识注册项** — preservation 会检查所选段落渲染后非空，但不会将段落内容固定为获准文本。
 
 <a id="dev-note"></a>
 ### 开发备注

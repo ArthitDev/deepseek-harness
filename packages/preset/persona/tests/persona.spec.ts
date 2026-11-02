@@ -7,7 +7,10 @@ import { PERSONA_SUFFIX_SECTION, PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh
 
 async function harness(deploymentPersona: string): Promise<Context> {
   const ctx = new Context()
-  await ctx.plugin(SystemPrompt, { personaPrefix: deploymentPersona })
+  await ctx.plugin(SystemPrompt, {
+    personaPrefix: deploymentPersona,
+    requiredSections: { 'deployment:persona-prefix': '1', 'deployment:persona-suffix': '1' },
+  })
   return ctx
 }
 

@@ -9,11 +9,16 @@
 
 import { LspError } from '@deepseek-ai/dsh-lsp'
 import type {
+  LspDiagnostic,
+  LspDiagnosticsResult,
+  LspProviderDiagnostics,
+  LspProviderId,
   LspOperation,
   LspProviderQuery,
   LspQueryResult,
 } from '@deepseek-ai/dsh-lsp'
 import { deadline } from '@deepseek-ai/dsh-timeout'
+import { createHash } from 'node:crypto'
 import { abortable, abortError } from './abort.ts'
 import { LspConnection } from './connection.ts'
 import type { ConnectionSpawner, ConnectionSpec, ConnectionWriter } from './connection.ts'
@@ -30,12 +35,30 @@ import {
 
 /** Everything an instance needs beyond the connection spec. */
 export interface InstanceSpec extends ConnectionSpec {
+  /** Stable provider identity included in diagnostic results. */
+  readonly providerId: LspProviderId
   /** Canonical workspace file URI supplied by the filesystem provider. */
   readonly workspaceUri: string
   /** Static `initialize` options forwarded to the server. */
   readonly initializationOptions: unknown
   /** Graceful `shutdown`/`exit` budget before escalation (ms). */
   readonly shutdownTimeoutMs: number
+  /** Bound for diagnostics handshake, open, and publish wait (ms). */
+  readonly diagnosticsTimeoutMs: number
+  /** Maximum normalized diagnostics retained per request. */
+  readonly maxDiagnostics: number
+  /** Maximum UTF-8 bytes retained across normalized diagnostic fields. */
+  readonly maxDiagnosticBytes: number
+}
+
+interface DiagnosticsWaiter {
+  readonly uri: string
+  readonly version: number
+  exact?: { readonly diagnostics: readonly LspDiagnostic[]; readonly omitted: number; readonly invalid: boolean }
+  unversioned?: { readonly diagnostics: readonly LspDiagnostic[]; readonly omitted: number; readonly invalid: boolean }
+  invalid?: boolean
+  resolve: (() => void) | undefined
+  reject: ((error: Error) => void) | undefined
 }
 
 /**
@@ -52,6 +75,8 @@ export class LspInstance {
   private teardownPromise: Promise<void> | undefined
   /** Set once the process closes, so the pool can synchronously skip a dead instance. */
   private processClosed = false
+  private nextDocumentVersion = 0
+  private pendingDiagnostics: DiagnosticsWaiter | undefined
   /** Populated once `initialize` succeeds; a failed handshake rejects every query. */
   private readonly ready: Promise<void>
 
@@ -61,12 +86,26 @@ export class LspInstance {
    * @param writer - optional connection writer used by transport conformance tests.
    */
   constructor(private readonly spec: InstanceSpec, spawner: ConnectionSpawner, writer?: ConnectionWriter) {
-    this.connection = new LspConnection(spec, spawner, (method, params) => this.answerServerRequest(method, params), writer)
+    this.connection = new LspConnection(
+      spec,
+      spawner,
+      (method, params) => this.answerServerRequest(method, params),
+      writer,
+      (method, params) => {
+        this.onServerNotification(method, params)
+      },
+    )
     this.ready = this.initialize()
     // A handshake rejection must not surface as an unhandled rejection before the first query awaits
     // it; queries attach the real handler.
     this.ready.catch(() => {})
-    void this.connection.closed.then(() => { this.processClosed = true })
+    void this.connection.closed.then(() => {
+      this.processClosed = true
+      const waiter = this.pendingDiagnostics
+      if (waiter !== undefined) {
+        waiter.reject?.(this.connection.failure ?? new Error('language server closed before diagnostics arrived'))
+      }
+    })
   }
 
   /** Synchronous liveness check: true once the process has closed or the instance was disposed. */
@@ -103,6 +142,24 @@ export class LspInstance {
     // Keep the tail alive regardless of this query's outcome so the next caller still serializes. The
     // tail follows the ACTUAL prior work (this.queue), not the abortable view, so a caller giving up
     // on the wait does not deserialize the queue.
+    this.queue = this.queue.then(() => run).then(() => undefined, () => undefined)
+    return run
+  }
+
+  /**
+   * Query bounded diagnostics for a source file.
+   * @param request - routed file request and its LSP language id.
+   * @param source - source bytes already read inside the provider workspace queue.
+   * @param signal - optional caller cancellation; the host also applies its configured deadline.
+   * @returns bounded findings labelled with source identity and freshness.
+   */
+  diagnostics(request: LspProviderDiagnostics, source: HostSource, signal?: AbortSignal): Promise<LspDiagnosticsResult> {
+    const run = abortable(this.queue, signal)
+      .then(() => this.runDiagnostics(request, source, signal))
+      .catch(async (error: unknown) => {
+        if (this.isTransportFailure(error)) await this.awaitTeardownAttempt()
+        throw error
+      })
     this.queue = this.queue.then(() => run).then(() => undefined, () => undefined)
     return run
   }
@@ -151,13 +208,14 @@ export class LspInstance {
     }
 
     const uri = source.fileUrl
+    const version = ++this.nextDocumentVersion
     let opened = false
     try {
       /* v8 ignore next -- guards an abort landing between the ready wait and didOpen; not deterministically reproducible. */
       if (signal?.aborted) throw abortError(signal)
       try {
         await abortable(this.connection.notify('textDocument/didOpen', {
-          textDocument: { uri, languageId: request.languageId, version: 1, text: source.text },
+          textDocument: { uri, languageId: request.languageId, version, text: source.text },
         }), signal)
       } catch (error) {
         // A canceled backpressured write or failed stdin leaves the protocol stream unusable before
@@ -181,6 +239,107 @@ export class LspInstance {
           await this.awaitTeardownAttempt()
         }
       }
+    }
+  }
+
+  private async runDiagnostics(
+    request: LspProviderDiagnostics,
+    source: HostSource,
+    callerSignal?: AbortSignal,
+  ): Promise<LspDiagnosticsResult> {
+    const timer = deadline(undefined, this.spec.diagnosticsTimeoutMs, 'LSP_DIAGNOSTICS')
+    const signal = callerSignal === undefined ? timer.signal : AbortSignal.any([callerSignal, timer.signal])
+    const uri = source.fileUrl
+    const digest = digestText(source.text)
+    let version = this.nextDocumentVersion
+    let waiter: NonNullable<LspInstance['pendingDiagnostics']> | undefined
+    try {
+      await abortable(this.ready, signal)
+      if (this.disposed) throw new LspError('LSP instance was disposed', 'LSP_DISPOSED')
+      if (this.connection.failure !== undefined) throw this.connection.failure
+      if (!supportsTransientOpen(this.capabilities?.textDocumentSync)) {
+        throw new LspError('server does not support transient textDocument/didOpen', 'LSP_UNSUPPORTED_OPERATION')
+      }
+      version = ++this.nextDocumentVersion
+      waiter = { uri, version, resolve: undefined, reject: undefined }
+      this.pendingDiagnostics = waiter
+      try {
+        await abortable(this.connection.notify('textDocument/didOpen', {
+          textDocument: { uri, languageId: request.languageId, version, text: source.text },
+        }), signal)
+      } catch (error) {
+        await this.awaitTeardownAttempt()
+        throw error
+      }
+      try {
+        await waitForDiagnostics(waiter, signal)
+      } finally {
+        if (!this.dead) {
+          try {
+            await abortable(this.connection.notify('textDocument/didClose', { textDocument: { uri } }), signal)
+          } catch (error) {
+            await this.awaitTeardownAttempt()
+            throw error
+          }
+        }
+      }
+      const current = waiter.exact
+      const report = current ?? waiter.unversioned
+      const status = report?.invalid === true ? 'invalid'
+        : current !== undefined ? 'current' : report !== undefined ? 'unverified' : 'not-reported'
+      return {
+        workspaceUri: this.spec.workspaceUri,
+        fileUri: uri,
+        providerId: this.spec.providerId,
+        documentVersion: version,
+        documentDigest: digest,
+        observedAt: new Date().toISOString(),
+        status,
+        diagnostics: report?.diagnostics ?? [],
+        omitted: report?.omitted ?? 0,
+      }
+    } catch (error) {
+      if (callerSignal?.aborted) {
+        await this.awaitTeardownAttempt()
+        throw error
+      }
+      if (!timer.signal.aborted) throw error
+      await this.awaitTeardownAttempt()
+      const unversioned = waiter?.unversioned
+      return {
+        workspaceUri: this.spec.workspaceUri,
+        fileUri: uri,
+        providerId: this.spec.providerId,
+        documentVersion: version,
+        documentDigest: digest,
+        observedAt: new Date().toISOString(),
+        status: unversioned?.invalid === true || waiter?.invalid === true ? 'invalid' : unversioned !== undefined ? 'unverified' : 'not-reported',
+        diagnostics: unversioned?.diagnostics ?? [],
+        omitted: unversioned?.omitted ?? 0,
+      }
+    } finally {
+      if (this.pendingDiagnostics === waiter) this.pendingDiagnostics = undefined
+      timer[Symbol.dispose]()
+    }
+  }
+
+  private onServerNotification(method: string, params: unknown): void {
+    if (method !== 'textDocument/publishDiagnostics' || params === null || typeof params !== 'object') return
+    const record = params as Record<string, unknown>
+    const pending = this.pendingDiagnostics
+    if (pending === undefined || record.uri !== pending.uri) return
+    const parsed = normalizeDiagnostics(record.diagnostics, this.spec.maxDiagnostics, this.spec.maxDiagnosticBytes)
+    const hasVersion = Object.hasOwn(record, 'version')
+    if (hasVersion && (typeof record.version !== 'number' || !Number.isInteger(record.version) || record.version < 0)) {
+      pending.invalid = true
+      return
+    }
+    if (hasVersion) {
+      if (record.version !== pending.version) return
+      pending.exact = parsed
+      pending.resolve?.()
+    } else {
+      pending.unversioned = parsed
     }
   }
 
@@ -346,5 +505,83 @@ const CLIENT_CAPABILITIES = {
     definition: { linkSupport: true },
     implementation: { linkSupport: true },
     references: {},
+    publishDiagnostics: { versionSupport: true },
   },
 } as const
+
+/** Wait for one matching version notification; silence is represented by the caller as not-reported. */
+async function waitForDiagnostics(
+  pending: DiagnosticsWaiter,
+  signal: AbortSignal,
+): Promise<void> {
+  if (pending.exact !== undefined) return
+  try {
+    await abortable(new Promise<void>((resolve, reject) => {
+      pending.resolve = resolve
+      pending.reject = reject
+    }), signal)
+  } finally {
+    pending.resolve = undefined
+    pending.reject = undefined
+  }
+}
+
+/** Validate, deduplicate, and bound untrusted publish-diagnostics entries. */
+function normalizeDiagnostics(value: unknown, maxItems: number, maxBytes: number): NonNullable<DiagnosticsWaiter['exact']> {
+  if (!Array.isArray(value)) return { diagnostics: [], omitted: 0, invalid: true }
+  const seen = new Set<string>()
+  const result: LspDiagnostic[] = []
+  let omitted = 0
+  let bytes = 0
+  let invalid = false
+  for (const item of value) {
+    if (item === null || typeof item !== 'object') { invalid = true; omitted++; continue }
+    const entry = item as Record<string, unknown>
+    const range = normalizedRange(entry.range)
+    if (range === undefined || typeof entry.message !== 'string') { invalid = true; omitted++; continue }
+    const diagnostic: LspDiagnostic = {
+      range,
+      severity: entry.severity === 1 ? 'error'
+        : entry.severity === 2 ? 'warning'
+          : entry.severity === 3 ? 'information'
+            : entry.severity === 4 ? 'hint' : 'unknown',
+      message: entry.message,
+      ...(typeof entry.source === 'string' ? { source: entry.source } : {}),
+      ...(typeof entry.code === 'string' || typeof entry.code === 'number' ? { code: entry.code } : {}),
+    }
+    const key = JSON.stringify(diagnostic)
+    if (!seen.has(key)) {
+      const size = Buffer.byteLength(key)
+      if (result.length >= maxItems || bytes + size > maxBytes) { omitted++; continue }
+      seen.add(key)
+      result.push(diagnostic)
+      bytes += size
+    }
+  }
+  return { diagnostics: result, omitted, invalid }
+}
+
+/** Validate integer UTF-16 coordinates and ordered half-open ranges from a language-server process. */
+function normalizedRange(value: unknown): LspDiagnostic['range'] | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  const range = value as Record<string, unknown>
+  const start = range.start
+  const end = range.end
+  if (start === null || typeof start !== 'object' || end === null || typeof end !== 'object') return undefined
+  const first = start as Record<string, unknown>
+  const last = end as Record<string, unknown>
+  if (![first.line, first.character, last.line, last.character].every(item =>
+    typeof item === 'number' && Number.isInteger(item) && item >= 0)) return undefined
+  const ordered = (last.line as number) > (first.line as number)
+    || ((last.line as number) === (first.line as number) && (last.character as number) >= (first.character as number))
+  if (!ordered) return undefined
+  return {
+    start: { line: first.line as number, character: first.character as number },
+    end: { line: last.line as number, character: last.character as number },
+  }
+}
+
+/** SHA-256 identifies the exact UTF-8 bytes opened as the transient document. */
+function digestText(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}

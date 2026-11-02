@@ -530,35 +530,29 @@ function completeCompaction(
 }
 
 /**
- * Reconstruct the last routed request's cacheable prefix for the shadowed
- * region: the system prompt held by the `system/message` at surface node 0,
- * the header's tool schemas, then the region's own derived messages in surface
- * order. The summarizer appends only the compaction instruction after this, so
- * the call is a genuine prefix of the conversation and reuses the provider's
- * KV cache. A surface without a system head, or whose head projects to no
- * message, contributes no leading system message.
- * @param session - session supplying the surface head, request header, and per-node projection.
+ * Replay every active system message and the selected region in surface order,
+ * with the last routed tools. System updates outside the selected region remain
+ * instructions for the auxiliary call. Empty system nodes project to no message.
+ * Prefix-cache reuse ends at the first omitted conversation message.
+ * @param session - session supplying the surface, request header, and per-node projection.
  * @param shadowedSeqs - the surface-node seqs, in order, being compacted.
- * @returns the replayed conversation prefix to condense.
+ * @returns the selected conversation and complete system history to condense.
  */
 function buildSummarizationInput(
   session: Session,
   shadowedSeqs: readonly SessionSeq[],
 ): SummarizationInput {
   const header = session.requestHeader()
-  // shadowedSeqs are current surface seqs, so the surface has a node 0.
-  // oxlint-disable-next-line typescript/no-non-null-assertion
-  const head = systemHead(session, session.surface.nodes[0]!)
-  const system = head === undefined ? null : session.deriveEventMessage(head)
-  const regionMessages = shadowedSeqs
-    // shadowedSeqs are current surface seqs, so each is a valid log index.
-    // Existing Session history read; migration deferred.
-    // oxlint-disable-next-line typescript/no-non-null-assertion, typescript/no-deprecated
-    .map(seq => session.deriveEventMessage(session.eventAt(seq)!))
+  const selected = new Set(shadowedSeqs)
+  const messages = session.surface.nodes
+    // oxlint-disable-next-line typescript/no-non-null-assertion, typescript/no-deprecated -- Current surface nodes exist in the log.
+    .map(seq => session.eventAt(seq)!)
+    .filter(event => event.type === 'system/message' || selected.has(event.seq))
+    .map(event => session.deriveEventMessage(event))
     .filter((message): message is Message => message !== null)
   return {
     ...header?.tools === undefined ? {} : { tools: header.tools },
-    messages: system === null ? regionMessages : [system, ...regionMessages],
+    messages,
   }
 }
 

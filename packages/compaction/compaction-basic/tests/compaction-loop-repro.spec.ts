@@ -343,6 +343,66 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
 })
 
 describe('token pressure after loop-admitted system prompts', () => {
+  it('keeps updated prompt instructions through manual compaction and subsequent requests', async () => {
+    const ctx = new Context()
+    const requests: GenerateOptions[] = []
+    const adapter = new class extends StepwiseToolAdapter {
+      override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return { ...await super.resolveModel(provider, model), systemPromptUpdate: 'in-history' }
+      }
+      override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        requests.push(options)
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'block-end', index: 0, block: {
+          type: 'text', text: options.purpose === 'compaction' ? 'CURRENT TASK CHECKPOINT' : 'answer',
+        } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    }(0)
+    try {
+      await mountAgentLoopTestDependencies(ctx)
+      await mountInvariants(ctx)
+      await ctx.plugin(AgentLoop, { agents: [] })
+      await ctx.plugin(TokenMeter)
+      ctx.llm.registerAdapter(['mock'], adapter)
+      let prompt = 'ORIGINAL SYSTEM'
+      ctx.systemPrompt.section({ name: 'prompt-integrity', order: 0, complete: true, text: () => prompt })
+      const compact = new BasicCompactionEngine(ctx, { auto: false, headroomTokens: 0, maxTokens: 64 })
+      const agent = await ctx.agentLoop.create(SessionId('prompt-compaction'), { provider: 'mock', model: 'mock' })
+      const send = async (text: string) => {
+        agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
+        await agent.whenIdle()
+        expect(agent.session.snapshotEvents().at(-1)).toMatchObject({
+          type: 'turn/end', data: { reason: { kind: 'completed' } },
+        })
+      }
+      await send('Earlier work and exact findings. '.repeat(200))
+      prompt = 'UPDATED SYSTEM\nKeep every project instruction.'
+      await send('Continue the current task.')
+      const systems = agent.session.deriveMessages().filter(message => message.role === 'system')
+      expect(systems).toHaveLength(2)
+      const latestSystem = agent.session.surface.nodes.findLast(seq => agent.session.eventAt(seq)?.type === 'system/message')!
+
+      const result = await compact.compactNow(agent, new AbortController().signal)
+
+      expect(result?.shadowedSeqs).toContain(latestSystem)
+      const summary = requests.find(request => request.purpose === 'compaction')!
+      expect(summary.messages.filter(message => message.role === 'system')).toEqual(systems)
+      expect(summary.system).toBeUndefined()
+      await send('Continue after compact.')
+      const resumed = requests.at(-1)!
+      expect(resumed.messages.filter(message => message.role === 'system').map(message => message.content))
+        .toEqual([[{ type: 'text', text: prompt }]])
+      const replay = Session.create(agent.id, agent.session.snapshotEvents())
+      expect(resumed.messages).toEqual(replay.deriveMessages().slice(0, -1))
+      prompt = ''
+      await send('Continue with intentionally cleared instructions.')
+      expect(requests.at(-1)!.messages.some(message => message.role === 'system')).toBe(false)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it.each([false, true])('counts initial and replaced prompts once with retry=%s', async (retry) => {
     const ctx = new Context()
     const requests: GenerateOptions[] = []

@@ -11,8 +11,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { JobHandle, JobKind, JobOutcome } from '@deepseek-ai/dsh-jobs'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import { createMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
-import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
+import { createMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tui'
 import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
@@ -38,7 +38,7 @@ describe('background job status in Agent Debug', () => {
           screenCtx.jobs.attachController('job-screen-test')
           const agent = fixtureAgent(screenCtx, screenCtx.sessions.create(SessionId('visible-jobs')))
           await screenCtx.agents.register(agent)
-          screen = new ChatScreen({ ctx: screenCtx, tui, agent, config: {}, onQuit: vi.fn() })
+          screen = new ChatScreen({ ctx: screenCtx, tui, agent, config: { jobInputWarningDelayMs: 20 }, onQuit: vi.fn() })
         } },
       })
       const path = join(root, 'cordis.yml')
@@ -78,8 +78,26 @@ describe('background job status in Agent Debug', () => {
       expect(debug()).not.toContain('long-command-preview')
       expect(frame()).toContain('3 jobs')
       expect(debug().trimEnd()).toMatchSnapshot('completed tool with running jobs')
+      readAt.mockClear()
+      vi.useFakeTimers()
+      windows.handle.append('Password:')
+      await vi.advanceTimersByTimeAsync(20)
+      expect(debug()).toContain('may be waiting')
+      expect(debug()).toContain('for input')
+      expect(debug()).not.toContain('Password:')
+      screen.submit('/agent-debug')
+      windows.handle.append('still progressing')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(frame()).not.toContain('Agent Debug')
+      screen.submit('/agent-debug')
+      expect(debug()).not.toContain('may be waiting for input')
       windows.handle.append('output must stay out of status rows')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(readAt).toHaveBeenCalled()
       expect(debug()).not.toContain('output must stay out')
+      vi.useRealTimers()
+      windows.handle.updateProgress('3/10 completed')
+      await vi.waitFor(() => { expect(debug()).toContain('3/10 completed') })
       screen.submit('/agent-debug')
       expect(frame()).not.toContain('Agent Debug')
       windows.settle({ status: 'completed' })
@@ -100,10 +118,17 @@ describe('background job status in Agent Debug', () => {
       expect(frame()).toContain(windows.id)
       start.mock.calls[0]?.[0]('\x1b')
       expect(read).not.toHaveBeenCalled()
-      expect(readAt).not.toHaveBeenCalled()
+      expect(readAt).toHaveBeenCalled()
       expect(kill).not.toHaveBeenCalled()
+      expect(ctx.jobs.read(windows.id, first.id).chunks.map(chunk => chunk.text).join(''))
+        .toContain('output must stay out of status rows')
       ctx.jobs.kill(workflow.id, first.id)
       expect(debug()).toContain(`[STOPPING] Job · ${workflow.id}`)
+      vi.useFakeTimers()
+      workflow.handle.append('Password:')
+      await vi.advanceTimersByTimeAsync(20)
+      expect(debug()).not.toContain('may be waiting for input')
+      vi.useRealTimers()
       workflow.settle({ status: 'killed' })
       foreign.settle({ status: 'completed' })
       await vi.waitFor(() => { expect(ctx.jobs.get(workflow.id, first.id).status).toBe('killed') })
@@ -112,6 +137,21 @@ describe('background job status in Agent Debug', () => {
       expect(frame()).not.toMatch(/\d+ jobs/)
       ctx.jobs.remove(windows.id, first.id)
       expect(debug()).not.toContain(`[COMPLETED] Job · ${windows.id}`)
+      screen.handleEvent(first.session.append('user/message', createUserMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'Review https://example.test/' }],
+      }), { surfaceOp: 'append' }))
+      const targetLines = frame().split('\n')
+      const header = targetLines.findIndex(line => line.includes('Targets'))
+      expect(header).toBeGreaterThanOrEqual(0)
+      const column = visibleWidth(targetLines[header]!.slice(0, targetLines[header]!.indexOf('Targets'))) + 1
+      const eventCount = first.session.snapshotEvents().length
+      start.mock.calls[0]?.[0](`\x1b[<0;${column};${header + 1}M`)
+      start.mock.calls[0]?.[0](`\x1b[<0;${column};${header + 1}m`)
+      expect(debug()).toContain('Targets ▸')
+      start.mock.calls[0]?.[0]('\r')
+      expect(debug()).toContain('Targets ▾')
+      expect(debug()).toContain('https://example.test/')
+      expect(first.session.snapshotEvents()).toHaveLength(eventCount)
       const list = vi.spyOn(ctx.jobs, 'list')
       tui.stop()
       await ctx.fiber.dispose()

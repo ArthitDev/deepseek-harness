@@ -80,6 +80,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `displayName` | provider name | Label shown by selector surfaces |
 | `api` | catalog protocol | Wire protocol; only needed for routes the catalog does not supply |
 | `baseURL` | catalog endpoint | Endpoint of every model on the route |
+| `baseURLPortEnv` | unset | Launch-environment variable replacing the port of an explicit HTTP(S) `baseURL`; an unset or empty value keeps that URL |
 | `models` | installed catalog | Replaces the route's catalog wholesale; each entry defaults from the installed model |
 | `modelOverrides` | none | Reshapes individual installed-catalog models without replacing the rest |
 | `compat` | catalog detection | Wire-compatibility switches for unrecognized endpoints |
@@ -109,6 +110,8 @@ For self-hosted Chat Completions endpoints, `thinkingTokenBudgetField` selects t
 ### Change configuration at runtime
 
 Each operation captures the current `providers` Config reference. New or changed provider profiles are validated before form persistence; unchanged catalog failures remain editable. Route-set or retry-policy changes update registration atomically, preserving previous routes if another adapter owns a requested route.
+
+`baseURLPortEnv` reads the launch snapshot in process, project `.env`, then user `.env` precedence. Its non-empty value must be decimal digits naming a port from 1 through 65535; an invalid value rejects profile resolution without printing the value. It changes only the port and preserves the host and path. Remove this field when configuring a fixed endpoint that should ignore port environment overrides.
 
 ### Discover models from endpoints
 

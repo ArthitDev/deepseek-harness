@@ -7,7 +7,7 @@
  */
 
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
-import type { LspHover, LspLocation, LspOperation, LspPosition } from '@deepseek-ai/dsh-lsp'
+import type { LspHover, LspLocation, LspOperation, LspPosition, LspRange } from '@deepseek-ai/dsh-lsp'
 import { posix, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -119,6 +119,39 @@ export function formatHover(hover: LspHover | null, maxResultChars: number): str
   return boundResult(text, maxResultChars, 'hover')
 }
 
+/**
+ * Render one freshness-labelled diagnostic observation under the complete text budget.
+ * @param value - the normalized observation and its document identity.
+ * @param maxResultChars - maximum rendered characters, including a truncation notice.
+ * @returns bounded human-readable diagnostics text.
+ */
+export function formatDiagnostics(value: {
+  readonly workspaceUri: string
+  readonly fileUri: string
+  readonly providerId: string
+  readonly documentVersion: number
+  readonly documentDigest: string
+  readonly observedAt: string
+  readonly status: string
+  readonly diagnostics: readonly {
+    readonly severity: string
+    readonly range: LspRange
+    readonly message: string
+    readonly source?: string
+    readonly code?: string | number
+  }[]
+  readonly omitted: number
+}, maxResultChars: number): string {
+  const lines = [
+    `Diagnostics ${value.status}; provider ${value.providerId}; version ${value.documentVersion}; digest ${value.documentDigest}; observed ${value.observedAt}.`,
+    `Workspace ${value.workspaceUri}`,
+    `File ${value.fileUri}`,
+    ...value.diagnostics.map(item => `${item.severity} ${item.range.start.line + 1}:${item.range.start.character + 1}${item.source === undefined ? '' : ` ${item.source}`}${item.code === undefined ? '' : ` ${item.code}`}: ${item.message}`),
+    `${value.omitted} diagnostics omitted.`,
+  ]
+  return boundResult(lines.join('\n'), maxResultChars, 'diagnostics')
+}
+
 /** Bound a complete rendered result, including the truncation notice itself. */
 function boundResult(text: string, maxChars: number, label: string): string {
   if (text.length <= maxChars) return text
@@ -188,4 +221,13 @@ export function presentLspCall(args: LspToolArgs): GenericCallView {
     title: `LSP ${args.operation} ${args.file_path}:${args.line}:${args.character}`,
     locations: [{ path: args.file_path, line: args.line }],
   }
+}
+
+/**
+ * Present a diagnostics request through the existing generic tool activity view.
+ * @param args - the model-visible file path.
+ * @returns the generic search activity card for the requested file.
+ */
+export function presentDiagnosticsCall(args: { readonly file_path: string }): GenericCallView {
+  return { card: 'generic', kind: 'search', title: `LSP diagnostics ${args.file_path}`, locations: [{ path: args.file_path }] }
 }

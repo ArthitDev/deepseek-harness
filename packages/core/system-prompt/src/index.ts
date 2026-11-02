@@ -17,9 +17,17 @@ declare module '@deepseek-ai/cordis' {
 
   interface Events {
     /**
+     * Prepare scoped prompt providers before each assembly reads them.
+     * Scope-filtered dispatch runs serially, so failures prevent provider evaluation.
+     * @param context - the caller's per-assembly context.
+     * @mode serial
+     */
+    'system-prompt/prepare'(this: Scoped<SystemPrompt>, context: AssembleContext): Promise<void>
+    /**
      * Expert waterfall over the assembled sections, contexts, tools, and variables.
      * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners
-     * receive only that scope's assemblies. The returned value is authoritative.
+     * receive only that scope's assemblies. The returned value is authoritative,
+     * subject to `preserveSections` and the complete-section rules below.
      * A supplied signal controls only this explicit assembly request and must not
      * be retained to control later turns. A registered complete section is
      * restored after this waterfall, so listeners cannot add to or replace
@@ -53,6 +61,8 @@ export interface AssembleContext {
 export interface PromptSection {
   /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
   readonly name: string
+  /** Declared version compared exactly with `requiredSections`; omission is unversioned. */
+  readonly version?: string
   /**
    * Sections are concatenated in ascending order. Equal orders use code-unit
    * name order.
@@ -121,6 +131,9 @@ export interface PromptAssembly {
   tools: ToolSchema[]
   variables: Record<string, string | undefined>
 }
+
+// Render-time admission uses final waterfall variables without adding public assembly fields.
+const requiredSectionsByAssembly = new WeakMap<PromptAssembly, ReadonlySet<string>>()
 
 const SECTION_ORDERS = {
   HARNESS_IDENTITY: -1000,
@@ -245,6 +258,10 @@ function compareToolNames(a: ToolSchema, b: ToolSchema): number {
 
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.personaPrefix} for its contract). */
 export interface Config {
+  /** Reject changed, missing, duplicated, or reordered effective registered sections after the waterfall (default false). */
+  preserveSections?: boolean
+  /** Require these registered section names and exact versions before provider evaluation (default empty). */
+  requiredSections?: Record<string, string>
   /** Include the factual runtime-host label before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
@@ -269,16 +286,31 @@ export interface Config {
 
 /**
  * Interpolate strict `{{variable}}` references, drop empty sections, and join
- * the rest with blank lines. Sections with `interpolate: false` retain literal
- * text. Malformed, unknown, or undefined references in other sections throw;
- * a lone `{{` without any later `}}` is literal prose, and substituted values
- * are not scanned again.
+ * the rest with blank lines. Required preserved sections must render nonblank.
+ * Sections with `interpolate: false` retain literal text. Malformed, unknown,
+ * or undefined references throw; a lone `{{` without any later `}}` is literal
+ * prose, and substituted values are not scanned again.
  * @param assembly - the assembly whose sections and variables to render.
  * @returns the rendered prompt, or `''` when all sections are empty.
  */
 export function renderPrompt(assembly: PromptAssembly): string {
+  const required = requiredSectionsByAssembly.get(assembly)
   return assembly.sections
-    .map(section => section.interpolate === false ? section.text : interpolate(section, assembly.variables, 'section'))
+    .map((section) => {
+      let text: string
+      try {
+        text = section.interpolate === false ? section.text : interpolate(section, assembly.variables, 'section')
+      } catch (error) {
+        if (required?.has(section.name)) {
+          throw new Error(`system-prompt: required section "${section.name}" could not be rendered`)
+        }
+        throw error
+      }
+      if (required?.has(section.name) && text.trim().length === 0) {
+        throw new Error(`system-prompt: required section "${section.name}" rendered empty`)
+      }
+      return text
+    })
     .filter(text => text.length > 0)
     .join('\n\n')
 }
@@ -368,7 +400,11 @@ type ToolProvider = (context: AssembleContext) => ToolProviderResult
  * One section suppressor's per-assembly decision: the section-name allowlist
  * that stays visible, or `undefined` to withhold nothing this assembly.
  */
-type SectionSuppressor = () => readonly string[] | undefined
+type SectionSuppressor = (
+  scopedNames: readonly string[],
+  context: AssembleContext,
+  sectionNames: readonly string[],
+) => readonly string[] | undefined
 
 /** One stored suppressor with the layer its allowlist applies to. */
 interface SectionSuppressorEntry {
@@ -424,6 +460,8 @@ class PromptLayer implements ScopeLayer {
 /** Registry service for the prompt inputs assembled before each model step. */
 export class SystemPrompt extends Service {
   static Config: z<Config> = z.object({
+    preserveSections: z.boolean().default(false),
+    requiredSections: z.dict(z.string().pattern(/\S/), z.string().pattern(/\S/)).default({}),
     includeHarnessIdentity: z.boolean().default(true),
     includeRuntimeContext: z.boolean().default(true),
     personaPrefix: z.string().default(''),
@@ -437,26 +475,33 @@ export class SystemPrompt extends Service {
     () => { this.ctx.emit('system-prompt/change') },
   )
   private readonly toolOrder: string[] | undefined
+  private readonly preserveSections: boolean
+  private readonly requiredSections: readonly [string, string][]
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'systemPrompt')
     this.toolOrder = validateToolOrder(config.toolOrder)
+    this.preserveSections = config.preserveSections ?? false
+    this.requiredSections = Object.entries(config.requiredSections ?? {})
     // Keep runtime metadata independent of the selected loop plugin and persona.
     if (config.includeHarnessIdentity ?? true) {
       this.section({
         name: 'harness:identity',
+        version: '1',
         order: this.getSectionOrder('HARNESS_IDENTITY'),
         text: 'Runtime host: Shield Break Harness.',
       })
     }
     this.section({
       name: PERSONA_PREFIX_SECTION,
+      version: '1',
       order: this.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       // The fallback narrows the optional input type; the schema already defaults it.
       text: config.personaPrefix ?? '',
     })
     this.section({
       name: PERSONA_SUFFIX_SECTION,
+      version: '1',
       order: this.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX'),
       text: config.personaSuffix ?? '',
     })
@@ -540,11 +585,17 @@ export class SystemPrompt extends Service {
    * withheld.
    * @param options - `except` names the sections that remain visible, as a
    *   static list or a provider re-evaluated at every assembly for live toggles.
+   *   The provider receives effective scoped names, the per-assembly context,
+   *   and all effective section names, in that order.
    *   An undefined provider result disables suppression; an empty list permits no gated sections.
    * @returns the exact Cordis effect disposer.
    */
   suppressSections(options?: {
-    except?: readonly string[] | (() => readonly string[] | undefined)
+    except?: readonly string[] | ((
+      scopedNames: readonly string[],
+      context: AssembleContext,
+      sectionNames: readonly string[],
+    ) => readonly string[] | undefined)
     globalOnly?: boolean
   }): () => void {
     const authored = options?.except
@@ -594,17 +645,18 @@ export class SystemPrompt extends Service {
   }
 
   /**
-   * Assemble global and scoped providers, detach tool parameters, apply
-   * canonical ordering, then run the assembly waterfall. Scoped sections and
-   * variables shadow globals. The returned waterfall value is authoritative
-   * except that an effective complete section is restored afterwards as the
-   * sole prompt section.
+   * Run scoped preparation, assemble global and scoped providers, detach tool
+   * parameters, apply canonical ordering, then run the assembly waterfall.
+   * Scoped sections and variables shadow globals. With preservation enabled,
+   * effective registered sections remain intact after the waterfall; an
+   * effective complete section is always restored as the sole prompt section.
    * @param context - the optional scope and plugin-defined assembly fields.
-   * @returns the post-waterfall assembly with any complete prompt enforced.
+   * @returns the post-waterfall assembly with registered prompt integrity enforced.
    */
   // Keep configuration failures on the declared asynchronous error path.
   async assemble(context: AssembleContext = {}): Promise<PromptAssembly> {
     const scope = context.scope
+    await this.ctx.serial(scopeTarget(this, scope), 'system-prompt/prepare', context)
     const scopeLayers = this.layers.chainLayers(scope)
     const runtimeContextSuppressed = !this.layers.global.runtimeContextSuppressors.isEmpty()
       || scopeLayers.some(layer => !layer.runtimeContextSuppressors.isEmpty())
@@ -613,12 +665,25 @@ export class SystemPrompt extends Service {
     // exemption follows the definition's origin layer, not name membership in
     // the global layer.
     const scopedSectionNames = new Set(scopeLayers.flatMap(layer => [...layer.sections.keys()]))
+    // Scoped sections shadow globals before suppressors decide which effective names remain.
+    const sectionByName = this.layers.merge(scope, layer => layer.sections)
+    for (const [name, expected] of this.requiredSections) {
+      const section = sectionByName.get(name)
+      if (section === undefined) {
+        throw new Error(`system-prompt: required section "${name}" is missing (expected version "${expected}", actual <missing>)`)
+      }
+      if (section.version !== expected) {
+        const actual = section.version === undefined ? '<unversioned>' : JSON.stringify(section.version)
+        throw new Error(`system-prompt: required section "${name}" has wrong version (expected "${expected}", actual ${actual})`)
+      }
+    }
+    const effectiveSectionNames = [...sectionByName.keys()]
     const sectionSuppressors = [
       ...this.layers.global.sectionSuppressors.values(),
       ...scopeLayers.flatMap(layer => [...layer.sectionSuppressors.values()]),
     ]
       .flatMap((entry) => {
-        const allow = entry.allow()
+        const allow = entry.allow([...scopedSectionNames], context, [...effectiveSectionNames])
         return allow === undefined ? [] : [{ allow: new Set(allow), globalOnly: entry.globalOnly }]
       })
     // Scoped variables shadow globals.
@@ -632,8 +697,6 @@ export class SystemPrompt extends Service {
         variables[name] = provider(context)
       }
     }
-    // Scoped sections shadow globals before the deterministic order sort.
-    const sectionByName = this.layers.merge(scope, layer => layer.sections)
     const contextByName = this.layers.merge(scope, layer => layer.contexts)
     // Validate order against pre-restriction names while collecting visible schemas.
     const providers = [
@@ -688,16 +751,35 @@ export class SystemPrompt extends Service {
       tools: orderTools(collected, this.toolOrder, knownNames),
       variables,
     }
+    const expected = this.preserveSections
+      ? (completeSection === undefined ? sections : [completeSection]).map(section => ({ ...section }))
+      : undefined
     const transformed = await this.ctx.waterfall(
       scopeTarget(this, scope), 'system-prompt/assemble', assembly, context,
       () => Promise.resolve(assembly),
     )
-    if (completeSection === undefined && !runtimeContextSuppressed) return transformed
-    return {
+    const result = completeSection === undefined && !runtimeContextSuppressed ? transformed : {
       ...transformed,
       sections: completeSection === undefined ? transformed.sections : [completeSection],
       contexts: runtimeContextSuppressed ? [] : transformed.contexts,
     }
+    if (expected !== undefined) {
+      let previous = -1
+      for (const section of expected) {
+        const index = result.sections.findIndex(candidate => candidate.name === section.name)
+        const candidate = result.sections[index]
+        if (index <= previous || candidate?.text !== section.text || candidate.interpolate !== section.interpolate
+          || result.sections.findLastIndex(candidate => candidate.name === section.name) !== index) {
+          throw new Error(`system-prompt: section "${section.name}" was removed, changed, duplicated, or reordered`)
+        }
+        previous = index
+      }
+      const required = new Set(expected
+        .filter(section => this.requiredSections.some(([name]) => name === section.name) && section.text.trim().length > 0)
+        .map(section => section.name))
+      if (required.size > 0) requiredSectionsByAssembly.set(result, required)
+    }
+    return result
   }
 }
 

@@ -541,7 +541,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     const request = adapter.requests[0]
-    expect(systemOf(request)).toBe('Runtime host: Shield Break Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.\n\nNever announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.')
+    expect(systemOf(request)).toBe('Runtime host: Shield Break Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.\n\nWhen you need or are required to use a tool, emit its structured tool call immediately; describing a call in text does not execute it. Read relevant files and project instructions before changing code, reuse existing patterns, and update affected callers and configuration. Run independent calls together when useful; sequence calls that depend on earlier results or edit the same files. Inspect errors and exit status before choosing the next action. If output is truncated, use the returned path, cursor, or range to retrieve the relevant missing content. A background acknowledgement confirms a start, not completion; use the available status or completion notice to establish the outcome. Verify changes with relevant checks and report what ran, what succeeded, and what remains unverified.')
     expect(request!.tools?.map(t => t.name)).toEqual(['noop'])
   })
 

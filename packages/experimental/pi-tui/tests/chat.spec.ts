@@ -5,10 +5,14 @@ import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { AssistantStreamAccumulator, boundContextSummary, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, ToolCallId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { AssistantStreamAccumulator, boundContextSummary, createAssistantMessage, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, ToolCallId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import ToolRuntime, { defineTool, type ToolExecution } from '@deepseek-ai/dsh-tools'
 import SessionStore, { Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import TerminalSessionService, { TerminalSessionId } from '@deepseek-ai/dsh-terminal'
 import type { TerminalBackend, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
@@ -59,6 +63,7 @@ describe('running subagents in the status bar', () => {
   it('tracks lifecycle events per session, ignores duplicates, and releases listeners on disposal', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
     const makeAgent = async (id: string): Promise<Agent> => {
       const owner = await ctx.plugin(() => {})
       return fixtureAgent(owner.ctx.extend({ testParent: id }), ctx.sessions.create(SessionId(id)))
@@ -129,7 +134,204 @@ describe('running subagents in the status bar', () => {
   })
 })
 
+describe('Agent Debug tool progress', () => {
+  it('shows only the active agent call, then settles it and ignores late progress', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('debug-progress')))
+    const other = fixtureAgent(ctx, ctx.sessions.create(SessionId('debug-progress-other')))
+    const started: PromiseWithResolvers<ToolExecution> = Promise.withResolvers()
+    const finish: PromiseWithResolvers<void> = Promise.withResolvers()
+    ctx.tools.register(defineTool({
+      name: 'progress-tool',
+      description: 'emit one progress update',
+      parameters: {},
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute(_args, exec) {
+        started.resolve(exec)
+        await finish.promise
+        return 'finished'
+      },
+    }))
+    const terminal: Terminal = {
+      columns: 120, rows: 30, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    tui.start()
+    const callId = ToolCallId('debug-progress-call')
+    const activity = async () => await renderScreen(tui)
+    let pending: ReturnType<typeof ctx.tools.execute> | undefined
+    try {
+      screen.handleEvent(agent.session.append('assistant/message', {
+        turn: 1, step: 1,
+        message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [
+          { type: 'tool-call', id: callId, name: 'progress-tool', arguments: '{}' },
+        ] }),
+        stream: [],
+      }, { surfaceOp: 'append' }))
+      screen.handleEvent(agent.session.append('tool/call', {
+        turn: 1, step: 1, callId, name: 'progress-tool', arguments: '{}',
+      }))
+      expect(await activity()).toContain('[PREPARING] Tool · progress-tool')
+
+      pending = ctx.tools.execute({
+        agent, name: 'progress-tool', arguments: {}, callId, signal: new AbortController().signal,
+      })
+      const execution = await started.promise
+      expect(await activity()).toContain('[EXECUTING] Tool · progress-tool')
+
+      const progress = { progress: 3, total: 10, message: 'checking server' }
+      ctx.events.emit(scopeTarget(ctx.tools, agent), 'tools/progress', execution, progress)
+      expect(await activity()).toContain('Progress 3/10 · checking server')
+      const otherExecution = { ...execution, agent: other }
+      ctx.events.emit(scopeTarget(ctx.tools, other), 'tools/progress', otherExecution, {
+        progress: 99, total: 100, message: 'other agent',
+      })
+      expect(await activity()).not.toContain('other agent')
+
+      finish.resolve()
+      await pending
+      screen.handleEvent(agent.session.append('tool/result', {
+        turn: 1, step: 1,
+        message: createMessage({ role: 'tool', source: { kind: 'tool', callId }, toolCallId: callId,
+          content: [{ type: 'text', text: 'finished' }] }),
+      }, { surfaceOp: 'append' }))
+      const settled = await activity()
+      expect(settled).toContain('[OK] Tool · progress-tool')
+      expect(settled).not.toContain('Progress 3/10')
+      ctx.events.emit(scopeTarget(ctx.tools, agent), 'tools/progress', execution, {
+        progress: 9, total: 10, message: 'late update',
+      })
+      expect(await activity()).not.toContain('late update')
+    } finally {
+      finish.resolve()
+      await pending?.catch(() => {})
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
+describe('Agent Debug subagent lifecycle', () => {
+  it('tracks the latest child tool by call id and ignores child events after settlement', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    const parent = fixtureAgent(ctx, ctx.sessions.create(SessionId('debug-parent')))
+    const inherited = ctx.sessions.create(SessionId('debug-inherited'))
+    inherited.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'parent-only task' }] }), { surfaceOp: 'append' })
+    inherited.append('turn/start', { turn: 1 })
+    const inheritedCall = ToolCallId('parent-only-call')
+    inherited.append('tool/call', { turn: 1, step: 1, callId: inheritedCall, name: 'parent-only-tool', arguments: '{}' })
+    inherited.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({
+      source: { provider: 'fixture', model: 'fixture' }, content: [],
+    }), usage: { inputTokens: 77, outputTokens: 33 } }, { surfaceOp: 'append' })
+    const childSession = ctx.sessions.create(SessionId('debug-child'), {
+      seed: inherited.snapshotEvents(), inheritedEventCount: SessionLogOffset(inherited.seq),
+      meta: { parentSession: inherited.id, isSeeded: true },
+    })
+    const child = fixtureAgent(ctx, childSession)
+    await ctx.agents.register(child)
+    const start = vi.fn<Terminal['start']>()
+    const terminal: Terminal = {
+      columns: 120, rows: 30, kittyProtocolActive: false,
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
+      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    }
+    const tui = new TuiAltScreen(terminal)
+    const screen = new ChatScreen({ ctx, tui, agent: parent, config: {}, onQuit: vi.fn() })
+    tui.start()
+    const runId = SubagentRunId('debug-run')
+    const scoped = { [Context.filter]: () => true }
+    const frame = async () => await renderScreen(tui)
+    const callId = (id: string) => ToolCallId(id)
+    const toolCall = (id: string, name: string) => child.session.append('tool/call', {
+      turn: 1, step: 1, callId: callId(id), name, arguments: '{}',
+    })
+    const toolResult = (id: string, isError: boolean) => child.session.append('tool/result', {
+      turn: 1, step: 1,
+      message: createMessage({ role: 'tool', toolCallId: callId(id), source: { kind: 'tool', callId: callId(id) },
+        content: [{ type: 'text', text: isError ? 'failed' : 'finished' }], isError }),
+    }, { surfaceOp: 'append' })
+    try {
+      ctx.events.emit(scoped, 'subagent/start', { runId, provider: 'fixture', id: child.id, local: true })
+      const pane = Reflect.get(screen, 'toolActivity') as { focused: boolean; handleInput(data: string): void }
+      pane.focused = true
+      const interrupt = vi.spyOn(parent, 'cancel')
+      pane.handleInput('\r')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(true) })
+      start.mock.calls[0]?.[0]('\x03')
+      await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
+      expect(interrupt).not.toHaveBeenCalled()
+      const childTask = child.session.append('user/message', createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: 'child-only task' }] }), { surfaceOp: 'append' })
+      ctx.events.emit(scoped, 'session/event', child.session, childTask)
+      ctx.events.emit(scoped, 'session/event', child.session, toolCall('first-call', 'first-tool'))
+      ctx.events.emit(scoped, 'session/event', child.session, toolCall('latest-call', 'latest-tool'))
+      ctx.events.emit(scoped, 'session/event', child.session, toolResult('first-call', true))
+      const childSummary = await frame()
+      expect(childSummary).toContain('child-only task')
+      expect(childSummary).toContain('last tool: latest-tool')
+      expect(childSummary).not.toContain('parent-only task')
+      expect(childSummary).not.toContain('parent-only-tool')
+      expect(childSummary).not.toContain('77 in')
+      expect(childSummary).not.toContain('Preparing latest-tool')
+      expect(childSummary).not.toContain('Finished latest-tool')
+      expect(childSummary).not.toContain('Failed latest-tool')
+      ctx.events.emit(scoped, 'session/event', child.session, toolResult('latest-call', true))
+      expect(await frame()).toContain('[RUNNING] Sub Agent · fixture')
+      expect(await frame()).toContain('last tool: latest-tool')
+
+      ctx.events.emit(scoped, 'subagent/end', {
+        runId, provider: 'fixture', id: child.id, local: true, stopReason: 'completed',
+      })
+      const settled = await frame()
+      expect(settled).toContain('[OK] Sub Agent · fixture')
+      expect(settled).toContain('Subagent completed.')
+      ctx.events.emit(scoped, 'session/event', child.session, toolCall('late-call', 'late-tool'))
+      expect(await frame()).toContain('Subagent completed.')
+      expect(await frame()).not.toContain('Preparing late-tool')
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
 describe('exit and resume hints', () => {
+  it('rebuilds the Main Agent summary when an externally driven replay is finalized', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('boot-summary'))
+    session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'inspect the service' }] }), { surfaceOp: 'append' })
+    session.append('turn/start', { turn: 1 })
+    const callId = ToolCallId('boot-summary-call')
+    session.append('tool/call', { turn: 1, step: 1, callId, name: 'read_file', arguments: '{}' })
+    const agent = fixtureAgent(ctx, session)
+    const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
+      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    tui.start()
+    try {
+      screen.replaying = true
+      for (const event of session.snapshotEvents()) screen.handleEvent(event)
+      screen.finalizeReplay()
+      const rendered = await renderScreen(tui)
+      expect(rendered).toContain('Main Agent')
+      expect(rendered).toContain('task: inspect the service')
+      expect(rendered).toContain('tool: read_file')
+      expect(rendered).toContain('1 pending')
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
   it('loads folded tool images only when revealed and reloads evicted images', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -244,6 +446,82 @@ describe('exit and resume hints', () => {
       expect(await renderScreen(tui)).toContain('usage: /recap')
       expect(resumed.session.snapshotEvents()).toEqual(history)
       expect(followup).not.toHaveBeenCalled()
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
+  it('opens a read-only context overlay without a model turn and keeps prompt text hidden', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('context-viewer')))
+    const second = fixtureAgent(ctx, ctx.sessions.create(SessionId('context-viewer-second')))
+    agent.session.append('request/context', { provider: 'mock', model: 'one', contextWindow: 11_000 })
+    second.session.append('request/context', { provider: 'mock', model: 'two', contextWindow: 22_000 })
+    agent.session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'private prompt marker' }],
+    }), { surfaceOp: 'append' })
+    const startInput = vi.fn<Terminal['start']>()
+    const tui = new TuiAltScreen({
+      columns: 40, rows: 12, kittyProtocolActive: false,
+      start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
+      hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
+      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    })
+    const onQuit = vi.fn()
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit })
+    const followup = vi.spyOn(agent, 'followup')
+    const cancel = vi.spyOn(agent, 'cancel')
+    const show = vi.spyOn(tui, 'showOverlay')
+    tui.start()
+    const input = (data: string): void => { startInput.mock.calls[0]?.[0](data) }
+    try {
+      Object.defineProperty(agent, 'status', { configurable: true, value: 'running' })
+      screen.submit('/context')
+      const rendered = (await renderScreen(tui)).replaceAll(/\s+/g, ' ')
+      expect(rendered).toContain('Context diagnostics')
+      expect(rendered).toContain(
+        'Harness request at llm/stream (pre-adapter): unavailable',
+      )
+      expect(tui.getScreenLines()).toHaveLength(12)
+      const overlay = show.mock.calls[0]?.[0]
+      expect(overlay).toBeDefined()
+      overlay?.handleInput?.('\x1b[6~')
+      overlay?.handleInput?.('\x1b[6~')
+      const afterPageDown = (await renderScreen(tui)).replaceAll(/\s+/g, ' ')
+      expect(afterPageDown).toContain('Current session context window: 11,000 tokens')
+      for (let page = 0; page < 3; page++) overlay?.handleInput?.('\x1b[6~')
+      const bottom = (await renderScreen(tui)).replaceAll(/\s+/g, ' ')
+      expect(bottom).toContain('Queued input is shown separately')
+      expect(bottom).toContain('Esc close')
+      overlay?.handleInput?.('\x1b[5~')
+      expect((await renderScreen(tui)).replaceAll(/\s+/g, ' ')).toContain('Queued next-turn')
+      overlay?.handleInput?.('\x1b[A')
+      overlay?.handleInput?.('\x1b[B')
+      overlay?.handleInput?.('\x1b[H')
+      overlay?.handleInput?.('\x1b[F')
+      expect((await renderScreen(tui)).replaceAll(/\s+/g, ' ')).not.toContain('private prompt marker')
+      for (const key of ['\x1b', '\x03', '\x04']) {
+        input(key)
+        expect(tui.hasOverlay()).toBe(false)
+        expect(cancel).not.toHaveBeenCalled()
+        expect(onQuit).not.toHaveBeenCalled()
+        screen.submit('/context')
+      }
+      expect(followup).not.toHaveBeenCalled()
+      expect(agent.session.snapshotEvents()).toHaveLength(2)
+      Object.defineProperty(agent, 'status', { configurable: true, value: 'idle' })
+      await screen.switchAgent(second)
+      expect(tui.hasOverlay()).toBe(false)
+      screen.submit('/context')
+      const nextSessionOverlay = show.mock.calls.at(-1)?.[0]
+      await renderScreen(tui)
+      nextSessionOverlay?.handleInput?.('\x1b[6~')
+      nextSessionOverlay?.handleInput?.('\x1b[6~')
+      const nextSessionText = (await renderScreen(tui)).replaceAll(/\s+/g, ' ')
+      expect(nextSessionText).toContain('Current session context window: 22,000 tokens')
+      expect(nextSessionText).not.toContain('Current session context window: 11,000 tokens')
+      input('\x1b')
+      expect(tui.hasOverlay()).toBe(false)
     } finally { tui.stop(); await ctx.fiber.dispose() }
   })
 
@@ -379,7 +657,7 @@ describe('preset switches with conversation history', () => {
     session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('OLD_PRESET') }, { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'retained question' }] }), { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ source: { kind: 'knowledge-context', form: 'instructions', digest: 'old-wiki' }, content: [{ type: 'text', text: 'OLD_WIKI_GUIDANCE' }] }), { surfaceOp: 'append' })
-    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { kind: 'model', ...oldRoute }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createMessage({ role: 'assistant', source: { ...oldRoute, kind: 'model' as const }, content: [{ type: 'text', text: 'retained answer' }] }) }, { surfaceOp: 'append' })
     session.append('step/end', { turn: 1, step: 1 })
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     const original = session.snapshotEvents()
@@ -890,7 +1168,7 @@ describe('the split-pane shell', () => {
       await renderScreen(tui)
       const activity = (): string => tui.getScreenLines()
         .map(line => stripVTControlCharacters(line).slice(54)).join('\n')
-      expect(activity()).toContain('[RUNNING] Shell · pwsh')
+      expect(activity()).toContain('[PREPARING] Shell · pwsh')
       expect(activity()).toContain('Get-Date')
       screen.handleEvent({
         type: 'tool/result', seq: SessionSeq(2), time: 0, surfaceOp: 'append',
@@ -977,7 +1255,7 @@ describe('the split-pane shell', () => {
       })
       screen.submit('/agent-debug')
       await renderScreen(tui)
-      expect(activity()).toContain('[RUNNING] Tool · read_file')
+      expect(activity()).toContain('[PREPARING] Tool · read_file')
       input('\x1b[1;7D')
       await renderScreen(tui)
       expect(tui.getScreenLines()[0]).toContain('Agent Debug')

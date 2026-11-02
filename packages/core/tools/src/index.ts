@@ -58,7 +58,14 @@ declare module '@deepseek-ai/dsh-llm' {
  */
 const PTC_ONLY_INSTRUCTION = `\`${RUN_CODE_NAME}\` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.`
 
-const TOOL_CALL_INSTRUCTION = 'Never announce or simulate a tool call in assistant text. When you need or are required to use a tool, emit its structured tool call immediately.'
+const TOOL_CALL_INSTRUCTION = 'When you need or are required to use a tool, emit its structured tool call immediately; '
+  + 'describing a call in text does not execute it. Read relevant files and project instructions before changing code, '
+  + 'reuse existing patterns, and update affected callers and configuration. '
+  + 'Run independent calls together when useful; sequence calls that depend on earlier results or edit the same files. '
+  + 'Inspect errors and exit status before choosing the next action. If output is truncated, use the returned path, '
+  + 'cursor, or range to retrieve the relevant missing content. A background acknowledgement confirms a start, '
+  + 'not completion; use the available status or completion notice to establish the outcome. '
+  + 'Verify changes with relevant checks and report what ran, what succeeded, and what remains unverified.'
 
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
@@ -143,6 +150,15 @@ declare module '@deepseek-ai/cordis' {
 
   interface Events {
     /**
+     * Report transient progress for one admitted execution. Notifications are
+     * process-local, scoped to `exec.agent`, and never change its timeout.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's updates.
+     * @param exec - the exact registered execution receiving progress.
+     * @param update - server- or provider-reported progress values.
+     * @mode emit
+     */
+    'tools/progress'(this: Scoped<ToolRuntime>, exec: Readonly<ToolExecution>, update: ToolProgress): undefined
+    /**
      * Allow, deny, cancel, or ask before dispatch. `next()` delegates to allow;
      * `cancel` selects the canonical pre-dispatch cancellation result, and missing
      * approval support turns `ask` into denial. Async gates must observe
@@ -209,6 +225,16 @@ declare module '@deepseek-ai/cordis' {
      */
     'tools/change'(): void
   }
+}
+
+/** One transient progress notification associated with an exact tool execution. */
+export interface ToolProgress {
+  /** Provider-reported progress value. */
+  readonly progress: number
+  /** Provider-reported total, when available. */
+  readonly total?: number
+  /** Bounded provider message, when available. */
+  readonly message?: string
 }
 
 /** Tool-owned canonical output contract used after the body returns a JSON value. */
@@ -855,6 +881,7 @@ export class ToolRuntime extends Service {
     ctx.systemPrompt.tools(context => this.wireSchemas(context.scope))
     ctx.systemPrompt.section({
       name: 'tools:calling',
+      version: '1',
       order: ctx.systemPrompt.getSectionOrder('PTC_ONLY'),
       text: context => this.wireSchemas(context.scope).schemas.length > 0 ? TOOL_CALL_INSTRUCTION : '',
     })

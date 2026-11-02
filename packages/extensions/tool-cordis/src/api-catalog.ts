@@ -1602,7 +1602,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'lsp',
     summary: 'The LSP capability seam (`ctx.lsp`).',
-    description: 'The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query execution; exposes exactly the four operations and no protocol escape hatch.',
+    description: 'The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query execution; exposes four navigation operations plus file diagnostics and no protocol escape hatch.',
     methods: [
       {
         signature: 'registerProvider(provider: LspProvider): () => void',
@@ -1615,6 +1615,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Select a provider by the file\'s extension and run one query. Selection is per-query and order-independent; no match throws `LspError` `LSP_UNAVAILABLE`.',
         parameters: [{ name: 'request', description: 'the normalized query.' }, { name: 'signal', description: 'optional cancellation forwarded to the selected provider.' }],
         returns: 'the normalized, closed-union result.',
+      },
+      {
+        signature: 'diagnostics(request: LspDiagnosticsRequest, signal?: AbortSignal): Promise<LspDiagnosticsResult>',
+        description: 'Select a provider by the file extension and request diagnostics; a provider without this optional capability throws `LSP_UNAVAILABLE`.',
+        parameters: [{ name: 'request', description: 'the file and workspace paths.' }, { name: 'signal', description: 'optional cancellation forwarded to the selected provider.' }],
+        returns: 'a bounded observation with explicit freshness status.',
       },
     ],
   },
@@ -1684,6 +1690,47 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read the current rendering generation before reusing a Client PDF.',
         parameters: [{ name: 'signal', description: 'Remote caller cancellation.' }],
         returns: 'provider lifetime, replaced with rendering, font, or engine configuration.',
+      },
+    ],
+  },
+  {
+    key: 'pentestAssistance',
+    summary: 'Host plugin shared by the TUI and Web profile.',
+    description: 'Host plugin shared by the TUI and Web profile.',
+    methods: [
+      {
+        signature: 'current(): AssistanceSettings',
+        description: 'Read the current assistance settings without changing the shared namespace.',
+        parameters: [],
+        returns: 'Live values from the shared settings namespace.',
+      },
+      {
+        signature: 'install(agentCtx: Context, lease: PentestTaskLease, sessionId: SessionId): void',
+        description: 'Add accounting to a fresh executor without replacing its existing guard.',
+        parameters: [{ name: 'agentCtx', description: 'Executor-scoped context.' }, { name: 'lease', description: 'Run and target identities of this episode.' }, { name: 'sessionId', description: 'Executor session whose delegated descendants inherit the accounting.' }],
+      },
+      {
+        signature: 'async status(runId: string): Promise<{ targets: readonly TargetAssistanceState[]; review?: ProgressReviewState }>',
+        description: 'Read shared accounting and the last reviewer outcome for an existing run.',
+        parameters: [{ name: 'runId', description: 'Canonical run identity.' }],
+        returns: 'Shared target states and the bounded review ledger.',
+      },
+      {
+        signature: 'adviceFor(snapshot: PentestRunSnapshot): { episodeId: string; recommendation: string } | undefined',
+        description: 'Read advice only when it reviews the latest completed episode in this snapshot.',
+        parameters: [{ name: 'snapshot', description: 'Snapshot used to schedule the next executor.' }],
+        returns: 'Evidence-linked advice, or undefined after newer work or a failed review.',
+      },
+      {
+        signature: 'async search(runId: string, query: string, signal?: AbortSignal): Promise<AssistanceMemoryResult>',
+        description: 'Search on demand and cache only complete, source-attributed retrieval results.',
+        parameters: [{ name: 'runId', description: 'Run whose evidence may be searched.' }, { name: 'query', description: 'Literal search terms.' }, { name: 'signal', description: 'Optional cancellation.' }],
+        returns: 'Bounded Wiki and evidence passages, never raw artifacts.',
+      },
+      {
+        signature: 'reviewIfNeeded(snapshot: PentestRunSnapshot, agentOptions: AgentOptions, signal?: AbortSignal): Promise<void>',
+        description: 'Invoke a tool-restricted reviewer only after evidence stagnation and within its own quota.',
+        parameters: [{ name: 'snapshot', description: 'Canonical state already loaded by the control cycle.' }, { name: 'agentOptions', description: 'Existing Supervisor model route.' }, { name: 'signal', description: 'Parent loop cancellation.' }],
       },
     ],
   },
@@ -3480,9 +3527,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the exact Cordis effect disposer.',
       },
       {
-        signature: 'suppressSections(options?: { except?: readonly string[] | (() => readonly string[] | undefined) globalOnly?: boolean }): () => void',
+        signature: 'suppressSections(options?: { except?: readonly string[] | (( scopedNames: readonly string[], context: AssembleContext, sectionNames: readonly string[], ) => readonly string[] | undefined) globalOnly?: boolean }): () => void',
         description: 'Suppress prompt sections in the calling context\'s scope, keeping only the names the allowlist carries. Multiple suppressors stack: a section survives only when every active suppressor\'s allowlist names it, so one strict suppressor cannot be widened by another. The owned services that registered the sections keep running; only their prompt contribution is withheld.',
-        parameters: [{ name: 'options', description: '`except` names the sections that remain visible, as a static list or a provider re-evaluated at every assembly for live toggles. An undefined provider result disables suppression; an empty list permits no gated sections.' }],
+        parameters: [{ name: 'options', description: '`except` names the sections that remain visible, as a static list or a provider re-evaluated at every assembly for live toggles. The provider receives effective scoped names, the per-assembly context, and all effective section names, in that order. An undefined provider result disables suppression; an empty list permits no gated sections.' }],
         returns: 'the exact Cordis effect disposer.',
       },
       {
@@ -3499,9 +3546,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async assemble(context: AssembleContext = {}): Promise<PromptAssembly>',
-        description: 'Assemble global and scoped providers, detach tool parameters, apply canonical ordering, then run the assembly waterfall. Scoped sections and variables shadow globals. The returned waterfall value is authoritative except that an effective complete section is restored afterwards as the sole prompt section.',
+        description: 'Run scoped preparation, assemble global and scoped providers, detach tool parameters, apply canonical ordering, then run the assembly waterfall. Scoped sections and variables shadow globals. With preservation enabled, effective registered sections remain intact after the waterfall; an effective complete section is always restored as the sole prompt section.',
         parameters: [{ name: 'context', description: 'the optional scope and plugin-defined assembly fields.' }],
-        returns: 'the post-waterfall assembly with any complete prompt enforced.',
+        returns: 'the post-waterfall assembly with registered prompt integrity enforced.',
       },
     ],
   },
@@ -4700,7 +4747,7 @@ export const EVENT_API: readonly EventApiEntry[] = [
     mode: 'waterfall',
     signature: '\'system-prompt/assemble\'(this: Scoped<SystemPrompt>, assembly: PromptAssembly, context: AssembleContext, next: () => Promise<PromptAssembly>): Promise<PromptAssembly>',
     summary: 'Expert waterfall over the assembled sections, contexts, tools, and variables.',
-    description: 'Expert waterfall over the assembled sections, contexts, tools, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope\'s assemblies. The returned value is authoritative. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope\'s system prompt.',
+    description: 'Expert waterfall over the assembled sections, contexts, tools, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope\'s assemblies. The returned value is authoritative, subject to `preserveSections` and the complete-section rules below. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope\'s system prompt.',
     parameters: [{ name: 'assembly', description: 'the mutable assembly built from registered providers.' }, { name: 'context', description: 'the caller\'s per-assembly context.' }],
   },
   {
@@ -4710,6 +4757,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Emitted when any prompt provider changes.',
     description: 'Emitted when any prompt provider changes. This registry notification is unfiltered because a global change affects every scope.',
     parameters: [],
+  },
+  {
+    name: 'system-prompt/prepare',
+    mode: 'serial',
+    signature: '\'system-prompt/prepare\'(this: Scoped<SystemPrompt>, context: AssembleContext): Promise<void>',
+    summary: 'Prepare scoped prompt providers before each assembly reads them.',
+    description: 'Prepare scoped prompt providers before each assembly reads them. Scope-filtered dispatch runs serially, so failures prevent provider evaluation.',
+    parameters: [{ name: 'context', description: 'the caller\'s per-assembly context.' }],
   },
   {
     name: 'tools/change',
@@ -4742,6 +4797,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Allow, deny, cancel, or ask before dispatch.',
     description: 'Allow, deny, cancel, or ask before dispatch. `next()` delegates to allow; `cancel` selects the canonical pre-dispatch cancellation result, and missing approval support turns `ask` into denial. Async gates must observe `exec.signal`; the registry rechecks cancellation after they settle but never abandons their promise. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent\'s calls.',
     parameters: [{ name: 'exec', description: 'the pending call (name, parsed arguments, caller agent).' }],
+  },
+  {
+    name: 'tools/progress',
+    mode: 'emit',
+    signature: '\'tools/progress\'(this: Scoped<ToolRuntime>, exec: Readonly<ToolExecution>, update: ToolProgress): undefined',
+    summary: 'Report transient progress for one admitted execution.',
+    description: 'Report transient progress for one admitted execution. Notifications are process-local, scoped to `exec.agent`, and never change its timeout. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent\'s updates.',
+    parameters: [{ name: 'exec', description: 'the exact registered execution receiving progress.' }, { name: 'update', description: 'server- or provider-reported progress values.' }],
   },
   {
     name: 'tools/ptc-dispatch-log',
@@ -5006,6 +5069,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AssembledSection',
     declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n    interpolate?: boolean;\n}',
+  },
+  {
+    name: 'AssistanceMemoryHit',
+    declaration: 'export interface AssistanceMemoryHit {\n    readonly source: \'wiki\' | \'evidence\';\n    readonly reference: string;\n    readonly summary: string;\n    readonly runId?: string;\n    readonly taskId?: string;\n    readonly target?: string;\n    readonly createdAt?: string;\n}',
+  },
+  {
+    name: 'AssistanceMemoryResult',
+    declaration: 'export interface AssistanceMemoryResult {\n    readonly hits: readonly AssistanceMemoryHit[];\n    readonly truncated: boolean;\n}',
+  },
+  {
+    name: 'AssistanceSettings',
+    declaration: 'export interface AssistanceSettings {\n    repeatLimit: number;\n    burstLimit: number;\n    burstWindowMs: number;\n    reviewAfterEpisodes: number;\n    reviewCooldownMs: number;\n    maxReviewsPerRun: number;\n    reviewMaxTokens: number;\n    reviewTimeoutMs: number;\n    wikiRoots: string[];\n    memoryMaxFiles: number;\n    memoryMaxFileBytes: number;\n    memoryMaxResults: number;\n    memoryMaxOutputBytes: number;\n    memoryCacheTtlMs: number;\n}',
   },
   {
     name: 'AssistantMessage',
@@ -6024,6 +6099,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LocalizedText = string | {\n    readonly en: string;\n    readonly [locale: string]: string;\n};',
   },
   {
+    name: 'LspDiagnostic',
+    declaration: 'export interface LspDiagnostic {\n    readonly range: LspRange;\n    readonly severity: \'error\' | \'warning\' | \'information\' | \'hint\' | \'unknown\';\n    readonly message: string;\n    readonly source?: string;\n    readonly code?: string | number;\n}',
+  },
+  {
+    name: 'LspDiagnosticsRequest',
+    declaration: 'export interface LspDiagnosticsRequest {\n    readonly filePath: string;\n    readonly workspaceRoot: string;\n}',
+  },
+  {
+    name: 'LspDiagnosticsResult',
+    declaration: 'export interface LspDiagnosticsResult {\n    readonly workspaceUri: string;\n    readonly fileUri: string;\n    readonly providerId: LspProviderId;\n    readonly documentVersion: number;\n    readonly documentDigest: string;\n    readonly observedAt: string;\n    readonly status: LspDiagnosticsStatus;\n    readonly diagnostics: readonly LspDiagnostic[];\n    readonly omitted: number;\n}',
+  },
+  {
+    name: 'LspDiagnosticsStatus',
+    declaration: 'export type LspDiagnosticsStatus = \'current\' | \'unverified\' | \'not-reported\' | \'changed\' | \'invalid\';',
+  },
+  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -6041,7 +6132,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LspProvider',
-    declaration: 'export interface LspProvider {\n    readonly id: LspProviderId;\n    readonly extensionToLanguage: Readonly<Record<string, string>>;\n    query(request: LspProviderQuery, signal?: AbortSignal): Promise<LspQueryResult>;\n}',
+    declaration: 'export interface LspProvider {\n    readonly id: LspProviderId;\n    readonly extensionToLanguage: Readonly<Record<string, string>>;\n    query(request: LspProviderQuery, signal?: AbortSignal): Promise<LspQueryResult>;\n    diagnostics?(request: LspProviderDiagnostics, signal?: AbortSignal): Promise<LspDiagnosticsResult>;\n}',
+  },
+  {
+    name: 'LspProviderDiagnostics',
+    declaration: 'export interface LspProviderDiagnostics extends LspDiagnosticsRequest {\n    readonly languageId: string;\n}',
   },
   {
     name: 'LspProviderId',
@@ -6432,6 +6527,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ProfilePnpmInvocation {\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n}',
   },
   {
+    name: 'ProgressReviewState',
+    declaration: 'export type ProgressReviewState = z.infer<typeof reviewState>;',
+  },
+  {
     name: 'ProjectionChangeListener',
     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: SessionSeq) => void;',
   },
@@ -6465,7 +6564,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PromptSection',
-    declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly interpolate?: boolean;\n    readonly complete?: boolean;\n}',
+    declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly version?: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly interpolate?: boolean;\n    readonly complete?: boolean;\n}',
   },
   {
     name: 'PromptSectionOrderName',
@@ -7845,7 +7944,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SystemPrompt',
-    declaration: 'export class SystemPrompt extends Service {\n    static Config: z<Config>;\n    constructor(ctx: Context, config: Config);\n    section(section: PromptSection): () => void;\n    getSectionOrder(name: PromptSectionOrderName): number;\n    getContextOrder(name: PromptContextOrderName): number;\n    context(context: PromptContext): () => void;\n    suppressRuntimeContext(): () => void;\n    suppressSections(options?: {\n        except?: readonly string[] | (() => readonly string[] | undefined);\n        globalOnly?: boolean;\n    }): () => void;\n    tools(provider: (context: AssembleContext) => ToolProviderResult): () => void;\n    variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void;\n    async assemble(context: AssembleContext = {}): Promise<PromptAssembly>;\n}',
+    declaration: 'export class SystemPrompt extends Service {\n    static Config: z<Config>;\n    constructor(ctx: Context, config: Config);\n    section(section: PromptSection): () => void;\n    getSectionOrder(name: PromptSectionOrderName): number;\n    getContextOrder(name: PromptContextOrderName): number;\n    context(context: PromptContext): () => void;\n    suppressRuntimeContext(): () => void;\n    suppressSections(options?: {\n        except?: readonly string[] | ((scopedNames: readonly string[], context: AssembleContext, sectionNames: readonly string[]) => readonly string[] | undefined);\n        globalOnly?: boolean;\n    }): () => void;\n    tools(provider: (context: AssembleContext) => ToolProviderResult): () => void;\n    variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void;\n    async assemble(context: AssembleContext = {}): Promise<PromptAssembly>;\n}',
   },
   {
     name: 'SystemPromptMessageSource',
@@ -7862,6 +7961,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TargetAssistanceState',
+    declaration: 'export type TargetAssistanceState = z.infer<typeof targetState>;',
   },
   {
     name: 'TeamId',
@@ -8106,6 +8209,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ToolPresentationMode',
     declaration: 'export type ToolPresentationMode = \'native\' | \'ptc\' | \'both\';',
+  },
+  {
+    name: 'ToolProgress',
+    declaration: 'export interface ToolProgress {\n    readonly progress: number;\n    readonly total?: number;\n    readonly message?: string;\n}',
   },
   {
     name: 'ToolProviderResult',

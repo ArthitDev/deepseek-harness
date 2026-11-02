@@ -3,8 +3,8 @@
 exports[`exit and resume hints > creates only the visible history views with limit 3 > bounded history 1`] = `
 [
   " … 119 earlier messages folded — /expand-all shows all                  │ ── Agent Debug ──                             ",
-  " › saved-119                                                            │ No activity yet. Send a task in chat.         ",
-  " › saved-120                                                            │                                               ",
+  " › saved-119                                                            │ Main Agent · task: saved-120 · calls: none ·  ",
+  " › saved-120                                                            │ usage: unknown                                ",
   " ℹ Recap · Request: saved-120                                           │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
@@ -33,8 +33,8 @@ exports[`exit and resume hints > creates only the visible history views with lim
 exports[`exit and resume hints > replays a seeded session once even when its parent no longer exists > resumed inherited messages with a missing parent 1`] = `
 [
   " ⧉  S H I E L D   B R E A K   A G E N T                                 │ ── Agent Debug ──                             ",
-  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ No activity yet. Send a task in chat.         ",
-  " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │                                               ",
+  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ Main Agent · task: saved question · calls:    ",
+  " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │ none · usage: unknown                         ",
   " › saved question                                                       │                                               ",
   " saved answer                                                           │                                               ",
   " ℹ Recap · Request: saved question · Last reply: saved answer           │                                               ",

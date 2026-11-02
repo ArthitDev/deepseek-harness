@@ -32,6 +32,12 @@ Mount `dsh-system-prompt` wherever agents run: it provides `ctx.systemPrompt`, t
 
 The config owns the fixed opener, runtime context, deployment persona prefix and suffix, and tool order; everything else comes from registered contributions.
 
+`requiredSections` checks registrations after scoped shadowing and preparation, before section text, variables, tools, or suppression callbacks run. Suppression and complete prompts still pass this registration check. With `preserveSections: true`, a selected required section with nonblank template text must also render nonblank; intentional empty templates remain valid. The optional `version` is registration metadata and does not change rendered prompt text.
+
+Shipped profiles require version `'1'` for `tools:calling` and both deployment persona sections. Profiles that enable `harness:identity` require its version too. Scoped shadows of these sections must declare the same version; this check does not authenticate section text.
+
+Tool, mode, skill, MCP, and runtime-context contributions remain capability-dependent, so profiles do not require them as universal prompt sections.
+
 ```yaml
 - name: '@deepseek-ai/dsh-system-prompt'
   config:
@@ -43,6 +49,8 @@ The config owns the fixed opener, runtime context, deployment persona prefix and
 
 | Field | Default | Meaning |
 |---|---|---|
+| `requiredSections` | `{}` | After preparation and scoped shadowing, require each named effective registration to carry the exact configured `version` before section, variable, or tool providers run. Missing, unversioned, or different versions reject assembly. Suppression and complete-section selection do not remove this registration check. |
+| `preserveSections` | `false` | Preserve each effective registered section selected for this assembly across the waterfall: its name, contribution text, interpolation flag, and relative order. Suppression and complete-section selection happen first. Standalone use defaults off; shipped profiles enable it. Selected required sections with nonblank templates must render nonblank using final waterfall variables. Added sections, tools, contexts, and routed variables remain available. |
 | `includeHarnessIdentity` | `true` | Include the factual `Runtime host: Shield Break Harness.` label at order −1000. It assigns no model identity or persona. Set false to omit the label. |
 | `includeRuntimeContext` | `true` | Include ordered dynamic runtime context in assembly |
 | `personaPrefix` | `''` | Global persona prefix template at order `0`, before first-party guidance |
@@ -63,6 +71,8 @@ ctx.systemPrompt.section({
 })
 ```
 
+Set `version` when a deployment may require this registration at an exact version.
+
 Set `interpolate: false` on a section to preserve its text literally, including `{{…}}` groups in generated tool documentation. Other sections interpolate variables by default.
 
 ### Contribute a prompt variable
@@ -81,7 +91,9 @@ Tool-schema providers are evaluated per assembly and contribute the model-visibl
 
 `suppressRuntimeContext()` removes every dynamic runtime-context contribution for the calling scope without disabling the services that own the underlying facts; multiple suppressors compose and the effect restores context when none remains.
 
-`suppressSections()` re-evaluates live allowlists at each assembly. An undefined allowlist disables that suppressor; an empty list withholds every gated section. With `globalOnly: true`, preset-scoped contributions remain visible.
+`suppressSections()` re-evaluates live allowlists at each assembly. An undefined allowlist disables that suppressor; an empty list withholds every gated section. Callback providers receive scoped section names, the assembly context, and all effective section names. With `globalOnly: true`, preset-scoped contributions remain visible.
+
+The scope-filtered `system-prompt/prepare` serial event runs before provider values, suppression decisions, or section selection are read. Use it to refresh settings that affect the next assembly; a rejected listener prevents provider evaluation. The separate `system-prompt/assemble` waterfall runs after those inputs are resolved.
 
 -----
 
@@ -95,7 +107,7 @@ This section explains how the package realizes the behavior above; the observabl
 
 ### Design concept
 
-The package is a registry plus a cooperative assembly pipeline. One `assemble()` call merges the global layer with the requested scope's layer, detaches tool parameters, canonicalizes section order by number and then name, runs the scope-filtered `system-prompt/assemble` waterfall, restores an effective complete section as the sole prompt section, and applies any active runtime-context suppressor. Sections and dynamic contexts are separate inputs: sections become prompt text, while contexts become sourced user-role snapshots in model history under the loop. Tool schemas are part of the assembly by design — "what the model is told it can do" is one coherent thing, even though adapters transmit schemas as a separate wire field.
+The package is a registry plus a cooperative assembly pipeline. One `assemble()` call first runs the scope-filtered `system-prompt/prepare` serial event, then merges the global layer with the requested scope's layer, detaches tool parameters, canonicalizes section order by number and then name, runs the scope-filtered `system-prompt/assemble` waterfall, restores an effective complete section as the sole prompt section, and applies any active runtime-context suppressor. Sections and dynamic contexts are separate inputs: sections become prompt text, while contexts become sourced user-role snapshots in model history under the loop. Tool schemas are part of the assembly by design — "what the model is told it can do" is one coherent thing, even though adapters transmit schemas as a separate wire field.
 
 ### Source map
 
@@ -106,7 +118,7 @@ The package is a registry plus a cooperative assembly pipeline. One `assemble()`
 
 ### Assembly and rendering
 
-Assembly resolves and renders in two stages: `assemble()` returns sections with resolved-but-uninterpolated text, the ordered tool schemas, and every registered variable resolved against the context, while `renderPrompt()` interpolates `{{variable}}` references unless a section sets `interpolate: false`, drops empty sections, and joins with blank lines — strictly, an unknown reference, a registered-but-valueless reference, or a malformed complete group throws, because a malformed prompt is worse than a loud failure. `toolOrder` canonicalizes the collected tools before the waterfall (registration order is a plugin-load artifact); a waterfall listener that mutates the list owns the determinism of what it emits.
+Assembly resolves and renders in two stages: `assemble()` returns sections with resolved-but-uninterpolated text, the ordered tool schemas, and every registered variable resolved against the context. On the assembly returned by `assemble()`, `renderPrompt()` interpolates `{{variable}}` references unless a section sets `interpolate: false`, drops empty optional sections, and joins with blank lines. When preservation is enabled, selected required sections with nonblank templates must remain nonblank after this final interpolation; malformed, unknown, or valueless references in those sections report only the section name. Other interpolation failures retain their detailed diagnostics. `toolOrder` canonicalizes the collected tools before the waterfall (registration order is a plugin-load artifact); a waterfall listener that mutates the list owns the determinism of what it emits.
 
 ### Scoping
 
@@ -174,6 +186,7 @@ Prefix-stable while the visible schema set, rendering, and order are unchanged. 
 These limits define when prompt assembly needs special care. They are current package constraints, not a task backlog.
 
 - **Deployment-authored prompt text is config/composition only** — this plugin owns the global persona prefix and suffix defaults, creator plugins may register agent-scoped shadows, and other sections come from the plugin that owns the fact; there is no end-user prompt-editing API.
+- **Required section versions identify registrations** — preserved selected sections are checked for nonblank rendered text, but their content is not pinned to an approved value.
 - **No inline escape syntax in interpolated text** — use `interpolate: false` when a whole section must preserve literal braces.
 - **`toolOrder` misconfiguration surfaces at prompt assembly (the first turn), not at boot** — only shape violations throw at config load.
 

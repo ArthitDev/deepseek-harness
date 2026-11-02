@@ -1097,6 +1097,33 @@ describe('compaction region transaction', () => {
     expect(compact.calls[1]!.input.messages[0]).toMatchObject({ role: 'user' })
   })
 
+  it.each([
+    ['before', 1, 2, 2],
+    ['across', 1, 4, 3],
+    ['after', 5, 6, 2],
+  ] as const)('replays every active system update when compacting %s it', async (_position, start, end, count) => {
+    const compact = service()
+    const session = conversation(3, undefined, 'ORIGINAL SYSTEM')
+    const replaced = session.surface.nodes[3]!
+    session.append('system/message', {
+      turn: 4, step: 1, message: createSystemMessage('UPDATED SYSTEM\nKeep every project instruction.'),
+    }, { surfaceOp: { op: 'replace', startSeq: replaced, endSeq: replaced }, sourceEventSeqs: [replaced] })
+    session.append('system/message', {
+      turn: 4, step: 1, message: createSystemMessage(''),
+    }, { surfaceOp: 'append' })
+    const nodes = [...session.surface.nodes]
+    const systems = session.deriveMessages().filter(message => message.role === 'system')
+
+    await compact.compactRegion(nodes[start]!, nodes[end]!, agent(session, MODEL), SIGNAL)
+
+    const { input } = compact.calls[0]!
+    expect(input.messages.filter(message => message.role === 'system')).toEqual(systems)
+    expect(input.messages.map(({ role, content, source }) => ({ role, content, source }))).toMatchSnapshot()
+    expect(input.messages.filter(message => message.role !== 'system')).toHaveLength(count)
+    const replay = Session.create(SessionId('system-update-replay'), session.snapshotEvents())
+    expect(replay.deriveMessages()).toEqual(session.deriveMessages())
+  })
+
   it('surfaces the session rejection of a range that covers the system head', async () => {
     const compact = service()
     const session = conversation(3, undefined, 'PROTECTED SYSTEM')

@@ -29,13 +29,14 @@ import chalk from 'chalk'
 import { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { JobView } from '@deepseek-ai/dsh-jobs'
-import type {} from '@deepseek-ai/dsh-subagent'
+import type { JobId, JobOutputRead, JobView } from '@deepseek-ai/dsh-jobs'
+import { foldSubagentDescriptor, type SubagentRunEndInfo, type SubagentRunInfo } from '@deepseek-ai/dsh-subagent'
+import type { ActivityEntry } from '../core/activity.js'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type MessageSource, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolDispatchExecution, type ToolExecution, type ToolExecutionResult, type ToolProgress } from '@deepseek-ai/dsh-tools'
 import {
   CombinedAutocompleteProvider,
   Container,
@@ -110,6 +111,10 @@ import { buildBanner } from './banner.js'
 import type { TranscriptSearchMatch } from '../core/search.js'
 import { defaultModelSelection } from '../core/web-settings.js'
 import { TEAM_MODE_OPTIONS, type TeamMode } from '../core/team-mode.js'
+import { installContextCapture } from '../core/context.js'
+import { showContextViewer } from './context-viewer.js'
+import { createAgentSummary, foldAgentSummary, formatAgentSummary, rebuildAgentSummary, type AgentSummary } from '../core/agent-summary.js'
+import { JOB_INPUT_WATCH_TAIL_BYTES, JobInputWatch } from '../core/job-input-watch.js'
 
 /** Dependencies for one live ChatScreen: context, viewport, agent, and quit/switch callbacks. */
 export interface ChatScreenOptions {
@@ -125,6 +130,8 @@ export interface ChatScreenOptions {
     preset?: string
     /** Newest transcript items to render until explicitly expanded; defaults to 20. */
     historyLimit?: number
+    /** Quiet time after a recognized job prompt before Agent Debug warns. */
+    jobInputWarningDelayMs?: number
   }
   onQuit: (resumeHint?: string) => void
   /** Called after a successful in-session agent switch (new/fork/resume). */
@@ -261,7 +268,14 @@ export class ChatScreen {
   private readonly paneSlot = new VStack([])
   private shellPane: ShellPane | undefined
   private disposeShellDraft: (() => void) | undefined
-  private readonly toolActivity = new ToolActivityPane()
+  private readonly toolActivity = new ToolActivityPane((key) => {
+    const run = this.subagentActivity.get(key.slice('subagent:'.length))
+    if (run?.child === undefined) {
+      this.pushNotice('subagent is no longer available; use /agents to inspect history', 'error')
+      return
+    }
+    void this.inspectSubagentRun(run.child.session.id, run.entry.label)
+  })
   private agentDebugVisible = true
   private readonly editor: Editor
   /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
@@ -271,7 +285,14 @@ export class ChatScreen {
   private disposeSkillsPolicy: (() => void) | undefined
   private disposeJobs: (() => void) | undefined
   private agentsOverlayOpen = false
+  private contextOverlayOpen = false
+  private contextOverlayClose: (() => void) | undefined
   private jobSnapshots: readonly JobView[] = []
+  private readonly waitingJobIds = new Set<JobId>()
+  private readonly jobReadOffsets = new Map<JobId, number>()
+  private readonly jobReadTimers = new Map<JobId, ReturnType<typeof setTimeout>>()
+  private jobInputWatch!: JobInputWatch
+  private mainSummary: AgentSummary = createAgentSummary()
   private mcpEnabled = true
   private jevEnabled = true
   private skillsEnabled = true
@@ -280,6 +301,7 @@ export class ChatScreen {
   /** Per-agent live stream subscription (rebound on every agent switch). */
   private disposeStream: (() => void) | undefined
   private streamSyncTimer: ReturnType<typeof setTimeout> | undefined
+  private activitySyncTimer: ReturnType<typeof setTimeout> | undefined
   private exitArm: ExitArm = { lastPressAt: 0 }
   /** Previous idle Esc press, for the double-Esc rewind gesture. */
   private lastEscapeAt: number | undefined
@@ -300,6 +322,17 @@ export class ChatScreen {
   private cachedJevCost: number | undefined
   /** Running delegation ids and the parent-scope filters carried by their lifecycle events. */
   private readonly subagentRuns = new Map<string, (agentCtx: Context) => boolean>()
+  private readonly subagentActivity = new Map<string, {
+    entry: ActivityEntry
+    child?: Agent
+    parent: Agent
+    admits: (agentCtx: Context) => boolean
+    latestCall?: { callId: string; name: string }
+    summary: AgentSummary
+    fallbackTask?: string
+  }>()
+  private debugEntries: readonly ActivityEntry[] = []
+  private readonly activeToolCalls = new Map<string, symbol>()
   /** ScrollView over the transcript (Ctrl+F jump target). */
   private transcriptScroll: ScrollView | undefined
   /** Active find query — views highlight its matches while set. */
@@ -335,21 +368,34 @@ export class ChatScreen {
     })
     this.ctx.effect(() => () => {
       this.disposed = true
+      this.contextOverlayClose?.()
       this.statusBar.stop()
       this.workingLoader?.stop()
       this.cancelStreamSync()
+      clearTimeout(this.activitySyncTimer)
+      this.activitySyncTimer = undefined
       this.disposeStream?.()
       this.disposeMcpPolicy?.()
       this.disposeSkillsPolicy?.()
       this.disposeJobs?.()
       this.disposeShellDraft?.()
       this.shellPane?.dispose()
+      for (const timer of this.jobReadTimers.values()) clearTimeout(timer)
+      this.jobReadTimers.clear()
+      this.jobInputWatch.dispose()
     })
     this.agent = options.agent
     this.config = options.config
+    this.jobInputWatch = new JobInputWatch(options.config.jobInputWarningDelayMs ?? 15000, (id, waiting) => {
+      if (this.disposed) return
+      if (waiting) this.waitingJobIds.add(id)
+      else this.waitingJobIds.delete(id)
+      this.scheduleActivitySync()
+    })
     this.historyLimit = options.config.historyLimit ?? 20
     this.commands = this.ctx.get('commands')
     this.onAgentSwitch = options.onAgentSwitch
+    installContextCapture(this.ctx)
 
     this.seedSelection()
     this.disposeSelection = this.installSelection()
@@ -357,6 +403,7 @@ export class ChatScreen {
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
     this.listenSubagents()
+    this.listenToolActivity()
 
     this.editor = new Editor(this.tui, editorTheme, { paddingX: 1 })
     this.editor.onSubmit = (text) => {
@@ -398,6 +445,7 @@ export class ChatScreen {
       // functional key (Ctrl+C/D/T/O/L, Esc, Shift+Tab) fires twice.
       if (isKeyRelease(data)) return undefined
       if (this.agentsOverlayOpen && this.tui.hasOverlay()) return undefined
+      if (this.contextOverlayOpen && this.tui.hasOverlay()) return undefined
       if (matchesKey(data, 'ctrl+alt+g') && !this.tui.hasOverlay()) {
         void this.cmdAgents().catch((error: unknown) => { this.pushNotice(`agents: ${error instanceof Error ? error.message : String(error)}`, 'error') })
         return { consume: true }
@@ -788,6 +836,7 @@ export class ChatScreen {
       this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
       return
     }
+    this.contextOverlayClose?.()
     // The pane streams a PTY session owned by the outgoing agent; it dies
     // with that agent's scope.
     this.closeShellPane()
@@ -795,6 +844,10 @@ export class ChatScreen {
     this.disposeMcpPolicy?.()
     this.disposeSkillsPolicy?.()
     this.agent = next
+    this.mainSummary = createAgentSummary()
+    this.activeToolCalls.clear()
+    clearTimeout(this.activitySyncTimer)
+    this.activitySyncTimer = undefined
     this.model = createModel()
     this.views.clear()
     this.messages.clear()
@@ -836,6 +889,7 @@ export class ChatScreen {
       for (const event of replayEvents(agent.session)) {
         this.handleEvent(event)
       }
+      this.mainSummary = rebuildAgentSummary(replayEvents(agent.session))
     } finally {
       this.replaying = false
     }
@@ -852,6 +906,7 @@ export class ChatScreen {
    */
   finalizeReplay(): void {
     this.replaying = false
+    this.mainSummary = rebuildAgentSummary(replayEvents(this.agent.session))
     this.sync()
   }
 
@@ -941,6 +996,7 @@ export class ChatScreen {
       },
       { name: 'retry', description: 'Re-send the last prompt after a failure' },
       { name: 'recap', description: 'Review the latest request, reply, and active checkpoint' },
+      { name: 'context', description: 'Compare the last request with current and queued context' },
       { name: 'expand-all', description: 'Toggle folding of old messages' },
     ]
     this.editor.setAutocompleteProvider(
@@ -1169,6 +1225,19 @@ export class ChatScreen {
     } finally { await stopLifecycle(); this.agentsOverlayOpen = false }
   }
 
+  /** Inspect the selected live child while global interrupt and quit keys belong to its overlay. */
+  private async inspectSubagentRun(id: Agent['id'], label: string): Promise<void> {
+    if (this.agentsOverlayOpen || this.tui.hasOverlay()) return
+    this.agentsOverlayOpen = true
+    try {
+      await inspectSubagent(this.ctx, this.tui, id, label, this.historyLimit)
+    } catch (error: unknown) {
+      if (!this.disposed) this.pushNotice(`subagent: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    } finally {
+      this.agentsOverlayOpen = false
+    }
+  }
+
   private async cmdJobs(): Promise<void> {
     const jobs = this.ctx.get('jobs')
     if (jobs === undefined) {
@@ -1274,6 +1343,18 @@ export class ChatScreen {
         return
       }
       this.pushNotice(buildRecap(this.agent.session.deriveMessages()) ?? 'Nothing to recap yet.')
+      return
+    }
+    if (parsed.name === 'context') {
+      if (parsed.raw.trim() !== '') {
+        this.pushNotice('usage: /context', 'error')
+        return
+      }
+      this.contextOverlayOpen = true
+      this.contextOverlayClose = showContextViewer(this.ctx, this.tui, this.agent, () => {
+        this.contextOverlayOpen = false
+        this.contextOverlayClose = undefined
+      })
       return
     }
     if (parsed.name === 'queue') {
@@ -2952,7 +3033,7 @@ export class ChatScreen {
         '  Ctrl+Alt+←/→  resize chat/shell split (or drag the divider)',
         '  Tab        complete paths · / slash commands · @ attach files',
         '             (empty editor: cycle tool-card focus · Enter expand)',
-        'commands: /new /fork /resume /recap /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /shell /agent-debug /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
+        'commands: /new /fork /resume /recap /context /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /shell /agent-debug /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
       ].join('\n'),
     )
   }
@@ -3504,6 +3585,13 @@ export class ChatScreen {
     }
     const before = this.model.items
     applyEvent(this.model, event)
+    const marker = event.type === 'developer/message'
+      ? event as SessionEvent & { surfaceOp?: { op?: string } }
+      : undefined
+    if (!this.replaying) {
+      if (marker?.surfaceOp?.op === 'replace') this.mainSummary = rebuildAgentSummary(replayEvents(this.agent.session))
+      else foldAgentSummary(this.mainSummary, event)
+    }
     if (this.model.items !== before) {
       this.handledMarkerSeq = event.seq
       // A surface replace pruned items and re-densified ids: stale views and
@@ -3535,28 +3623,224 @@ export class ChatScreen {
   /** Observe all runs; their Cordis carrier filters select the visible agent's descendants. */
   private listenSubagents(): void {
     const runs = this.subagentRuns
+    // Cordis exposes the scoped carrier filter only as this callback's dynamic `this`.
+    // oxlint-disable-next-line typescript/no-this-alias -- Capture Cordis's scoped carrier for the run predicate.
+    const screen = this
     const refresh = () => { this.sync(false) }
     this.ctx.events.on('subagent/start', function (
       this: { [Context.filter]?: (ctx: Context) => boolean } | null,
-      info: { runId: string },
+      info: SubagentRunInfo,
     ) {
       const filter = this?.[Context.filter]
       if (filter === undefined) return
-      runs.set(info.runId, agentCtx => filter.call(this, agentCtx))
+      const admits = (agentCtx: Context) => filter.call(this, agentCtx)
+      runs.set(info.runId, admits)
+      const child = screen.ctx.agents.get(info.id)
+      const inherited = child?.session.inheritedEventCount
+      const ownedEvents = child === undefined ? [] : replayEvents(child.session).filter(event =>
+        inherited === undefined || event.seq >= inherited)
+      const fallbackTask = foldSubagentDescriptor(ownedEvents)?.label
+      const summary = rebuildAgentSummary(ownedEvents, fallbackTask)
+      const entry: ActivityEntry = {
+        seq: screen.model.activity.at(-1)?.seq ?? 0,
+        key: `subagent:${info.runId}`,
+        category: 'Sub Agent',
+        status: 'running',
+        label: `${info.provider} · ${info.id}`,
+        detail: formatAgentSummary(summary),
+        time: Date.now(),
+      }
+      screen.subagentActivity.set(info.runId, {
+        entry,
+        ...(child === undefined ? {} : { child }),
+        parent: screen.agent,
+        admits,
+        summary,
+        ...(fallbackTask === undefined ? {} : { fallbackTask }),
+      })
+      screen.trimSubagentActivity()
       refresh()
     }, { global: true })
-    this.ctx.events.on('subagent/end', (info: { runId: string }) => {
+    this.ctx.events.on('subagent/end', (info: SubagentRunEndInfo) => {
       this.subagentRuns.delete(info.runId)
+      const run = this.subagentActivity.get(info.runId)
+      if (run !== undefined) {
+        run.entry.status = info.stopReason === 'error' ? 'error' : info.stopReason === 'aborted' ? 'cancelled' : 'ok'
+        run.entry.detail = `${formatAgentSummary(run.summary)} · Subagent ${info.stopReason}.`
+        run.entry.endedAt = Date.now()
+      }
+      this.trimSubagentActivity()
       this.sync(false)
+    }, { global: true })
+    this.ctx.events.on('session/event', (session, event: SessionEvent) => {
+      for (const run of this.subagentActivity.values()) {
+        const child = run.child
+        if (run.entry.endedAt !== undefined || child === undefined || child.session !== session) continue
+        const marker = event.type === 'developer/message'
+          ? event as SessionEvent & { surfaceOp?: { op?: string } }
+          : undefined
+        if (marker?.surfaceOp?.op === 'replace') {
+          const inherited = child.session.inheritedEventCount
+          const owned = replayEvents(child.session).filter(accepted => accepted.seq >= inherited)
+          run.summary = rebuildAgentSummary(owned, run.fallbackTask)
+        } else foldAgentSummary(run.summary, event)
+        run.entry.detail = formatAgentSummary(run.summary)
+        if (event.type === 'tool/call') {
+          run.latestCall = { callId: event.data.callId, name: event.data.name }
+          run.entry.status = 'preparing'
+        }
+        else if (event.type === 'tool/result') {
+          const latestCall = run.latestCall
+          if (latestCall !== undefined && latestCall.callId === event.data.message.source.callId) {
+            run.entry.status = 'running'
+          }
+        }
+        if (run.admits(this.agent.ctx)) this.scheduleActivitySync()
+      }
+    }, { global: true })
+    this.ctx.events.on('tools/execute', (exec: ToolDispatchExecution, next: () => Promise<ToolExecutionResult>) => {
+      for (const run of this.subagentActivity.values()) {
+        if (run.child === exec.agent && run.entry.endedAt === undefined) {
+          run.entry.detail = formatAgentSummary(run.summary)
+          run.entry.status = 'executing'
+          this.scheduleActivitySync()
+        }
+      }
+      return next()
     }, { global: true })
   }
 
-  /** Observe registry lifecycle changes for the visible session without reading job output. */
+  private trimSubagentActivity(): void {
+    const settled = [...this.subagentActivity.entries()].filter(([, run]) => run.entry.endedAt !== undefined)
+    for (const [id] of settled.slice(0, Math.max(0, settled.length - 20))) this.subagentActivity.delete(id)
+  }
+
+  /** Observe dispatched calls and MCP progress without recording transient data in the session. */
+  private listenToolActivity(): void {
+    this.ctx.events.on('tools/execute', async (exec: ToolDispatchExecution, next: () => Promise<ToolExecutionResult>) => {
+      if (exec.agent === this.agent && !this.disposed) {
+        this.activeToolCalls.set(exec.callId, exec.token)
+        const row = this.model.activity.find(entry => entry.key === `tool:${exec.callId}` || entry.key === `ptc:${exec.callId}`)
+        if (row !== undefined && row.endedAt === undefined) {
+          row.status = 'executing'
+          delete row.progress
+        }
+        this.scheduleActivitySync()
+      }
+      try {
+        return await next()
+      } finally {
+        if (exec.agent === this.agent && this.activeToolCalls.get(exec.callId) === exec.token) {
+          this.activeToolCalls.delete(exec.callId)
+        }
+      }
+    }, { global: true })
+    this.ctx.events.on('tools/progress', (exec: Readonly<ToolExecution>, update: ToolProgress) => {
+      if (this.disposed || exec.agent !== this.agent || this.activeToolCalls.get(exec.callId) !== exec.token) return
+      const row = this.model.activity.find(entry => entry.key === `tool:${exec.callId}` || entry.key === `ptc:${exec.callId}`)
+      if (row === undefined || row.endedAt !== undefined) return
+      row.status = 'executing'
+      row.progress = update
+      this.scheduleActivitySync()
+    }, { global: true })
+  }
+
+  private scheduleActivitySync(): void {
+    if (this.disposed || this.activitySyncTimer !== undefined) return
+    this.activitySyncTimer = setTimeout(() => {
+      this.activitySyncTimer = undefined
+      this.sync(false)
+    }, 16)
+  }
+
+  /** Observe visible job output through non-consuming registry cursors. */
   private listenJobs(): void {
     this.disposeJobs?.()
-    this.disposeJobs = this.ctx.get('jobs')?.events.subscribe({ owner: this.agent.id }, (event) => {
-      if (!this.disposed && event.type !== 'output' && event.type !== 'progress') this.sync()
+    this.jobInputWatch.dispose()
+    this.jobReadOffsets.clear()
+    for (const timer of this.jobReadTimers.values()) clearTimeout(timer)
+    this.jobReadTimers.clear()
+    const jobs = this.ctx.get('jobs')
+    if (jobs === undefined) {
+      this.jobSnapshots = []
+      return
+    }
+    const observe = (job: JobView) => {
+      if (job.status !== 'running') return
+      const from = Math.max(job.output.earliest, job.output.total - JOB_INPUT_WATCH_TAIL_BYTES)
+      try {
+        const read = jobs.readAt(job.id, from, this.agent.id)
+        this.jobReadOffsets.set(job.id, read.next)
+        this.feedJobOutputRead(job.id, read)
+      } catch (error: unknown) {
+        this.ctx.logger.debug('Agent Debug could not observe job output during registration.', error)
+        this.jobReadOffsets.delete(job.id)
+      }
+    }
+    this.jobSnapshots = jobs.list(this.agent.id)
+    for (const job of this.jobSnapshots) observe(job)
+    this.disposeJobs = jobs.events.subscribe({ owner: this.agent.id }, (event) => {
+      if (this.disposed) return
+      if (event.type === 'output') {
+        this.jobInputWatch.activity(event.id)
+        this.scheduleJobOutputRead(event.id)
+        return
+      }
+      if (event.type === 'registered') {
+        this.jobSnapshots = [...this.jobSnapshots.filter(job => job.id !== event.job.id), event.job]
+        observe(event.job)
+        this.scheduleActivitySync()
+      } else if (event.type === 'progress') {
+        this.clearJobOutputWatch(event.job.id)
+        this.jobSnapshots = [...this.jobSnapshots.filter(job => job.id !== event.job.id), event.job]
+        this.scheduleActivitySync()
+      } else {
+        this.clearJobOutputWatch(event.job.id)
+        this.jobReadOffsets.delete(event.job.id)
+        this.sync()
+      }
     })
+  }
+
+  private scheduleJobOutputRead(id: JobId): void {
+    if (this.jobReadTimers.has(id)) return
+    this.jobReadTimers.set(id, setTimeout(() => {
+      this.jobReadTimers.delete(id)
+      const jobs = this.ctx.get('jobs')
+      const job = jobs?.get(id, this.agent.id)
+      if (jobs === undefined || job?.status !== 'running') {
+        this.clearJobOutputWatch(id)
+        return
+      }
+      const earliest = Math.max(job.output.earliest, job.output.total - JOB_INPUT_WATCH_TAIL_BYTES)
+      const priorOffset = this.jobReadOffsets.get(id)
+      const from = Math.max(priorOffset ?? earliest, earliest)
+      if (priorOffset !== undefined && from > priorOffset) this.jobInputWatch.reset(id)
+      try {
+        const read = jobs.readAt(id, from, this.agent.id)
+        this.jobReadOffsets.set(id, read.next)
+        this.feedJobOutputRead(id, read)
+      } catch (error: unknown) {
+        this.ctx.logger.debug('Agent Debug could not read the current job output tail.', error)
+        this.clearJobOutputWatch(id)
+        this.jobReadOffsets.delete(id)
+      }
+    }, 0))
+  }
+
+  private feedJobOutputRead(id: JobId, read: JobOutputRead): void {
+    if (read.lossy) this.jobInputWatch.reset(id)
+    for (const chunk of read.chunks) {
+      if (chunk.gapBefore === true) this.jobInputWatch.reset(id)
+      this.jobInputWatch.output(id, chunk.text.slice(-JOB_INPUT_WATCH_TAIL_BYTES))
+    }
+  }
+
+  private clearJobOutputWatch(id: JobId): void {
+    const timer = this.jobReadTimers.get(id)
+    if (timer !== undefined) clearTimeout(timer)
+    this.jobReadTimers.delete(id)
+    this.jobInputWatch.clear(id)
   }
 
   /**
@@ -3648,7 +3932,18 @@ export class ChatScreen {
       this.cachedJevCost = jevSessionCost(this.model.items)
     }
     const { items } = this.model
-    this.toolActivity.update(this.model.activity, this.jobSnapshots, this.model.targets.getSnapshot())
+    const subagentEntries = [...this.subagentActivity.values()]
+      .filter(run => run.admits(this.agent.ctx))
+      .map(run => run.entry)
+    const activity = [...this.model.activity, ...subagentEntries].sort((left, right) => left.seq - right.seq)
+    if (
+      activity.length !== this.debugEntries.length
+      || activity.some((entry, index) => this.debugEntries[index] !== entry)
+    ) this.debugEntries = activity
+    const summaryVisible = this.mainSummary.task !== undefined || this.mainSummary.startedAt !== undefined
+      || this.mainSummary.latestTool !== undefined || this.mainSummary.todos !== undefined
+    this.toolActivity.update(this.debugEntries, this.jobSnapshots, this.model.targets.getSnapshot(),
+      summaryVisible ? formatAgentSummary(this.mainSummary) : undefined, this.waitingJobIds)
     const foldKey = foldWindow(items.length, this.expandedAll, this.historyLimit)
     for (const id of this.views.keys()) {
       if (id < foldKey.boundary) this.views.delete(id)

@@ -40,6 +40,8 @@ After startup you see a `dsh web:` line whose root URL carries a fresh process t
 
 Saved model selections override the composition default. The settings card accepts a Messages-compatible API address and a credential reference.
 
+In this checkout, the first `zcode-direct` or `zcode/glm-5.3[-flash]` request starts or reuses the bundled ZCode proxy. Concurrent requests wait for one startup attempt per Web host; other providers and the GUI stay available during startup. A failed attempt logs one warning and still delegates the request to the configured endpoint. Closing Web cancels pending startup helpers but leaves the shared proxy running. The direct preset defaults to `reasoning: low`; see [machine-local ZCode setup](../../../third-party/zcode-api/INTEGRATION.md) for overrides and prerequisites.
+
 ### Configuration
 
 Most users never set these; the command-line flags feed the four settings below — `--host`, `--port`, and `--trusted-host` come from the invocation, and `--no-open` turns the browser handoff off for that invocation:
@@ -95,6 +97,7 @@ The URL line and browser handoff are readiness signals: supervisors RPC as soon 
 |---|---|
 | [`src/index.ts`](src/index.ts) | The `web-app` glue plugin: dist resolution, LAN trust sampling, prompt sections, bash variable, URL line, browser handoff |
 | [`src/startup.ts`](src/startup.ts) | The `web-startup` provider: `--host`, `--port`, `--trusted-host`, `--no-open`, `--help` |
+| [`src/proxy-startup.ts`](src/proxy-startup.ts) | Shared Web/TUI proxy startup and cancellation, exported through `./startup` |
 | [`cordis.patch.yml`](cordis.patch.yml) | The web patch: restated base values, web host rows, browser roster, preset registry |
 | [`presets/`](presets) | One `@deepseek-ai/dsh-agent-preset` declaration per shipped preset (`standard`, `ptc`, `minimal`, `cordis`), each its own patch file |
 | — | No runtime invariant companion is published; every contribution (frontend-static child plugin, prompt section, bashEnv registration) is registry-disposed with the fiber, and each owning registry's package carries that relation's invariant; the package holds no mutable state of its own to audit. |
@@ -149,6 +152,7 @@ Source and Web sections follow first-party reusable instructions. Different chec
 These limits tell you what to expect in unusual setups — a source checkout, SSH sessions, or strict networks. They are current package constraints, not a general browser comparison or a task backlog.
 
 - **The frontend must be built** — a source checkout needs `pnpm run build` first; startup stops with a build hint when the dist is missing, and there is no source-serving fallback.
+- **Automatic ZCode startup needs the checkout scripts and bundled proxy**. Installing this package alone does not provision them or account credentials. After a failed startup attempt, fix setup and restart Web or start the proxy manually.
 - **LAN addresses are sampled once at startup** — interface changes after boot are not re-advertised; the printed LAN URL always matches what was sampled.
 - **Only the handoff start is observable** — the GUI reports that the browser was asked to open, not that it actually opened; a later browser exit is never reported, and the printed URL is your manual fallback.
 - **SSH sessions keep the URL but skip the browser handoff** — the printed URL names the remote host's loopback endpoint; the SSH client or editor must expose and open the local forwarded address.

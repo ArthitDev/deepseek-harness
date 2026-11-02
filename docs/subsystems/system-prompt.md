@@ -48,6 +48,8 @@ The exported `PERSONA_PREFIX_SECTION` (`deployment:persona-prefix`) and `PERSONA
 interface PromptSection {
   /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
   readonly name: string
+  /** Declared version compared exactly with `requiredSections`; omission is unversioned. */
+  readonly version?: string
   /**
    * Sections are concatenated in ascending order. Equal orders use code-unit
    * name order.
@@ -151,10 +153,12 @@ suppressRuntimeContext(): () => void
  * withheld.
  * @param options - `except` names the sections that remain visible, as a
  *   static list or a provider re-evaluated at every assembly for live toggles.
+ *   The provider receives effective scoped names, the per-assembly context,
+ *   and all effective section names, in that order.
  *   An undefined provider result disables suppression; an empty list permits no gated sections.
  * @returns the exact Cordis effect disposer.
  */
-suppressSections(options?: { except?: readonly string[] | (() => readonly string[] | undefined) globalOnly?: boolean }): () => void
+suppressSections(options?: { except?: readonly string[] | (( scopedNames: readonly string[], context: AssembleContext, sectionNames: readonly string[], ) => readonly string[] | undefined) globalOnly?: boolean }): () => void
 
 /**
  * Register a tool-schema provider in the calling context's scope. Global and
@@ -176,13 +180,13 @@ tools(provider: (context: AssembleContext) => ToolProviderResult): () => void
 variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void
 
 /**
- * Assemble global and scoped providers, detach tool parameters, apply
- * canonical ordering, then run the assembly waterfall. Scoped sections and
- * variables shadow globals. The returned waterfall value is authoritative
- * except that an effective complete section is restored afterwards as the
- * sole prompt section.
+ * Run scoped preparation, assemble global and scoped providers, detach tool
+ * parameters, apply canonical ordering, then run the assembly waterfall.
+ * Scoped sections and variables shadow globals. With preservation enabled,
+ * effective registered sections remain intact after the waterfall; an
+ * effective complete section is always restored as the sole prompt section.
  * @param context - the optional scope and plugin-defined assembly fields.
- * @returns the post-waterfall assembly with any complete prompt enforced.
+ * @returns the post-waterfall assembly with registered prompt integrity enforced.
  */
 async assemble(context: AssembleContext = {}): Promise<PromptAssembly>
 ```
@@ -197,13 +201,14 @@ Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-
 
 #### `system-prompt/assemble` — waterfall
 
-Expert waterfall over the assembled sections, contexts, tools, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope's assemblies. The returned value is authoritative. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope's system prompt.
+Expert waterfall over the assembled sections, contexts, tools, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope's assemblies. The returned value is authoritative, subject to `preserveSections` and the complete-section rules below. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope's system prompt.
 
 ```ts cordis-catalog
 /**
  * Expert waterfall over the assembled sections, contexts, tools, and variables.
  * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners
- * receive only that scope's assemblies. The returned value is authoritative.
+ * receive only that scope's assemblies. The returned value is authoritative,
+ * subject to `preserveSections` and the complete-section rules below.
  * A supplied signal controls only this explicit assembly request and must not
  * be retained to control later turns. A registered complete section is
  * restored after this waterfall, so listeners cannot add to or replace
@@ -233,6 +238,26 @@ Emitted when any prompt provider changes. This registry notification is unfilter
  */
 'system-prompt/change'(): void
 ```
+
+Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-prompt/src/index.ts)
+
+<a id="system-promptprepare--serial"></a>
+
+#### `system-prompt/prepare` — serial
+
+Prepare scoped prompt providers before each assembly reads them. Scope-filtered dispatch runs serially, so failures prevent provider evaluation.
+
+```ts cordis-catalog
+/**
+ * Prepare scoped prompt providers before each assembly reads them.
+ * Scope-filtered dispatch runs serially, so failures prevent provider evaluation.
+ * @param context - the caller's per-assembly context.
+ * @mode serial
+ */
+'system-prompt/prepare'(this: Scoped<SystemPrompt>, context: AssembleContext): Promise<void>
+```
+
+Types: [Scoped](scope.md)
 
 Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-prompt/src/index.ts)
 <!-- END GENERATED cordis-surface -->

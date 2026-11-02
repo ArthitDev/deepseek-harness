@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createDeveloperMessage, createMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { readFile } from 'node:fs/promises'
+import { createAssistantMessage, createDeveloperMessage, createMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type SessionEvent, type SessionEventMap } from '@deepseek-ai/dsh-session'
 import { ApprovalRequestId } from '@deepseek-ai/dsh-user-approval/types'
+import type { ActivityEntry } from '../src/core/activity.ts'
 import { applyEvent, createModel } from '../src/core/model.ts'
 
 let seq = 0
@@ -12,14 +14,89 @@ function event<K extends keyof SessionEventMap>(type: K, data: SessionEventMap[K
 const call = (name = 'pwsh', id = 'call') => event('tool/call', {
   turn: 1, step: 1, name, callId: ToolCallId(id), arguments: '{"command":"Get-Date"}',
 })
-const result = (id = 'call', isError = false, meta?: SessionEventMap['tool/result']['meta']) => event('tool/result', {
+const result = (id = 'call', isError = false, meta?: SessionEventMap['tool/result']['meta'], errorCode?: string) => event('tool/result', {
   turn: 1, step: 1,
   message: createMessage({ role: 'tool', source: { kind: 'tool', callId: ToolCallId(id) },
     toolCallId: ToolCallId(id), content: [{ type: 'text', text: isError ? 'Error: command failed' : 'exit code: 0\nfinished' }], isError }),
+  ...(errorCode === undefined ? {} : { error: { name: 'AbortError', code: errorCode } }),
   ...(meta === undefined ? {} : { meta }),
 }, 2500)
 
 describe('Agent Debug event projection', () => {
+  it('replays queued and preparing calls without inventing live execution or progress', () => {
+    const model = createModel()
+    const requested = event('assistant/message', {
+      turn: 1, step: 1,
+      message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [
+        { type: 'tool-call', id: ToolCallId('queued'), name: 'mcp__docs__search', arguments: '{"query":"x"}' },
+      ] }),
+      stream: [],
+    })
+    applyEvent(model, requested)
+    expect(model.activity[0]).toMatchObject({ key: 'tool:queued', category: 'MCP', status: 'queued' })
+    applyEvent(model, call('mcp__docs__search', 'queued'))
+    expect(model.activity[0]).toMatchObject({ status: 'preparing' })
+    expect(model.activity[0]?.progress).toBeUndefined()
+    const replayed = createModel()
+    applyEvent(replayed, requested)
+    applyEvent(replayed, call('mcp__docs__search', 'queued'))
+    const projection = (entries: typeof model.activity) => entries.map(({ seq: _seq, time: _time, ...entry }) => entry)
+    expect(projection(replayed.activity)).toEqual(projection(model.activity))
+  })
+
+  it('folds the keyless tool-call-turn recording into the same queued, preparing, and settled activity', async () => {
+    const source = await readFile(new URL('../../../../snapshots/session/tool-call-turn/session.v4.jsonl', import.meta.url), 'utf8')
+    const events = source.trimEnd().split('\n').slice(1).map(line => JSON.parse(line) as SessionEvent)
+    const fold = () => {
+      const model = createModel()
+      const states: ActivityEntry['status'][] = []
+      let key: string | undefined
+      for (const entry of events) {
+        applyEvent(model, entry)
+        if (entry.type === 'assistant/message') {
+          const requested = entry.data.message.content.find(block => block.type === 'tool-call')
+          if (requested?.type === 'tool-call') {
+            key = `tool:${requested.id}`
+            const row = model.activity.find(activity => activity.key === key)
+            if (row !== undefined) states.push(row.status)
+          }
+        } else if ((entry.type === 'tool/call' || entry.type === 'tool/result') && key !== undefined) {
+          const row = model.activity.find(activity => activity.key === key)
+          if (row !== undefined) states.push(row.status)
+        }
+      }
+      return { activity: model.activity, states }
+    }
+    const first = fold()
+    const replay = fold()
+    expect(first.states).toEqual(['queued', 'preparing', 'ok'])
+    expect(first.activity[0]?.progress).toBeUndefined()
+    expect(replay.activity).toEqual(first.activity)
+  })
+
+  it.each(['ABORTED', 'ABORTED_BEFORE_DISPATCH'] as const)('folds PTC %s as cancelled', (errorCode) => {
+    const model = createModel()
+    const ptc = (type: string, time: number, isError?: boolean): SessionEvent => ({
+      type, seq: SessionSeq(seq++), time, data: {
+        rootCallId: ToolCallId('root'), parentCallId: ToolCallId('root'), subCallId: 'root:ptc:0',
+        name: 'mcp__docs__search', arguments: { query: 'x' }, ...(isError === undefined ? {} : { isError }),
+        ...(isError ? { error: { name: 'AbortError', code: errorCode } } : {}),
+      },
+    } as SessionEvent)
+    applyEvent(model, ptc('tool/ptc-dispatch-start', 1000))
+    expect(model.activity[0]).toMatchObject({ key: 'ptc:root:ptc:0', status: 'preparing' })
+    expect(model.activity[0]?.detail).toContain('"query":"x"')
+    applyEvent(model, ptc('tool/ptc-dispatch', 2500, true))
+    expect(model.activity[0]).toMatchObject({ status: 'cancelled', endedAt: 2500 })
+  })
+
+  it.each(['ABORTED', 'ABORTED_BEFORE_DISPATCH'] as const)('folds native %s as cancelled', (errorCode) => {
+    const model = createModel()
+    applyEvent(model, call())
+    applyEvent(model, result('call', true, undefined, errorCode))
+    expect(model.activity[0]).toMatchObject({ status: 'cancelled', endedAt: 2500 })
+  })
+
   it.each([
     [{ kind: 'completed' }, 'ok'], [{ kind: 'blocked' }, 'stopped'],
     [{ kind: 'max-tokens' }, 'stopped'], [{ kind: 'interrupted' }, 'stopped'],

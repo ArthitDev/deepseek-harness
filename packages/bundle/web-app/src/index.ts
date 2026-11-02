@@ -26,6 +26,7 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-shell-env'
+import { installZcodeStartup } from './proxy-startup.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'web-app'
@@ -224,6 +225,10 @@ export const internals: {
  * @param config - validated {@link Config}.
  */
 export function apply(ctx: Context, config: Config): void {
+  const profile = ctx.get('profileContext')
+  installZcodeStartup(ctx, profile?.installAnchor ?? join(SOURCE_ROOT, 'apps/cli/package.json'), () => {
+    ctx.logger.warn('ZCode proxy startup failed. Other providers remain available. Run pnpm zcode:setup and check ZCode login.')
+  })
   const runtime = resolveLanTrust(ctx.webServer.host, config.trustedHosts)
   // The loopback URL belongs to this host. Under SSH, the operator reaches it
   // through a local forwarding address that this process cannot derive.

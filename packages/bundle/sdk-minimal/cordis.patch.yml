@@ -84,6 +84,11 @@
     - id: system-prompt
       name: '@deepseek-ai/dsh-system-prompt'
       config:
+        preserveSections: true
+        requiredSections:
+          tools:calling: '1'
+          deployment:persona-prefix: '1'
+          deployment:persona-suffix: '1'
         includeHarnessIdentity: false
         includeRuntimeContext: false
         personaPrefix: !!js process.env.DSH_SYSTEM_PROMPT ?? 'You are a helpful software engineer assistant.'

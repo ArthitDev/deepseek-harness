@@ -76,6 +76,34 @@ function snapshotMode(value: string | undefined): SnapshotMode {
   }
 }
 
+/** Add the verified Git for Windows runtime only to the context-capture replay child. */
+function contextCapturePath(scenario: HeadlessScenario): Record<string, string> {
+  if (scenario.manifest.environment?.DSH_CONTEXT_CAPTURE_TEST !== '1') return {}
+  if (process.platform !== 'win32') return {}
+  const programFiles = process.env.ProgramFiles ?? process.env.PROGRAMFILES ?? 'C:\\Program Files'
+  const gitLookup = spawnSync('where.exe', ['git'], { encoding: 'utf8' })
+  const locatedGit = gitLookup.status === 0 ? gitLookup.stdout
+    .split(/\r?\n/u).find(candidate => candidate.trim() !== '')?.trim()
+    : undefined
+  const locatedGitRoot = locatedGit === undefined ? undefined : dirname(dirname(locatedGit))
+  const bash = [
+    ...(locatedGitRoot === undefined ? [] : [join(locatedGitRoot, 'bin/bash.exe')]),
+    join(programFiles, 'Git/bin/bash.exe'),
+    'C:/Program Files/Git/bin/bash.exe',
+  ]
+    .find(candidate => existsSync(candidate))
+  if (bash === undefined) throw new Error(`${scenario.name}: Git for Windows bash.exe is required for the real shell replay`)
+  const environmentPathKey = Object.keys(process.env).find(key => key.toLowerCase() === 'path')
+  if (environmentPathKey === undefined || process.env[environmentPathKey] === undefined) {
+    throw new Error(`${scenario.name}: child PATH is missing; cannot launch real bash.exe`)
+  }
+  const gitBin = dirname(bash)
+  const gitRoot = dirname(gitBin)
+  const additions = [gitBin, join(gitRoot, 'usr/bin'), join(gitRoot, 'mingw64/bin')]
+    .filter(directory => existsSync(directory))
+  return { [environmentPathKey]: [...additions, process.env[environmentPathKey]].join(delimiter) }
+}
+
 const mode = snapshotMode(process.env.DSH_SNAPSHOT)
 const RUNTIME_WORKSPACE_ENTRIES = ['.agents', '.dsh', '.snapshot-patches'] as const
 
@@ -177,9 +205,11 @@ function headerOf(log: string): JsonObject {
 
 function contextOf(logs: readonly string[]): NormalizeContext {
   const headers = logs.map(headerOf)
+  const cwd = typeof headers[0]?.cwd === 'string' ? headers[0].cwd : '\0missing-cwd\0'
   return {
     sessionIds: headers.flatMap(header => typeof header.id === 'string' ? [header.id] : []),
-    cwd: typeof headers[0]?.cwd === 'string' ? headers[0].cwd : '\0missing-cwd\0',
+    cwd,
+    .../^[A-Za-z]:\\/.test(cwd) ? { cwdAliases: [`/${cwd.replaceAll('\\', '/')}`] } : {},
   }
 }
 
@@ -1145,6 +1175,7 @@ describe('headless recorded-session snapshots', () => {
               ? {}
               : { DSH_PERMISSION_MODE: scenario.manifest.permission }),
             ...scenario.manifest.environment,
+            ...contextCapturePath(scenario),
             ...(scenario.name === 'mcp-resources' || scenario.name === 'mcp-resources-ptc' ? {
               DSH_MCP_RESOURCES_FIXTURE: join(repoRoot, 'packages/mcp/mcp-client/tests/fixtures/resources-server.ts'),
             } : {}),
@@ -1166,6 +1197,9 @@ describe('headless recorded-session snapshots', () => {
               await copyFile(join(scenario.dir, 'profile.patch.yml'), join(profileDir, 'cordis.patch.yml'))
             }
             await seedWorkspace(scenario, cwd)
+            if (scenario.manifest.environment?.DSH_CONTEXT_CAPTURE_TEST === '1') {
+              await mkdir(join(cwd, '.git'))
+            }
             initialWorkspace = await captureWorkspaceSnapshot(cwd, {
               ignoredRootEntries: RUNTIME_WORKSPACE_ENTRIES,
             })
@@ -1174,6 +1208,32 @@ describe('headless recorded-session snapshots', () => {
             actualLogs = await persistedSessions(cwd)
             if (retainedToolInput !== undefined) {
               verifyToolResultWriterParity(primaryFixture, actualLogs[0]!.content)
+            }
+            if (scenario.manifest.environment?.DSH_CONTEXT_CAPTURE_TEST === '1') {
+              const capture = JSON.parse(await readFile(join(cwd, '.dsh/context-capture.json'), 'utf8')) as JsonObject
+              const categories = capture.categories as Record<string, { count: number; tokens: number }>
+              expect(capture.generation).toBe(2)
+              expect(capture.messageCount).toBeGreaterThan(0)
+              expect(capture.messageTokens).toBeGreaterThan(0)
+              expect(capture.toolCount).toBeGreaterThan(0)
+              expect(capture.toolSchemaTokens).toBeGreaterThan(0)
+              expect(Object.values(categories).reduce((sum, category) => sum + category.count, 0))
+                .toBe(capture.messageCount)
+              expect(capture.usage).toEqual({ inputTokens: 170, outputTokens: 28, cacheReadTokens: 2816 })
+              expect(capture.agentSummary).toEqual({
+                hasTask: true,
+                latestTool: 'bash',
+                calls: { completed: 1, failed: 0, cancelled: 0, stopped: 0, pending: 0 },
+                inputTokens: 3049,
+                outputTokens: 117,
+              })
+              const activity = JSON.parse(await readFile(join(cwd, '.dsh/activity-capture.json'), 'utf8')) as {
+                transitions: { seq: number; status: string; hasProgress: boolean }[]
+                rows: { seq: number; status: string; hasProgress: boolean }[]
+              }
+              expect(activity.transitions.map(entry => entry.status)).toEqual(['queued', 'preparing', 'ok'])
+              expect(activity.transitions.every(entry => Number.isSafeInteger(entry.seq) && !entry.hasProgress)).toBe(true)
+              expect(activity.rows).toContainEqual(expect.objectContaining({ status: 'ok', hasProgress: false }))
             }
             if (mcpDemo !== undefined) {
               const log = actualLogs[0]!.content

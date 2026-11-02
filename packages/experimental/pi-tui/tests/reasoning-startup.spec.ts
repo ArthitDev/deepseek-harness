@@ -74,7 +74,7 @@ describe('restored reasoning effort through Loader and the real request loop', (
       expect(adapter.requests).toHaveLength(2)
       const switched = await ctx.agentLoop.create(SessionId('switched'), route, { cwd: home })
       switched.session.append('request/header', { header: { config: high }, reason: 'initial' })
-      screen.switchAgent(switched)
+      await screen.switchAgent(switched)
       screen.submit('continue after switching session')
       await switched.whenIdle()
       expect(adapter.requests).toHaveLength(3)

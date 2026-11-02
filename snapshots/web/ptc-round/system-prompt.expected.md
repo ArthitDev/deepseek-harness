@@ -26,7 +26,7 @@ Use the web_fetch tool to retrieve the content of a specific HTTP(S) URL (for ex
 
 Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
 
-Use subagent in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set `run_in_background: false` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.
+Use subagent in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Sequence dependent work after its prerequisite results are available; coordinate edits to shared files. Set `run_in_background: false` when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message; avoid busy-polling. Review the returned evidence, changes, and checks before integrating the result.
 
 Use subagent_fork in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set `run_in_background: false` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.
 
@@ -199,7 +199,7 @@ interface ToolArgsMap {
   subagent: {
     /** A short (3-5 word) description of the delegated task, for display. */
     description: string;
-    /** The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. */
+    /** The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work. */
     prompt: string;
     /** Whether to run in the background and return a durable subagent id immediately. Defaults to true. Set false to wait for the result when your next action depends on it. */
     run_in_background?: boolean;
@@ -208,7 +208,7 @@ interface ToolArgsMap {
   subagent_fork: {
     /** A short (3-5 word) description of the delegated task, for display. */
     description: string;
-    /** The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new. */
+    /** The task for the subagent. It already sees this conversation's completed turns, so build on them freely. Include new instructions and evidence from the current in-flight turn, which it cannot see. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work. */
     prompt: string;
     /** Whether to run in the background and return a durable subagent id immediately. Defaults to true. Set false to wait for the result when your next action depends on it. */
     run_in_background?: boolean;

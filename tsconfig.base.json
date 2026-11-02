@@ -323,6 +323,7 @@
       "@deepseek-ai/dsh-experimental-agent-team": ["./packages/experimental/agent-team/src"],
       "@deepseek-ai/dsh-pentest-executor": ["./packages/pentest/pentest-executor/src"],
       "@deepseek-ai/dsh-pentest-executor/loop": ["./packages/pentest/pentest-executor/src/loop.ts"],
+      "@deepseek-ai/dsh-pentest-executor/assistance": ["./packages/pentest/pentest-executor/src/assistance.ts"],
       "@deepseek-ai/dsh-pentest-executor/types": ["./packages/pentest/pentest-executor/src/types.ts"],
       "@deepseek-ai/dsh-pentest-run": ["./packages/pentest/pentest-run/src"],
       "@deepseek-ai/dsh-pentest-run/types": ["./packages/pentest/pentest-run/src/types.ts"],

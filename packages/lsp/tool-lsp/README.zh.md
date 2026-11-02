@@ -1,5 +1,5 @@
 ---
-description: "面向模型的 lsp 工具：四种只读代码导航操作、从 1 开始的 UTF-16 光标坐标、有边界的结果与悬停文本，供组合模型代码导航的用户与维护者阅读。"
+description: "面向模型的 lsp 与 lsp_diagnostics 工具：精确导航和带明确新鲜度的有边界文件诊断，供用户与维护者组合模型代码导航。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-tool-lsp` 让模型通过单个只读 `lsp` 工具导航代码：打开符号定义、查找引用与实现，或阅读悬停文档。请求使用从 1 开始的 UTF-16 行列位置。导航结果数量有上限、按文件分组，并在省略位置或截断文本时显示标记；悬停结果经过规范化，且会区分信息缺失与错误。该包要求配置 LSP 提供方，并要求会话具有工作区根目录。当文本搜索有歧义，或修改需要精确的符号关系时选择它；普通导航应继续使用 `search` 与 `read`。
+`dsh-tool-lsp` 让模型通过只读 `lsp` 工具导航代码，并通过 `lsp_diagnostics` 检查单个工作区文件的有边界诊断。导航结果按文件分组并标记省略或截断；诊断结果带有明确的新鲜度状态和文档身份。该包要求配置 LSP 提供方和会话工作区根目录。文本搜索有歧义或需要精确符号关系时使用导航；修改后或报告完成前检查相关文件的诊断。
 
 ## 目录
 
@@ -29,11 +29,11 @@ kind: "package-reference"
 
 ### 工具
 
-`lsp` 接受 `operation`（`goToDefinition`、`findReferences`、`goToImplementation` 或 `hover`）、`file_path`、`line` 与 `character`。`line` 与 `character` 是正的、从 1 开始的 UTF-16 光标坐标；未落在符号上的位置可能返回空结果。`findReferences` 始终包含声明，因此影响分析绝不会遗漏定义位置。提供方、language id、工作区根目录、限制、超时与可执行文件均不进入模型输入。
+`lsp` 接受 `operation`（`goToDefinition`、`findReferences`、`goToImplementation` 或 `hover`）、`file_path`、`line` 与 `character`。`line` 与 `character` 是正的、从 1 开始的 UTF-16 光标坐标；未落在符号上的位置可能返回空结果。`findReferences` 始终包含声明。`lsp_diagnostics` 接受一个 `file_path`，并返回有边界的诊断及新鲜度状态。提供方、language id、工作区根目录、限制、超时与可执行文件均不进入模型输入。
 
 ### 模型得到什么
 
-导航返回按文件分组的 `path:line:character` 位置行（从 1 开始）；悬停返回规范化文本或无可悬停提示。空位置与无悬停都是成功的无结果响应。结果先由 `maxLocations` 限制，再由 `maxResultChars` 限制，省略与截断标记计入完整上限；这些上限只影响呈现，不影响规范结果值。
+导航返回按文件分组的 `path:line:character` 位置行（从 1 开始），悬停返回规范化文本或无悬停提示。`lsp_diagnostics` 返回文档版本、内容摘要、提供方身份、观察时间、新鲜度状态、诊断与省略计数。`current` 表示观察时收到匹配文档版本的报告，不代表报告完整，也不能替代测试；`unverified`、`not-reported`、`changed` 或 `invalid` 均不能证明文件没有问题。位置结果受 `maxLocations` 限制，呈现文本受 `maxResultChars` 限制。
 
 ### 配置
 
@@ -105,7 +105,7 @@ kind: "package-reference"
 ##### 逐字指引
 
 ```markdown
-Use search/read for ordinary navigation. Use lsp when textual matches are ambiguous or before a change requires precise definitions, implementations, or references. Positions are one-based line and character (UTF-16) at the cursor; an off-symbol position may return no results. findReferences always includes the declaration.
+Use search/read for ordinary navigation. Use lsp when textual matches are ambiguous or before a change requires precise definitions, implementations, or references. Use lsp_diagnostics for relevant edited files and before reporting completion. Diagnostics may be stale, unverified, or unavailable; never treat silence as clean. Positions are one-based line and character (UTF-16) at the cursor; an off-symbol position may return no results. findReferences always includes the declaration.
 ```
 
 #### Token 影响
@@ -133,8 +133,7 @@ Use search/read for ordinary navigation. Use lsp when textual matches are ambigu
 ### 结果
 
 #### 模型看到什么
-
-按文件分组的 `path:line:character` 位置行或规范化悬停文本，先由 `maxLocations` 限制，再由 `maxResultChars` 限制；省略与截断标记计入完整字符上限。这些上限只影响原生／模型呈现，不影响规范值。空结果使用不同的 `No results.`／`No hover information.` 行。
+按文件分组的 `path:line:character` 位置行或规范化悬停文本，先由 `maxLocations` 限制，再由 `maxResultChars` 限制；省略与截断标记计入完整字符上限。诊断结果受 `maxResultChars` 限制，并保留新鲜度与文档身份字段；它们只进入工具结果，不改变请求前缀。这些上限只影响呈现，不影响规范值。空结果使用不同的 `No results.`／`No hover information.` 行。
 
 #### Token 影响
 

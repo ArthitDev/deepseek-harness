@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import Loader, { type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { ToolCallId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
@@ -449,6 +448,11 @@ describe('dsh-tool-subagent', () => {
     expect(schema.description).toContain('does not see this conversation')
     const props = (schema.parameters as { properties: Record<string, { description: string }> }).properties
     expect(props['prompt']!.description).toContain('include everything it needs')
+    expect(props['prompt']!.description).toContain('objective and success criteria')
+    expect(props['prompt']!.description).toContain('whether you need findings, changes, or both')
+    expect(props['prompt']!.description).toContain('preserve concurrent edits')
+    expect(props['prompt']!.description).not.toContain('current in-flight turn')
+    expect(props['prompt']!.description).toMatchSnapshot('fresh handoff')
   })
 
   it('derives inherited-context wording from a seeded-conversation provider', async () => {
@@ -462,6 +466,45 @@ describe('dsh-tool-subagent', () => {
     expect(schema.description).not.toContain('can prevent provider-side reuse of the inherited conversation prefix')
     const props = (schema.parameters as { properties: Record<string, { description: string }> }).properties
     expect(props['prompt']!.description).toContain('completed turns')
+    expect(props['prompt']!.description).toContain('current in-flight turn, which it cannot see')
+    expect(props['prompt']!.description).toContain('scope and file ownership')
+    expect(props['prompt']!.description).toContain('sources, changed files, checks run, and unresolved issues')
+    expect(props['prompt']!.description).toMatchSnapshot('fork handoff')
+  })
+
+  it('loads handoff guidance through a Loader composition without changing delegation parameters', async () => {
+    const ctx = await setup({ provider: 'mock', toolName: 'baseline' }, { reply: 'child completed' })
+    const root = mkdtempSync(path.join(tmpdir(), 'dsh-handoff-composition-'))
+    try {
+      await ctx.plugin(Loader)
+      ctx.loader.builtins['handoff-subagent'] = tool
+      const composition = path.join(root, 'cordis.yml')
+      const entries: EntryOptions[] = [{
+        id: 'delegation', name: 'cordis:handoff-subagent',
+        config: { provider: 'mock', toolName: 'configured_subagent' },
+      }]
+      writeFileSync(composition, JSON.stringify(entries))
+      expect(JSON.parse(readFileSync(composition, 'utf8'))).toEqual(entries)
+      await ctx.loader.root.update(entries)
+      await ctx.loader.await()
+      const baseline = ctx.tools.schemas().find(schema => schema.name === 'baseline')!
+      const configured = ctx.tools.schemas().find(schema => schema.name === 'configured_subagent')!
+      expect({ ...configured, name: 'baseline' }).toEqual(baseline)
+      expect(JSON.stringify(configured.parameters)).toContain('objective and success criteria')
+      const result = await ctx.tools.execute({
+        signal: testToolSignal, callId: ToolCallId('loader-handoff'), name: 'configured_subagent',
+        arguments: { description: 'test handoff', prompt: 'Reply when complete' }, agent: fakeAgent(),
+      })
+      expect(result.isError).toBe(false)
+      expect(text(result)).toBe('child completed')
+      ctx.loader.remove('delegation')
+      await vi.waitFor(() => {
+        expect(ctx.tools.schemas().some(schema => schema.name === 'configured_subagent')).toBe(false)
+      })
+    } finally {
+      await ctx.fiber.dispose()
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('disposes the run on the success path (no leaked child)', async () => {
@@ -1230,7 +1273,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
     const assembly = await ctx.systemPrompt.assemble(assembleContextFor(parent))
     const guidance = assembly.sections.find(section => section.name === 'tool:subagent')
     expect(guidance?.text.length).toBeGreaterThan(0)
-    expect(createHash('sha256').update(guidance!.text).digest('hex')).toMatchInlineSnapshot('"c6e133344836fe00823a83f100665ed9ca10c3a15ab1c135f98e8ae98f32ec16"')
+    expect(guidance!.text).toMatchSnapshot('continuable execution guidance')
 
     const started = await callSubagent(
       ctx,

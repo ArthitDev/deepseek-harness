@@ -1,5 +1,5 @@
 /**
- * Model-facing `lsp` tool over `ctx.lsp`. One read-only tool with four operations
+ * Model-facing `lsp` tool over `ctx.lsp`. Four read-only navigation operations plus a separate file diagnostics tool
  * (`goToDefinition`/`findReferences`/`goToImplementation`/`hover`); it converts one-based UTF-16
  * cursor coordinates to the seam's zero-based positions, requires the session workspace with no
  * fallback, caps and renders results, and attaches a configurable timeout budget for
@@ -21,10 +21,12 @@ import {
   DEFAULT_MAX_LOCATIONS,
   DEFAULT_MAX_RESULT_CHARS,
   formatHover,
+  formatDiagnostics,
   formatLocations,
   LSP_OPERATIONS,
   parseLspArgs,
   presentLspCall,
+  presentDiagnosticsCall,
 } from './render.ts'
 import { sessionCwd } from './session-cwd.ts'
 
@@ -32,10 +34,12 @@ export {
   DEFAULT_MAX_LOCATIONS,
   DEFAULT_MAX_RESULT_CHARS,
   formatHover,
+  formatDiagnostics,
   formatLocations,
   LSP_OPERATIONS,
   parseLspArgs,
   presentLspCall,
+  presentDiagnosticsCall,
   renderUri,
 } from './render.ts'
 export { sessionCwd } from './session-cwd.ts'
@@ -51,7 +55,7 @@ export const DEFAULT_LSP_TOOL_TIMEOUT_MS = 60_000
 
 /** The stable system-prompt guidance positioning LSP as a precision aid. */
 export const LSP_PROMPT_TEXT =
-  'Use search/read for ordinary navigation. Use lsp when textual matches are ambiguous or before a change requires precise definitions, implementations, or references. Positions are one-based line and character (UTF-16) at the cursor; an off-symbol position may return no results. findReferences always includes the declaration.'
+  'Use search/read for ordinary navigation. Use lsp when textual matches are ambiguous or before a change requires precise definitions, implementations, or references. Use lsp_diagnostics for relevant edited files and before reporting completion. Diagnostics may be stale, unverified, or unavailable; never treat silence as clean. Positions are one-based line and character (UTF-16) at the cursor; an off-symbol position may return no results. findReferences always includes the declaration.'
 
 /** Plugin configuration: result caps and the timeout budget. */
 export interface Config {
@@ -86,6 +90,34 @@ const LSP_RANGE_OUTPUT_SCHEMA = {
   properties: {
     start: { ...LSP_POSITION_OUTPUT_SCHEMA, required: true },
     end: { ...LSP_POSITION_OUTPUT_SCHEMA, required: true },
+  },
+} as const
+
+const LSP_DIAGNOSTIC_OUTPUT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    range: { ...LSP_RANGE_OUTPUT_SCHEMA, required: true },
+    severity: { type: 'string', enum: ['error', 'warning', 'information', 'hint', 'unknown'], required: true },
+    message: { type: 'string', required: true },
+    source: { type: 'string' },
+    code: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+  },
+} as const
+
+const LSP_DIAGNOSTICS_OUTPUT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    workspaceUri: { type: 'string', required: true },
+    fileUri: { type: 'string', required: true },
+    providerId: { type: 'string', required: true },
+    documentVersion: { type: 'integer', required: true },
+    documentDigest: { type: 'string', required: true },
+    observedAt: { type: 'string', required: true },
+    status: { type: 'string', enum: ['current', 'unverified', 'not-reported', 'changed', 'invalid'], required: true },
+    diagnostics: { type: 'array', required: true, items: LSP_DIAGNOSTIC_OUTPUT_SCHEMA },
+    omitted: { type: 'integer', required: true },
   },
 } as const
 
@@ -228,6 +260,40 @@ export function apply(ctx: Context, config: Config): void {
       }
     },
     presentCall: presentLspCall,
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'lsp_diagnostics',
+    description: 'Read bounded diagnostics published by the language server for one workspace file. Results include freshness status and document identity; missing or stale reports do not mean the file is clean.',
+    parameters: {
+      file_path: { type: 'string', required: true, description: 'The source file, relative to the workspace or absolute.' },
+    },
+    output: {
+      schema: LSP_DIAGNOSTICS_OUTPUT_SCHEMA,
+      render: (_args, value) => [{ type: 'text', text: formatDiagnostics(value, resolved.maxResultChars) }],
+    },
+    timeoutMs: resolved.timeoutMs,
+    async execute(args, exec) {
+      if (typeof args.file_path !== 'string' || args.file_path.trim().length === 0) {
+        throw new Error('file_path must be a non-empty string')
+      }
+      const workspaceRoot = sessionCwd(exec)
+      if (workspaceRoot === undefined) {
+        throw new LspError('the lsp_diagnostics tool requires a session workspace cwd', 'LSP_WORKSPACE_REQUIRED')
+      }
+      const result = await ctx.lsp.diagnostics({ filePath: args.file_path, workspaceRoot }, exec.signal)
+      return {
+        ...result,
+        diagnostics: result.diagnostics.map(item => ({
+          ...item,
+          range: {
+            start: { line: item.range.start.line, character: item.range.start.character },
+            end: { line: item.range.end.line, character: item.range.end.character },
+          },
+        })),
+      }
+    },
+    presentCall: presentDiagnosticsCall,
   }))
 }
 

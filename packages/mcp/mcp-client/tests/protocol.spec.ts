@@ -149,4 +149,39 @@ describe('modern MCP connections', () => {
     expect((await result).isError).toBe(true)
     await cancelled.promise
   })
+
+  it('forwards server progress as request-scoped transient tool events', async () => {
+    let progressToken: string | number | undefined
+    let sendLateProgress!: () => Promise<void>
+    const server = new McpServer({ name: 'progress', version: '1' })
+    server.registerTool('work', { inputSchema: z.object({}) }, async (_args, context) => {
+      progressToken = context.mcpReq._meta?.progressToken
+      await context.mcpReq.notify({ method: 'notifications/progress', params: {
+        progressToken,
+        progress: 3,
+        total: 10,
+        message: '\u001b]0;ignored\u0007working',
+      } })
+      sendLateProgress = () => context.mcpReq.notify({ method: 'notifications/progress', params: {
+        progressToken, progress: 4, total: 10, message: 'late',
+      } })
+      return { content: [{ type: 'text', text: 'done' }] }
+    })
+    const ctx = await connect(server)
+    const seen: { callId: string; progress: number; total?: number; message?: string }[] = []
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    ctx.on('tools/progress', () => { throw new Error('observer failed') })
+    ctx.on('tools/progress', (exec, update) => {
+      seen.push({ callId: exec.callId, ...update })
+    })
+    const result = await ctx.tools.execute({
+      name: 'mcp__fixture__work', arguments: {}, callId: ToolCallId('progress-call'), signal: new AbortController().signal,
+    })
+    expect(result.isError).toBe(false)
+    expect(progressToken).toBeTypeOf('number')
+    expect(seen).toEqual([{ callId: 'progress-call', progress: 3, total: 10, message: 'working' }])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('progress observer failed'))
+    await sendLateProgress()
+    expect(seen).toHaveLength(1)
+  })
 })

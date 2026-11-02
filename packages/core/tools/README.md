@@ -137,6 +137,8 @@ Successful image-bearing subcall results become deferred user-message context wi
 
 Tool plugins call `ctx.tools.register()` and their schemas flow into prompt assembly automatically. `tools/pre-execute` is the reorderable allow/deny/ask gate; `ctx.tools.guard()` adds monotonic owner policy after it; `tools/execute` wraps normalized canonical dispatch for timeout, retry, or metrics; `tools/post-execute` may replace content or value, block with feedback, or attach ordered contexts; `tools/result` observes the immutable final outcome. MCP servers discover tools and register them with the server's schemas.
 
+Consumers can observe transient updates to one admitted call through the typed `tools/progress` event. Each notification identifies the exact execution and follows its agent scope; progress is process-local and does not extend the call timeout or enter Session history.
+
 </details>
 
 -----
@@ -162,11 +164,11 @@ The package-level contract is enough for most consumers; read these when you nee
 
 #### What the model sees
 
-In normal mode the model sees each visible definition's exact name, description, and JSON Schema; the shipped definitions are recorded in the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tools). Agent-scoped restrictions, shadows, and extension registrations change that agent's end-tool set.
+In normal mode the model sees each visible definition's exact name, description, and JSON Schema; the shipped definitions are recorded in the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tools). Agent-scoped restrictions, shadows, and extension registrations change that agent's end-tool set. While tools are visible, the `tools:calling` section explains structured calls, reading files and project instructions before edits, reusing existing patterns, and updating affected callers and configuration. The tools package registers this section at version `'1'` for shipped profile admission checks. It recommends overlapping independent calls, sequencing dependencies and shared-file edits, inspecting errors, retrieving truncated output through the supplied locator, and distinguishing background starts from completion. It asks for relevant checks and an accurate report of verified and unverified results. This guidance also applies in PTC and `both` modes; it does not change schemas, execution policy, or concurrency limits.
 
 #### Token effect
 
-Fixed per-request cost proportional to the visible definitions. Restrictions that hide tools remove their entire schema cost for that agent.
+Fixed per-request cost proportional to the visible definitions, plus one fixed workflow-guidance section while tools are visible. Restrictions that hide tools remove their entire schema cost for that agent.
 
 #### KV Cache effect
 

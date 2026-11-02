@@ -1,0 +1,29 @@
+# Context-overflow composition used by the headless compaction session.
+
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  config:
+    thresholdRatio: 0.99
+    retainTokens: 20
+    maxTokens: 32
+
+# Keep machine-local instructions and skill libraries out of this prompt fixture.
+- id: agent-instructions
+  config:
+    maxBytes: 65536
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots: []
+
+- insert:
+    - id: compaction-system-integrity
+      name: '../../../packages/test-support/session-snapshot/tests/fixtures/compaction-system-integrity.ts'
