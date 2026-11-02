@@ -449,6 +449,80 @@ describe('exit and resume hints', () => {
     } finally { tui.stop(); await ctx.fiber.dispose() }
   })
 
+  it('resumes at the latest transcript bubble after browsing an earlier session', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    const firstSession = ctx.sessions.create(SessionId('resume-scroll-first'))
+    const resumedSession = ctx.sessions.create(SessionId('resume-scroll-second'))
+    const appendHistory = (session: Session, prefix: string): void => {
+      for (let index = 0; index < 30; index++) {
+        session.append('user/message', createUserMessage({ source: { kind: 'user' },
+          content: [{ type: 'text', text: `${prefix}_USER_${index}` }] }), { surfaceOp: 'append' })
+        session.append('assistant/message', { turn: index + 1, step: 1, stream: [], message: createMessage({ role: 'assistant',
+          source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: `${prefix}_ASSISTANT_${index}` }] }) }, { surfaceOp: 'append' })
+      }
+    }
+    appendHistory(firstSession, 'FIRST')
+    appendHistory(resumedSession, 'RESUMED')
+    resumedSession.append('assistant/message', { turn: 31, step: 1, stream: [], message: createMessage({ role: 'assistant',
+      source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: 'LATEST_RESUMED_BUBBLE' }] }) }, { surfaceOp: 'append' })
+    const first = fixtureAgent(ctx, firstSession)
+    const resumed = fixtureAgent(ctx, resumedSession)
+    await ctx.agents.register(first)
+    await ctx.agents.register(resumed)
+    let terminalInput: ((data: string) => void) | undefined
+    const switched: PromiseWithResolvers<boolean>[] = []
+    const tui = new TuiAltScreen({
+      columns: 70, rows: 14, kittyProtocolActive: false,
+      start: (onInput) => { terminalInput = onInput },
+      stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
+      hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
+      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    })
+    const screen = new ChatScreen({
+      ctx, tui, agent: first, config: {}, onQuit: vi.fn(),
+      onAgentSwitch: () => switched.at(-1)?.resolve(true),
+    })
+    tui.start()
+    try {
+      await screen.replayTranscript(first)
+      expect(await renderScreen(tui)).toContain('FIRST_ASSISTANT_29')
+      for (let page = 0; page < 3; page++) terminalInput?.('\x1b[5~')
+      expect(tui.isFollowingOutput).toBe(false)
+      expect(await renderScreen(tui)).not.toContain('FIRST_ASSISTANT_29')
+
+      switched.push(Promise.withResolvers<boolean>())
+      const resumedEvents = resumed.session.snapshotEvents()
+      screen.submit(`/resume ${resumed.id}`)
+      await switched.at(-1)?.promise
+      const resumedFrame = await renderScreen(tui)
+      const latestBubble = resumedFrame.split('\n').filter(line => line.trimStart().startsWith('LATEST_RESUMED_BUBBLE'))
+      expect(latestBubble).toHaveLength(1)
+      expect(latestBubble).toMatchSnapshot('latest resumed transcript bubble')
+      expect(tui.isFollowingOutput).toBe(true)
+      expect(resumed.session.snapshotEvents()).toEqual(resumedEvents)
+
+      for (let page = 0; page < 3; page++) terminalInput?.('\x1b[5~')
+      expect(tui.isFollowingOutput).toBe(false)
+      screen.handleEvent(resumed.session.append('user/message', createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: 'LIVE_AFTER_SCROLL' }] }), { surfaceOp: 'append' }))
+      expect((await renderScreen(tui)).split('\n').filter(line => line.trimStart().startsWith('\u203a LIVE_AFTER_SCROLL')))
+        .toHaveLength(0)
+      expect(tui.isFollowingOutput).toBe(false)
+
+      const liveEvents = resumed.session.snapshotEvents()
+      switched.push(Promise.withResolvers<boolean>())
+      screen.submit(`/resume ${resumed.id}`)
+      await switched.at(-1)?.promise
+      const sameSessionFrame = await renderScreen(tui)
+      expect(sameSessionFrame.split('\n').filter(line => line.trimStart().startsWith('\u203a LIVE_AFTER_SCROLL')))
+        .toHaveLength(1)
+      expect(tui.isFollowingOutput).toBe(true)
+      expect(resumed.session.snapshotEvents()).toEqual(liveEvents)
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
   it('opens a read-only context overlay without a model turn and keeps prompt text hidden', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)

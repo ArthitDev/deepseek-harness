@@ -826,12 +826,15 @@ export class ChatScreen {
 
   /**
    * Rebind the screen to another live agent (new/fork/resume): tear down the
-   * old per-agent selection install, reset the transcript, reinstall and
-   * reseed the selection, replay the durable log, and repaint.
+   * old per-agent selection install, reset the transcript and scroll, reinstall
+   * and reseed the selection, replay the durable log, and repaint.
    * @param next - the live agent to rebind the screen to.
    */
   async switchAgent(next: Agent): Promise<void> {
-    if (next === this.agent) return
+    if (next === this.agent) {
+      this.transcriptScroll?.scrollToEnd()
+      return
+    }
     if (this.isBusy()) {
       this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
       return
@@ -874,6 +877,7 @@ export class ChatScreen {
     this.rebuildAutocomplete()
     this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
     this.sync()
+    this.transcriptScroll?.scrollToEnd()
     this.refreshGitState()
   }
 

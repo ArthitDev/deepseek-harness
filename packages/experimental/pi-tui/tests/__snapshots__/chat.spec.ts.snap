@@ -65,6 +65,12 @@ exports[`exit and resume hints > replays a seeded session once even when its par
 ]
 `;
 
+exports[`exit and resume hints > resumes at the latest transcript bubble after browsing an earlier session > latest resumed transcript bubble 1`] = `
+[
+  " LATEST_RESUMED_BUBBLE         │ calls: none · usage: unknown         ",
+]
+`;
+
 exports[`the split-pane shell > opens the shared shell beside the chat, cycles focus, then toggles closed > shared shell and resize divider 1`] = `
 [
   " │ ── Agent Debug ──                             ",
