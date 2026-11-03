@@ -80,7 +80,7 @@ Verify both read and write paths. Header-only listing must not read bodies or pu
 <a id="snapshot-successors"></a>
 ## 5. Create snapshot successors
 
-Read [snapshot ownership](../../snapshots/AGENTS.md) and the [snapshot library](../../packages/test-support/session-snapshot/README.md). The [corpus policy](../../scripts/session-snapshot-corpus-policy.ts) keeps its declared baseline as replay input so upgrades exercise the adjacent chain; a writer bump does not require refreshing that corpus. Select the owning scenario when a current-generation successor is needed, keep each historical file, and use the target version’s canonical parent and child filenames. Never rename a predecessor to the target filename or change only its header.
+Read [snapshot ownership](../../snapshots/AGENTS.md) and the [snapshot library](../../packages/test-support/session-snapshot/README.md). The [corpus policy](../../scripts/session-snapshot-corpus-policy.ts) accepts ordinary replay inputs from the V3 minimum baseline through the current writer, including released pre-current generations; every source version still needs direct migration coverage. A writer bump does not require refreshing that corpus. Select the owning scenario when a current-generation successor is needed, keep each historical file, and use the target version’s canonical parent and child filenames. Never rename a predecessor to the target filename or change only its header.
 
 For unchanged replay input, use keyless refresh on the owner, then replay without write-back. These SDK commands use `text-turn` and the checkout's writer version. Implement and wire N+1 before using them to generate that version, and select the actual affected owner for a feature:
 

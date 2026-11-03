@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { TargetIndex } from '../src/core/targets.ts'
 import { targetTreeLines } from '../src/ui/targets-pane.ts'
 
@@ -76,5 +76,91 @@ describe('target tree', () => {
     expect(lines).toContain('└─ api')
     expect(lines).toContain('https://example.test:8080')
     expect(lines).toContain('Other · 1\n└─ https://[::2]/')
+  })
+
+  it('keeps the first equal host and path score across origins', () => {
+    const index = new TargetIndex()
+    index.observe(1, 'https://example.test:8443/app https://example.test:9443/app', true)
+    index.observe(2, 'https://example.test:10443/application https://example.test:10443/app/v1')
+
+    expect(targetTreeLines(index.getSnapshot())).toEqual([
+      'Target · 2',
+      '├─ https://example.test:8443/app',
+      '│  └─ Sub Target · 2',
+      '│     └─ https://example.test:10443',
+      '│        ├─ application',
+      '│        └─ app',
+      '│           └─ v1',
+      '└─ https://example.test:9443/app',
+    ])
+  })
+
+  it('keeps path prefixes on segment boundaries', () => {
+    const index = new TargetIndex()
+    index.observe(1, 'https://example.test/app', true)
+    index.observe(2, 'https://example.test/application/v1')
+
+    expect(targetTreeLines(index.getSnapshot())).toEqual([
+      'Target · 1',
+      '└─ https://example.test/app',
+      '   └─ Sub Target · 1',
+      '      └─ application',
+      '         └─ v1',
+    ])
+  })
+
+  it('scores each primary path once per discovery', () => {
+    const rootCount = 128
+    const urls = [
+      ...Array.from({ length: rootCount }, (_, index) => ({
+        url: `https://example.test/root-${index}`,
+        primary: true,
+      })),
+      { url: 'https://example.test/discovery', primary: false },
+    ]
+    const pathname = vi.spyOn(URL.prototype, 'pathname', 'get')
+    let lines: string[]
+    let pathReads: number
+    try {
+      lines = targetTreeLines(urls)
+      pathReads = pathname.mock.calls.length
+    } finally {
+      pathname.mockRestore()
+    }
+
+    expect(lines[0]).toBe('Target · 128')
+    expect(lines).toContain('│  └─ Sub Target · 1')
+    expect(lines).toContain('│     └─ discovery')
+    expect(pathReads).toBeLessThanOrEqual(3 * rootCount + 8)
+  })
+
+  it('reads URL pathnames linearly across roots and discoveries', () => {
+    const rootCount = 64
+    const discoveryCount = 64
+    const urls = [
+      ...Array.from({ length: rootCount }, (_, index) => ({
+        url: `https://example.test/root-${index}`,
+        primary: true,
+      })),
+      ...Array.from({ length: discoveryCount }, (_, index) => ({
+        url: `https://example.test/root-${index}/discovery`,
+        primary: false,
+      })),
+    ]
+    const pathname = vi.spyOn(URL.prototype, 'pathname', 'get')
+    let lines: string[]
+    let pathReads: number
+    try {
+      lines = targetTreeLines(urls)
+      pathReads = pathname.mock.calls.length
+    } finally {
+      pathname.mockRestore()
+    }
+
+    expect(lines[0]).toBe('Target · 64')
+    expect(lines.filter(line => line.includes('Sub Target'))).toHaveLength(discoveryCount)
+    expect(lines.some(line => line.includes('discovery'))).toBe(true)
+    // Three reads per discovery allow path matching and addPath work; each root needs one metadata read.
+    expect(pathReads).toBeLessThanOrEqual(rootCount + 3 * discoveryCount + 8)
   })
 })

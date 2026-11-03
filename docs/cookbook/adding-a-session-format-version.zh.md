@@ -80,7 +80,7 @@ Alpha 转换器可以明确拒绝尚无已实现、有证据映射的历史场�
 <a id="snapshot-successors"></a>
 ## 5. 创建快照后继代际
 
-阅读[快照所有权](../../snapshots/AGENTS.md)和[快照库](../../packages/test-support/session-snapshot/README.zh.md)。[语料策略](../../scripts/session-snapshot-corpus-policy.ts)保留其声明的 baseline 作为回放输入，让升级实际经过相邻迁移链；提高 writer 版本不要求 refresh 该语料。需要当前代际后继时，选择拥有数据的场景，保留每份历史文件，并使用目标版本的规范父子文件名。绝不将前代重命名为目标文件名，或仅修改其 header。
+阅读[快照所有权](../../snapshots/AGENTS.md)和[快照库](../../packages/test-support/session-snapshot/README.zh.md)。[语料策略](../../scripts/session-snapshot-corpus-policy.ts)接受从 V3 最低 baseline 到当前 writer 的普通回放输入，也接受早于当前 writer 的已发布代际；每个源版本仍需直接迁移覆盖。提高 writer 版本不要求 refresh 该语料。需要当前代际后继时，选择拥有数据的场景，保留每份历史文件，并使用目标版本的规范父子文件名。绝不将前代重命名为目标文件名，或仅修改其 header。
 
 如果回放输入不变，在所有者上执行无密钥 refresh，再执行不写回的 replay。以下 SDK 命令使用 `text-turn` 和工作区的写入器版本。先实现并接入 N+1，才能用它们生成该版本；功能变更应选择实际受影响的所有者：
 

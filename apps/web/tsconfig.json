@@ -38,7 +38,7 @@
     "tests/startup-rpc-budget.e2e.ts",
     "tests/minimal-preset.snapshot.ts",
     "tests/message-feedback-protocol.snapshot.ts",
-    "tests/prompt-integrity.snapshot.ts",
+    "tests/prompt-integrity.spec.ts",
     "tests/fixtures/prompt-preset.mjs",
     "tests/preset-migration.snapshot.ts",
     "tests/live-interactions.e2e.ts",

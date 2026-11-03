@@ -111,6 +111,8 @@ describe('tool workflow guidance across presentation modes', () => {
       const assembly = await systemPrompt.assemble()
       expect(assembly.sections.find(section => section.name === 'tools:calling')?.text)
         .toContain('A background acknowledgement confirms a start, not completion')
+      expect(assembly.sections.find(section => section.name === 'tools:calling')?.text)
+        .toContain('A successful tool result or subagent report alone does not establish completion')
       expect(ctx.tools.schemas()).toEqual(schemas)
       expect(assembly.tools.map(tool => tool.name)).toEqual(mode === 'native'
         ? ['echo'] : mode === 'ptc' ? [RUN_CODE_NAME] : ['echo', RUN_CODE_NAME])

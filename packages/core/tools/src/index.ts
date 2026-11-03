@@ -65,7 +65,11 @@ const TOOL_CALL_INSTRUCTION = 'When you need or are required to use a tool, emit
   + 'Inspect errors and exit status before choosing the next action. If output is truncated, use the returned path, '
   + 'cursor, or range to retrieve the relevant missing content. A background acknowledgement confirms a start, '
   + 'not completion; use the available status or completion notice to establish the outcome. '
-  + 'Verify changes with relevant checks and report what ran, what succeeded, and what remains unverified.'
+  + 'For action tasks, identify the requested outcome and an observable check before acting. A successful tool result or '
+  + 'subagent report alone does not establish completion. Inspect the affected behavior or state with relevant checks, '
+  + 'compare the evidence with every requirement, and continue authorized work that remains. If a check fails or is '
+  + 'unavailable, report the specific gap and never claim success without evidence. State which requirements are '
+  + 'verified and which remain unverified.'
 
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,

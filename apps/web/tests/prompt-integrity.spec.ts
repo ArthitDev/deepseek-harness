@@ -95,7 +95,7 @@ describe('Web prompt integrity lifecycle', () => {
       provider: 'prompt-integrity',
       model: 'local',
     })
-  })
+  }, 30_000)
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -104,7 +104,7 @@ describe('Web prompt integrity lifecycle', () => {
     if (stateRoot !== undefined) await rm(stateRoot, { recursive: true, force: true }).catch((error: unknown) => failures.push(error))
     if (failures.length === 1) throw failures[0]
     if (failures.length > 1) throw new AggregateError(failures, 'Web prompt integrity cleanup failed')
-  })
+  }, 30_000)
 
   it('switches preset, rejects invalid and empty required core before dispatch, recovers, then resumes', async () => {
     const send = async (requestId: string): Promise<void> => {

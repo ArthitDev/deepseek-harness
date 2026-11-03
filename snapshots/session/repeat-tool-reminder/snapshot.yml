@@ -1,7 +1,8 @@
 version: 1
 scenario: repeat-tool-reminder
 profile: headless
-composition: default
+composition: repeat-tool-reminder
 recording: authored
 header:
   class: default
+  pin: true

@@ -124,7 +124,7 @@ guard 建立在四项承诺之上：
 ##### 首个阈值提醒
 
 ```markdown
-You are repeating the exact same tool call with identical arguments. Carefully analyze the previous result before calling again: if the task is not complete, try a different approach or different arguments instead of repeating the call.
+Repeated tool call detected. Compare the previous result with earlier results before deciding whether to call again.
 ```
 
 #### Token 影响
@@ -148,7 +148,7 @@ Repeated tool call detected:
 - tool: <toolName>
 - consecutive_calls: <count>
 - arguments: <canonicalArguments>
-The repeated calls are not making progress. Do not call this tool with these exact arguments again. Inspect the latest result and choose a different action, different arguments, or finish the task if enough evidence has been gathered.
+Compare each result with earlier results and verify whether the task state changed. For work expected to take time, use the available status or wait operation and check again when appropriate; repeated status results may mean work is still pending. If a failure repeats, or results show the current approach cannot advance the task, diagnose the cause and try an evidence-backed alternative; cosmetic argument changes are not progress. Before retrying a state-changing action with an uncertain outcome, inspect current state to avoid duplicate effects. Continue authorized work while evidence shows a path forward. Finish only after verifying the task outcome; report a concrete blocker only when no safe path remains.
 ```
 
 #### Token 影响
@@ -166,7 +166,7 @@ The repeated calls are not making progress. Do not call this tool with these exa
 
 这些限制说明 guard 何时不合适。它们是当前包约束，不是任务积压。
 
-- **仅精确匹配检测**——规范化是深度键排序，因此近似变体（稍作修改的路径、值内多余的空白）会绕过链；在没有需求证据前，不采用模糊匹配。
+- **仅精确匹配检测**——规范化是深度键排序，因此近似变体（稍作修改的路径、值内多余的空白）会绕过链。检测器不会判断语义进展，也不会分类轮询或失败；提醒只为模型提供建议。
 - **压缩（compaction）不会重置链**——跨越压缩检查点的链会继续计数。
 - **仅提供建议**——尚未实现高阈值时升级为阻止形式，但 `PostToolDecision` 已支持阻止。
 - **subagent 之间不共享链**——链始终按 agent 隔离；父 agent 与其 subagent 重复相同调用也绝不合并。

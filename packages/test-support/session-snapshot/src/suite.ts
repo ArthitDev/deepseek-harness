@@ -19,8 +19,8 @@
  */
 
 import { readFile, readdir, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isSurfaceEligibleType } from '@deepseek-ai/dsh-session/surface'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
@@ -122,15 +122,19 @@ export interface Scenario {
    */
   pinsHeader?: boolean
   /**
-   * Header-pinning scenario whose `system-prompt.expected.md` this pin reuses.
-   * Defaults to this scenario. The source must own its prompt sidecar and
-   * declare the same {@link expectedPromptChanges}; only valid on a pin.
+   * Local header pin or corpus-relative `profile/scenario` whose canonical
+   * `system-prompt.expected.md` this pin reuses. Defaults to this scenario and
+   * is valid only on a pin. A local owner must pin its header; a corpus owner
+   * must declare header metadata. Both must match prompt-change counts and own
+   * the sidecar; borrowed corpus sources stay read-only in record and refresh.
    */
   systemPromptSource?: string
   /**
-   * Header-pinning scenario whose `tool-schemas.expected.json` this pin reuses.
-   * Defaults to this scenario. The source must own its schema sidecar and
-   * declare the same {@link expectedHeaderChanges}; only valid on a pin.
+   * Local header pin or corpus-relative `profile/scenario` whose canonical
+   * `tool-schemas.expected.json` this pin reuses. Defaults to this scenario and
+   * is valid only on a pin. A local owner must pin its header; a corpus owner
+   * must declare header metadata. Both must match header-change counts and own
+   * the sidecar; borrowed corpus sources stay read-only in record and refresh.
    */
   toolSchemasSource?: string
   /**
@@ -296,6 +300,14 @@ export interface NamedSnapshotContent {
   path: string
   /** Complete committed file content. */
   content: string
+}
+
+/** One canonical sidecar path and the local alias inventory entry for it. */
+interface SidecarSource {
+  name: string
+  path: string
+  aliasPath: string
+  external: boolean
 }
 
 /**
@@ -1265,8 +1277,58 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
     pinningScenario: Scenario,
     field: 'systemPromptSource' | 'toolSchemasSource',
     label: string,
-  ): Scenario => {
+  ): SidecarSource => {
+    const sidecarFile = field === 'systemPromptSource' ? SYSTEM_PROMPT_SNAPSHOT : TOOL_SCHEMAS_SNAPSHOT
+    const countField = field === 'systemPromptSource' ? 'expectedPromptChanges' : 'expectedHeaderChanges'
+    const countManifestField = field === 'systemPromptSource' ? 'promptChanges' : 'changes'
+    const expectedCount = pinningScenario[countField] ?? 0
+    const scenarioSource = (sourceName: string, aliasName: string): SidecarSource => {
+      const segments = sourceName.split('/')
+      if (!segments.every(segment => /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(segment))) {
+        throw new Error(`acp-snapshot: ${pinningScenario.name} names invalid corpus-relative ${label} source "${sourceName}"`)
+      }
+      const corpusRoot = resolve(dirname(snapshotsDir))
+      const sourceDir = resolve(corpusRoot, ...segments)
+      const sourceRelative = relative(corpusRoot, sourceDir)
+      if (sourceRelative === '' || sourceRelative === '..' || sourceRelative.startsWith(`..${sep}`) || isAbsolute(sourceRelative)) {
+        throw new Error(`acp-snapshot: ${pinningScenario.name} names invalid corpus-relative ${label} source "${sourceName}"`)
+      }
+      const sourceManifestPath = join(sourceDir, 'snapshot.yml')
+      if (!existsSync(sourceManifestPath)) {
+        throw new Error(`acp-snapshot: ${pinningScenario.name} names unknown corpus-relative ${label} source "${sourceName}"`)
+      }
+      const sourceManifest = parseSnapshotManifest(readFileSync(sourceManifestPath, 'utf8'), sourceManifestPath)
+      if (sourceManifest.scenario !== undefined && sourceManifest.scenario !== segments.at(-1)) {
+        throw new Error(
+          `acp-snapshot: corpus ${label} source "${sourceName}" declares scenario "${sourceManifest.scenario}" instead of "${segments.at(-1)}"`,
+        )
+      }
+      const header = sourceManifest.header
+      if (header === undefined) {
+        throw new Error(`acp-snapshot: corpus ${label} source "${sourceName}" has no header metadata`)
+      }
+      const declaredSource = header[field]
+      if (declaredSource !== undefined && declaredSource !== sourceName && declaredSource !== segments.at(-1)) {
+        throw new Error(`acp-snapshot: corpus ${label} source "${sourceName}" redirects to "${declaredSource}"`)
+      }
+      if ((header[countManifestField] ?? 0) !== expectedCount) {
+        throw new Error(
+          `acp-snapshot: ${pinningScenario.name} and corpus source "${sourceName}" declare different ${countField} counts for shared ${label}`,
+        )
+      }
+      const sourcePath = join(sourceDir, sidecarFile)
+      if (!existsSync(sourcePath)) {
+        throw new Error(`acp-snapshot: corpus ${label} source "${sourceName}" does not own ${sidecarFile}`)
+      }
+      return {
+        name: sourceName,
+        path: sourcePath,
+        aliasPath: join(snapshotsDir, aliasName, sidecarFile),
+        external: true,
+      }
+    }
     const sourceName = pinningScenario[field] ?? pinningScenario.name
+    if (sourceName.includes('/')) return scenarioSource(sourceName, pinningScenario.name)
     const source = scenariosByName.get(sourceName)
     if (source === undefined) {
       throw new Error(`acp-snapshot: ${pinningScenario.name} names unknown ${label} source "${sourceName}"`)
@@ -1274,26 +1336,44 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
     if (source.pinsHeader !== true) {
       throw new Error(`acp-snapshot: ${pinningScenario.name} names non-pinning ${label} source "${sourceName}"`)
     }
-    if (source[field] !== undefined && source[field] !== source.name) {
-      throw new Error(`acp-snapshot: ${pinningScenario.name} names ${label} source "${sourceName}", which does not own its sidecar`)
-    }
-    const countField = field === 'systemPromptSource' ? 'expectedPromptChanges' : 'expectedHeaderChanges'
     if ((source[countField] ?? 0) !== (pinningScenario[countField] ?? 0)) {
       throw new Error(
         `acp-snapshot: ${pinningScenario.name} and ${sourceName} declare different ${countField} counts for shared ${label}`,
       )
     }
-    return source
+    const sourceReference = source[field]
+    if (sourceReference !== undefined && sourceReference !== source.name) {
+      if (!sourceReference.includes('/')) {
+        throw new Error(`acp-snapshot: ${pinningScenario.name} names ${label} source "${sourceName}", which does not own its sidecar`)
+      }
+      return scenarioSource(sourceReference, source.name)
+    }
+    const sourcePath = join(snapshotsDir, source.name, sidecarFile)
+    return { name: source.name, path: sourcePath, aliasPath: sourcePath, external: false }
   }
 
-  const promptSourceByClass = new Map<string, Scenario>()
-  const schemaSourceByClass = new Map<string, Scenario>()
+  const promptSourceByClass = new Map<string, SidecarSource>()
+  const schemaSourceByClass = new Map<string, SidecarSource>()
   for (const [cls, pinningScenario] of pinningByClass) {
     promptSourceByClass.set(cls, sourceFor(pinningScenario, 'systemPromptSource', 'system-prompt snapshot'))
     schemaSourceByClass.set(cls, sourceFor(pinningScenario, 'toolSchemasSource', 'tool-schema snapshot'))
   }
-  const promptOwners = new Set([...promptSourceByClass.values()].map(source => source.name))
-  const schemaOwners = new Set([...schemaSourceByClass.values()].map(source => source.name))
+  const promptOwners = new Map([...promptSourceByClass.values()].map(source => [source.path, source]))
+  const schemaOwners = new Map([...schemaSourceByClass.values()].map(source => [source.path, source]))
+  const promptAliases = new Set([...promptSourceByClass.values()].map(source => resolve(source.aliasPath)))
+  const schemaAliases = new Set([...schemaSourceByClass.values()].map(source => resolve(source.aliasPath)))
+
+  const sourceForClass = (
+    sources: ReadonlyMap<string, SidecarSource>,
+    scenario: Scenario,
+    label: string,
+  ): SidecarSource => {
+    const source = sources.get(classOf(scenario))
+    if (source === undefined) {
+      throw new Error(`acp-snapshot: no ${label} source is registered for header class "${classOf(scenario)}"`)
+    }
+    return source
+  }
   const promptClaims = new Map<string, SharedSnapshotClaim>()
   const schemaClaims = new Map<string, SharedSnapshotClaim>()
 
@@ -1384,12 +1464,12 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             ? refreshFixtureReplacements(result.sessionLogs, existingFixtures)
             : []
           const freshFixtures = REFRESHING
-            ? result.sessionLogs.map((log, index) => scrubSessionSnapshot(portableFixture(stabilizeRefreshLog(
-              log.content,
+            ? result.sessionLogs.map((log, index) => scrubSessionSnapshot(stabilizeRefreshLog(
+              portableFixture(log.content),
               existingFixtures[index] as string,
               refreshReplacements,
               ctx,
-            ))))
+            )))
             : result.sessionLogs.map(log => scrubSessionSnapshot(portableFixture(log.content)))
           const outputFixtures = redactSessionSnapshotIds(stabilizeFixtureMessageIds(
             reconcileCatalogCreationTimes(freshFixtures, 'preserve-headers'), existingFixtures,
@@ -1403,11 +1483,15 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             expect(prompts.length, `${mode} produced a system prompt count that differs from 1 + expectedPromptChanges`)
               .toBe(1 + (scenario.expectedPromptChanges ?? 0))
             const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
-            /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
-            const promptSource = promptSourceByClass.get(classOf(scenario)) ?? scenario
-            const promptPath = join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT)
+            const promptSource = sourceForClass(promptSourceByClass, scenario, 'system-prompt snapshot')
+            const promptPath = promptSource.path
             claimSharedSnapshot(promptClaims, promptPath, scenario.name, promptSnapshot)
-            await writeFile(promptPath, promptSnapshot)
+            if (promptSource.external) {
+              expect(promptSnapshot, `${scenario.name}: borrowed prompt snapshot ${promptPath} is read-only`)
+                .toBe(await readFile(promptPath, 'utf8'))
+            } else {
+              await writeFile(promptPath, promptSnapshot)
+            }
 
             const schemaSets = toolSchemasFrom(pinningHeaderPayloads(primary.content, ctx))
             expect(schemaSets.length, `${mode} produced a tool-schema count that differs from 1 + expectedHeaderChanges`)
@@ -1416,11 +1500,15 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
               schemaSets[0] as unknown[],
               schemaSets.slice(1),
             )
-            /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
-            const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? scenario
-            const schemaPath = join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT)
+            const schemaSource = sourceForClass(schemaSourceByClass, scenario, 'tool-schema snapshot')
+            const schemaPath = schemaSource.path
             claimSharedSnapshot(schemaClaims, schemaPath, scenario.name, toolSchemasSnapshot)
-            await writeFile(schemaPath, toolSchemasSnapshot)
+            if (schemaSource.external) {
+              expect(toolSchemasSnapshot, `${scenario.name}: borrowed tool-schema snapshot ${schemaPath} is read-only`)
+                .toBe(await readFile(schemaPath, 'utf8'))
+            } else {
+              await writeFile(schemaPath, toolSchemasSnapshot)
+            }
           }
           for (const index of childSchemaPins) {
             const log = result.sessionLogs[index]
@@ -1483,16 +1571,14 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         // system prompt must equal the readable prompt sidecar.
         /* v8 ignore next -- construction guarantees the pin exists; a miss would fail the one-header assertion loudly. */
         const pinningScenario = pinningByClass.get(classOf(scenario)) ?? scenario
-        /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
-        const promptSource = promptSourceByClass.get(classOf(scenario)) ?? pinningScenario
-        /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
-        const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? pinningScenario
+        const promptSource = sourceForClass(promptSourceByClass, scenario, 'system-prompt snapshot')
+        const schemaSource = sourceForClass(schemaSourceByClass, scenario, 'tool-schema snapshot')
         const pinningDir = join(snapshotsDir, pinningScenario.name)
         const [pinningFixtureFile] = await sessionFixtures(pinningDir)
         const pinnedFixture = await readFile(join(pinningDir, pinningFixtureFile as string), 'utf8')
         const pinned = pinningHeaderPayloads(pinnedFixture, fixtureContext(pinnedFixture))
         const promptSnapshot = await readFile(
-          join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT),
+          promptSource.path,
           'utf8',
         )
         const initialPromptSnapshot = initialSystemPromptSnapshot(promptSnapshot)
@@ -1501,7 +1587,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         expect(parseSystemPromptSnapshot(promptSnapshot).changes.length, `the prompt source (${promptSource.name}) has an unexpected system prompt change count`)
           .toBe(pinningScenario.expectedPromptChanges ?? 0)
         const toolSchemasSnapshot = await readFile(
-          join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT),
+          schemaSource.path,
           'utf8',
         )
         const toolSchemas = parseToolSchemasSnapshot(toolSchemasSnapshot)
@@ -1563,7 +1649,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             // are exactly what the class pin cannot describe.
             const childPrompt = childPinnedPrompts.get(logIndex)
             const promptOrigin = childPrompt === undefined
-              ? `${promptSource.name}/${SYSTEM_PROMPT_SNAPSHOT}`
+              ? promptSource.path
               : childSystemPromptSnapshot(logIndex)
             for (const [k, prompt] of prompts.entries()) {
               expect(formatSystemPromptSnapshot(prompt), `session ${log.id}: system prompt #${k + 1} diverged from ${promptOrigin}`)
@@ -1635,10 +1721,10 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         ).toBe(pinsNativeWindowsStdout === true)
         expect(existsSync(join(dir, 'replay.override.json')), `${name}/replay.override.json presence must match \`overridden\``)
           .toBe(overridden === true)
-        expect(existsSync(join(dir, SYSTEM_PROMPT_SNAPSHOT)), `${name}/${SYSTEM_PROMPT_SNAPSHOT} presence must match snapshot-source ownership`)
-          .toBe(promptOwners.has(name))
-        expect(existsSync(join(dir, TOOL_SCHEMAS_SNAPSHOT)), `${name}/${TOOL_SCHEMAS_SNAPSHOT} presence must match snapshot-source ownership`)
-          .toBe(schemaOwners.has(name))
+        expect(existsSync(join(dir, SYSTEM_PROMPT_SNAPSHOT)), `${name}/${SYSTEM_PROMPT_SNAPSHOT} presence must match declared sidecar ownership`)
+          .toBe(promptAliases.has(resolve(dir, SYSTEM_PROMPT_SNAPSHOT)))
+        expect(existsSync(join(dir, TOOL_SCHEMAS_SNAPSHOT)), `${name}/${TOOL_SCHEMAS_SNAPSHOT} presence must match declared sidecar ownership`)
+          .toBe(schemaAliases.has(resolve(dir, TOOL_SCHEMAS_SNAPSHOT)))
         await expect(sessionFixtures(dir), `${name}: session fixture inventory`).resolves.toBeDefined()
       }
     })
@@ -1662,22 +1748,20 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
       // Assert the committed pin directly because a class containing only its
       // pinning scenario has no non-pinning live run to catch undeclared changes.
       for (const scenario of pinningByClass.values()) {
-        /* v8 ignore next -- registration guarantees every pin has resolved sources. */
-        const promptSource = promptSourceByClass.get(classOf(scenario)) ?? scenario
-        /* v8 ignore next -- registration guarantees every pin has resolved sources. */
-        const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? scenario
+        const promptSource = sourceForClass(promptSourceByClass, scenario, 'system-prompt snapshot')
+        const schemaSource = sourceForClass(schemaSourceByClass, scenario, 'tool-schema snapshot')
         const fixtureDir = join(snapshotsDir, scenario.name)
         const [fixtureFile] = await sessionFixtures(fixtureDir)
         const fixture = await readFile(join(fixtureDir, fixtureFile as string), 'utf8')
         const headers = pinningHeaderPayloads(fixture, fixtureContext(fixture))
         const promptSnapshot = await readFile(
-          join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT),
+          promptSource.path,
           'utf8',
         )
         expect(headers.length, `${scenario.name}: unexpected request/header count`)
           .toBe(1 + (scenario.expectedHeaderChanges ?? 0))
         const toolSchemasSnapshot = await readFile(
-          join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT),
+          schemaSource.path,
           'utf8',
         )
         const toolSchemas = parseToolSchemasSnapshot(toolSchemasSnapshot)
@@ -1702,13 +1786,13 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
     })
 
     it('stores each distinct prompt and tool-schema snapshot once', async () => {
-      const prompts = await Promise.all([...promptOwners].map(async (owner): Promise<NamedSnapshotContent> => ({
-        path: `${owner}/${SYSTEM_PROMPT_SNAPSHOT}`,
-        content: await readFile(join(snapshotsDir, owner, SYSTEM_PROMPT_SNAPSHOT), 'utf8'),
+      const prompts = await Promise.all([...promptOwners.values()].map(async (source): Promise<NamedSnapshotContent> => ({
+        path: `${source.name}/${SYSTEM_PROMPT_SNAPSHOT}`,
+        content: await readFile(source.path, 'utf8'),
       })))
-      const schemas = await Promise.all([...schemaOwners].map(async (owner): Promise<NamedSnapshotContent> => ({
-        path: `${owner}/${TOOL_SCHEMAS_SNAPSHOT}`,
-        content: await readFile(join(snapshotsDir, owner, TOOL_SCHEMAS_SNAPSHOT), 'utf8'),
+      const schemas = await Promise.all([...schemaOwners.values()].map(async (source): Promise<NamedSnapshotContent> => ({
+        path: `${source.name}/${TOOL_SCHEMAS_SNAPSHOT}`,
+        content: await readFile(source.path, 'utf8'),
       })))
       assertUniqueSnapshotContents('system-prompt', prompts)
       assertUniqueSnapshotContents('tool-schema', schemas)
@@ -1734,9 +1818,8 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             .toBeDefined()
           const file = childSystemPromptSnapshot(index)
           const sidecar = await readFile(join(dir, file), 'utf8')
-          /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
-          const promptSource = promptSourceByClass.get(classOf(scenario)) ?? scenario
-          const classPin = await readFile(join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT), 'utf8')
+          const promptSource = sourceForClass(promptSourceByClass, scenario, 'system-prompt snapshot')
+          const classPin = await readFile(promptSource.path, 'utf8')
           assertChildSystemPromptSnapshot(sidecar, initialSystemPromptSnapshot(classPin), `${scenario.name}/${file}`)
         }
       }

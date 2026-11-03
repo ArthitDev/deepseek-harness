@@ -4,6 +4,24 @@
   disabled: true
 - id: tool-pwsh
   disabled: true
+
+- id: agent-instructions
+  config:
+    projectRootMarkers: []
+    maxBytes: 65536
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    knowledgeRoots: []
+    sampleOverCapGlobResults: false
+
 - id: llm-deepseek
   disabled: true
 - id: plugin-package-inventory-deepseek

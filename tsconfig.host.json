@@ -34,6 +34,7 @@
     "apps/web/tests/startup-rpc-budget.e2e.ts",
     "apps/web/tests/minimal-preset.snapshot.ts",
     "apps/web/tests/message-feedback-protocol.snapshot.ts",
+    "apps/web/tests/prompt-integrity.spec.ts",
     "apps/web/tests/preset-migration.snapshot.ts",
     "apps/web/tests/live-interactions.e2e.ts",
     "apps/web/tests/question-composer.e2e.ts",

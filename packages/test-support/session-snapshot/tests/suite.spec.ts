@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -117,6 +117,117 @@ const REPLAY_SCENARIOS: Scenario[] = [
   { name: 'authored-error', hasModelTurn: true, recorded: false, overridden: true, headerClass: 'main' },
 ]
 
+const EXTERNAL_SCENARIOS: Scenario[] = [{
+  name: 'external-pin',
+  hasModelTurn: true,
+  recorded: true,
+  pinsHeader: true,
+  expectedHeaderChanges: 1,
+  expectedPromptChanges: 1,
+  headerClass: 'external',
+  systemPromptSource: 'session/text-turn',
+  toolSchemasSource: 'session/text-turn',
+}]
+
+const externalFixture = (() => {
+  const root = mkdtempSync(join(tmpdir(), 'acp-snapshot-external-source-'))
+  try {
+    const replayDir = join(root, 'acp')
+    const refreshDir = join(root, 'acp-refresh')
+    const recordDir = join(root, 'acp-record')
+    const ownerDir = join(root, 'session', 'text-turn')
+    const promptSource = readFileSync(join(REPLAY_DIR, 'pin-turn', 'system-prompt.expected.md'), 'utf8')
+    const schemaSource = readFileSync(join(REPLAY_DIR, 'pin-turn', 'tool-schemas.expected.json'), 'utf8')
+    const ownerManifest = [
+      'version: 1',
+      'scenario: text-turn',
+      'profile: headless',
+      'recording: authored',
+      'header:',
+      '  class: text-turn',
+      '  systemPromptSource: text-turn',
+      '  toolSchemasSource: session/text-turn',
+      '  changes: 1',
+      '  promptChanges: 1',
+      '',
+    ].join('\n')
+    const promptStub = '../../session/text-turn/system-prompt.expected.md\n'
+    const schemaStub = '../../session/text-turn/tool-schemas.expected.json\n'
+
+    mkdirSync(ownerDir, { recursive: true })
+    writeFileSync(join(ownerDir, 'snapshot.yml'), ownerManifest)
+    writeFileSync(join(ownerDir, 'system-prompt.expected.md'), promptSource)
+    writeFileSync(join(ownerDir, 'tool-schemas.expected.json'), schemaSource)
+    const oldSidecarTime = new Date('2000-01-01T00:00:00.000Z')
+    const promptPath = join(ownerDir, 'system-prompt.expected.md')
+    const schemaPath = join(ownerDir, 'tool-schemas.expected.json')
+    utimesSync(promptPath, oldSidecarTime, oldSidecarTime)
+    utimesSync(schemaPath, oldSidecarTime, oldSidecarTime)
+    const promptMtime = statSync(promptPath).mtimeMs
+    const schemaMtime = statSync(schemaPath).mtimeMs
+    for (const snapshotsDir of [replayDir, refreshDir, recordDir]) {
+      mkdirSync(snapshotsDir, { recursive: true })
+      const pinDir = join(snapshotsDir, 'external-pin')
+      cpSync(join(REPLAY_DIR, 'pin-turn'), pinDir, { recursive: true })
+      const localManifest = [
+        'version: 1',
+        'scenario: external-pin',
+        'profile: acp',
+        'recording: authored',
+        'header:',
+        '  class: external',
+        '  pin: true',
+        '  systemPromptSource: session/text-turn',
+        '  toolSchemasSource: session/text-turn',
+        '  changes: 1',
+        '  promptChanges: 1',
+        '',
+      ].join('\n')
+      writeFileSync(join(pinDir, 'snapshot.yml'), localManifest)
+      writeFileSync(join(pinDir, 'system-prompt.expected.md'), promptStub)
+      writeFileSync(join(pinDir, 'tool-schemas.expected.json'), schemaStub)
+    }
+    return {
+      root, replayDir, refreshDir, recordDir, ownerDir,
+      promptSource, schemaSource, promptStub, schemaStub, promptMtime, schemaMtime,
+    }
+  } catch (error: unknown) {
+    rmSync(root, { recursive: true, force: true })
+    throw error
+  }
+})()
+
+const EXTERNAL_ROOT = externalFixture.root
+const EXTERNAL_REPLAY_DIR = externalFixture.replayDir
+const EXTERNAL_REFRESH_DIR = externalFixture.refreshDir
+const EXTERNAL_RECORD_DIR = externalFixture.recordDir
+const EXTERNAL_OWNER_DIR = externalFixture.ownerDir
+
+function expectExternalSourceRegistrationError(
+  source: string,
+  expected: RegExp,
+  editOwner?: (ownerDir: string) => void,
+): void {
+  const root = mkdtempSync(join(tmpdir(), 'acp-snapshot-invalid-source-'))
+  try {
+    const snapshotsDir = join(root, 'acp')
+    const ownerDir = join(root, 'session', 'text-turn')
+    cpSync(EXTERNAL_REPLAY_DIR, snapshotsDir, { recursive: true })
+    cpSync(EXTERNAL_OWNER_DIR, ownerDir, { recursive: true })
+    editOwner?.(ownerDir)
+    expect(() => {
+      defineAcpSnapshotSuite({
+        agent: AGENT,
+        snapshotsDir,
+        scenarios: [{ ...EXTERNAL_SCENARIOS[0]!, systemPromptSource: source }],
+        mode: 'replay',
+      })
+    }).toThrow(expected)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}
+
 const RECORD_SCENARIOS: Scenario[] = [
   { name: 'rec-pin', hasModelTurn: true, recorded: true, pinsHeader: true },
   { name: 'rec-child', hasModelTurn: true, recorded: true, pinsChildToolSchemas: [1] },
@@ -144,9 +255,33 @@ staleRefreshFixtures(refreshDir)
 afterAll(async () => {
   if (!BOOTSTRAP) await rm(recordDir, { recursive: true, force: true })
   await rm(refreshDir, { recursive: true, force: true })
+  await rm(EXTERNAL_ROOT, { recursive: true, force: true })
 })
 
 function staleRefreshFixtures(dir: string): void {
+  const pinBehaviorPath = join(dir, 'pin-turn', 'behavior.json')
+  const pinBehavior = JSON.parse(readFileSync(pinBehaviorPath, 'utf8')) as {
+    logs: Array<{ lines: Array<Record<string, unknown>> }>
+  }
+  const pinLog = pinBehavior.logs[0]
+  if (pinLog === undefined) throw new Error('pin-turn fake ACP behavior has no parent session log')
+  for (const event of pinLog.lines) {
+    if (typeof event.seq === 'number' && event.seq >= 3) event.seq += 1
+  }
+  pinLog.lines.splice(4, 0, {
+    type: 'user/message',
+    seq: 3,
+    time: 100,
+    data: {
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      role: 'user',
+      content: [{ type: 'text', text: 'The input lives under {{CWD}}/input.txt.' }],
+      source: { kind: 'user' },
+    },
+    surfaceOp: 'append',
+  })
+  writeFileSync(pinBehaviorPath, `${JSON.stringify(pinBehavior, null, 2)}\n`)
+
   writeFileSync(join(dir, 'plain-turn', 'stdout.expected.jsonl'), 'stale stdout\n')
   writeFileSync(join(dir, 'pin-turn', 'system-prompt.expected.md'), 'STALE PROMPT\n')
   writeFileSync(join(dir, 'pin-turn', 'tool-schemas.expected.json'), '{"initial":[{"name":"stale"}],"changes":[]}\n')
@@ -182,6 +317,45 @@ describe('defineAcpSnapshotSuite: record mode', () => {
 
 describe('defineAcpSnapshotSuite: refresh mode', () => {
   defineAcpSnapshotSuite({ agent: AGENT, snapshotsDir: refreshDir, scenarios: REPLAY_SCENARIOS, mode: 'refresh' })
+})
+
+describe('defineAcpSnapshotSuite: corpus-relative sidecar sources', () => {
+  defineAcpSnapshotSuite({
+    agent: AGENT,
+    snapshotsDir: EXTERNAL_REPLAY_DIR,
+    scenarios: EXTERNAL_SCENARIOS,
+    mode: 'replay',
+  })
+  defineAcpSnapshotSuite({
+    agent: AGENT,
+    snapshotsDir: EXTERNAL_RECORD_DIR,
+    scenarios: EXTERNAL_SCENARIOS,
+    mode: 'record',
+  })
+  defineAcpSnapshotSuite({
+    agent: AGENT,
+    snapshotsDir: EXTERNAL_REFRESH_DIR,
+    scenarios: EXTERNAL_SCENARIOS,
+    mode: 'refresh',
+  })
+
+  it('keeps the canonical owner bytes and literal aliases unchanged in record and refresh', () => {
+    expect(readFileSync(join(EXTERNAL_OWNER_DIR, 'system-prompt.expected.md'), 'utf8'))
+      .toBe(externalFixture.promptSource)
+    expect(statSync(join(EXTERNAL_OWNER_DIR, 'system-prompt.expected.md')).mtimeMs)
+      .toBe(externalFixture.promptMtime)
+    expect(readFileSync(join(EXTERNAL_OWNER_DIR, 'tool-schemas.expected.json'), 'utf8'))
+      .toBe(externalFixture.schemaSource)
+    expect(statSync(join(EXTERNAL_OWNER_DIR, 'tool-schemas.expected.json')).mtimeMs)
+      .toBe(externalFixture.schemaMtime)
+    for (const snapshotsDir of [EXTERNAL_RECORD_DIR, EXTERNAL_REFRESH_DIR]) {
+      const pinDir = join(snapshotsDir, 'external-pin')
+      expect(readFileSync(join(pinDir, 'system-prompt.expected.md'), 'utf8'))
+        .toBe(externalFixture.promptStub)
+      expect(readFileSync(join(pinDir, 'tool-schemas.expected.json'), 'utf8'))
+        .toBe(externalFixture.schemaStub)
+    }
+  })
 })
 
 describe('defineAcpSnapshotSuite: refresh write-back', () => {
@@ -222,6 +396,7 @@ describe('defineAcpSnapshotSuite: refresh write-back', () => {
 
     const pinSession = readFileSync(join(refreshDir, 'pin-turn', 'session.v3.jsonl'), 'utf8')
     expect(pinSession).toContain('"cwd":"{{cwd}}"')
+    expect(pinSession).toContain('The input lives under {{cwd}}/input.txt.')
     expect(readFileSync(join(refreshDir, 'pin-turn', 'session.jsonl'), 'utf8'))
       .not.toContain('"version"')
     expect(pinSession.match(/"text":"{{system}}"/g)).toHaveLength(2)
@@ -375,6 +550,60 @@ describe('defineAcpSnapshotSuite: registration contract', () => {
         mode: 'replay',
       })
     }).toThrow(/pin names non-pinning tool-schema snapshot source "plain"/)
+  })
+
+  it('rejects invalid corpus-relative sidecar sources', () => {
+    expectExternalSourceRegistrationError(
+      'session/missing',
+      /pin names unknown corpus-relative system-prompt snapshot source "session\/missing"/,
+    )
+    expectExternalSourceRegistrationError(
+      '../outside',
+      /pin names invalid corpus-relative system-prompt snapshot source "\.\.\/outside"/,
+    )
+    expectExternalSourceRegistrationError(
+      'session/text-turn',
+      /corpus system-prompt snapshot source "session\/text-turn" has no header metadata/,
+      (ownerDir) => {
+        const manifestPath = join(ownerDir, 'snapshot.yml')
+        const manifest = readFileSync(manifestPath, 'utf8')
+        writeFileSync(manifestPath, manifest.replace(/header:\n(?:  .+\n)+/u, ''))
+      },
+    )
+    expectExternalSourceRegistrationError(
+      'session/text-turn',
+      /corpus system-prompt snapshot source "session\/text-turn" declares scenario "other" instead of "text-turn"/,
+      (ownerDir) => {
+        const manifestPath = join(ownerDir, 'snapshot.yml')
+        const manifest = readFileSync(manifestPath, 'utf8')
+        writeFileSync(manifestPath, manifest.replace('scenario: text-turn', 'scenario: other'))
+      },
+    )
+    expectExternalSourceRegistrationError(
+      'session/text-turn',
+      /different expectedPromptChanges counts for shared system-prompt snapshot/,
+      (ownerDir) => {
+        const manifestPath = join(ownerDir, 'snapshot.yml')
+        const manifest = readFileSync(manifestPath, 'utf8')
+        writeFileSync(manifestPath, manifest.replace('promptChanges: 1', 'promptChanges: 2'))
+      },
+    )
+    expectExternalSourceRegistrationError(
+      'session/text-turn',
+      /corpus system-prompt snapshot source "session\/text-turn" does not own system-prompt.expected.md/,
+      (ownerDir) => {
+        rmSync(join(ownerDir, 'system-prompt.expected.md'))
+      },
+    )
+    expectExternalSourceRegistrationError(
+      'session/text-turn',
+      /corpus system-prompt snapshot source "session\/text-turn" redirects to "other"/,
+      (ownerDir) => {
+        const manifestPath = join(ownerDir, 'snapshot.yml')
+        const manifest = readFileSync(manifestPath, 'utf8')
+        writeFileSync(manifestPath, manifest.replace('systemPromptSource: text-turn', 'systemPromptSource: other'))
+      },
+    )
   })
 
   it('rejects a sidecar source that redirects the same artifact', () => {
@@ -1037,6 +1266,34 @@ describe('stabilizeFixtureMessageIds', () => {
     ].join('\n')
 
     expect(stabilizeFixtureMessageIds([fresh], [existing])[0]).toContain(`"id":"${existingId}"`)
+  })
+
+  it('tokenizes escaped Windows cwd paths inside runtime-context JSON strings', () => {
+    const cwd = String.raw`C:\Temp\acp-snap-cwd-abc123`
+    const reportedCwd = String.raw`C:\Users\runner\AppData\Local\Temp\acp-snap-cwd-abc123`
+    const runtimeContext = JSON.stringify({ cwd: reportedCwd, sibling: `${reportedCwd}-backup` })
+    const raw = [
+      JSON.stringify({ type: 'session', id: 's', cwd }),
+      JSON.stringify({
+        type: 'tool/result',
+        data: { content: [{ type: 'text', text: `runtime-context=${runtimeContext}; literal prose stays` }] },
+      }),
+      '',
+    ].join('\n')
+
+    const out = tokenizeSessionFixtureCwd(raw)
+    const result = JSON.parse(out.split('\n')[1] as string) as {
+      data: { content: { text: string }[] }
+    }
+    const text = result.data.content[0]?.text ?? ''
+    const embedded = JSON.parse(text.slice('runtime-context='.length, text.indexOf(';'))) as {
+      cwd: string
+      sibling: string
+    }
+
+    expect(text).toContain('"cwd":"{{cwd}}"')
+    expect(embedded).toEqual({ cwd: '{{cwd}}', sibling: `${reportedCwd}-backup` })
+    expect(text).toContain('literal prose stays')
   })
 
   it('rejects a fingerprint connected to an id that also identifies different content', () => {

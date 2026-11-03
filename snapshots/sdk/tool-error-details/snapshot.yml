@@ -4,4 +4,5 @@ profile: sdk
 composition: both
 recording: authored
 header:
-  class: both
+  class: sdk-tool-error-details
+  pin: true

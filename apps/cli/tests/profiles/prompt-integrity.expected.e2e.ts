@@ -1,20 +1,21 @@
 import { createServer } from 'node:http'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import type { Readable } from 'node:stream'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { zstdDecompressSync } from 'node:zlib'
 import { resolveExampleLaunch } from '@deepseek-ai/dsh-loader-smoke'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
-import { scanZstdFrames } from '../../packages/session/session-persistence-jsonl/src/zstd.ts'
+import { scanZstdFrames } from '../../../../packages/session/session-persistence-jsonl/src/zstd.ts'
 
-const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
+const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const launch = resolveExampleLaunch({
   srcBin: join(repoRoot, 'apps/cli/src/bin.ts'),
   mode: 'lib',
 })
-const promptPlugin = fileURLToPath(new URL('../../packages/test-support/session-snapshot/tests/fixtures/prompt-lifecycle.mjs', import.meta.url))
+const promptPlugin = fileURLToPath(new URL('../../../../packages/test-support/session-snapshot/tests/fixtures/prompt-lifecycle.mjs', import.meta.url))
 function messagesResponse(): string {
   return [
     { type: 'message_start', message: { id: 'prompt-integrity-response', model: 'deepseek-v4-pro', usage: { input_tokens: 3, output_tokens: 0 } } },
@@ -33,12 +34,15 @@ interface RpcLine {
   readonly error?: Record<string, unknown>
 }
 
-function startRpcReader(child: ReturnType<typeof execa>, stderr: () => string): (predicate: (line: RpcLine) => boolean) => Promise<RpcLine> {
+function startRpcReader(
+  stdout: Readable,
+  stderr: () => string,
+): (predicate: (line: RpcLine) => boolean) => Promise<RpcLine> {
   const pending: string[] = []
   const received: RpcLine[] = []
   let parseError: Error | undefined
   let buffer = ''
-  child.stdout.on('data', (chunk: Buffer) => {
+  stdout.on('data', (chunk: Buffer) => {
     buffer += chunk.toString('utf8')
     const parts = buffer.split('\n')
     buffer = parts.pop() ?? ''
@@ -129,7 +133,7 @@ describe('SDK prompt integrity lifecycle', () => {
     })
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8') })
-    const wait = startRpcReader(child, () => stderr)
+    const wait = startRpcReader(child.stdout, () => stderr)
     const send = async (id: number, marker: string): Promise<RpcLine> => {
       child.stdin.write(`${JSON.stringify({
         jsonrpc: '2.0', id, method: 'session/prompt',
@@ -230,7 +234,7 @@ describe('SDK prompt integrity lifecycle', () => {
     })
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8') })
-    const wait = startRpcReader(child, () => stderr)
+    const wait = startRpcReader(child.stdout, () => stderr)
     try {
       child.stdin.write(`${JSON.stringify({
         jsonrpc: '2.0', id: 1, method: 'initialize',
@@ -241,7 +245,8 @@ describe('SDK prompt integrity lifecycle', () => {
         jsonrpc: '2.0', id: 2, method: 'session/prompt',
         params: { sessionId: 'prompt-version-sdk', contentBlocks: [{ type: 'text', text: 'invalid core' }] },
       })}\n`)
-      expect(await wait(line => line.id === 2)).toMatchObject({ result: { messageId: expect.any(String) } })
+      const accepted = await wait(line => line.id === 2)
+      expect(accepted.result?.messageId).toEqual(expect.any(String))
       expect(await wait(line => line.method === 'session.event'
         && line.params?.sessionId === 'prompt-version-sdk'
         && (line.params.event as { type?: string } | undefined)?.type === 'turn/end')).toMatchObject({

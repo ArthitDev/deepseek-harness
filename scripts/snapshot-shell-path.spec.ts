@@ -1,13 +1,14 @@
 import { Context } from '@deepseek-ai/cordis'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import * as adapter from './snapshot-shell-path.ts'
 
-it.skipIf(process.platform === 'win32')('translates only the exact fixture command and preserves real shell failures', async () => {
+// Three real Bash/WSL launches and teardown share the process-test budget.
+it('translates only the exact fixture command and preserves real shell failures', async () => {
   const root = await mkdtemp(join(tmpdir(), 'snapshot-shell-'))
   const ctx = new Context()
   const disposers: (() => Promise<void>)[] = []
@@ -20,23 +21,31 @@ it.skipIf(process.platform === 'win32')('translates only the exact fixture comma
     await bash
     const command = "printf 'actual bytes' > /fixture/recorded.txt"
     const livePath = join(root, "space and 'quote.txt")
+    const workdir = process.cwd()
     const fork = ctx.plugin(adapter, { command, recordedPath: '/fixture/recorded.txt', livePath })
     disposers.push(() => fork.dispose())
     await fork
-    const outcome = await (await ctx.shell.execute(ctx.shell.resolve({ command }))).result()
+    if (process.platform === 'win32') {
+      await writeFile(livePath, 'unchanged')
+      expect(() => ctx.shell.execute(ctx.shell.resolve({ command, workdir, stdin: 'must not run' })))
+        .toThrow(/translated fixture command must not provide stdin/)
+      expect(await readFile(livePath, 'utf8')).toBe('unchanged')
+      await rm(livePath)
+    }
+    const outcome = await (await ctx.shell.execute(ctx.shell.resolve({ command, workdir }))).result()
     expect(outcome.timedOut).toBe(false)
-    expect(outcome.exitCode).toBe(0)
+    expect(outcome.exitCode, outcome.stderr.text).toBe(0)
     expect(await readFile(livePath, 'utf8')).toBe('actual bytes')
-    const untouched = await (await ctx.shell.execute(ctx.shell.resolve({ command: "printf '/fixture/recorded.txt'; exit 7" }))).result()
+    const untouched = await (await ctx.shell.execute(ctx.shell.resolve({ command: "printf '/fixture/recorded.txt'; exit 7", workdir }))).result()
     expect(untouched.exitCode).toBe(7)
     expect(untouched.stdout.text).toBe('/fixture/recorded.txt')
     await fork.dispose()
     await rm(livePath)
-    const restored = await (await ctx.shell.execute(ctx.shell.resolve({ command }))).result()
+    const restored = await (await ctx.shell.execute(ctx.shell.resolve({ command, workdir }))).result()
     expect(restored.exitCode).not.toBe(0)
     await expect(readFile(livePath)).rejects.toMatchObject({ code: 'ENOENT' })
   } finally {
     for (const dispose of disposers.reverse()) await dispose()
     await rm(root, { recursive: true, force: true })
   }
-})
+}, 30_000)

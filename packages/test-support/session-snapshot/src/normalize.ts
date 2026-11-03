@@ -123,7 +123,9 @@ function cwdSpellings(ctx: NormalizeContext): string[] {
   const macAliases = spellings
     .filter(spelling => spelling.startsWith('/') && !spelling.startsWith('/private/'))
     .map(spelling => `/private${spelling}`)
-  return [...new Set([...spellings, ...macAliases])]
+  const known = [...new Set([...spellings, ...macAliases])]
+  const escaped = known.map(spelling => JSON.stringify(spelling).slice(1, -1))
+  return [...new Set([...known, ...escaped])]
     .sort((left, right) => right.length - left.length)
 }
 
@@ -245,7 +247,7 @@ function escapeRegExp(value: string): string {
 function tokenizeFixtureString(value: string, ctx: NormalizeContext, basename: string): string {
   const exact = replaceCwd(value, ctx, CWD)
   const absoluteCwd = new RegExp(
-    String.raw`(?:[A-Za-z]:)?[\\/](?:[^\\/\s<>"]+[\\/])*${escapeRegExp(basename)}`
+    String.raw`(?:[A-Za-z]:)?[\\/]+(?:[^\\/\s<>"]+[\\/]+)*${escapeRegExp(basename)}`
     + String.raw`(?=$|[\\/\s<>'"()\[\]{},;:!?=])`,
     'g',
   )

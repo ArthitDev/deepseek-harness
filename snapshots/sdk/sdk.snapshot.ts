@@ -332,7 +332,7 @@ function contextOfContents(contents: readonly string[]): NormalizeContext {
   }
 }
 
-async function fixtureFiles(scenario: CorpusScenario): Promise<string[]> {
+async function fixtureFiles(scenario: Pick<CorpusScenario, 'name' | 'dir'>): Promise<string[]> {
   const names = sessionFixtureNames(await readdir(scenario.dir))
   return Promise.all(names.map(async (name) => {
     const path = join(scenario.dir, name)
@@ -341,12 +341,46 @@ async function fixtureFiles(scenario: CorpusScenario): Promise<string[]> {
   }))
 }
 
-async function hydrateReplayFixtures(scenario: CorpusScenario, cwd: string): Promise<string[]> {
+/** Hydrate nested JSON strings, including JSON-encoded tool arguments. */
+function hydrateReplayFixtureContents(contents: string, cwd: string): string {
+  const token = '{{cwd}}'
+  const replace = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      if (!value.includes(token)) return value
+      let nested: unknown
+      try {
+        nested = JSON.parse(value)
+      } catch (error: unknown) {
+        if (!(error instanceof SyntaxError)) throw error
+        return value.replaceAll(token, () => cwd)
+      }
+      const serialized = JSON.stringify(replace(nested))
+      if (serialized === undefined) throw new Error('SDK replay fixture JSON value did not serialize')
+      return serialized
+    }
+    if (Array.isArray(value)) return value.map(replace)
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replace(item)]))
+    }
+    return value
+  }
+  return contents.split('\n').map(line => {
+    const carriageReturn = line.endsWith('\r') ? '\r' : ''
+    const json = carriageReturn.length > 0 ? line.slice(0, -1) : line
+    if (!json.includes(token)) return line
+    const parsed: unknown = JSON.parse(json)
+    const serialized = JSON.stringify(replace(parsed))
+    if (serialized === undefined) throw new Error('SDK replay fixture JSON line did not serialize')
+    return `${serialized}${carriageReturn}`
+  }).join('\n')
+}
+
+async function hydrateReplayFixtures(scenario: Pick<CorpusScenario, 'name' | 'dir'>, cwd: string): Promise<string[]> {
   const root = join(cwd, '.replay-fixtures')
   await mkdir(root, { recursive: true })
   return Promise.all((await fixtureFiles(scenario)).map(async (source) => {
     const destination = join(root, basename(source))
-    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', cwd))
+    await writeFile(destination, hydrateReplayFixtureContents(await readFile(source, 'utf8'), cwd))
     return destination
   }))
 }
@@ -795,6 +829,42 @@ async function verifyHeaders(
 }
 
 describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
+  it('hydrates replay fixture cwd values through outer and nested JSON', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'sdk-replay-'))
+    try {
+      const sourceDir = join(root, 'source')
+      const cwd = join(root, 'cwd-$&-$$')
+      await Promise.all([mkdir(sourceDir), mkdir(cwd)])
+      const sourcePath = join(sourceDir, 'session.v4.jsonl')
+      const argumentsJson = JSON.stringify({ path: '{{cwd}}/note.txt' })
+      const original = [
+        JSON.stringify({ type: 'session', version: 4, cwd: '{{cwd}}' }),
+        JSON.stringify({ type: 'tool/call', data: {
+          arguments: argumentsJson,
+          text: 'before {{cwd}} after $& $$ "quoted"\nnext line\\tail',
+        } }),
+        '',
+      ].join('\n')
+      await writeFile(sourcePath, original)
+      const scenario = { name: 'cwd-hydration', dir: sourceDir }
+      const [hydratedPath] = await hydrateReplayFixtures(scenario, cwd)
+      const actual = await readFile(hydratedPath!, 'utf8')
+      expect(await readFile(sourcePath, 'utf8')).toBe(original)
+
+      for (const replacement of [cwd, 'C:\\Users\\Sun\\$&-$$\\workspace', '/tmp/Sun "$&" $$\nworkspace\\tail']) {
+        const content = hydrateReplayFixtureContents(original, replacement)
+        const rows = content.trimEnd().split(/\r?\n/u).map(line => JSON.parse(line) as JsonObject)
+        expect(rows[0]?.['cwd']).toBe(replacement)
+        const data = rows[1]?.['data'] as JsonObject
+        expect(JSON.parse(data['arguments'] as string)).toEqual({ path: `${replacement}/note.txt` })
+        expect(data['text']).toBe(`before ${replacement} after $& $$ "quoted"\nnext line\\tail`)
+      }
+      expect(() => actual.trimEnd().split(/\r?\n/u).forEach(line => JSON.parse(line))).not.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('restores the retained V3 max-tokens recording after an interrupted next-turn restart', async () => {
     const path = join(corpusRoot, 'sdk/max-tokens-continue/session.v3.jsonl')
     const fixture = await readFile(path, 'utf8')

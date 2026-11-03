@@ -366,6 +366,28 @@ describe('normalizeSessionLog', () => {
     })
   })
 
+  it('scrubs the JSON-escaped generated cwd but keeps prefix-sharing paths', () => {
+    const windowsCwd = String.raw`C:\Users\runner\AppData\Local\Temp\acp-snap-cwd-abc123`
+    const sibling = `${windowsCwd}-backup`
+    const context = JSON.stringify({ cwd: windowsCwd, sibling })
+    const unrelated = String.raw`D:\Users\runner\AppData\Local\Temp\authored.txt`
+    const event = JSON.stringify({
+      type: 'tool/result',
+      data: { context, sibling, unrelated },
+    })
+    const output = normalizeSessionLog(`${header({ cwd: windowsCwd })}\n${event}\n`, {
+      sessionIds: [],
+      cwd: windowsCwd,
+    })
+    const normalized = JSON.parse(output.split('\n')[1] ?? '{}') as {
+      data: { context: string; sibling: string; unrelated: string }
+    }
+
+    expect(JSON.parse(normalized.data.context)).toEqual({ cwd: '{{cwd}}', sibling })
+    expect(normalized.data.sibling).toBe(sibling)
+    expect(normalized.data.unrelated).toBe(unrelated)
+  })
+
   it('scrubs cwd and session id deep inside event data', () => {
     const ev = JSON.stringify({
       type: 'tool/result', seq: 2, time: 5,

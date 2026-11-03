@@ -1521,6 +1521,14 @@ describe('default one-shot summarizer', () => {
     expect(lastText).toContain('Write concise English engineering prose.')
     expect(lastText).toContain('numeric values, function signatures, and syntax fragments.')
     expect(lastText).toContain('## Primary Request and Intent')
+    expect(lastText).toContain('latest explicit correction or cancellation controls the active request')
+    expect(lastText).toContain('attempted fix, observed result, and checks/commands or artifact references')
+    expect(lastText).toContain('keep unresolved failures unresolved')
+    expect(lastText).toContain('background job or subagent, preserve its ID, last observed status, output location, and how to check it')
+    expect(lastText).toContain('write "unknown" for any of these facts that was not observed')
+    expect(lastText).toContain('distinguish passed, failed, and unrun checks')
+    expect(lastText).toContain('A start acknowledgement is not completion')
+    expect(lastText).toContain('make inspecting current state a prerequisite to retrying')
   })
 
   it('applies the routed model policy without changing the replayed prefix', async () => {

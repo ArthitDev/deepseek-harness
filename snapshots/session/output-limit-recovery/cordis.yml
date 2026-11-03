@@ -1,4 +1,21 @@
 # Output recovery does not depend on platform-specific shell tools.
+- id: agent-instructions
+  config:
+    projectRootMarkers: []
+    maxBytes: 65536
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    knowledgeRoots: []
+    sampleOverCapGlobResults: false
+
 - id: compaction-basic
   config: {}
 - id: tool-bash

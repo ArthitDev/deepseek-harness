@@ -3,3 +3,18 @@
       name: '@deepseek-ai/dsh-ptc-runtime-node'
     - id: structured-denial-fixture
       name: './deny.mjs'
+- id: agent-instructions
+  disabled: true
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+- id: tool-fs-search
+  config:
+    knowledgeRoots: []
+    sampleOverCapGlobResults: false
+- id: tool-bash
+  # Recorded Bash denials run on every host and stop before process execution.
+  disabled: false
+- id: tool-pwsh
+  disabled: true

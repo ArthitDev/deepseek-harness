@@ -68,10 +68,7 @@ const REMINDER_SOURCE: MessageSource = { kind: 'repeat-tool-reminder' }
  * count, so a custom first threshold keeps the gentle-then-detailed escalation.
  */
 const GENTLE_REMINDER =
-  'You are repeating the exact same tool call with identical arguments. '
-  + 'Carefully analyze the previous result before calling again: if the task is '
-  + 'not complete, try a different approach or different arguments instead of '
-  + 'repeating the call.'
+  'Repeated tool call detected. Compare the previous result with earlier results before deciding whether to call again.'
 
 /** The detailed later-threshold reminder naming the tool, the run length, and the canonical arguments. */
 function detailedReminder(toolName: string, count: number, canonicalArguments: string): string {
@@ -79,10 +76,11 @@ function detailedReminder(toolName: string, count: number, canonicalArguments: s
     + `- tool: ${toolName}\n`
     + `- consecutive_calls: ${count}\n`
     + `- arguments: ${canonicalArguments}\n`
-    + 'The repeated calls are not making progress. Do not call this tool with '
-    + 'these exact arguments again. Inspect the latest result and choose a '
-    + 'different action, different arguments, or finish the task if enough '
-    + 'evidence has been gathered.'
+    + 'Compare each result with earlier results and verify whether the task state changed. '
+    + 'For work expected to take time, use the available status or wait operation and check again when appropriate; repeated status results may mean work is still pending. '
+    + 'If a failure repeats, or results show the current approach cannot advance the task, diagnose the cause and try an evidence-backed alternative; cosmetic argument changes are not progress. '
+    + 'Before retrying a state-changing action with an uncertain outcome, inspect current state to avoid duplicate effects. '
+    + 'Continue authorized work while evidence shows a path forward. Finish only after verifying the task outcome; report a concrete blocker only when no safe path remains.'
 }
 
 /**

@@ -1,4 +1,4 @@
-/** Retained V3 replay inputs, current-writer fixtures, and bounded older migration coverage. */
+/** V3-minimum replay inputs, current-writer fixtures, and bounded older migration coverage. */
 
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SnapshotSessionFormatManifest } from '@deepseek-ai/dsh-session-snapshot'
@@ -16,6 +16,7 @@ export interface SnapshotCorpusScenarioGenerations {
 /** Counts returned after the corpus policy accepts the inventory. */
 export interface SnapshotCorpusGenerationSummary {
   readonly currentRoles: number
+  /** Ordinary replay roles from V3 through the pre-current released generations. */
   readonly baselineRoles: number
   readonly retainedRoles: number
   readonly retainedScenarios: number
@@ -59,13 +60,17 @@ export function assertSnapshotCorpusPolicy(
       )
     }
     if (scenario.retained === undefined) {
-      if (selectedVersion === RETAINED_BASELINE_VERSION) {
-        baselineRoles += scenario.selectedVersions.length
-      } else if (selectedVersion === SESSION_FORMAT_VERSION) {
+      if (selectedVersion === SESSION_FORMAT_VERSION) {
         currentRoles += scenario.selectedVersions.length
+      } else if (Number.isSafeInteger(selectedVersion)
+        && selectedVersion >= RETAINED_BASELINE_VERSION && selectedVersion < SESSION_FORMAT_VERSION) {
+        baselineRoles += scenario.selectedVersions.length
+        const coverage = coverageByVersion.get(selectedVersion) ?? new Set<string>()
+        coverageByVersion.set(selectedVersion, coverage)
+        for (const item of REQUIRED_ADJACENT_COVERAGE) coverage.add(item)
       } else {
         throw new Error(
-          `${scenario.key}: selected Session generation v${selectedVersion} must be retained baseline v${RETAINED_BASELINE_VERSION} or current v${SESSION_FORMAT_VERSION}`,
+          `${scenario.key}: selected Session generation v${selectedVersion} must be ordinary replay input v${RETAINED_BASELINE_VERSION} through current v${SESSION_FORMAT_VERSION} or explicitly retained`,
         )
       }
       continue
@@ -91,7 +96,6 @@ export function assertSnapshotCorpusPolicy(
     for (const item of scenario.retained.coverage) coverage.add(item)
   }
 
-  if (baselineRoles > 0) coverageByVersion.set(RETAINED_BASELINE_VERSION, new Set(REQUIRED_ADJACENT_COVERAGE))
   for (let version = 0; version < SESSION_FORMAT_VERSION; version += 1) {
     const required = version === 0 ? REQUIRED_V0_COVERAGE : REQUIRED_ADJACENT_COVERAGE
     const coverage = coverageByVersion.get(version)

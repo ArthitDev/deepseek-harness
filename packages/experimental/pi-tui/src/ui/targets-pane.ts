@@ -23,17 +23,19 @@ function branch(label: string, key = label): Branch {
   return { key, label, children: new Map() }
 }
 
-function parentPathLength(root: URL, child: URL): number {
-  const base = root.pathname.replace(/\/$/, '')
-  return root.origin === child.origin && (child.pathname === base || child.pathname.startsWith(`${base}/`)) ? base.length + 1 : 0
+function parentPathLength(rootOrigin: string, basePath: string, childOrigin: string, childPath: string): number {
+  return rootOrigin === childOrigin
+    && (childPath === basePath || childPath.startsWith(`${basePath}/`))
+    ? basePath.length + 1 : 0
 }
 
-function addPath(parent: Branch, url: URL, root: URL): void {
-  const sameOrigin = url.origin === root.origin
-  const base = root.pathname.replace(/\/$/, '')
-  const path = parentPathLength(root, url) > 0
-    ? url.pathname.slice(base.length) : url.pathname
-  const parts = [...(sameOrigin ? [] : [url.origin]), ...path.split('/').filter(Boolean)]
+function addPath(parent: Branch, url: URL, rootOrigin: string, basePath: string): void {
+  const origin = url.origin
+  const pathname = url.pathname
+  const sameOrigin = origin === rootOrigin
+  const path = parentPathLength(rootOrigin, basePath, origin, pathname) > 0
+    ? pathname.slice(basePath.length) : pathname
+  const parts = [...(sameOrigin ? [] : [origin]), ...path.split('/').filter(Boolean)]
   if (parts.length === 0) parts.push('/')
   let node = parent
   for (const part of parts) {
@@ -59,22 +61,49 @@ function rowsOf(nodes: readonly Branch[], collapsed: ReadonlySet<string>, path: 
 }
 
 function targetBranches(urls: readonly TargetUrl[]): Branch[] {
-  const roots = urls.filter(entry => entry.primary)
-    .map(entry => ({ url: new URL(entry.url), node: branch(entry.url), children: [] as URL[] }))
+  const roots = urls.filter(entry => entry.primary).map((entry) => {
+    const url = new URL(entry.url)
+    const hostname = url.hostname
+    const pathname = url.pathname
+    return {
+      url,
+      hostname,
+      origin: url.origin,
+      basePath: pathname.replace(/\/$/, ''),
+      isIp: isIP(hostname.replace(/^\[|\]$/g, '')) !== 0,
+      node: branch(entry.url),
+      children: [] as URL[],
+    }
+  })
   const others: URL[] = []
   for (const entry of urls) {
     if (entry.primary) continue
     const url = new URL(entry.url)
-    const root = roots.filter(candidate => url.hostname === candidate.url.hostname
-      || (isIP(candidate.url.hostname.replace(/^\[|\]$/g, '')) === 0 && url.hostname.endsWith(`.${candidate.url.hostname}`)))
-      .sort((a, b) => b.url.hostname.length - a.url.hostname.length || parentPathLength(b.url, url) - parentPathLength(a.url, url))[0]
+    const hostname = url.hostname
+    const origin = url.origin
+    const pathname = url.pathname
+    let root: typeof roots[number] | undefined
+    let rootHostLength = -1
+    let rootPathLength = -1
+    for (const candidate of roots) {
+      if (hostname !== candidate.hostname
+        && (candidate.isIp || !hostname.endsWith(`.${candidate.hostname}`))) continue
+      const hostLength = candidate.hostname.length
+      if (hostLength < rootHostLength) continue
+      const pathLength = parentPathLength(candidate.origin, candidate.basePath, origin, pathname)
+      if (hostLength > rootHostLength || pathLength > rootPathLength) {
+        root = candidate
+        rootHostLength = hostLength
+        rootPathLength = pathLength
+      }
+    }
     if (root === undefined) others.push(url)
     else root.children.push(url)
   }
   for (const root of roots) {
     if (root.children.length === 0) continue
     const sub = branch(`Sub Target · ${root.children.length}`, 'sub')
-    for (const url of root.children) addPath(sub, url, root.url)
+    for (const url of root.children) addPath(sub, url, root.origin, root.basePath)
     root.node.children.set('sub', sub)
   }
   const targets = branch(`Target · ${roots.length}`, 'target')
@@ -86,6 +115,8 @@ function targetBranches(urls: readonly TargetUrl[]): Branch[] {
 
 /**
  * Group explicit targets, matching hosts/subdomains, and unrelated URLs into folder branches.
+ * Host matches rank by hostname length, then matching same-origin path length.
+ * Equal scores keep the first root.
  * @param urls - Normalized session URL observations.
  * @returns Display-only lines; host matching never authorizes tool execution.
  */
@@ -158,7 +189,8 @@ export class TargetsPane extends VStack {
       const selected = this.focused && this.selected === row.key
       const marker = row.expandable ? this.collapsed.has(row.key) ? '▸' : '▾' : ' '
       const text = truncateToWidth(`${selected ? '›' : ' '} ${row.prefix}${marker} ${row.label}`, Math.max(0, width - 4))
-      return truncateToWidth(`${style.muted('│')} ${(selected ? style.accent : style.toolName)(text)}${' '.repeat(Math.max(0, width - visibleWidth(text) - 3))}${style.muted('│')}`, width)
+      const line = `${style.muted('│')} ${(selected ? style.accent : style.toolName)(text)}${' '.repeat(Math.max(0, width - visibleWidth(text) - 3))}${style.muted('│')}`
+      return width < 3 ? truncateToWidth(line, width) : line
     })
     this.renderedRows = { rows: this.rows, width, focused: this.focused, selected: this.selected, lines }
     return lines

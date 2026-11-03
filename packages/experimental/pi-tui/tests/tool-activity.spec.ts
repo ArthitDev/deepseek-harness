@@ -1,11 +1,12 @@
 import { stripVTControlCharacters } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Text, TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tui'
+import { Text, TuiAltScreen, visibleWidth, type Component, type Terminal } from '@earendil-works/pi-tui'
 import { JobId, type JobView } from '@deepseek-ai/dsh-jobs'
 import type { ActivityEntry } from '../src/core/activity.ts'
 import type { ToolCardStatus } from '../src/core/model.ts'
 import { ToolActivityPane } from '../src/ui/tool-activity.ts'
 import { TargetIndex } from '../src/core/targets.ts'
+import { TargetsPane } from '../src/ui/targets-pane.ts'
 import { style } from '../src/ui/theme.ts'
 
 function call(id: number, status: ToolCardStatus = 'running'): ActivityEntry {
@@ -46,6 +47,21 @@ function fixture(pane: ToolActivityPane, width = 46, rows = 100) {
 function text(pane: ToolActivityPane, width = 46): string {
   const { tui, frame } = fixture(pane, width)
   try { return frame() } finally { tui.stop() }
+}
+
+function targetPaneWithUnicodeRows(): TargetsPane {
+  const owner: Component & { focused: boolean } = { focused: false, invalidate() {}, render: () => [] }
+  const pane = new TargetsPane(owner)
+  const root = 'https://example.test/ไทย/漢字/😀/'
+  pane.update([
+    { url: root, primary: true },
+    { url: `${root}ascii/alpha`, primary: false },
+    { url: `${root}ascii/beta/gamma`, primary: false },
+    { url: `${root}ไทย/二`, primary: false },
+    { url: `${root}漢字/二`, primary: false },
+    { url: `${root}emoji/😂`, primary: false },
+  ])
+  return pane
 }
 
 describe('agent tool activity', () => {
@@ -167,6 +183,43 @@ describe('agent tool activity', () => {
       pane.update([])
       expect(frame()).not.toContain('Targets')
     } finally { tui.stop() }
+  })
+
+  it('preserves complete Target rows across narrow widths and avoids redundant wide clipping', () => {
+    const pane = targetPaneWithUnicodeRows()
+    const widths = [0, 1, 2, 3, 4, 5, 6, 46]
+    const fullRows: Record<string, string[]> = {}
+    const capture = (state: string): void => {
+      for (const width of widths) fullRows[`${state}, width ${width}`] = pane.render(width)
+    }
+
+    const muted = vi.spyOn(style, 'muted').mockImplementation(value => `\x1b[90m${value}\x1b[39m`)
+    const toolName = vi.spyOn(style, 'toolName').mockImplementation(value => `\x1b[36;1m${value}\x1b[39;22m`)
+    const accent = vi.spyOn(style, 'accent').mockImplementation(value => `\x1b[31m${value}\x1b[39m`)
+    const segment = vi.spyOn(Intl.Segmenter.prototype, 'segment')
+    try {
+      capture('unfocused')
+      pane.focused = true
+      pane.handleInput('\x1b[B')
+      pane.handleInput('\x1b[B')
+      capture('selected')
+      pane.handleInput('\r')
+      capture('collapsed')
+      pane.handleInput('\r')
+      capture('expanded')
+      expect(fullRows).toMatchSnapshot('complete Target rows across widths and states')
+
+      segment.mockClear()
+      const measuredPane = targetPaneWithUnicodeRows()
+      measuredPane.render(46)
+      const borderedRuns = segment.mock.calls.filter(([value]) => value === '│').length
+      expect(borderedRuns).toBe(0)
+    } finally {
+      segment.mockRestore()
+      accent.mockRestore()
+      toolName.mockRestore()
+      muted.mockRestore()
+    }
   })
 
   it('reuses rendered Target rows while the URL snapshot and render state stay unchanged', () => {

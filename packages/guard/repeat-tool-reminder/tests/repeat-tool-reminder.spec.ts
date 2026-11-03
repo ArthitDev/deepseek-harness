@@ -74,12 +74,51 @@ describe('threshold escalation', () => {
 
     const found = reminders(agent)
     expect(found).toHaveLength(2)
-    expect(found[0]!.text).toContain('repeating the exact same tool call')
+    expect(found[0]!.text).toBe('Repeated tool call detected. Compare the previous result with earlier results before deciding whether to call again.')
     expect(found[0]!.source).toEqual(guardSource('probe', 3))
-    expect(found[1]!.text).toContain('consecutive_calls: 5')
-    expect(found[1]!.text).toContain('- tool: probe')
-    expect(found[1]!.text).toContain('{"q":"same"}')
+    expect(found[1]!.text).toBe([
+      'Repeated tool call detected:',
+      '- tool: probe',
+      '- consecutive_calls: 5',
+      '- arguments: {"q":"same"}',
+      'Compare each result with earlier results and verify whether the task state changed. For work expected to take time, use the available status or wait operation and check again when appropriate; repeated status results may mean work is still pending. If a failure repeats, or results show the current approach cannot advance the task, diagnose the cause and try an evidence-backed alternative; cosmetic argument changes are not progress. Before retrying a state-changing action with an uncertain outcome, inspect current state to avoid duplicate effects. Continue authorized work while evidence shows a path forward. Finish only after verifying the task outcome; report a concrete blocker only when no safe path remains.',
+    ].join('\n'))
     expect(found[1]!.source).toEqual(guardSource('probe', 5))
+  })
+
+  it('keeps repeated status polling available and preserves each raw result', async () => {
+    const ctx = await harness({ thresholds: [2, 3] })
+    ctx.tools.register(defineContentToolFixture({
+      name: 'status',
+      description: 'Check whether work has finished.',
+      parameters: {},
+      async execute() { return [{ type: 'text', text: 'Still running.' }] },
+    }))
+    ctx.llm.registerAdapter(['mock'], new MockAdapter([
+      toolCallResponse('c1', 'status', {}),
+      toolCallResponse('c2', 'status', {}),
+      toolCallResponse('c3', 'status', {}),
+      textResponse('The work is still running.'),
+    ]))
+    const agent = await ctx.agentLoop.create(SessionId('status-poll'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Check the ongoing work.' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const results = agent.session.snapshotEvents()
+      .filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
+    expect(results).toHaveLength(3)
+    expect(results.map(result => result.data.message.content)).toEqual(
+      Array.from({ length: 3 }, () => [{ type: 'text', text: 'Still running.' }]),
+    )
+    const found = reminders(agent)
+    expect(found.map(reminder => reminder.text)).toHaveLength(2)
+    expect(found[0]!.text).toContain('Compare the previous result with earlier results')
+    expect(found[1]!.text).toContain('- consecutive_calls: 3')
+    expect(found[1]!.text).toContain('repeated status results may mean work is still pending')
+    expect(found.map(reminder => reminder.source)).toEqual([
+      guardSource('status', 2),
+      guardSource('status', 3),
+    ])
   })
 
   it('keys the gentle text to thresholds[0], not the literal 3', async () => {
@@ -95,7 +134,7 @@ describe('threshold escalation', () => {
 
     const found = reminders(agent)
     expect(found).toHaveLength(2)
-    expect(found[0]!.text).toContain('repeating the exact same tool call') // gentle at 2
+    expect(found[0]!.text).toBe('Repeated tool call detected. Compare the previous result with earlier results before deciding whether to call again.') // gentle at 2
     expect(found[1]!.text).toContain('consecutive_calls: 4') // detailed at 4
   })
 })
@@ -159,7 +198,7 @@ describe('chain semantics', () => {
 
     const found = reminders(agent)
     expect(found).toHaveLength(1)
-    expect(found[0]!.text).toContain('repeating the exact same tool call')
+    expect(found[0]!.text).toContain('Compare the previous result with earlier results')
   })
 
   it('include patterns track only matching tools (wildcard star)', async () => {
@@ -180,7 +219,7 @@ describe('chain semantics', () => {
 
     const found = reminders(agent)
     expect(found).toHaveLength(1)
-    expect(found[0]!.text).toContain('repeating the exact same tool call')
+    expect(found[0]!.text).toContain('Compare the previous result with earlier results')
   })
 
   it('escapes regex metacharacters in patterns (a dot matches only a literal dot)', async () => {
@@ -339,7 +378,7 @@ describe('fold onto the downstream decision', () => {
     // Only the repeated call adds guard context; downstream source fields survive.
     expect(found[0]!.text).toBe('downstream-ctx')
     expect(found[0]!.source).toEqual({ kind: 'test' })
-    expect(found[1]!.text).toContain('repeating the exact same tool call')
+    expect(found[1]!.text).toContain('Compare the previous result with earlier results')
     expect(found[1]!.source).toEqual(guardSource('probe', 2))
     expect(found[2]).toEqual({ text: 'downstream-ctx', source: { kind: 'test' } })
     // The block's feedback reached the tool result unchanged.
@@ -366,7 +405,7 @@ describe('fold onto the downstream decision', () => {
 
     const found = reminders(agent)
     expect(found).toHaveLength(1)
-    expect(found[0]!.text).toContain('repeating the exact same tool call')
+    expect(found[0]!.text).toContain('Compare the previous result with earlier results')
     const results = agent.session.snapshotEvents().filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
     expect(results[1]!.data.message.content).toEqual([{ type: 'text', text: 'replaced' }])
   })

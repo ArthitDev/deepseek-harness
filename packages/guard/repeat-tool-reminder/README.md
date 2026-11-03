@@ -124,7 +124,7 @@ At the first configured consecutive-repeat threshold, that agent receives the re
 ##### First-threshold reminder
 
 ```markdown
-You are repeating the exact same tool call with identical arguments. Carefully analyze the previous result before calling again: if the task is not complete, try a different approach or different arguments instead of repeating the call.
+Repeated tool call detected. Compare the previous result with earlier results before deciding whether to call again.
 ```
 
 #### Token effect
@@ -148,7 +148,7 @@ Repeated tool call detected:
 - tool: <toolName>
 - consecutive_calls: <count>
 - arguments: <canonicalArguments>
-The repeated calls are not making progress. Do not call this tool with these exact arguments again. Inspect the latest result and choose a different action, different arguments, or finish the task if enough evidence has been gathered.
+Compare each result with earlier results and verify whether the task state changed. For work expected to take time, use the available status or wait operation and check again when appropriate; repeated status results may mean work is still pending. If a failure repeats, or results show the current approach cannot advance the task, diagnose the cause and try an evidence-backed alternative; cosmetic argument changes are not progress. Before retrying a state-changing action with an uncertain outcome, inspect current state to avoid duplicate effects. Continue authorized work while evidence shows a path forward. Finish only after verifying the task outcome; report a concrete blocker only when no safe path remains.
 ```
 
 #### Token effect
@@ -166,7 +166,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 These limits define when the guard is a poor fit. They are current package constraints, not a task backlog.
 
-- **Exact-match detection only** — canonicalization is a deep key-sort, so near-identical variants (a tweaked path, extra whitespace inside a value) evade the chain; fuzzy matching is rejected pending evidence of need.
+- **Exact-match detection only** — canonicalization is a deep key-sort, so near-identical variants (a tweaked path, extra whitespace inside a value) evade the chain. The detector does not assess semantic progress or classify polling and failures; reminders only guide the model.
 - **Compaction does not reset chains** — a chain spanning a compaction checkpoint keeps counting.
 - **Advisory only** — escalating to a blocking form at a high threshold is not implemented, though `PostToolDecision` already supports blocking.
 - **No subagent chain-sharing** — chains stay isolated per agent; a parent and its subagent repeating the same call never combine.

@@ -1,0 +1,16 @@
+# Keep machine-local instructions, skill libraries, and knowledge out of this prompt fixture.
+- id: agent-instructions
+  config:
+    maxBytes: 65536
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots: []

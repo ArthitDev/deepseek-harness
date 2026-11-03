@@ -109,6 +109,11 @@ export async function apply(ctx: Context): Promise<void> {
       const expected = agent.session.deriveMessages().filter(message => message.role === 'system')
       assert.equal(expected.length, 2)
       assert.deepEqual(options.messages.filter(message => message.role === 'system'), expected)
+      const instruction = options.messages.at(-1)
+      assert.equal(instruction?.role, 'user')
+      const text = instruction?.content.find(block => block.type === 'text')
+      assert(text?.type === 'text' && text.text.includes('A start acknowledgement is not completion'))
+      assert(text?.type === 'text' && text.text.includes('make inspecting current state a prerequisite to retrying'))
     }
     return next()
   })
