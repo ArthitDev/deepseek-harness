@@ -1,0 +1,115 @@
+{
+  "executions": [
+    {
+      "timestamp": "2026-10-25T18:13:53.460Z",
+      "hash": "test01",
+      "language": "python",
+      "environment": "windows",
+      "success": true,
+      "exitCode": 0,
+      "duration": 44,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test01_2026-10-25T18-13-53-414Z.py",
+      "outputPreview": "SB Executor online\r\nPython 3.13\r\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:13:56.938Z",
+      "hash": "test02",
+      "language": "bash",
+      "environment": "kali",
+      "success": false,
+      "exitCode": 1,
+      "duration": 82,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test02_2026-10-25T18-13-53-461Z.sh",
+      "outputPreview": "chmod: cannot access '/mnt/e/Prompt-Jail/exec-workspace/sb_test02_2026-10-25T18-13-53-461Z.sh': No such file or directory\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:13:57.116Z",
+      "hash": "test03",
+      "language": "python",
+      "environment": "kali",
+      "success": false,
+      "exitCode": 2,
+      "duration": 79,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test03_2026-10-25T18-13-56-940Z.py",
+      "outputPreview": "python3: can't open file '/mnt/e/Prompt-Jail/exec-workspace/sb_test03_2026-10-25T18-13-56-940Z.py': [Errno 2] No such file or directory\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:13:57.360Z",
+      "hash": "test04",
+      "language": "powershell",
+      "environment": "windows",
+      "success": true,
+      "exitCode": 0,
+      "duration": 242,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test04_2026-10-25T18-13-57-116Z.ps1",
+      "outputPreview": "MSI-CYBORG-15-N\r\n7.6.7\r\nMicrosoft Windows NT 10.0.26300.0\r\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:14:00.385Z",
+      "hash": "test05",
+      "language": "python",
+      "environment": "windows",
+      "success": false,
+      "exitCode": null,
+      "duration": 3023,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test05_2026-10-25T18-13-57-361Z.py",
+      "outputPreview": ""
+    },
+    {
+      "timestamp": "2026-10-25T18:14:50.429Z",
+      "hash": "test01",
+      "language": "python",
+      "environment": "windows",
+      "success": true,
+      "exitCode": 0,
+      "duration": 41,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test01_2026-10-25T18-14-50-382Z.py",
+      "outputPreview": "SB Executor online\r\nPython 3.13\r\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:14:51.327Z",
+      "hash": "test02",
+      "language": "bash",
+      "environment": "kali",
+      "success": true,
+      "exitCode": 0,
+      "duration": 85,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test02_2026-10-25T18-14-50-430Z.sh",
+      "outputPreview": "Kali online\nLinux MSI-Cyborg-15-NB 6.6.87.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Mon Apr 21 17:08:54 UTC 2025 x86_64 GNU/Linux\n/usr/bin/nmap\n/usr/bin/sqlmap\n/usr/bin/hydra\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:14:51.580Z",
+      "hash": "test03",
+      "language": "python",
+      "environment": "kali",
+      "success": true,
+      "exitCode": 0,
+      "duration": 149,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test03_2026-10-25T18-14-51-328Z.py",
+      "outputPreview": "nmap module: OK\nscapy module: OK\nsqlmap binary: /usr/bin/sqlmap\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:14:51.831Z",
+      "hash": "test04",
+      "language": "powershell",
+      "environment": "windows",
+      "success": true,
+      "exitCode": 0,
+      "duration": 246,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test04_2026-10-25T18-14-51-581Z.ps1",
+      "outputPreview": "MSI-CYBORG-15-N\r\n7.6.7\r\nMicrosoft Windows NT 10.0.26300.0\r\n"
+    },
+    {
+      "timestamp": "2026-10-25T18:14:54.842Z",
+      "hash": "test05",
+      "language": "python",
+      "environment": "windows",
+      "success": false,
+      "exitCode": null,
+      "duration": 3010,
+      "file": "E:\\Cybersecure-Pentest\\deepseek-harness\\scripts\\exec-workspace\\sb_test05_2026-10-25T18-14-51-831Z.py",
+      "outputPreview": ""
+    }
+  ],
+  "feedback": []
+}
