@@ -314,7 +314,7 @@
       "time": 0,
       "data": {
         "sessionId": "{{parent}}",
-        "sessionFormatVersion": 4,
+        "sessionFormatVersion": 5,
         "throughSeq": 19
       }
     },
@@ -542,7 +542,7 @@
       "time": 0,
       "data": {
         "sessionId": "{{parent}}",
-        "sessionFormatVersion": 4,
+        "sessionFormatVersion": 5,
         "throughSeq": 27
       }
     },
@@ -740,7 +740,7 @@
       "time": 0,
       "data": {
         "sessionId": "{{parent}}",
-        "sessionFormatVersion": 4,
+        "sessionFormatVersion": 5,
         "throughSeq": 33
       }
     },
@@ -973,7 +973,7 @@
       "time": 0,
       "data": {
         "sessionId": "{{parent}}",
-        "sessionFormatVersion": 4,
+        "sessionFormatVersion": 5,
         "throughSeq": 41
       }
     },
@@ -1178,7 +1178,7 @@
       "time": 0,
       "data": {
         "sessionId": "{{parent}}",
-        "sessionFormatVersion": 4,
+        "sessionFormatVersion": 5,
         "throughSeq": 48
       }
     },
@@ -1422,7 +1422,7 @@
       "time": 0,
       "data": {
         "sessionId": "{{parent}}",
-        "sessionFormatVersion": 4,
+        "sessionFormatVersion": 5,
         "throughSeq": 59
       }
     },
@@ -2055,7 +2055,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{parent}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 19
           }
         }
@@ -2331,7 +2331,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{parent}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 27
           }
         }
@@ -2565,7 +2565,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{parent}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 33
           }
         }
@@ -2846,7 +2846,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{parent}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 41
           }
         }
@@ -3263,7 +3263,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.\n\nApproval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).\n\nYou are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
+                "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.\n\nApproval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).\n\nDelegation context: this session has a fixed permission scope that cannot be widened from inside the session. Operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
               }
             ],
             "source": {
@@ -3280,7 +3280,7 @@
                 },
                 {
                   "name": "subagent:delegation",
-                  "text": "You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
+                  "text": "Delegation context: this session has a fixed permission scope that cannot be widened from inside the session. Operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
                 }
               ]
             },
@@ -3373,7 +3373,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{child-1}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 16
           }
         }
@@ -3624,7 +3624,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{parent}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 48
           }
         }
@@ -4072,7 +4072,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.\n\nApproval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).\n\nYou are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
+                "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.\n\nApproval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).\n\nDelegation context: this session has a fixed permission scope that cannot be widened from inside the session. Operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
               }
             ],
             "source": {
@@ -4089,7 +4089,7 @@
                 },
                 {
                   "name": "subagent:delegation",
-                  "text": "You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
+                  "text": "Delegation context: this session has a fixed permission scope that cannot be widened from inside the session. Operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it."
                 }
               ]
             },
@@ -4182,7 +4182,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{child-2}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 16
           }
         }
@@ -4464,7 +4464,7 @@
           "time": 0,
           "data": {
             "sessionId": "{{parent}}",
-            "sessionFormatVersion": 4,
+            "sessionFormatVersion": 5,
             "throughSeq": 59
           }
         }

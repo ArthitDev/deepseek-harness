@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import shutil
 import subprocess
 import threading
 import time
@@ -23,7 +24,7 @@ NotificationFilter: TypeAlias = Callable[[Notification], bool]
 
 @dataclass(slots=True)
 class HarnessConfig:
-    """Configuration for launching the local Shield Break Harness SDK runtime."""
+    """Launch a local SDK runtime; a .js dsh_bin requires Node on the child PATH."""
 
     dsh_bin: str | None = None
     profile: str = "sdk"
@@ -466,7 +467,14 @@ class HarnessClient:
                 ) from exc
             base = resolve_bundled_launch_args()
         else:
-            base = (str(Path(self.config.dsh_bin).expanduser().resolve()),)
+            executable = Path(self.config.dsh_bin).expanduser().resolve()
+            if executable.suffix == ".js":
+                node = shutil.which("node", path=env.get("PATH"))
+                if node is None:
+                    raise FileNotFoundError("a JavaScript dsh_bin requires Node.js (>=22.19) on PATH")
+                base = (node, str(executable))
+            else:
+                base = (str(executable),)
 
         if self.config.dsh_home is not None:
             if not self.config.dsh_home.strip():

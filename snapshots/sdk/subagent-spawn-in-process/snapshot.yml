@@ -5,3 +5,4 @@ composition: sdk-default
 recording: live
 header:
   class: sdk-default
+  childSystemPrompts: [1]

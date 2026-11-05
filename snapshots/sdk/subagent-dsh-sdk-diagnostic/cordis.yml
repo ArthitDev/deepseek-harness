@@ -28,13 +28,15 @@
       config:
         providerName: dsh-sdk-diagnostic
         profile: sdk
-        patches:
-          - !!js process.env.DSH_TEST_CHILD_PATCH
+        dshBin: !!js process.env.DSH_TEST_SDK_BIN
+        patches: !!js "[...(process.env.DSH_TEST_SDK_SOURCE_PATCH ? [process.env.DSH_TEST_SDK_SOURCE_PATCH] : []), process.env.DSH_TEST_CHILD_PATCH]"
         dshHome: !!js dshHomePath('children/foreground')
         provider: mock
         model: mock-echo
         env:
           DSH_TELEMETRY_DISABLED: '1'
+          NODE_OPTIONS: !!js process.env.DSH_TEST_SDK_NODE_OPTIONS ?? ''
+          TSX_TSCONFIG_PATH: !!js process.env.DSH_TEST_SDK_TSCONFIG ?? ''
           DSH_TEST_CHILD_FAILURE: '1'
     - id: tool-subagent-dsh-sdk-diagnostic
       name: '@deepseek-ai/dsh-tool-subagent'
@@ -48,13 +50,15 @@
       config:
         providerName: dsh-sdk-diagnostic-background
         profile: sdk
-        patches:
-          - !!js process.env.DSH_TEST_CHILD_PATCH
+        dshBin: !!js process.env.DSH_TEST_SDK_BIN
+        patches: !!js "[...(process.env.DSH_TEST_SDK_SOURCE_PATCH ? [process.env.DSH_TEST_SDK_SOURCE_PATCH] : []), process.env.DSH_TEST_CHILD_PATCH]"
         dshHome: !!js dshHomePath('children/background')
         provider: mock
         model: mock-echo
         env:
           DSH_TELEMETRY_DISABLED: '1'
+          NODE_OPTIONS: !!js process.env.DSH_TEST_SDK_NODE_OPTIONS ?? ''
+          TSX_TSCONFIG_PATH: !!js process.env.DSH_TEST_SDK_TSCONFIG ?? ''
           DSH_TEST_CHILD_FAILURE: '1'
           FAKE_INIT_GO: .dsh-sdk-background-release
     - id: tool-subagent-dsh-sdk-diagnostic-background

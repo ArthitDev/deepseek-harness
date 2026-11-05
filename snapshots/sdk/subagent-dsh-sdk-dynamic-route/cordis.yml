@@ -28,12 +28,15 @@
       name: '@deepseek-ai/dsh-subagent-dsh-sdk'
       config:
         profile: sdk
+        dshBin: !!js process.env.DSH_TEST_SDK_BIN
         patches: !!js JSON.parse(process.env.DSH_TEST_CHILD_PATCHES ?? '[]')
         dshHome: !!js process.env.DSH_TEST_CHILD_HOME
         provider: mock
         model: mock-routed
         env:
           DSH_TELEMETRY_DISABLED: '1'
+          NODE_OPTIONS: !!js process.env.DSH_TEST_SDK_NODE_OPTIONS ?? ''
+          TSX_TSCONFIG_PATH: !!js process.env.DSH_TEST_SDK_TSCONFIG ?? ''
 
     - id: subagent-model-selection-settings
       name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'

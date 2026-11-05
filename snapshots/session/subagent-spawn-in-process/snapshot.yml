@@ -5,3 +5,4 @@ composition: default
 recording: live
 header:
   class: default
+  childSystemPrompts: [1]

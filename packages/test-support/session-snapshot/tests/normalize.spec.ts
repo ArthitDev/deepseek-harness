@@ -1043,6 +1043,22 @@ describe('normalizeSessionSnapshot', () => {
 })
 
 describe('tokenizeSessionFixtureCwd', () => {
+  it('preserves the file URI prefix for Windows workspace and file paths', () => {
+    const cwd = String.raw`C:\Users\runner\AppData\Local\Temp\acp-snap-cwd-abc123`
+    const uri = `file:///${cwd.replaceAll('\\', '/')}`
+    const raw = [
+      JSON.stringify({ type: 'session', id: 's', createdAt: 1, cwd }),
+      JSON.stringify({ type: 'tool/result', data: { text: `Workspace ${uri}\nFile ${uri}/subject.ts\nOther file:///C:/authored.txt` } }),
+      '',
+    ].join('\n')
+
+    const out = tokenizeSessionFixtureCwd(raw)
+    const result = JSON.parse(out.split('\n')[1]!) as { data: { text: string } }
+    expect(result.data.text)
+      .toBe('Workspace file://{{cwd}}\nFile file://{{cwd}}/subject.ts\nOther file:///C:/authored.txt')
+    expect(tokenizeSessionFixtureCwd(out)).toBe(out)
+  })
+
   it.each([
     {
       name: 'macOS',

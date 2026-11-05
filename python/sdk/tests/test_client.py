@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import inspect
+import shutil
 import sys
 import threading
 import time
@@ -1135,6 +1136,53 @@ def test_client_default_launch_uses_bundled_dsh_sdk_profile_and_explicit_home(
         "DSH_HOME": str(home),
         "DSH_CORDIS_CONFIG": None,
     }
+
+
+def test_client_launches_javascript_dsh_with_profile_home_and_ordered_patches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("JavaScript CLI launch requires Node on PATH")
+    directory = tmp_path / "runtime with spaces"
+    directory.mkdir()
+    (directory / "package.json").write_text('{"type":"module"}')
+    script = directory / "bin.js"
+    script.write_text("""
+import { createInterface } from 'node:readline'
+for await (const line of createInterface({ input: process.stdin })) {
+    const message = JSON.parse(line)
+    const result = message.method === 'initialize'
+        ? { serverInfo: { name: JSON.stringify({ argv: process.argv.slice(2), home: process.env.DSH_HOME }) } }
+        : {}
+    console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
+    if (message.method === 'shutdown') break
+}
+""", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    home = tmp_path / "home 中文"
+    patches = ("first patch.yml", "last patch.yml")
+    with HarnessClient(HarnessConfig(
+        dsh_bin="runtime with spaces/bin.js", profile="custom", dsh_home=str(home), patches=patches,
+    )) as client:
+        result = client.initialize(provider="deepseek-official", cwd=str(tmp_path), model="test")
+    assert json.loads(result.serverInfo.name) == {
+        "argv": ["--profile", "custom", "--patch", str(tmp_path / patches[0]), "--patch", str(tmp_path / patches[1])],
+        "home": str(home),
+    }
+
+
+def test_javascript_dsh_requires_node_on_the_child_path(tmp_path: Path) -> None:
+    client = HarnessClient(HarnessConfig(
+        dsh_bin=str(tmp_path / "bin.js"), dsh_home=str(tmp_path / "home"), env={"PATH": str(tmp_path)},
+    ))
+    with pytest.raises(FileNotFoundError, match="JavaScript dsh_bin requires Node.js"):
+        client.start()
+    assert client._proc is None
+
+
+def test_native_dsh_does_not_require_node(tmp_path: Path) -> None:
+    client = HarnessClient(HarnessConfig(dsh_bin=sys.executable, dsh_home=str(tmp_path)))
+    assert client._default_launch_args({"PATH": str(tmp_path)}) == (sys.executable, "--profile", "sdk")
 
 
 def test_client_accepts_explicit_environment_dsh_home(

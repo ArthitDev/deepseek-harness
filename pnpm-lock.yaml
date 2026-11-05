@@ -58,6 +58,9 @@ importers:
       '@deepseek-ai/dsh-skill-office':
         specifier: workspace:*
         version: link:packages/skill/skill-office
+      '@deepseek-ai/dsh-subagent-dsh-sdk':
+        specifier: workspace:*
+        version: link:packages/subagent/subagent-dsh-sdk
       '@deepseek-ai/dsh-tool-session-query':
         specifier: workspace:*
         version: link:packages/session-query/tool-session-query

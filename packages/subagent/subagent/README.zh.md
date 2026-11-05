@@ -157,6 +157,32 @@ kind: "package-reference"
 
 在父级中仅追加：通知位于其可复用请求前缀之后。到达空闲父级会启动一次独立的模型请求，到达繁忙父级则不会。
 
+### 子级报告指引
+
+#### 模型看到什么
+
+每个进程内 spawn 或 fork 子 agent 都会收到下方作用域内的 `subagent:reporting` 系统提示词 section，适用于一次性运行及可继续的 Activation，包括冷恢复。父 agent 不会收到该 section。报告指引保留任务要求的响应格式，不验证或认证子 agent 的陈述。
+
+##### 报告 section
+
+```markdown
+When returning delegated work, give your parent a self-contained result in the requested format. Include, as applicable:
+- Outcome: what you completed, the files changed, and the findings relevant to the assigned success criteria.
+- Evidence: sources and exact check commands or methods, passed/failed/unrun status, observed results, and the revision or file state checked.
+- Remaining work: unfinished requirements, unresolved failures, assumptions, and concrete blockers. Keep verified facts separate from inferences and reports.
+- Ongoing or uncertain actions: job or subagent IDs, last observed status, output locations, and how to check them when known. Mark unknown outcomes explicitly so the parent can inspect current state before retrying.
+A successful tool call or launch acknowledgement alone does not establish task completion. Do not present partial or unchecked work as verified success.
+Follow the requested output format or structured-output schema; include these details only where that format allows, without adding unsupported fields.
+```
+
+#### Token 影响
+
+每个进程内子 agent 的系统提示词中增加一个固定 section；父 agent 中没有额外 section。
+
+#### KV Cache 影响
+
+子级请求未变化及冷恢复时保持稳定。fork 子 agent 的系统提示词与父级不同，因此继承对话并不保证复用父级完整的缓存前缀。
+
 ### 子级委派范围声明
 
 #### 模型看到什么

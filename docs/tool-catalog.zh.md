@@ -1913,7 +1913,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `subagent`
 
-将一项自包含任务委派给 subagent（在自身上下文中工作的独立 agent），用它卸载聚焦且独立的工作，例如研究、限定范围的实现或分析，以免消耗当前对话的上下文。subagent 会返回结果，但不会返回中间步骤。请提供完整、独立的提示词，因为它看不到当前对话。此调用默认等待结果。设置 `run_in_background: true` 可返回 job id；使用 `job_output` 收集结果，使用 `job_kill` 停止任务。
+将一项自包含任务委派给 subagent（在自身上下文中工作的独立 agent），用它卸载聚焦且独立的工作，例如研究、限定范围的实现或分析，以免消耗当前对话的上下文。subagent 会返回结果，但不会返回中间步骤。请提供完整、独立的提示词，因为它看不到当前对话。将返回的报告视为需要评估的证据，与指定的成功标准及当前来源或工作区状态核对。解决相互矛盾的发现；集成修改影响检查对象时，重新执行相关检查。一次运行完成本身不代表任务已验证。针对报告中的缺口采取行动：处理未满足的标准，调查意外失败的检查，并执行任务仍需的检查。向可继续子级发送聚焦的后续任务，说明缺失的证据或需要的修正。操作结果不确定时，重试前先检查当前状态；继续不依赖尚未明确结果的工作。此调用默认等待结果。设置 `run_in_background: true` 可返回 job id；使用 `job_output` 收集结果，使用 `job_kill` 停止任务。
 
 ```json
 {
@@ -1925,7 +1925,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "prompt": {
       "type": "string",
-      "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
+      "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. For each check, request the exact command or method, passed/failed/unrun status, observed result, and the revision or file state checked. Distinguish verified findings from assumptions, and list unfinished work and uncertain action outcomes so the parent can continue without repeating effects. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
     },
     "run_in_background": {
       "type": "boolean",

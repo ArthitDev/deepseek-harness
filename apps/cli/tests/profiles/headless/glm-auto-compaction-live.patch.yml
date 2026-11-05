@@ -1,0 +1,47 @@
+# Opt-in live GLM automatic pressure compaction evaluation.
+
+- id: agent-default-model
+  config:
+    provider: zai
+    model: glm-5.3-flash
+
+- id: compaction-basic
+  config:
+    auto: false
+    thresholdRatio: 0.8
+    headroomTokens: 0
+    maxTokens: 8192
+    retainTokens: 0
+    compactionRetries: 0
+
+- id: session-title-llm
+  disabled: true
+
+# Exercise summarization even when a model-free prune would clear the threshold.
+- id: tool-result-pruner
+  disabled: true
+
+- id: agent-instructions
+  config:
+    maxBytes: 0
+    projectRootMarkers: []
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    knowledgeRoots: []
+
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+
+- insert:
+    - id: compaction-glm-auto-observer
+      name: ./tests/fixtures/compaction-glm-auto-observer.ts

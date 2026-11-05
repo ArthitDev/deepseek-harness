@@ -17,6 +17,17 @@ import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import * as LlmRetry from '@deepseek-ai/dsh-llm-retry'
 import { Session, SessionId, type SessionEvent, type SurfaceEvent } from '@deepseek-ai/dsh-session'
 
+const checkpointText = (label: string): string => [
+  `## Primary Request and Intent\n${label}`,
+  '## Key Technical Concepts\n(none)',
+  '## Files and Code\n(none)',
+  '## Errors and Fixes\n(none)',
+  '## Pending Jobs\n(none)',
+  '## Current Work\n(none)',
+  '## Next Step\n(none)',
+  '## Critical Context\n(none)',
+].join('\n')
+
 /**
  * CBR-001 regression through the real loop. A replacement checkpoint has a high
  * log seq at the surface head and carries no tool pair, so both adjacent cuts
@@ -108,7 +119,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
     if (trailing.includes('Create a structured checkpoint from the conversation above')) {
       this.summaryRequests.push(options)
       yield { type: 'block-start', index: 0, blockType: 'text' }
-      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'RECOVERY CHECKPOINT' } }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: checkpointText('RECOVERY CHECKPOINT') } }
       yield { type: 'finish', reason: { kind: 'stop' } }
       return
     }
@@ -163,7 +174,7 @@ class RouteSwitchAdapter extends LlmAdapter {
     yield {
       type: 'block-end',
       index: 0,
-      block: { type: 'text', text: summary ? 'ROUTE SWITCH CHECKPOINT' : 'continued' },
+      block: { type: 'text', text: summary ? checkpointText('ROUTE SWITCH CHECKPOINT') : 'continued' },
     }
     yield { type: 'finish', reason: { kind: 'stop' } }
   }
@@ -354,7 +365,9 @@ describe('token pressure after loop-admitted system prompts', () => {
         requests.push(options)
         yield { type: 'block-start', index: 0, blockType: 'text' }
         yield { type: 'block-end', index: 0, block: {
-          type: 'text', text: options.purpose === 'compaction' ? 'CURRENT TASK CHECKPOINT' : 'answer',
+          type: 'text', text: options.purpose === 'compaction'
+            ? checkpointText('CURRENT TASK CHECKPOINT')
+            : 'answer',
         } }
         yield { type: 'finish', reason: { kind: 'stop' } }
       }

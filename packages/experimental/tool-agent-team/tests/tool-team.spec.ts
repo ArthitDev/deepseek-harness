@@ -218,7 +218,7 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt.length).toBeGreaterThan(0)
-    expect(createHash('sha256').update(leadPrompt).digest('hex')).toMatchInlineSnapshot('"138a3512d92268523d9d2fdc0644863aacb8108ff7597df622dc34a2eeda008f"')
+    expect(createHash('sha256').update(leadPrompt).digest('hex')).toMatchInlineSnapshot('"b18a8406a20067e8b6a5b9c66b6a0902c85e299c3bb7a99fb52d0d38295e59b3"')
     expect(leadPrompt).not.toContain('Your Team role')
     expect(renderContextSnapshot(leadAssembly)).toBe('')
 
@@ -233,7 +233,10 @@ describe('dsh-tool-team', () => {
     const childAssembly = await assembly(ctx, child)
     expect(childAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
-    expect(renderPrompt(childAssembly)).toBe(leadPrompt)
+    expect(renderPrompt({ ...childAssembly, sections: childAssembly.sections.filter(section => section.name !== 'subagent:reporting') })).toBe(leadPrompt)
+    expect(childAssembly.sections.find(section => section.name === 'subagent:reporting')?.text)
+      .toContain('When returning delegated work')
+    expect(leadAssembly.sections.some(section => section.name === 'subagent:reporting')).toBe(false)
     expect(renderContextSnapshot(childAssembly)).not.toContain('team:identity')
     expect(child.session.deriveMessages().some(message => message.content.some(block =>
       block.type === 'text' && block.text === '<system-reminder>\nYou are teammate "tool-worker".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n'))).toBe(true)
@@ -254,7 +257,7 @@ describe('dsh-tool-team', () => {
 
   it.each([
     ['fresh', undefined], ['fork', undefined], ['fork', 'in-history'],
-  ] as const)('records %s teammate identity with update mode %s and keeps the wire prefix', async (mode, systemPromptUpdate) => {
+  ] as const)('records %s teammate identity with update mode %s and preserves inherited conversation', async (mode, systemPromptUpdate) => {
     const { ctx, lead, adapter } = await setup([textResponse('parent answer'), textResponse('child answer')])
     if (systemPromptUpdate !== undefined) adapter.systemPromptUpdate = systemPromptUpdate
     await runTurn(lead, 'Parent task')
@@ -268,15 +271,28 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
     const childRequest = serializeRequest(adapter.requests[1]!)
     expect(childRequest.tools).toEqual(parentRequest.tools)
-    expect(childRequest.system).toEqual(parentRequest.system)
+    expect(parentRequest.system).not.toContain('When returning delegated work')
+    const childSystem = adapter.requests[1]!.messages.filter(message => message.role === 'system').at(-1)
+    expect(childSystem?.content.some(block => block.type === 'text' && block.text.includes('When returning delegated work'))).toBe(true)
+    if (mode === 'fork' && systemPromptUpdate === 'in-history') {
+      expect(childRequest.system).toEqual(parentRequest.system)
+    } else {
+      expect(childRequest.system).toContain('When returning delegated work')
+    }
     expect(childRequest.system).not.toContain('Your Team role')
     if (mode === 'fork') {
       expect(childRequest.messages.slice(0, parentRequest.messages.length)).toEqual(parentRequest.messages)
-      expect(adapter.requests[1]!.messages.slice(0, parentHistory.length)).toEqual(parentHistory)
+      if (systemPromptUpdate === 'in-history') {
+        expect(adapter.requests[1]!.messages.slice(0, parentHistory.length)).toEqual(parentHistory)
+      } else {
+        const inheritedConversation = parentHistory.filter(message => message.role !== 'system')
+        expect(adapter.requests[1]!.messages.filter(message => message.role !== 'system').slice(0, inheritedConversation.length))
+          .toEqual(inheritedConversation)
+      }
     } else {
       expect(JSON.stringify(childRequest.messages)).not.toContain('Parent task')
     }
-    expect(childRequest.messages.at(-1)?.content.slice(0, 2)).toEqual([
+    expect(childRequest.messages.findLast(message => message.content.some(block => block.type === 'text' && block.text === 'Review the work'))?.content.slice(0, 2)).toEqual([
       { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n' },
       { type: 'text', text: 'Review the work' },
     ])
@@ -314,7 +330,7 @@ describe('dsh-tool-team', () => {
     await handle.dispose()
   })
 
-  it.each([undefined, 'in-history'] as const)('keeps a teammate fork prefix with update mode %s without a Lead correction', async (systemPromptUpdate) => {
+  it.each([undefined, 'in-history'] as const)('keeps teammate conversation with update mode %s while updating reporting guidance', async (systemPromptUpdate) => {
     const { ctx, lead, adapter } = await setup([textResponse('review done'), textResponse('lead notified'), textResponse('fork answer')])
     if (systemPromptUpdate !== undefined) adapter.systemPromptUpdate = systemPromptUpdate
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -340,8 +356,17 @@ describe('dsh-tool-team', () => {
       const fork = serializeRequest(forkRequest)
       expect(fork.tools).toEqual(original.tools)
       expect(fork.messages.slice(0, original.messages.length)).toEqual(original.messages)
-      expect(forkRequest.messages.slice(0, inheritedHistory.length)).toEqual(inheritedHistory)
-      expect(fork.messages.at(-1)?.content).toContainEqual({ type: 'text', text: 'Continue independently' })
+      if (systemPromptUpdate === 'in-history') {
+        expect(forkRequest.messages.slice(0, inheritedHistory.length)).toEqual(inheritedHistory)
+      } else {
+        const inheritedConversation = inheritedHistory.filter(message => message.role !== 'system')
+        expect(forkRequest.messages.filter(message => message.role !== 'system').slice(0, inheritedConversation.length))
+          .toEqual(inheritedConversation)
+      }
+      const currentSystem = forkRequest.messages.filter(message => message.role === 'system').at(-1)
+      expect(currentSystem?.content.some(block => block.type === 'text' && block.text.includes('When returning delegated work'))).toBe(false)
+      expect(fork.messages.findLast(message => message.role === 'user')?.content)
+        .toContainEqual({ type: 'text', text: 'Continue independently' })
       expect(JSON.stringify(fork.messages)).not.toContain('You are the Team Lead')
       expect(handle.agent.session.snapshotEvents().slice(0, seed.length)).toEqual(seed)
     } finally {

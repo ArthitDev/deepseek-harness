@@ -5,3 +5,4 @@ composition: advanced
 recording: authored
 header:
   class: advanced
+  childSystemPrompts: [1, 2]

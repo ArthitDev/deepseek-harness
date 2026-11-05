@@ -251,7 +251,7 @@ function tokenizeFixtureString(value: string, ctx: NormalizeContext, basename: s
     + String.raw`(?=$|[\\/\s<>'"()\[\]{},;:!?=])`,
     'g',
   )
-  return exact.replace(absoluteCwd, CWD).split(`/private${CWD}`).join(CWD)
+  return (basename === CWD ? exact : exact.replace(absoluteCwd, CWD)).split(`/private${CWD}`).join(CWD)
 }
 
 /** Recursively replace generated-cwd spellings while preserving every other JSON value. */
@@ -290,7 +290,10 @@ export function tokenizeSessionFixtureCwd(rawLog: string): string {
   if (basename === undefined || basename.length === 0) {
     throw new Error('acp-snapshot: cannot tokenize a cwd without a basename')
   }
-  const ctx: NormalizeContext = { sessionIds: [], cwd }
+  const ctx: NormalizeContext = {
+    sessionIds: [], cwd,
+    .../^[A-Za-z]:\\/.test(cwd) ? { cwdAliases: [`/${cwd.replaceAll('\\', '/')}`] } : {},
+  }
   return lines.map((line) => {
     if (line.trim().length === 0) return line
     return JSON.stringify(tokenizeFixtureValue(JSON.parse(line), ctx, basename))

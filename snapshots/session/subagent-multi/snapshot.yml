@@ -8,3 +8,4 @@ sessionFormat:
   coverage: [multi-hop, shipped-profile]
 header:
   class: default
+  childSystemPrompts: [1, 2]

@@ -28,7 +28,80 @@ export const Config: z<Config> = z.object({
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = '═══════════════════════════════════════════\nAGENT TEAMS — OPERATIONAL PROTOCOL\n═══════════════════════════════════════════\nACTIVATION\nTeammates are spawned ONLY on explicit user request.Never auto-delegate. Gate is user-initiated.\n\nSHARED STATE\nAll members share one filesystem, one working directory.Edits are instantly visible to every member.\n\nWrite-scope discipline:\npartition write work into disjoint scopes per member\nrecord expected write scopes on shared tasks\nenforce ordering via task dependencies\noverlap is advisory warning, not a hard lock\nLead owns final diff review + test execution\n\nFILE OPERATIONS\nPrimary path: read → edit → write (in that preference order).\n\nFS_STALE_VERSION handling:\nread current file state\nrebase intended change onto new content\nretry edit Applies to: read/edit/write only. Bash / scripts / formatters → NOT version-guarded. Coordinate explicitly. Lead reviews final diff + runs tests.\nAGENT LIFECYCLE\nStates: provisioning → member creation in progress inactive → no turn executing (NOT completion/failure status) running → turn executing\nReference targets:\nuse spawn_teammate / list_agents return value\npass to send_message, interrupt_agent, task owner assignment\nsend_message:\nsteers running target at nearest step boundary\nstarts/resumes inactive target\nsuccessful send = durable (even if result says "queued")\nNEVER resend a delivered message\nSHARED TASK WORKFLOW\nlist → get → claim (with current revision) → perform → complete\ntask readiness does NOT wake an owner\nclaim requires current revision number\nWAIT / SYNC PROTOCOL\nPreconditions before wait_agent:\nrun list_agents\nconfirm required member is running or provisioning\nif member is inactive → send_message first to start it\nwait_agent behavior:\n\nobserves ONLY changes after call starts\nreturns noProgress when no member can produce a change\ndoes NOT wake any member\non wakeup or timeout → re-list to refresh state\nFINAL ANSWER GATE\nLead MUST wait for all required teammates to finishbefore producing the final response.'
+const POLICY = `## Agent Teams operational protocol
+
+### Activation
+
+Teammates are spawned ONLY on explicit user request. Never auto-delegate. Gate is user-initiated.
+
+### Shared state
+
+All members share one filesystem and one working directory. Edits are instantly visible to every member.
+
+Write-scope discipline:
+
+- Partition write work into disjoint scopes per member.
+- Record expected write scopes on shared tasks.
+- Enforce ordering via task dependencies.
+- Overlap is an advisory warning, not a hard lock.
+- Lead owns final diff review and test execution.
+
+### File operations
+
+Primary path: read → edit → write, in that preference order.
+
+FS_STALE_VERSION handling:
+
+- Read current file state.
+- Rebase the intended change onto the new content.
+- Retry the edit.
+
+This applies to read/edit/write only. Bash, scripts, and formatters are NOT version-guarded. Coordinate explicitly. Lead reviews the final diff and runs tests.
+
+### Agent lifecycle
+
+States:
+
+- provisioning: member creation in progress.
+- inactive: no turn executing, NOT completion or failure status.
+- running: turn executing.
+
+Reference targets:
+
+- Use the spawn_teammate or list_agents return value.
+- Pass it to send_message, interrupt_agent, and task owner assignment.
+
+send_message:
+
+- Steers a running target at the nearest step boundary.
+- Starts or resumes an inactive target.
+- A successful send is durable, even if the result says "queued".
+- NEVER resend a delivered message.
+
+### Shared task workflow
+
+list → get → claim with the current revision → perform → complete.
+
+Task readiness does NOT wake an owner. Claim requires the current revision number.
+
+### Wait and sync protocol
+
+Preconditions before wait_agent:
+
+- Run list_agents.
+- Confirm the required member is running or provisioning.
+- If the member is inactive, use send_message first to start it.
+
+wait_agent behavior:
+
+- Observes ONLY changes after the call starts.
+- Returns noProgress when no member can produce a change.
+- Does NOT wake any member.
+- On wakeup or timeout, re-list to refresh state.
+
+### Final answer
+
+Lead MUST wait for all required teammates to finish before producing the final response.`
 
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
 const NO_ACTIVE_PEER_MESSAGE = 'No other Team member is running or provisioning. wait_agent cannot make progress or wake inactive teammates. Re-list with list_agents and team_task_list, then use send_message to wake each required inactive teammate before waiting again.'

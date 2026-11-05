@@ -1,0 +1,9 @@
+# Ordinary SDK recordings retain one shell catalog on every host.
+- id: tool-bash
+  disabled: false
+- id: bash-sandbox
+  disabled: false
+- id: tool-pwsh
+  disabled: true
+- id: pwsh-sandbox
+  disabled: true

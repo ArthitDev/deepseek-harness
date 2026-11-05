@@ -96,7 +96,7 @@ The [Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-
 
 ### Policy and tools
 
-One `team:policy` section on the member scope states the shared coordination rules; the fixed text and the nine tool registrations are declared in [`src/index.ts`](src/index.ts). The nine tool schemas are registered in scopes recognized as Team members at publication. Scoped registrations with the same names as the legacy global continuable-subagent controls shadow those globals for team members only.
+One `team:policy` section on the member scope states the shared coordination rules with Markdown headings and lists; the fixed text and the nine tool registrations are declared in [`src/index.ts`](src/index.ts). The nine tool schemas are registered in scopes recognized as Team members at publication. Scoped registrations with the same names as the legacy global continuable-subagent controls shadow those globals for team members only.
 
 ### Scoped registration and teardown
 
@@ -133,7 +133,7 @@ Fixed policy and schema cost on every Team member request. The initial identity 
 
 #### KV Cache effect
 
-With the same provider/model, shared system policy, and tool schemas, a fork retains the parent request prefix and appends the initial task with its identity prefix. Tool results and peer messages append after the reusable request prefix. Sessions recorded with identity inside the system prompt can change that prefix on their first request under this layout; actual provider cache hits remain best-effort.
+A fork preserves inherited conversation messages and events. When the member's reporting role changes, the route either replaces the system head or appends an in-history system update, which can change the reusable request prefix. Identity, tool results, and peer messages append to conversation history; actual provider cache hits remain best-effort.
 
 ## Known Limitations and Deferred Work
 

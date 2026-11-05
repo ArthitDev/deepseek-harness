@@ -3,10 +3,13 @@
  * the real `dsh --profile sdk` runtime through
  * `@deepseek-ai/dsh-sdk-client`, drives one turn over stdio JSON-RPC,
  * and pins the SDK `RunResult`, the complete notification stream, and the
- * persisted session logs. Replay serves recorded model
+ * persisted session logs. Scenario patches exclude machine-local instruction,
+ * skill, and knowledge discovery. Replay serves recorded model
  * responses via `llm-replay` (`cordis.snapshot.yml`); `DSH_SNAPSHOT=record`
  * re-records against the live API; `DSH_SNAPSHOT=refresh` replays committed
  * fixtures and rewrites expected outputs.
+ * Source mode launches the source CLI even when built artifacts are present;
+ * DSH_EXAMPLE_MODE=lib selects the built CLI for parent and SDK child runtimes.
  */
 
 import { existsSync } from 'node:fs'
@@ -15,6 +18,7 @@ import { tmpdir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { resolveExampleMode } from '@deepseek-ai/dsh-loader-smoke'
 import {
   assertPersistedSessionVersion,
   assertSessionFixtureVersion,
@@ -29,6 +33,7 @@ import {
   normalizedToolSchemas,
   parseSnapshotManifest,
   parseToolSchemasSnapshot,
+  parseSystemPromptSnapshot,
   redactSessionSnapshotIds,
   refreshFixtureReplacements,
   reconcileCatalogCreationTimes,
@@ -64,6 +69,13 @@ import {
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 
 const corpusRoot = fileURLToPath(new URL('../', import.meta.url))
+const isolationPatch = fileURLToPath(new URL('./isolation.cordis.yml', import.meta.url))
+const shellCatalogPatch = fileURLToPath(new URL('./shell-catalog.cordis.yml', import.meta.url))
+const sourceMode = resolveExampleMode() === 'src'
+const sdkBin = fileURLToPath(new URL(sourceMode ? '../../apps/cli/src/bin.ts' : '../../apps/cli/lib/bin.js', import.meta.url))
+const sourcePatch = fileURLToPath(new URL('../../apps/cli/src/sdk-source.cordis.patch.yml', import.meta.url))
+const sourceTsconfig = fileURLToPath(new URL('../../tsconfig.json', import.meta.url))
+const sourceNodeOptions = `--import=${JSON.stringify(import.meta.resolve('tsx/esm'))}`
 
 const MINIMAL_SYSTEM_PROMPT = 'You are the environment-selected minimal software engineer.'
 const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
@@ -587,17 +599,24 @@ async function runScenario(scenario: CorpusScenario): Promise<{
   const patchRoot = join(cwd, '.snapshot-patches')
   await mkdir(patchRoot, { recursive: true })
   const assertions = SDK_ASSERTIONS[scenario.name] ?? {}
-  const patches = [...authoredPatches(scenario, !recording), ...assertions.patches ?? []]
+  const patches = [
+    ...sourceMode ? [sourcePatch] : [],
+    ...authoredPatches(scenario, !recording),
+    isolationPatch,
+    ...scenario.name === 'persistent-tools' ? [] : [shellCatalogPatch],
+    ...assertions.patches ?? [],
+  ]
     .map((patch, index) => materializeProfilePatch(patch, cwd, 'sdk', patchRoot, index))
   let childSessionsRoot: string | undefined
   let childEnvironment: Record<string, string> = {}
   if (assertions.dshSdkChild !== undefined) {
     const childHome = join(cwd, '.child-dsh')
     const childPatch = materializeProfilePatch(assertions.dshSdkChild.config, cwd, 'sdk', patchRoot, patches.length)
+    const childIsolationPatch = materializeProfilePatch(isolationPatch, cwd, 'sdk', patchRoot, patches.length + 1)
     await mkdir(childHome, { recursive: true })
     childSessionsRoot = join(childHome, 'sessions')
     childEnvironment = {
-      DSH_TEST_CHILD_PATCHES: JSON.stringify([childPatch]),
+      DSH_TEST_CHILD_PATCHES: JSON.stringify([...sourceMode ? [sourcePatch] : [], childPatch, childIsolationPatch]),
       DSH_TEST_CHILD_HOME: childHome,
     }
   }
@@ -618,7 +637,14 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     DSH_SNAPSHOT_MODEL: route.model,
     DSH_TELEMETRY_DISABLED: '1',
     DSH_AGENTS_HOME: join(cwd, '.agents'),
-    NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning', ...sourceMode ? [sourceNodeOptions] : []].filter(Boolean).join(' '),
+    DSH_TEST_SDK_BIN: sdkBin,
+    ...sourceMode ? {
+      TSX_TSCONFIG_PATH: sourceTsconfig,
+      DSH_TEST_SDK_NODE_OPTIONS: sourceNodeOptions,
+      DSH_TEST_SDK_TSCONFIG: sourceTsconfig,
+      DSH_TEST_SDK_SOURCE_PATCH: sourcePatch,
+    } : {},
     ...parentFixture === undefined ? {} : {
       DSH_SNAPSHOT_FILE: parentFixture,
       ...childFixtures.length > 0 ? { DSH_SNAPSHOT_CHILD_FILES: childFixtures.join(delimiter) } : {},
@@ -632,6 +658,7 @@ async function runScenario(scenario: CorpusScenario): Promise<{
   }
 
   const harness = new DeepSeekHarness({
+    dshBin: sdkBin,
     profile: 'sdk',
     patches,
     dshHome,
@@ -696,6 +723,12 @@ async function runScenario(scenario: CorpusScenario): Promise<{
       subscription.close()
     }
     await harness.close()
+    if (childSessionsRoot !== undefined) {
+      const toolResults = results.flatMap(result => result.events).filter(event => event.type === 'tool/result')
+      expect(toolResults, `${scenario.name}: SDK child delegation result`).toHaveLength(1)
+      expect(toolResults[0]?.data['message'], `${scenario.name}: SDK child delegation must succeed: ${JSON.stringify(toolResults[0]?.data['message'])}`)
+        .not.toMatchObject({ isError: true })
+    }
     const logs = (await Promise.all([
       persistedLogs(sessionsRoot),
       ...(childSessionsRoot === undefined ? [] : [persistedLogs(childSessionsRoot)]),
@@ -805,10 +838,11 @@ async function verifyHeaders(
   for (const [logIndex, log] of ordered.entries()) {
     const headers = normalizedHeaders(log.content, ctx)
     const prompts = normalizedSystemPrompts(log.content, ctx)
+    const expectedPrompt = childPrompts.get(logIndex) ?? prompt
     if (headers.length > 0) {
       expect(systemPromptPrecedesRequests(log.content), `${scenario.name}: session ${logIndex} has a system/message before its first request/header`).toBe(true)
       expect(prompts.length, `${scenario.name}: session ${logIndex} system/message count`)
-        .toBe(1 + (logIndex === 0 ? pin.manifest.header.promptChanges ?? 0 : 0))
+        .toBe(1 + (logIndex === 0 ? pin.manifest.header.promptChanges ?? 0 : parseSystemPromptSnapshot(expectedPrompt).changes.length))
     }
     for (const [index, header] of headers.entries()) {
       const selectedSchemas = childSchemas.get(logIndex)?.[index]
@@ -823,7 +857,7 @@ async function verifyHeaders(
     }
     if (prompts.length > 0) {
       expect(formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)), `${scenario.name}: session ${logIndex} system prompts`)
-        .toBe(childPrompts.get(logIndex) ?? prompt)
+        .toBe(expectedPrompt)
     }
   }
 }
@@ -884,8 +918,8 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
   })
 
   for (const scenario of sdkScenarios) {
-    const scenarioTest = recording
-      && (scenario.manifest.recording === 'authored' || scenario.manifest.sessionFormat !== undefined)
+    const scenarioTest = (scenario.manifest.platform === 'posix' && process.platform === 'win32')
+      || (recording && (scenario.manifest.recording === 'authored' || scenario.manifest.sessionFormat !== undefined))
       ? it.skip
       : it
     scenarioTest(`${mode}s ${scenario.name} through dsh --profile sdk`, async () => {
@@ -966,8 +1000,8 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         const refreshed = ordered.map((log, index) => {
           const existing = expectedContents[index]
           if (existing === undefined) throw new Error(`no fixture for persisted log ${index}`)
-          return scrubSessionSnapshot(tokenizeSessionFixtureCwd(
-            stabilizeRefreshLog(log.content, existing, replacements, actualContext),
+          return scrubSessionSnapshot(stabilizeRefreshLog(
+            tokenizeSessionFixtureCwd(log.content), existing, replacements, actualContext,
           ))
         })
         expectedContents = redactSessionSnapshotIds(stabilizeFixtureMessageIds(reconcileCatalogCreationTimes(refreshed, 'preserve-headers'), expectedContents))

@@ -47,9 +47,10 @@ async function setup(script: Script) {
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(fork, { providerName: 'fork' })
-  ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
+  const adapter = new MockAdapter(script)
+  ctx.llm.registerAdapter(['mock'], adapter)
   const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
-  return { ctx, parent }
+  return { ctx, parent, adapter }
 }
 
 function text(blocks: readonly { type: string; text?: string }[]): string {
@@ -109,7 +110,7 @@ describe('dsh-subagent-fork-in-process', () => {
   })
 
   it('seeds the child with the parent\'s completed-turn prefix (child inherits context)', async () => {
-    const { ctx, parent } = await setup([textResponse('parent answer'), textResponse('child answer')])
+    const { ctx, parent, adapter } = await setup([textResponse('parent answer'), textResponse('child answer')])
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'parent question' }], source: { kind: 'user' } }))
     await parent.whenIdle()
     const parentPrefixLen = parent.session.snapshotEvents().length
@@ -131,6 +132,13 @@ describe('dsh-subagent-fork-in-process', () => {
     // inherited cut for reload and replay.
     expect(child.session.header.isSeeded).toBe(true)
     expect(child.session.inheritedEventCount).toBe(parentPrefixLen)
+    const systemText = adapter.requests.at(-1)!.messages.filter(message => message.role === 'system')
+      .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : [])).join('\n')
+    expect(systemText).toContain('When returning delegated work, give your parent a self-contained result')
+    expect(systemText).toContain('Mark unknown outcomes explicitly')
+    const parentSystemText = adapter.requests[0]!.messages.filter(message => message.role === 'system')
+      .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : [])).join('\n')
+    expect(parentSystemText).not.toContain('When returning delegated work')
     await run.dispose()
   })
 

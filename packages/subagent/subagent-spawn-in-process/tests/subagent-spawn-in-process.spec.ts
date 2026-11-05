@@ -401,6 +401,7 @@ describe('dsh-subagent-spawn-in-process', () => {
       const { ctx, parent, adapter } = await setup([
         textResponse('parent answer'),
         textResponse('child answer'),
+        textResponse('parent continues'),
       ])
       parent.followup(createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }))
       await parent.whenIdle()
@@ -413,9 +414,17 @@ describe('dsh-subagent-spawn-in-process', () => {
       await run.result
       const childRequest = adapter.requests.at(-1)!
       expect(systemPromptOf(childRequest)).toContain('You are the tersest test runner.')
+      expect(systemPromptOf(childRequest)).toContain('When returning delegated work, give your parent a self-contained result')
+      expect(systemPromptOf(childRequest)).toContain('passed/failed/unrun status')
+      expect(systemPromptOf(childRequest)).toContain('without adding unsupported fields')
+      expect(childRequest.tools).toEqual(adapter.requests[0]!.tools)
       // The parent's earlier request carried no such persona.
       expect(systemPromptOf(adapter.requests[0]!)).not.toContain('tersest test runner')
+      expect(systemPromptOf(adapter.requests[0]!)).not.toContain('When returning delegated work')
       await run.dispose()
+      parent.followup(createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }))
+      await parent.whenIdle()
+      expect(systemPromptOf(adapter.requests.at(-1)!)).toBe(systemPromptOf(adapter.requests[0]!))
     })
 
     it('toolFilter hides denied tools from the child prompt AND refuses their execution', async () => {

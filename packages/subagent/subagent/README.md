@@ -157,6 +157,32 @@ One notice per settled Activation in the parent's request, sized by the child's 
 
 Append-only in the parent: the notice follows its reusable request prefix. Reaching an idle parent starts one independent model request; reaching a busy one does not.
 
+### Child reporting guidance
+
+#### What the model sees
+
+Every in-process spawn or fork child receives the scoped `subagent:reporting` system-prompt section below, for one-shot runs and continuable activations including cold resume. The parent receives no such section. Reporting guidance preserves the requested response format and does not validate or certify the child's claims.
+
+##### Reporting section
+
+```markdown
+When returning delegated work, give your parent a self-contained result in the requested format. Include, as applicable:
+- Outcome: what you completed, the files changed, and the findings relevant to the assigned success criteria.
+- Evidence: sources and exact check commands or methods, passed/failed/unrun status, observed results, and the revision or file state checked.
+- Remaining work: unfinished requirements, unresolved failures, assumptions, and concrete blockers. Keep verified facts separate from inferences and reports.
+- Ongoing or uncertain actions: job or subagent IDs, last observed status, output locations, and how to check them when known. Mark unknown outcomes explicitly so the parent can inspect current state before retrying.
+A successful tool call or launch acknowledgement alone does not establish task completion. Do not present partial or unchecked work as verified success.
+Follow the requested output format or structured-output schema; include these details only where that format allows, without adding unsupported fields.
+```
+
+#### Token effect
+
+One fixed section in each in-process child's system prompt; no additional section in the parent.
+
+#### KV Cache effect
+
+Stable across unchanged child requests and cold resume. A fork child's system prompt differs from the parent's, so the inherited conversation does not guarantee reuse of the parent's full cached prefix.
+
 ### Child delegation-scope statement
 
 #### What the model sees

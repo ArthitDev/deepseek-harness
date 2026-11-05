@@ -25,6 +25,7 @@ export async function openBrowserWorker(
   if (!import.meta.url.endsWith('.ts')) {
     worker = new Worker(entry, { workerData: config, execArgv: [], env })
   } else {
+    env.TSX_DISABLE_CACHE = '1'
     const source = new URL('./worker.ts', import.meta.url)
     const bootstrap = `import { register } from ${JSON.stringify(import.meta.resolve('tsx/esm/api'))}; register(); await import(${JSON.stringify(source.href)})`
     worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(bootstrap)}`), { workerData: config, execArgv: [], env })

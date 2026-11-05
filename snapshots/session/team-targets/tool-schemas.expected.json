@@ -12,7 +12,7 @@
           },
           "description": {
             "type": "string",
-            "description": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
+            "description": "Optional clear, concise description of what this command does in active voice; defaults to the command text when omitted. 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
           },
           "timeoutMs": {
             "type": "number",
@@ -40,8 +40,7 @@
           }
         },
         "required": [
-          "command",
-          "description"
+          "command"
         ]
       }
     },

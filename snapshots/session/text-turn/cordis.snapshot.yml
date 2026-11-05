@@ -50,25 +50,25 @@
 
 - id: bash-sandbox
   name: '@deepseek-ai/dsh-bash-sandbox'
-  disabled: !!js process.platform === 'win32' && process.env.DSH_CONTEXT_CAPTURE_TEST !== '1'
+  disabled: false
 
 - id: tool-bash
   name: '@deepseek-ai/dsh-tool-bash'
-  disabled: !!js process.platform === 'win32' && process.env.DSH_CONTEXT_CAPTURE_TEST !== '1'
+  disabled: false
 
 - id: tool-pwsh
   name: '@deepseek-ai/dsh-tool-pwsh'
-  disabled: !!js process.platform !== 'win32' || process.env.DSH_CONTEXT_CAPTURE_TEST === '1'
+  disabled: true
 
 - id: pwsh-sandbox
   name: '@deepseek-ai/dsh-pwsh-sandbox'
-  disabled: !!js process.platform !== 'win32' || process.env.DSH_CONTEXT_CAPTURE_TEST === '1'
+  disabled: true
 
 - id: tool-fs-search
   name: '@deepseek-ai/dsh-tool-fs-search'
   config:
     sampleOverCapGlobResults: false
-    knowledgeRoots: !!js "process.env.DSH_CONTEXT_CAPTURE_TEST === '1' ? [] : [{ name: 'default', path: dshHomePath('knowledge'), bootstrap: true }]"
+    knowledgeRoots: []
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'

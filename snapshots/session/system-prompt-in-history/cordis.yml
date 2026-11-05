@@ -23,3 +23,27 @@
 - insert:
     - id: in-history-prompt-update
       name: '../../../packages/test-support/session-snapshot/tests/fixtures/in-history-prompt-update.ts'
+
+# Keep this prompt transcript independent of the host's workspace and tool defaults.
+- id: agent-instructions
+  config:
+    maxBytes: 0
+    projectRootMarkers: []
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots: []
+- id: tool-bash
+  disabled: false
+- id: bash-sandbox
+  disabled: false
+- id: tool-pwsh
+  disabled: true
+- id: pwsh-sandbox
+  disabled: true

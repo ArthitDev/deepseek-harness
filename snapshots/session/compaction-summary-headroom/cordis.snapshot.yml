@@ -1,5 +1,5 @@
 # The summary output cap inherits the 1,800-token headroom. A 1,000-token
-# request output reservation lowers the proactive trigger to 7,500 tokens.
+# request output reservation lowers the proactive trigger to 8,700 tokens.
 
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek'
@@ -27,5 +27,31 @@
             name: DeepSeek
             models:
               - id: deepseek-v4-flash
-                contextWindow: 10300
+                contextWindow: 11500
                 defaultMaxTokens: 1000
+
+- id: agent-instructions
+  config:
+    maxBytes: 0
+    projectRootMarkers: []
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots: []
+
+- id: tool-bash
+  disabled: false
+- id: bash-sandbox
+  disabled: false
+- id: tool-pwsh
+  disabled: true
+- id: pwsh-sandbox
+  disabled: true

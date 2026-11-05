@@ -96,7 +96,7 @@ kind: "package-reference"
 
 ### 策略与工具
 
-member scope 上的一个 `team:policy` 段落说明共享的协作规则；固定文本与九个工具注册都声明在 [`src/index.ts`](src/index.ts)。九个工具 schema 注册在发布时被识别为 Team member 的 scope 中。与旧全局 continuable-subagent 控件同名的 scoped 注册只会为团队成员覆盖这些全局控件。
+member scope 上的一个 `team:policy` 段落使用 Markdown 标题和列表说明共享的协作规则；固定文本与九个工具注册都声明在 [`src/index.ts`](src/index.ts)。九个工具 schema 注册在发布时被识别为 Team member 的 scope 中。与旧全局 continuable-subagent 控件同名的 scoped 注册只会为团队成员覆盖这些全局控件。
 
 ### 按作用域注册与拆除
 
@@ -133,7 +133,7 @@ member scope 上的一个 `team:policy` 段落说明共享的协作规则；固�
 
 #### KV Cache 影响
 
-provider／model、共享 system 策略和工具 schema 相同时，fork 保留父请求前缀并追加带身份前缀的初始任务。工具结果与 peer 消息追加在可复用请求前缀之后。原先在 system prompt 中记录身份的 Session，首次使用此布局请求时可能改变该前缀；提供方实际缓存命中仍为尽力而为。
+fork 保留继承的对话消息与事件。成员的报告角色变化时，路由会替换开头的 system 消息或在历史中追加 system 更新，因此可复用的请求前缀可能改变。身份、工具结果与 peer 消息追加到对话历史；提供方实际缓存命中仍为尽力而为。
 
 ## 已知限制与延期工作
 

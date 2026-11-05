@@ -187,8 +187,7 @@ export interface ChildComposition {
 
 /**
  * Model-facing delegation-scope statement for every in-process child. A
- * runtime-context contribution rather than a system-prompt section, so the
- * deployment's system prompt stays uniform across parents and children.
+ * runtime-context contribution rather than a system-prompt section.
  */
 export const SUBAGENT_DELEGATION_CONTEXT
   = 'Delegation context: this session has a fixed permission scope that cannot be widened from inside the session. '
@@ -196,11 +195,22 @@ export const SUBAGENT_DELEGATION_CONTEXT
     + 'When the task needs access beyond that scope, do not retry the denied operation; state the '
     + 'limitation in your reply so the delegating agent can handle it.'
 
+/** Reporting guidance scoped to in-process children, including cold-resumed children. */
+const SUBAGENT_REPORTING_INSTRUCTION = [
+  'When returning delegated work, give your parent a self-contained result in the requested format. Include, as applicable:',
+  '- Outcome: what you completed, the files changed, and the findings relevant to the assigned success criteria.',
+  '- Evidence: sources and exact check commands or methods, passed/failed/unrun status, observed results, and the revision or file state checked.',
+  '- Remaining work: unfinished requirements, unresolved failures, assumptions, and concrete blockers. Keep verified facts separate from inferences and reports.',
+  '- Ongoing or uncertain actions: job or subagent IDs, last observed status, output locations, and how to check them when known. Mark unknown outcomes explicitly so the parent can inspect current state before retrying.',
+  'A successful tool call or launch acknowledgement alone does not establish task completion. Do not present partial or unchecked work as verified success.',
+  'Follow the requested output format or structured-output schema; include these details only where that format allows, without adding unsupported fields.',
+].join('\n')
+
 /**
  * Compose one child inside its creation window: a seeded child joins its
  * parent's exact preset generation, while a fresh child mounts the model-bound
  * preset recorded in its header. Then register the fixed delegation statement,
- * persona, and tool restriction in the child's own scope. Creation and cold
+ * reporting guidance, persona, and tool restriction in the child's own scope. Creation and cold
  * resume both pass through here.
  *
  * The join comes first and the child's own registrations second, which is the
@@ -235,6 +245,11 @@ export async function applyChildComposition(
     name: 'subagent:delegation',
     order: childCtx.systemPrompt.getContextOrder('SUBAGENT_DELEGATION'),
     text: SUBAGENT_DELEGATION_CONTEXT,
+  })
+  childCtx.systemPrompt.section({
+    name: 'subagent:reporting',
+    order: childCtx.systemPrompt.getSectionOrder('TOOL_SUBAGENT'),
+    text: SUBAGENT_REPORTING_INSTRUCTION,
   })
   if (composition.persona !== undefined) {
     childCtx.systemPrompt.section({

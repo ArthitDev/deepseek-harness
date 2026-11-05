@@ -52,9 +52,10 @@ async function setup(script: Script) {
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
-  ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
+  const adapter = new MockAdapter(script)
+  ctx.llm.registerAdapter(['mock'], adapter)
   const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
-  return { ctx, parent }
+  return { ctx, parent, adapter }
 }
 
 function startSpec(parent: Agent, provider = 'spawn') {
@@ -86,6 +87,32 @@ function foldedApprovalPolicy(ctx: Context, id: SessionId, events: readonly Sess
 }
 
 describe('continuable policy inheritance', () => {
+  it.each(['spawn', 'fork'])('keeps reporting guidance child-scoped across %s cold resume', { timeout: 20_000 }, async (provider) => {
+    const { ctx, parent, adapter } = await setup([
+      textResponse('parent done'), textResponse('child done'), textResponse('resumed child done'),
+    ])
+    parent.followup(createUserMessage({ content: [{ type: 'text', text: 'parent work' }], source: { kind: 'user' } }))
+    await parent.whenIdle()
+    const started = await ctx.subagents.startContinuable(startSpec(parent, provider))
+    await waitNoActivation(ctx, started.childId)
+    await queueHostSubagentPrompt(
+      ctx.subagents, parent, started.childId,
+      [{ type: 'text', text: 'continue please' }], { kind: 'user' }, new AbortController().signal,
+    )
+    await waitNoActivation(ctx, started.childId)
+    const childRequests = adapter.requests.filter(request => request.sessionId === started.childId)
+    expect(childRequests).toHaveLength(2)
+    for (const request of childRequests) {
+      const systemText = request.messages.filter(message => message.role === 'system')
+        .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : [])).join('\n')
+      expect(systemText.split('When returning delegated work')).toHaveLength(2)
+      expect(systemText).toContain('job or subagent IDs, last observed status, output locations')
+    }
+    const parentText = adapter.requests[0]!.messages.filter(message => message.role === 'system')
+      .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : [])).join('\n')
+    expect(parentText).not.toContain('When returning delegated work')
+  })
+
   it.each(['auto', 'danger-full-access'] as const)(
     'persists the delegated %s identity across cold resume without reading the parent again',
     { timeout: 20_000 },

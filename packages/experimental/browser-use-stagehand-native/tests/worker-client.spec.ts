@@ -57,6 +57,7 @@ function event(worker: Worker, name: string): Promise<void> {
 it('passes explicit model credentials without ambient environment and awaits Worker listener release', async () => {
   vi.stubEnv('STAGEHAND_FIXTURE_TOKEN', 'ambient-secret')
   vi.stubEnv('HTTP_PROXY', 'https://ambient-proxy.example')
+  vi.stubEnv('TSX_DISABLE_CACHE', '0')
   const runtime = await open()
   const worker = state.workers[0]!
   expect(decodeURIComponent(state.entries[0]!)).toContain('tsx')
@@ -64,6 +65,7 @@ it('passes explicit model credentials without ambient environment and awaits Wor
   expect(model).toEqual(nativeModel)
   expect(env.STAGEHAND_FIXTURE_TOKEN).toBeUndefined()
   expect(env.HTTP_PROXY).toBeUndefined()
+  expect(env.TSX_DISABLE_CACHE).toBe('1')
   const socket = connect(port, '127.0.0.1')
   await once(socket, 'connect')
   socket.destroy()

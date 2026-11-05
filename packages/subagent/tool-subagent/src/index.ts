@@ -253,7 +253,17 @@ function providerWording(inheritsConversation: boolean): { description: string; 
   const handoff = ' State the objective and success criteria, relevant paths or URLs and known evidence, '
     + 'scope and file ownership, whether you need findings, changes, or both, and the expected output. '
     + 'Ask for sources, changed files, checks run, and unresolved issues as applicable. '
+    + 'For each check, request the exact command or method, passed/failed/unrun status, observed result, '
+    + 'and the revision or file state checked. Distinguish verified findings from assumptions, and list '
+    + 'unfinished work and uncertain action outcomes so the parent can continue without repeating effects. '
     + 'When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work.'
+  const review = ' Treat the returned report as evidence to assess: compare it with the assigned success criteria '
+    + 'and current sources or workspace state. Resolve conflicting findings and rerun affected checks when '
+    + 'integration changes what was checked; a completed run alone does not verify the task. '
+    + 'Act on gaps in the report: address unmet criteria and investigate unexpected failed checks; run '
+    + 'outstanding checks needed for the task. Send a continuable child focused follow-ups with missing '
+    + 'evidence or corrections. For uncertain action outcomes, inspect current state before retrying, '
+    + 'and continue work that does not depend on unresolved results.'
   if (inheritsConversation) {
     return {
       description:
@@ -261,7 +271,7 @@ function providerWording(inheritsConversation: boolean): { description: string; 
         + 'completed turns so far (it does not see the current in-flight turn). Use this when the subtask '
         + 'builds on this conversation\'s context — a follow-up analysis, '
         + 'a review, a continuation — without consuming this conversation\'s context for the work itself. '
-        + 'You receive its result, not its intermediate steps.',
+        + 'You receive its result, not its intermediate steps.' + review,
       promptDescription:
         'The task for the subagent. It already sees this conversation\'s completed turns, so build on them '
         + 'freely. Include new instructions and evidence from the current in-flight turn, which it cannot see.'
@@ -274,7 +284,7 @@ function providerWording(inheritsConversation: boolean): { description: string; 
       + 'to offload focused, independent work — research, a scoped '
       + 'implementation, an analysis — so it does not consume this conversation\'s context. The subagent '
       + 'returns its result, not its intermediate steps. Give it a '
-      + 'complete, standalone prompt: it does not see this conversation.',
+      + 'complete, standalone prompt: it does not see this conversation.' + review,
     promptDescription:
       'The complete, self-contained task for the subagent. It does not share this '
       + 'conversation\'s context, so include everything it needs.'

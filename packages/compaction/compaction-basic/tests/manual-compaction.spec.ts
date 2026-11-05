@@ -27,6 +27,7 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
+
 import SessionStore, { buildForkSeed, Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
@@ -45,6 +46,19 @@ declare module '@deepseek-ai/dsh-llm' {
     'rival': { kind: 'rival' } & ContextFormed
     'test': { kind: 'test' } & ContextFormed
   }
+}
+
+function checkpointText(): string {
+  return [
+    '## Primary Request and Intent\n(none)',
+    '## Key Technical Concepts\n(none)',
+    '## Files and Code\n(none)',
+    '## Errors and Fixes\n(none)',
+    '## Pending Jobs\n(none)',
+    '## Current Work\n(none)',
+    '## Next Step\n(none)',
+    '## Critical Context\n(none)',
+  ].join('\n')
 }
 
 const MODEL = 'mock'
@@ -98,7 +112,9 @@ class TextAdapter extends LlmAdapter {
     this.requests.push([...options.messages])
     this.routes.push(`${options.provider}/${options.model}`)
     yield { type: 'block-start', index: 0, blockType: 'text' }
-    yield { type: 'block-end', index: 0, block: { type: 'text', text: 'answer' } }
+    yield { type: 'block-end', index: 0, block: {
+      type: 'text', text: options.purpose === 'compaction' ? checkpointText() : 'answer',
+    } }
     yield { type: 'finish', reason: { kind: 'stop' } }
   }
 }

@@ -214,13 +214,17 @@ describe('startInProcessRun', () => {
     expect(child.session.header.isSeeded).toBe(true)
     expect(child.session.inheritedEventCount).toBe(seed.length)
     expect(child.session.snapshotEvents().slice(0, seed.length)).toEqual(seed)
-    // The seeded `system/message` stays surface node 0: the child renders the
-    // same prompt, so its loop appends no second system node.
+    // The reporting guidance is a child-only section, so the forked child's
+    // rendered prompt differs from the seeded one and its loop replaces the
+    // seeded `system/message` in place: the replacement cites the seed and
+    // takes over surface node 0.
     const seededSystem = seed.find(event => event.type === 'system/message')
     expect(seededSystem).toBeDefined()
-    expect(child.session.snapshotEvents().filter(event => event.type === 'system/message')).toHaveLength(1)
-    expect(child.session.surface.nodes[0]).toBe(seededSystem?.seq)
-    expect(child.session.deriveMessages()[0]).toEqual(parent.session.deriveMessages()[0])
+    const systemNodes = child.session.snapshotEvents().filter(event => event.type === 'system/message')
+    expect(systemNodes).toHaveLength(2)
+    expect(systemNodes[1]?.surfaceOp).toEqual({ op: 'replace', startSeq: seededSystem?.seq, endSeq: seededSystem?.seq })
+    expect(child.session.surface.nodes[0]).toBe(systemNodes[1]?.seq)
+    expect(child.session.deriveMessages()[0]).not.toEqual(parent.session.deriveMessages()[0])
     await run.dispose()
   })
 

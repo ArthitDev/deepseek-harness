@@ -22,6 +22,28 @@ from deepseek_harness_runtime import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _posix_fixture_modes(monkeypatch: pytest.MonkeyPatch) -> None:
+    if sys.platform != "win32":
+        return
+    # Windows chmod cannot retain the POSIX mode bits of foreign runtime fixtures.
+    modes: dict[Path, int] = {}
+    original_chmod, original_stat = Path.chmod, Path.stat
+
+    def chmod(path: Path, mode: int, *, follow_symlinks: bool = True) -> None:
+        original_chmod(path, mode, follow_symlinks=follow_symlinks)
+        modes[path] = mode
+
+    def stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        result = original_stat(path, follow_symlinks=follow_symlinks)
+        if path not in modes:
+            return result
+        return os.stat_result(((result.st_mode & ~0o777) | modes[path], *result[1:]))
+
+    monkeypatch.setattr(Path, "chmod", chmod)
+    monkeypatch.setattr(Path, "stat", stat)
+
+
 def _resource_sidecars(executable: Path, native_targets: tuple[str, ...] = ("darwin-arm64", "darwin-x64", "win32-x64")) -> Path:
     office = executable.with_name(f"{executable.name.removesuffix('.exe')}-office")
     tag = executable.name.removeprefix("deepseek-harness-sdk-runtime-").removesuffix(".exe")
@@ -85,13 +107,17 @@ def test_authoring_resources_validate_installed_and_wheel_payloads(tmp_path: Pat
     archive_path = tmp_path / "payload.zip"
     with zipfile.ZipFile(archive_path, "w") as archive:
         for path in root.rglob("*"):
-            archive.write(path, str(path.relative_to(root)).replace("\\", "/"))
+            name = str(path.relative_to(root)).replace("\\", "/")
+            archive.write(path, name)
+            info = archive.getinfo(name + "/" if path.is_dir() else name)
+            info.create_system = 3
+            info.external_attr = (path.stat().st_mode << 16) | (info.external_attr & 0xFFFF)
     with zipfile.ZipFile(archive_path) as archive:
         for candidate in (root, zipfile.Path(archive)):
             if invalid is None:
                 validate_resources(candidate, target)
             else:
-                with pytest.raises((ValueError, FileNotFoundError)):
+                with pytest.raises((ValueError, FileNotFoundError), match="lost its executable bit" if invalid == "mode" else None):
                     validate_resources(candidate, target)
 
 

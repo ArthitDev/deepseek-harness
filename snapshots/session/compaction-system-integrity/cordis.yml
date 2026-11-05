@@ -5,12 +5,13 @@
   config:
     thresholdRatio: 0.99
     retainTokens: 20
-    maxTokens: 32
+    maxTokens: 256
 
 # Keep machine-local instructions and skill libraries out of this prompt fixture.
 - id: agent-instructions
   config:
     maxBytes: 65536
+    projectRootMarkers: []
     instructionFileCandidates: []
     localInstructionFileCandidates: []
 

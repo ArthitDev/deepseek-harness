@@ -1906,7 +1906,7 @@ Source: [`packages/subagent/tool-subagent/src/list-models.ts`](../packages/subag
 
 ### `subagent`
 
-Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.
+Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. Treat the returned report as evidence to assess: compare it with the assigned success criteria and current sources or workspace state. Resolve conflicting findings and rerun affected checks when integration changes what was checked; a completed run alone does not verify the task. Act on gaps in the report: address unmet criteria and investigate unexpected failed checks; run outstanding checks needed for the task. Send a continuable child focused follow-ups with missing evidence or corrections. For uncertain action outcomes, inspect current state before retrying, and continue work that does not depend on unresolved results. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.
 
 ```json
 {
@@ -1918,7 +1918,7 @@ Delegate a self-contained task to a subagent (a separate agent that works in its
     },
     "prompt": {
       "type": "string",
-      "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
+      "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. State the objective and success criteria, relevant paths or URLs and known evidence, scope and file ownership, whether you need findings, changes, or both, and the expected output. Ask for sources, changed files, checks run, and unresolved issues as applicable. For each check, request the exact command or method, passed/failed/unrun status, observed result, and the revision or file state checked. Distinguish verified findings from assumptions, and list unfinished work and uncertain action outcomes so the parent can continue without repeating effects. When sharing files, tell the subagent to preserve concurrent edits and coordinate overlapping work."
     },
     "run_in_background": {
       "type": "boolean",

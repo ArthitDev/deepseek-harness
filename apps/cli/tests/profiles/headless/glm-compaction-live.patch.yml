@@ -1,0 +1,38 @@
+# Opt-in live GLM compaction evaluation over the configured direct Z.AI route.
+
+- id: agent-default-model
+  config:
+    provider: zai
+    model: glm-5.3-flash
+
+- id: compaction-basic
+  config:
+    auto: false
+
+- id: session-title-llm
+  disabled: true
+
+- id: agent-instructions
+  config:
+    maxBytes: 0
+    projectRootMarkers: []
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+
+- id: tool-fs-search
+  config:
+    knowledgeRoots: []
+
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+
+- insert:
+    - id: compaction-glm-live-fixture
+      name: ./tests/fixtures/compaction-glm-live.ts

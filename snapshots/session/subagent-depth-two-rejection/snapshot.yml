@@ -5,6 +5,7 @@ composition: depth-two
 recording: authored
 header:
   class: depth-two
+  childSystemPrompts: [1, 2]
   pin: true
   systemPromptSource: text-turn
   toolSchemasSource: text-turn

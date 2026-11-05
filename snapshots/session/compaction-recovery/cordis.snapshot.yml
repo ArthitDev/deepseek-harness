@@ -15,7 +15,7 @@
   config:
     thresholdRatio: 0.99
     retainTokens: 20
-    maxTokens: 32
+    maxTokens: 256
 
 - insert:
     - id: llm-replay
@@ -27,3 +27,27 @@
             models:
               - id: deepseek-v4-flash
                 contextWindow: 128000
+
+# Use the recorded Bash tool set without machine-local instructions or skills.
+- id: tool-bash
+  disabled: false
+- id: bash-sandbox
+  disabled: false
+- id: tool-pwsh
+  disabled: true
+- id: pwsh-sandbox
+  disabled: true
+- id: agent-instructions
+  config:
+    maxBytes: 0
+    projectRootMarkers: []
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    knowledgeRoots: []

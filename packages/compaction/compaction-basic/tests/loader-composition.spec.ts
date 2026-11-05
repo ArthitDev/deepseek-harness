@@ -16,9 +16,10 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { StreamChunk } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { isCompactCheckpointSource } from '@deepseek-ai/dsh-compaction'
+import { LlmAdapter, createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 
 let root: string | undefined
 let context: Context | undefined
@@ -92,6 +93,99 @@ describe('real Loader composition', () => {
     expect(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')).toHaveLength(2)
     expect(agent.session.deriveMessages().some(message =>
       message.source.kind === 'output-limit-continuation')).toBe(true)
+  })
+
+  it('keeps the original surface when the Loader auto-hook receives an acknowledgement', async () => {
+    const loaded = await loadYaml([
+      "- name: '@deepseek-ai/dsh-llm'",
+      "- name: '@deepseek-ai/dsh-session'",
+      "- name: '@deepseek-ai/dsh-session-projection'",
+      "- name: '@deepseek-ai/dsh-token-meter'",
+      "- name: '@deepseek-ai/dsh-compaction-basic'",
+      '  config:',
+      '    thresholdRatio: 0.8',
+      '    headroomTokens: 0',
+      '    retainTokens: 0',
+      '    maxTokens: 8',
+      '    auto: true',
+    ])
+    await loaded.plugin(SystemPrompt)
+    await loaded.plugin(ToolRuntime)
+    await loaded.plugin(AgentRegistry)
+    await loaded.plugin(AgentLoop, { agents: [] })
+    const calls: GenerateOptions[] = []
+    class AcknowledgingAdapter extends LlmAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({
+          provider,
+          id: model,
+          name: model,
+          context: { contextWindow: 256 },
+        })
+      }
+
+      override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        calls.push(options)
+        const isCompaction = options.purpose === 'compaction'
+        const text = isCompaction ? 'BASELINE_ACK' : 'turn response'
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'text-delta', index: 0, text }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    }
+    loaded.llm.registerAdapter(['mock'], new AcknowledgingAdapter())
+    const seed = Session.create(SessionId('loader-ack-seed'))
+    for (let turn = 1; turn <= 2; turn += 1) {
+      seed.append('turn/start', { turn })
+      seed.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: `seed request ${turn} ${'long history '.repeat(200)}` }],
+        source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      seed.append('step/start', { turn, step: 1 })
+      if (turn === 1) {
+        seed.append('request/header', {
+          header: { config: { provider: 'mock', model: 'mock' } },
+          reason: 'initial',
+        })
+      }
+      seed.append('assistant/message', {
+        stream: [],
+        turn,
+        step: 1,
+        message: createMessage({
+          role: 'assistant',
+          content: [{ type: 'text', text: `seed answer ${turn} ${'detail '.repeat(200)}` }],
+          source: { kind: 'model', provider: 'mock', model: 'mock' },
+        }),
+      }, { surfaceOp: 'append' })
+      seed.append('step/end', { turn, step: 1 })
+      seed.append('turn/end', { turn, reason: { kind: 'completed' } })
+    }
+    const { agent } = await loaded.agentLoop.createAgent(loaded, {
+      sessionId: SessionId('loader-ack-compaction'),
+      seed: seed.snapshotEvents(),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    const originalSurface = [...agent.session.surface.nodes]
+    const originalMessages = agent.session.deriveMessages()
+    const request = 'continue after compaction failure'
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: request }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+
+    expect(calls.map(call => call.purpose)).toContain('compaction')
+    expect(calls.some(call => call.purpose !== 'compaction')).toBe(true)
+    expect(originalSurface.every(seq => agent.session.surface.nodes.includes(seq))).toBe(true)
+    expect(agent.session.deriveMessages().slice(0, originalMessages.length)).toEqual(originalMessages)
+    expect(agent.session.snapshotEvents().some(event =>
+      event.type === 'user/message' && isCompactCheckpointSource(event.data.source),
+    )).toBe(false)
+    expect(agent.session.snapshotEvents().some(event => event.type === 'compaction/summary')).toBe(false)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'compaction/end')).toHaveLength(1)
+    const failedEnd = agent.session.snapshotEvents().findLast(event => event.type === 'compaction/end')
+    expect(failedEnd?.type).toBe('compaction/end')
+    if (failedEnd?.type === 'compaction/end') {
+      expect(failedEnd.data.error).toBe('summarization produced an invalid structured checkpoint')
+    }
   })
 
   it('loads the shipped token-meter, pruning, and compaction-basic YAML order', async () => {
