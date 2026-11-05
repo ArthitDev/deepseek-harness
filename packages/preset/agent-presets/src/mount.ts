@@ -119,10 +119,8 @@ class PresetTree extends Include {
    * future "edit your preset while it runs" flow needs a deliberate
    * persistence path rather than this method's return.
    */
-  // 0.2.2 moved persistence behind _write/_writeText; shadowing the text
-  // writer keeps this tree read-only: the preset file backs every session
-  // naming it, and nothing here is user state worth persisting.
-  private override async _writeText(): Promise<void> {}
+  override write(): void {
+  }
 }
 
 /** One preset composition currently installed under some agent. */

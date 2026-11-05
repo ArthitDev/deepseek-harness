@@ -27,15 +27,10 @@ export class TeamJournal {
    * @returns current projected state selected by the Lead Team id.
    */
   state(root: Agent): TeamState {
-    // The deprecated keyed stateOf stays the only cross-package read path; the
-    // owning registration lives in the host package's runtime lifecycle.
-    const projection = this.ctx.sessionProjections.stateOf(root.session, 'agentTeam') as
-      | TeamState
-      | { failure: string }
-      | undefined
+    const projection = this.ctx.sessionProjections.stateOf(root.session, 'agentTeam')
     if (projection === undefined) throw new Error('Agent Teams projection is not registered')
-    if ('failure' in projection && projection.failure !== undefined) throw new Error(projection.failure)
-    return projection as TeamState
+    if (projection.failure !== undefined) throw new Error(projection.failure)
+    return projection
   }
 
   /**

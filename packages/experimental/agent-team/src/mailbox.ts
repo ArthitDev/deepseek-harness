@@ -8,6 +8,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { steerHostSubagentPrompt } from '@deepseek-ai/dsh-subagent/internal'
 import { errorMessage, TeamError } from './error.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamRuntimeLifecycle } from './lifecycle.ts'
@@ -258,7 +259,7 @@ export class TeamMailbox {
           return true
         }
       }
-      await this.ctx.subagents.sendMessage(root, message.targetId, content, { signal })
+      await steerHostSubagentPrompt(this.ctx.subagents, root, message.targetId, content, source, signal)
       return target === undefined
         ? true
         : await this.checkpointDelivered(root, target.session, message.id)

@@ -616,6 +616,9 @@
       "@deepseek-ai/dsh-working-directory": ["./packages/session/working-directory/src"],
       "@deepseek-ai/dsh-workspace": ["./packages/workspace/workspace/src"],
       "@deepseek-ai/dsh-workspace-changes": ["./packages/deliverables/workspace-changes/src"],
+
+      "@deepseek-ai/dsh-experimental-agent-team/remote": ["./packages/experimental/agent-team/src/remote.ts"],
+      "@deepseek-ai/dsh-tool-web/settings": ["./packages/web/tool-web/src/settings.ts"],
       // END generated package aliases
     }
   }

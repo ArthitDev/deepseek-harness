@@ -65,13 +65,7 @@ export const RELEASED_V3_EVENT_TYPES: ReadonlySet<string> = new Set([
   'web/deepseek-search-llm-request',
   'workspace/changes',
 ])
-
-
-/** First-party event names understood by the released V4 reader: the frozen V3 vocabulary plus the V4-only developer surface. */
-export const RELEASED_V4_EVENT_TYPES: ReadonlySet<string> = new Set([
-  ...RELEASED_V3_EVENT_TYPES,
-  'developer/message',
-])/* jscpd:ignore-end */
+/* jscpd:ignore-end */
 
 /**
  * Keep unknown ignorable events opaque after header promotion.

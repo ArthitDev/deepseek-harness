@@ -112,13 +112,13 @@ export class TeamService extends TypertRemoteService {
       const membership = this.roster.tryMembership(agent)
       if (membership !== undefined) this.activity.notify(membership.id)
     })
-    ctx.effect(async () => {
-      const disposeProjection = await ctx.root.sessionProjections.register(teamProjectionDefinition)
+    ctx.effect(() => {
+      const disposeProjection = ctx.root.sessionProjections.register(teamProjectionDefinition)
       return async () => {
         try {
           await this.disposeRuntime()
         } finally {
-          await disposeProjection.dispose()
+          disposeProjection()
         }
       }
     }, 'agentTeams.runtimeLifecycle()')
