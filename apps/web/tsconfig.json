@@ -15,13 +15,8 @@
   },
   "include": [
     "src",
-    "scripts",
-    "tests"
+    "scripts"
   ],
-  // The web e2e lane (scaffold + replay specs) boots the host spine and reads
-  // its Context merges — host-plane programs, checked in tsconfig.host.json;
-  // this client-registered project must not also hold them (one program
-  // cannot see both sides of the cordis Context merges).
   "exclude": [
     "tests/home-whale.e2e.ts",
     "tests/sidebar-drawer.e2e.ts",
@@ -255,7 +250,9 @@
     "tests/workflow-run.e2e.ts"
   ],
   "references": [
-    { "path": "../../packages/experimental/auto-review" },
+    {
+      "path": "../../packages/experimental/auto-review"
+    },
     {
       "path": "../../packages/client/store"
     },

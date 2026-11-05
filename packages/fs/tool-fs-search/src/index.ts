@@ -159,3 +159,5 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     timeoutMs: resolved.timeoutMs,
   })
 }
+
+export * from './knowledge.ts'

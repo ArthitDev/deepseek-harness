@@ -409,4 +409,6 @@ export * from './executor.ts'
 export * from './schema.ts'
 export * from './json-schema.ts'
 export * from './presentation.ts'
+export * from './ts-types.ts'
+export * from './py-types.ts'
 export { ToolsService as ToolRuntime }

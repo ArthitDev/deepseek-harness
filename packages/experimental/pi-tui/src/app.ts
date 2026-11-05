@@ -1,0 +1,303 @@
+/**
+ * dsh-pi-tui app: boot the pi-tui rendering loop over dsh services.
+ *
+ * Flow: parse app args → resolve or create the agent (session picker when
+ * `--resume` has no id) → mount the ChatScreen → replay the durable
+ * session log → subscribe to live `session/event` → quit on Ctrl+C by
+ * disposing the whole tree (bounded fallback, cc-tui semantics).
+ */
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { Context } from '@deepseek-ai/cordis'
+import type { AgentOptions } from '@deepseek-ai/dsh-agent'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import { TuiAltScreen, type ViewportTUI } from '@earendil-works/pi-tui'
+import { parseArgs, USAGE } from './args.js'
+import {
+  discardEmptySession,
+  hasUserContent,
+  listPresets,
+  listSessions,
+  reconcileWorkspaceAttachments,
+  remoteCwd,
+  resolveAgent,
+  sessionSummaries,
+  type ResolvedAgent,
+} from './core/session.js'
+import { defaultModelSelection } from './core/web-settings.js'
+import { installWebPromptSettings } from './core/prompt-settings.js'
+import { ensureSbProxy, installZcodeStartup } from './core/zcode-proxy.js'
+import { ClipboardTerminal } from './ui/clipboard-terminal.js'
+import { pickSession } from './ui/session-picker.js'
+import { pickFromListWithSearch } from './ui/overlays.js'
+import { confirmApproval, askQuestions } from './ui/overlays.js'
+import { ChatScreen } from './ui/chat.js'
+
+/**
+ * Profile row config for the TUI app: the session to resume, an explicit
+ * provider/model route, and the working directory for new sessions.
+ */
+export interface AppConfig {
+  sessionId?: string
+  provider?: string
+  model?: string
+  cwd?: string
+  /** Newest transcript items rendered before older items are folded. */
+  historyLimit?: number
+  jobInputWarningDelayMs?: number
+}
+
+/**
+ * Mount the TUI app on the plugin context.
+ */
+export async function apply(ctx: Context, config: AppConfig): Promise<void> {
+  if (process.env.PI_TUI_DEBUG !== undefined) {
+    console.error('[pi-tui debug] config =', JSON.stringify(config))
+  }
+  const cmdline = ctx.get('cmdlineArgs')
+  const args = parseArgs(cmdline?.get() ?? [])
+
+  // YAML scalars like `undefined` arrive as the string "undefined"; treat
+  // them (and empty strings) as absent.
+  const clean = (value: string | undefined): string | undefined =>
+    value === undefined || value === 'undefined' || value === '' ? undefined : value
+  const sessionConfig = clean(config.sessionId)
+  const provider = clean(config.provider)
+  const model = clean(config.model)
+
+  // Provider/model route: explicit row config wins; otherwise inherit the
+  // harness's default-model selection (settings.yaml), matching the web app.
+  const defaultSelection = defaultModelSelection(ctx)
+  const effectiveProvider = provider ?? defaultSelection?.provider
+  const effectiveModel = model ?? defaultSelection?.model
+  if (args.help) {
+    console.log(USAGE)
+    disposeRootAndExit(ctx, 0)
+    return
+  }
+  if (args.unknown.length > 0) {
+    throw new Error(`pi-tui: unknown arguments: ${args.unknown.join(' ')} (see --help)`)
+  }
+  if (!process.stdout.isTTY) {
+    throw new Error('dsh-pi-tui needs an interactive terminal (stdout is not a TTY)')
+  }
+
+  const proxyStartupAbort = new AbortController()
+  const profile = ctx.get('profileContext') as { installAnchor: string }
+  const startupWarnings: string[] = []
+  let pushProxyWarning = (warning: string): void => { startupWarnings.push(warning) }
+  const proxyStartups = [
+    ensureSbProxy(profile.installAnchor, proxyStartupAbort.signal)
+      .then(() => undefined, () => 'SB transport startup failed. Direct providers remain available. Run pnpm sb:status and check the SB log or port conflict.'),
+  ]
+  installZcodeStartup(ctx, profile.installAnchor, () => {
+    pushProxyWarning('ZCode proxy startup failed. Use /model to select another provider. Run pnpm zcode:setup and check ZCode login.')
+  })
+  ctx.effect(() => async () => {
+    proxyStartupAbort.abort()
+    await Promise.all(proxyStartups)
+  })
+  await installWebPromptSettings(ctx)
+
+  const terminal = new ClipboardTerminal()
+  const tui: ViewportTUI = new TuiAltScreen(terminal)
+  tui.start()
+
+  const agentOptions: AgentOptions = {
+    ...(effectiveProvider !== undefined ? { provider: effectiveProvider } : {}),
+    ...(effectiveModel !== undefined ? { model: effectiveModel } : {}),
+  }
+
+  // Preset picker when `--preset` is given without an id.
+  let preset = args.preset
+  if (preset === undefined && args.pickPreset) {
+    const presets = await listPresets(ctx)
+    if (presets.length === 0) {
+      throw new Error('pi-tui: no agent presets available (--preset)')
+    }
+    preset = await pickFromListWithSearch(tui, {
+      title: 'Select preset',
+      items: presets.map(entry => ({
+        value: entry.id,
+        label: entry.name ?? entry.id,
+        ...(entry.description !== undefined ? { description: entry.description } : {}),
+      })),
+    })
+  }
+  // Leading positional directory: the session cwd, overriding the row config
+  // (e.g. an orchestrator launching `tui . --resume <id>`). Fails loud when
+  // the path is not an existing directory.
+  let cwdOverride: string | undefined
+  if (args.cwd !== undefined) {
+    const sessionCwd = resolve(args.cwd)
+    if (!existsSync(sessionCwd) || !statSync(sessionCwd).isDirectory()) {
+      throw new Error(`pi-tui: session cwd "${args.cwd}" is not an existing directory`)
+    }
+    cwdOverride = sessionCwd
+  }
+  const meta = {
+    cwd: cwdOverride ?? config.cwd ?? (args.machine !== undefined ? remoteCwd(args.machine) : process.cwd()),
+    ...(preset !== undefined ? { agentPreset: preset } : {}),
+  }
+
+  // Session picker when `--resume` is given without an id.
+  let sessionId = args.resumeId ?? sessionConfig
+  if (sessionId === undefined && args.pickSession) {
+    const headers = await listSessions(ctx)
+    const summaries = await sessionSummaries(ctx, headers)
+    sessionId = await pickSession(tui, headers, summaries)
+  }
+
+  const resolved = await resolveAgent(ctx, sessionId, agentOptions, meta)
+  const agent = resolved.agent
+  // Fresh sessions created this run that never carried user content. Their
+  // artifacts are discarded on switch or quit, so a boot without a
+  // conversation leaves no empty shell in the session store.
+  const freshEmptySessions = new Set<SessionId>()
+  if (resolved.fresh === true && !hasUserContent(agent.session)) {
+    freshEmptySessions.add(agent.id)
+  }
+  /** The plugin's own manifest release, shown on the banner; boot never depends on this read. */
+  const tuiVersion = (() => {
+    try {
+      const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as { version?: unknown }
+      return typeof manifest.version === 'string' ? manifest.version : '0.0.0'
+    } catch {
+      // A missing or unreadable manifest must not block boot; the placeholder keeps the banner honest.
+      return '0.0.0'
+    }
+  })()
+  // Keep the handle so the initial agent is disposed on the first in-session
+  // switch (new/fork/resume) — dropping it leaked its scoped context.
+  let current: ResolvedAgent = resolved
+
+  // ── human-interaction seams ────────────────────────────────────────────────
+  // Approval waterfall answerer: answer permission questions for OUR agent
+  // only; every other request continues down the chain.
+  ctx.on('approval/request', (request, next) => {
+    if (!screenOwns(request.agent.id)) return next()
+    return confirmApproval(tui, request)
+  })
+
+  // Answer user questions in the terminal: the service dispatches a
+  // 'user-questions/request' waterfall; returning an answer claims it (a
+  // cancelled form rejects as ASK_CANCELLED instead of delegating — there is
+  // no further listener here, so the rejection surfaces as a failed result).
+  ctx.on('user-questions/request', (_request) => {
+    return askQuestions(tui, _request)
+  })
+
+  const screen = new ChatScreen({
+    ctx,
+    tui,
+    agent,
+    config: {
+      version: tuiVersion,
+      historyLimit: config.historyLimit ?? 20,
+      jobInputWarningDelayMs: config.jobInputWarningDelayMs ?? 15000,
+      ...(effectiveProvider !== undefined ? { provider: effectiveProvider } : {}),
+      ...(effectiveModel !== undefined ? { model: effectiveModel } : {}),
+      ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
+      ...(preset !== undefined ? { preset } : {}),
+    },
+    onQuit: (hint) => {
+      tui.stop()
+      disposeRootAndExit(ctx, 0, hint, async () => {
+        for (const sessionId of [...freshEmptySessions]) {
+          freshEmptySessions.delete(sessionId)
+          await discardEmptySession(ctx, sessionId)
+        }
+      })
+    },
+    onAgentSwitch: (next: ResolvedAgent) => {
+      const old = current
+      current = next
+      if (old.handle !== undefined && old.agent !== next.agent) {
+        void old.handle.dispose()
+          .then(() => {
+            if (!freshEmptySessions.delete(old.agent.id)) return undefined
+            return discardEmptySession(ctx, old.agent.id)
+          })
+          .catch(() => {
+            // The registry teardown still covers a failed dispose.
+          })
+      }
+      if (next.fresh === true && !hasUserContent(next.agent.session)) {
+        freshEmptySessions.add(next.agent.id)
+      }
+    },
+  })
+  const screenOwns = (id: unknown): boolean => screen.ownsSession(id)
+
+  // Replay the complete snapshot before subscribing, so inherited and live events paint once.
+  await screen.replayTranscript(agent)
+  // ↑/↓ history: seed the editor from the replayed session transcript.
+  screen.seedHistory()
+  // Boot hint: tell the user persisted history is one Ctrl+R / /resume away
+  // (after replay, so the hint lands below the transcript, above live input).
+  screen.pushRecentSessionHint()
+
+  pushProxyWarning = (warning) => { screen.pushNotice(warning, 'error') }
+  for (const warning of startupWarnings) pushProxyWarning(warning)
+  for (const startup of proxyStartups) {
+    void startup.then((warning) => {
+      if (!proxyStartupAbort.signal.aborted && warning !== undefined) screen.pushNotice(warning, 'error')
+    })
+  }
+
+  ctx.on('session/event', (session, event) => {
+    if (screenOwns(session.id)) {
+      screen.handleEvent(event)
+    }
+    if (event.type === 'user/message' || event.type === 'request/header') {
+      freshEmptySessions.delete(session.id)
+    }
+  })
+
+  // Heal workspace grouping after the harness's cross-process index
+  // staleness: the web host's startup-only cwd index hides and eventually
+  // prunes TUI-created sessions from their workspace. Re-attach persisted
+  // sessions to their cwd workspace on boot (additive, best effort).
+  void reconcileWorkspaceAttachments(ctx)
+
+  // If the surrounding tree goes down (reload, teardown), take the TUI
+  // with it: stop the renderer and drain queued stdin so kitty key-release
+  // bytes don't leak to the parent shell.
+  ctx.effect(() => () => {
+    tui.stop()
+    void terminal.drainInput(1000, 50)
+  })
+}
+
+/**
+ * Dispose the whole application tree before process exit, with a bounded
+ * fallback (mirrors cc-tui's disposeRootAndExit semantics). `afterDispose`
+ * runs once the tree is down and every session handle has flushed — the
+ * point where abandoned fresh sessions can be durably discarded — bounded
+ * by the same fallback timer as the dispose itself.
+ */
+function disposeRootAndExit(ctx: Context, code: number, exitMessage?: string, afterDispose?: () => Promise<void>): void {
+  let finished = false
+  const finish = (): void => {
+    if (finished) return
+    finished = true
+    if (exitMessage !== undefined && exitMessage !== '') {
+      process.stdout.write(`\n${exitMessage}\n`, () => process.exit(code))
+      return
+    }
+    process.exit(code)
+  }
+  const timer = setTimeout(finish, 5000)
+  timer.unref()
+  void ctx.root.fiber.dispose().then(
+    () => {
+      clearTimeout(timer)
+      void (afterDispose?.() ?? Promise.resolve()).then(finish, finish)
+    },
+    () => {
+      clearTimeout(timer)
+      finish()
+    },
+  )
+}

@@ -11,6 +11,8 @@ import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
 import { isWildcardHost, type TlsConfig } from '@deepseek-ai/dsh-host-webserver'
+
+export { ensureSbProxy, ensureZcodeProxy, installZcodeStartup } from './proxy-startup.ts'
 import { parsePublicUrl } from './public-url.ts'
 
 /** Stable Cordis plugin name. */

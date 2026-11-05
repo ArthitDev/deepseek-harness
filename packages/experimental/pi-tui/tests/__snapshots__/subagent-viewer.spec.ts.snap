@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`read-only subagent inspection > opens from the agent count while the parent runs, follows child tools and streams, and returns without cancelling either agent > child transcript window 1`] = `
+" Subagent · Inspect the parser
+ child-viewer · IDLE / FINISHED
+ 5 older items · A to reveal
+ › child-message-5
+ › child-message-6
+ › child-message-7
+ › child-message-8
+ › child-message-9
+ › child-message-10
+ › child-message-11
+ › child-message-12
+ › child-message-13
+ › child-message-14
+ › child-message-15
+ › child-message-16
+ › child-message-17
+ › child-message-18
+ › child-message-19
+ › child-message-20
+ › child-message-21
+ › child-message-22
+ › child-message-23
+ › child-message-24
+
+
+
+
+
+
+
+ Read only · Esc main agent · ↑/↓ PgUp/PgDn scroll · Home/End · Ctrl+O tools · Ctrl+T thinking · A
+ older · R refresh"
+`;

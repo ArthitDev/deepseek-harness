@@ -1,0 +1,4444 @@
+/**
+ * ChatScreen: the live conversation surface.
+ *
+ * Layout is a vertical stack — messages, working loader, status bar, editor
+ * — rendered top-down. Like pi's own chat, the terminal viewport naturally
+ * sticks to the bottom (the last rendered lines), and scrollback is the
+ * terminal's native buffer.
+ *
+ * Key semantics (pi / Claude Code conventions):
+ *   Esc        interrupt (cancel the running turn; editor cancels autocomplete)
+ *   Ctrl+C     running → interrupt; idle+text → clear editor; idle+empty →
+ *              arm, second press within 500ms exits
+ *   Ctrl+D     exit when the editor is empty (else editor delete-forward)
+ *   Ctrl+T     toggle thinking display
+ *   Ctrl+O     toggle full tool output
+ *   Ctrl+L     open the model picker
+ *   Ctrl+X     open the reasoning-level picker
+ *   Ctrl+P     open the shell picker; when open, cycle pane/chat focus
+ *   Ctrl+Alt+G inspect subagent messages and tools
+ *   Ctrl+Alt+Left/Right  move the chat/shell divider
+ *   Shift+Tab  cycle mode
+ */
+import { join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { readFile, rm, writeFile } from 'node:fs/promises'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { basename, relative } from 'node:path'
+import chalk from 'chalk'
+import { Context } from '@deepseek-ai/cordis'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { JobId, JobOutputRead, JobView } from '@deepseek-ai/dsh-jobs'
+import { foldSubagentDescriptor, type SubagentRunEndInfo, type SubagentRunInfo } from '@deepseek-ai/dsh-subagent'
+import type { ActivityEntry } from '../core/activity.js'
+import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
+import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type MessageSource, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
+import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { defineTool, type ToolDispatchExecution, type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import {
+  CombinedAutocompleteProvider,
+  Container,
+  Editor,
+  Loader,
+  ScrollView,
+  Text,
+  TuiAltScreen,
+  VStack,
+  isKeyRelease,
+  matchesKey,
+  type AutocompleteProvider,
+  type SlashCommand,
+  type ViewportTUI,
+} from '@earendil-works/pi-tui'
+import {
+  applyEvent,
+  applyStreamChunk,
+  createModel,
+  pushNotice,
+  textOf,
+  type ChatItem,
+  type ChatModel,
+} from '../core/model.js'
+import { seedModelSelection } from '../core/selection.js'
+import { shortTokens } from '../core/format.js'
+import { buildRecap } from '../core/recap.js'
+import { inspectSubagent } from './subagent-viewer.js'
+import { osc52Encode } from '../core/clipboard.js'
+import { readGitState, type GitState } from '../core/git.js'
+import { buildSearchIndex } from '../core/search.js'
+import {
+  AgentDefaultModelService,
+  SessionProjectionsService,
+} from '../core/services.js'
+import { runRgFiles, shouldShowPath } from '../core/files.js'
+import { collectExecHistory } from '../core/exec-history.js'
+import { foldWindow, visibleItemsBefore, type FoldWindow } from '../core/fold.js'
+import {
+  ctrlC,
+  isPathLikeToken,
+  parseBang,
+  parseSlash,
+  type ExitArm,
+} from '../core/keys.js'
+import { collectProjection } from '../core/projection.js'
+import { BRAND_RED, editorTheme, selectListTheme, style } from './theme.js'
+import { createView, ReasoningView, StatusBar, ToolCardView, updateView, type StatusBarData } from './views.js'
+import { listAllModels, pickModel, type LlmRuntimeLike, type ModelRoute } from './model-picker.js'
+import {
+  forkSession,
+  listSessions,
+  loadPersistedSession,
+  listPresets,
+  remoteCwd,
+  replayEvents,
+  resolveAgent,
+  resolveModelPreset,
+  resumeCommand,
+  sessionSummaries,
+  type ResolvedAgent,
+} from '../core/session.js'
+import { parseDocument } from 'yaml'
+import { normalizeApiKey } from '@deepseek-ai/dsh-llm'
+import { pickFromList, pickFromListWithSearch, openFindOverlay, promptSecret, promptText } from './overlays.js'
+import { ShellPane, resolveShellSession, type ShellVariant } from './shell-pane.js'
+import { ShellSplit } from './shell-split.js'
+import { ToolActivityPane } from './tool-activity.js'
+import { pickReasoningLevel } from './reasoning-picker.js'
+import { pickWiki } from './wiki.js'
+import { buildBanner } from './banner.js'
+import type { TranscriptSearchMatch } from '../core/search.js'
+import { defaultModelSelection } from '../core/web-settings.js'
+import { TEAM_MODE_OPTIONS, type TeamMode } from '../core/team-mode.js'
+import { installContextCapture } from '../core/context.js'
+import { showContextViewer } from './context-viewer.js'
+import { createAgentSummary, foldAgentSummary, formatAgentSummary, rebuildAgentSummary, type AgentSummary } from '../core/agent-summary.js'
+import { JOB_INPUT_WATCH_TAIL_BYTES, JobInputWatch } from '../core/job-input-watch.js'
+
+/** Dependencies for one live ChatScreen: context, viewport, agent, and quit/switch callbacks. */
+export interface ChatScreenOptions {
+  ctx: Context
+  tui: ViewportTUI
+  agent: Agent
+  config: {
+    /** The running TUI release for the banner. */
+    version?: string
+    provider?: string
+    model?: string
+    cwd?: string
+    preset?: string
+    /** Newest transcript items to render until explicitly expanded; defaults to 20. */
+    historyLimit?: number
+    /** Quiet time after a recognized job prompt before Agent Debug warns. */
+    jobInputWarningDelayMs?: number
+  }
+  onQuit: (resumeHint?: string) => void
+  /** Called after a successful in-session agent switch (new/fork/resume). */
+  onAgentSwitch?: (resolved: ResolvedAgent) => void
+}
+
+interface LlmRuntime extends LlmRuntimeLike {
+  listProviders(): readonly { id: string; name: string }[]
+  resolveModelInfo(
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ): Promise<LlmResolvedModelInfo>
+  resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>
+}
+
+interface ToolPolicyRuntime {
+  guard?(guard: (execution: { readonly name: string; readonly arguments: unknown }) => string | undefined): () => void
+  schemas?(scope?: Agent): readonly { name: string }[]
+}
+
+const MCP_TOOL_PREFIX = 'mcp__'
+const DIRECT_JEV_MCP_TOOL_PREFIX = 'mcp__jev__'
+const JEV_MCP_TOOL_PREFIXES = [DIRECT_JEV_MCP_TOOL_PREFIX, 'mcp__open-dev-browser__', 'mcp__open_dev_browser__']
+const JEV_POLICY_SKILL = 'jev-first-policy'
+const SKILL_TOOL_NAME = 'skill'
+
+const isJevTool = (name: string): boolean => JEV_MCP_TOOL_PREFIXES.some(prefix => name.startsWith(prefix))
+
+const mcpServerName = (name: string): string => {
+  const rest = name.slice(MCP_TOOL_PREFIX.length)
+  const separator = rest.indexOf('__')
+  return separator < 0 ? rest : rest.slice(0, separator)
+}
+
+interface SkillCatalogEntry {
+  readonly name: string
+  readonly description: string
+}
+
+interface SkillCatalogSource {
+  readonly kind: 'skill-catalog'
+  readonly form: 'catalog'
+  readonly update?: true
+  readonly entries: readonly SkillCatalogEntry[]
+}
+
+function isSkillCatalogEntry(entry: unknown): entry is SkillCatalogEntry {
+  return typeof entry === 'object' && entry !== null
+    && 'name' in entry && typeof entry.name === 'string'
+    && 'description' in entry && typeof entry.description === 'string'
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'skill-catalog': SkillCatalogSource
+  }
+}
+
+function isSkillCatalogSource(
+  source: MessageSource,
+): source is SkillCatalogSource {
+  const kind: string = source.kind
+  if (kind !== 'skill-catalog' || !('entries' in source)) return false
+  const entries: unknown = source.entries
+  return Array.isArray(entries) && entries.every(isSkillCatalogEntry)
+}
+
+function filterDisabledSkills(message: UserMessage, disabled: ReadonlySet<string>): UserMessage | undefined {
+  const kind: string = message.source.kind
+  if (kind === 'skill-invocation' && 'name' in message.source
+    && typeof message.source.name === 'string' && disabled.has(message.source.name)) return undefined
+  if (!isSkillCatalogSource(message.source)) return message
+  const entries = message.source.entries.filter(entry => !disabled.has(entry.name))
+  if (entries.length === message.source.entries.length) return message
+  const hiddenPrefixes = message.source.entries
+    .filter(entry => disabled.has(entry.name))
+    .map(entry => `- \`${entry.name}\`:`)
+  return {
+    ...message,
+    content: message.content.map(block => block.type === 'text'
+      ? { ...block, text: block.text.split('\n').filter(line =>
+        !hiddenPrefixes.some(prefix => line.startsWith(prefix))).join('\n') }
+      : block),
+    source: { ...message.source, entries },
+  }
+}
+
+/**
+ * Sum provider-reported Jev cost from successful direct-MCP calls in this session.
+ * @param items - the transcript items to scan for Jev tool results.
+ * @returns the summed cost across Jev calls that reported one, or undefined when none did.
+ */
+export function jevSessionCost(items: readonly ChatItem[]): number | undefined {
+  let total = 0
+  let found = false
+  for (const item of items) {
+    if (item.tool?.status !== 'ok' || !item.tool.name.startsWith(DIRECT_JEV_MCP_TOOL_PREFIX)
+      || item.tool.resultFull === undefined) continue
+    try {
+      const value = JSON.parse(item.tool.resultFull) as { usage?: { cost?: unknown } }
+      const cost = value.usage?.cost
+      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) continue
+      total += cost
+      found = true
+    } catch {
+      // Older or custom Jev servers may return plain text without usage metadata.
+    }
+  }
+  return found ? total : undefined
+}
+
+/** The live conversation surface: transcript views, status bar, and editor bound to one agent. */
+export class ChatScreen {
+  private readonly ctx: Context
+  private readonly tui: ViewportTUI
+  private agent: Agent
+  private readonly config: ChatScreenOptions['config']
+  private readonly commands: CommandRuntime | undefined
+  private readonly onAgentSwitch: ((resolved: ResolvedAgent) => void) | undefined
+  private readonly onQuit: ChatScreenOptions['onQuit']
+  private quitting = false
+  private disposed = false
+  private model: ChatModel = createModel()
+  private readonly messages = new Container()
+  private readonly statusBar: StatusBar
+  /** Whether keyboard focus currently lives in the shell pane's editor. */
+  private shellFocused = false
+  /** Plain chat column inside the stable split root. */
+  private readonly chatRoot = new VStack([])
+  /** The chat and activity columns share one resizable root. */
+  private screenRoot: ShellSplit | undefined
+  /** Right column containing activity and the optional shell pane. */
+  private readonly paneSlot = new VStack([])
+  private shellPane: ShellPane | undefined
+  private disposeShellDraft: (() => void) | undefined
+  private readonly toolActivity = new ToolActivityPane((key) => {
+    const run = this.subagentActivity.get(key.slice('subagent:'.length))
+    if (run?.child === undefined) {
+      this.pushNotice('subagent is no longer available; use /agents to inspect history', 'error')
+      return
+    }
+    void this.inspectSubagentRun(run.child.session.id, run.entry.label)
+  })
+  private agentDebugVisible = true
+  private readonly editor: Editor
+  /** One-per-agent mutable model selection (grok/web pattern; install once per agent). */
+  private readonly selection: { current: import('@deepseek-ai/dsh-agent').ModelSelection | undefined } = { current: undefined }
+  private disposeSelection: (() => void) | undefined
+  private disposeMcpPolicy: (() => void) | undefined
+  private disposeSkillsPolicy: (() => void) | undefined
+  private disposeJobs: (() => void) | undefined
+  private agentsOverlayOpen = false
+  private contextOverlayOpen = false
+  private contextOverlayClose: (() => void) | undefined
+  private jobSnapshots: readonly JobView[] = []
+  private readonly waitingJobIds = new Set<JobId>()
+  private readonly jobReadOffsets = new Map<JobId, number>()
+  private readonly jobReadTimers = new Map<JobId, ReturnType<typeof setTimeout>>()
+  private jobInputWatch!: JobInputWatch
+  private mainSummary: AgentSummary = createAgentSummary()
+  private mcpEnabled = true
+  private jevEnabled = true
+  private skillsEnabled = true
+  private readonly disabledMcpServers = new Set<string>()
+  private readonly disabledSkills = new Set<string>()
+  /** Per-agent live stream subscription (rebound on every agent switch). */
+  private disposeStream: (() => void) | undefined
+  private streamSyncTimer: ReturnType<typeof setTimeout> | undefined
+  private activitySyncTimer: ReturnType<typeof setTimeout> | undefined
+  private exitArm: ExitArm = { lastPressAt: 0 }
+  /** Previous idle Esc press, for the double-Esc rewind gesture. */
+  private lastEscapeAt: number | undefined
+  private workingLoader: Loader | undefined
+  private readonly views = new Map<number, ReturnType<typeof createView>>()
+  private expandReasoning: boolean | undefined
+  private expandTools = false
+  private atPickerOpen = false
+  private reasoningPickerOpen = false
+  private teamModePickerOpen = false
+  private shellPickerOpen = false
+  private presetSwitching = false
+  /** In-flight official slash command's abort signal (Esc interrupts it). */
+  private slashAbort: AbortController | undefined
+  /** Last counted running background jobs (refreshed outside the chunk hot path). */
+  private cachedJobsRunning: number | undefined
+  /** Successful Jev tool results do not change during assistant text streaming. */
+  private cachedJevCost: number | undefined
+  /** Running delegation ids and the parent-scope filters carried by their lifecycle events. */
+  private readonly subagentRuns = new Map<string, (agentCtx: Context) => boolean>()
+  private readonly subagentActivity = new Map<string, {
+    entry: ActivityEntry
+    child?: Agent
+    parent: Agent
+    admits: (agentCtx: Context) => boolean
+    latestCall?: { callId: string; name: string }
+    summary: AgentSummary
+    fallbackTask?: string
+  }>()
+  private debugEntries: readonly ActivityEntry[] = []
+  private readonly activeToolCalls = new Map<string, symbol>()
+  /** ScrollView over the transcript (Ctrl+F jump target). */
+  private transcriptScroll: ScrollView | undefined
+  /** Active find query — views highlight its matches while set. */
+  private searchQuery: string | undefined
+  /** Cached git state for the session cwd (boot + switch refresh only). */
+  private gitState: GitState | undefined
+  /** Browse-mode focus ring: the tool card id Tab focuses (empty editor). */
+  private focusedToolId: number | undefined
+  /** Last folded replacement marker, shared by command dispatch and live delivery. */
+  private handledMarkerSeq: SessionSeq | undefined
+  /** Wall-clock start and token baseline of the live turn, for the done summary. */
+  private turnStartedAt: number | undefined
+  private turnStartTokens = 0
+  /** Replay guard: log folds during boot and switches must not emit live summaries. */
+  replaying = false
+  /** Per-card expand override toggled by Enter in browse mode. */
+  private expandedToolId: number | undefined
+  /** Long-session fold: render only the newest items above this line. */
+  private readonly historyLimit: number
+  private expandedAll = false
+  private foldNotice: Text | undefined
+  private lastFoldKey = ''
+  /** Banner above the editor listing messages queued for after the turn. */
+  private readonly queueBanner = new Text('', 0, 1)
+  private lastQueueKey = ''
+
+  constructor(options: ChatScreenOptions) {
+    this.onQuit = options.onQuit
+    this.ctx = options.ctx
+    this.tui = options.tui
+    this.statusBar = new StatusBar(this.tui, () => {
+      void this.cmdAgents().catch((error: unknown) => { this.pushNotice(`agents: ${error instanceof Error ? error.message : String(error)}`, 'error') })
+    })
+    this.ctx.effect(() => () => {
+      this.disposed = true
+      this.contextOverlayClose?.()
+      this.statusBar.stop()
+      this.workingLoader?.stop()
+      this.cancelStreamSync()
+      clearTimeout(this.activitySyncTimer)
+      this.activitySyncTimer = undefined
+      this.disposeStream?.()
+      this.disposeMcpPolicy?.()
+      this.disposeSkillsPolicy?.()
+      this.disposeJobs?.()
+      this.disposeShellDraft?.()
+      this.shellPane?.dispose()
+      for (const timer of this.jobReadTimers.values()) clearTimeout(timer)
+      this.jobReadTimers.clear()
+      this.jobInputWatch.dispose()
+    })
+    this.agent = options.agent
+    this.config = options.config
+    this.jobInputWatch = new JobInputWatch(options.config.jobInputWarningDelayMs ?? 15000, (id, waiting) => {
+      if (this.disposed) return
+      if (waiting) this.waitingJobIds.add(id)
+      else this.waitingJobIds.delete(id)
+      this.scheduleActivitySync()
+    })
+    this.historyLimit = options.config.historyLimit ?? 20
+    this.commands = this.ctx.get('commands')
+    this.onAgentSwitch = options.onAgentSwitch
+    installContextCapture(this.ctx)
+
+    this.seedSelection()
+    this.disposeSelection = this.installSelection()
+    this.disposeMcpPolicy = this.installMcpPolicy()
+    this.disposeSkillsPolicy = this.installSkillsPolicy()
+    this.listenStream()
+    this.listenSubagents()
+    this.listenToolActivity()
+
+    this.editor = new Editor(this.tui, editorTheme, { paddingX: 1 })
+    this.editor.onSubmit = (text) => {
+      this.submit(text)
+    }
+    this.editor.onChange = (text) => {
+      // Typing exits tool-card browse mode (the ring only applies to an
+      // empty editor).
+      if (text !== '' && this.focusedToolId !== undefined) this.exitBrowseMode()
+      this.maybeOpenAtPicker(text)
+    }
+
+    // pi-tui's combined provider: slash commands (official + local UI
+    // commands) plus file-path completion anchored at the session cwd.
+    this.rebuildAutocomplete()
+    // Layout: the transcript scrolls in an application-owned viewport, and
+    // the editor + status line are pinned at the BOTTOM (pi/Claude Code
+    // convention). The alternate-screen renderer diffs rows in place, so
+    // content shrink (e.g. reasoning collapsing at seal) no longer triggers
+    // the whole-screen + scrollback clear that TuiMainScreen used.
+    this.transcriptScroll = new ScrollView(this.messages, {
+      follow: 'end',
+      primary: true,
+      overscroll: 'chain',
+    })
+    this.chatRoot.addChild(this.transcriptScroll, { basis: 0, grow: 1, minSize: 1 })
+    this.chatRoot.addChild(
+      new VStack([this.queueBanner, this.editor, this.statusBar]),
+      { basis: 'auto', shrink: 1, minSize: 1 },
+    )
+    this.screenRoot = new ShellSplit(this.chatRoot, this.paneSlot, this.tui)
+    this.syncSidePane()
+    this.tui.setLayoutRoot(this.screenRoot)
+    this.tui.setFocus(this.editor)
+
+    this.tui.addInputListener((data: string) => {
+      // Global listeners see raw chunks BEFORE the focused-component path,
+      // which filters kitty key-release events — do the same here, or every
+      // functional key (Ctrl+C/D/T/O/L, Esc, Shift+Tab) fires twice.
+      if (isKeyRelease(data)) return undefined
+      if (this.agentsOverlayOpen && this.tui.hasOverlay()) return undefined
+      if (this.contextOverlayOpen && this.tui.hasOverlay()) return undefined
+      if (matchesKey(data, 'ctrl+alt+g') && !this.tui.hasOverlay()) {
+        void this.cmdAgents().catch((error: unknown) => { this.pushNotice(`agents: ${error instanceof Error ? error.message : String(error)}`, 'error') })
+        return { consume: true }
+      }
+      if (this.shellPickerOpen && this.tui.hasOverlay()) return undefined
+      if (!this.tui.hasOverlay() && this.toolActivity.focused && matchesKey(data, 'escape')) {
+        if (this.shellFocused) this.shellPane?.setFocused(true)
+        this.tui.setFocus(this.shellFocused && this.shellPane !== undefined ? this.shellPane.editor : this.editor)
+        return { consume: true }
+      }
+      if (!this.tui.hasOverlay()) {
+        if (matchesKey(data, 'ctrl+alt+d') && this.agentDebugVisible) {
+          if (this.shellFocused) this.shellPane?.setFocused(false)
+          this.tui.setFocus(this.toolActivity)
+          return { consume: true }
+        }
+        if (matchesKey(data, 'ctrl+alt+left') || matchesKey(data, 'ctrl+alt+right')) {
+          this.screenRoot?.resize(matchesKey(data, 'ctrl+alt+left') ? -2 : 2)
+          return { consume: true }
+        }
+      }
+      // A focused shell pane's editor yields Esc back to the chat first
+      if (this.shellFocused && data === '\u001b') {
+        this.unfocusShellPane()
+        return { consume: true }
+      }
+      // Ctrl+P opens the shell pane or cycles pane/chat focus (see the key map).
+      if (matchesKey(data, 'ctrl+p') && !this.tui.hasOverlay()) {
+        this.cycleShellFocus()
+        return { consume: true }
+      }
+      if ((this.reasoningPickerOpen || this.teamModePickerOpen) && this.tui.hasOverlay()) return undefined
+      if (matchesKey(data, 'escape')) {
+        // A running human shell command owns Esc first (pi semantics).
+        if (this.bashRunning) {
+          this.bashAbort?.abort()
+          return { consume: true }
+        }
+        // Then an in-flight official slash command (e.g. /plan).
+        if (this.slashAbort !== undefined) {
+          this.slashAbort.abort()
+          return { consume: true }
+        }
+        if (this.isWorking()) {
+          this.interrupt()
+          return { consume: true }
+        }
+        // Browse mode / find highlight: Esc exits both (idle only, and only
+        // when no overlay is open — overlays own Esc themselves).
+        if (!this.tui.hasOverlay()) {
+          if (this.focusedToolId !== undefined || this.expandedToolId !== undefined) {
+            this.exitBrowseMode()
+            return { consume: true }
+          }
+          if (this.searchQuery !== undefined) {
+            this.clearFindHighlight()
+            return { consume: true }
+          }
+          // Double-Esc on an empty idle editor rewinds to an earlier prompt.
+          if (this.editor.getText() === '') {
+            const now = Date.now()
+            const previous = this.lastEscapeAt
+            this.lastEscapeAt = now
+            if (previous !== undefined && now - previous <= 600) {
+              this.lastEscapeAt = undefined
+              void this.cmdRewind()
+            }
+          }
+        }
+        return undefined // editor cancels autocomplete, overlays close
+      }
+      if (matchesKey(data, 'ctrl+c')) {
+        const { action, state, arm } = ctrlC(
+          this.exitArm,
+          this.isWorking(),
+          this.editor.getText().length > 0,
+          Date.now(),
+        )
+        this.exitArm = state
+        if (action === 'cancel') this.interrupt()
+        else if (action === 'clear') this.editor.setText('')
+        else if (action === 'exit') this.quit()
+        if (arm) this.pushNotice('Press Ctrl+C again to exit')
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+d')) {
+        if (this.editor.getText() === '' && !this.isWorking()) {
+          this.quit()
+          return { consume: true }
+        }
+        return undefined // editor handles delete-forward
+      }
+      if (matchesKey(data, 'ctrl+t')) {
+        const views = [...this.views.values()].filter(view => view instanceof ReasoningView)
+        this.expandReasoning = !(views.length > 0
+          ? views.some(view => view.isExpanded)
+          : this.expandReasoning ?? this.model.working)
+        for (const view of views) view.setExpanded(this.expandReasoning)
+        this.sync()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+o')) {
+        this.expandTools = !this.expandTools
+        this.sync()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+l')) {
+        void this.openModelPicker()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+r')) {
+        void this.cmdHistorySearch()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+z')) {
+        this.suspend()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+g')) {
+        void this.externalEditor()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'shift+tab')) {
+        void this.cycleMode()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+x')) {
+        if (!this.tui.hasOverlay()) void this.cmdThinking('')
+        return { consume: true }
+      }
+      if (matchesKey(data, 'ctrl+f')) {
+        if (!this.tui.hasOverlay()) void this.cmdFindInTranscript()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'alt+c')) {
+        if (!this.tui.hasOverlay()) this.copyLastAssistant()
+        return { consume: true }
+      }
+      if (matchesKey(data, 'enter')) {
+        // Browse mode owns Enter while a tool card is focused (empty editor
+        // makes plain Enter a no-op anyway); overlays own Enter themselves.
+        if (this.focusedToolId !== undefined && !this.tui.hasOverlay() && !this.toolActivity.focused) {
+          this.toggleFocusedTool()
+          return { consume: true }
+        }
+        return undefined
+      }
+      if (matchesKey(data, 'tab')) {
+        // Empty editor + settled tool cards: Tab cycles the browse focus
+        // ring; with text it stays autocomplete (PathAware gate makes Tab a
+        // no-op on plain words anyway).
+        if (this.editor.getText() === '' && !this.tui.hasOverlay() && !this.toolActivity.focused) {
+          this.cycleToolFocus()
+          return { consume: true }
+        }
+        return undefined
+      }
+      return undefined
+    })
+
+    this.showBanner()
+    this.ctx.events.on('tools/change', () => { this.sync(false) }, { global: true })
+    this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
+    this.listenJobs()
+    this.sync()
+    this.refreshGitState()
+    // NOTE: the app layer already started the TUI (it must be live for the
+    // boot-time session picker overlay); starting again would attach a
+    // second stdin data listener and duplicate every keystroke.
+  }
+
+  private isWorking(): boolean {
+    return this.model.working || this.agent.status === 'running'
+  }
+
+  private interrupt(): void {
+    this.agent.cancel({ kind: 'user' }, { keepInbox: true })
+  }
+
+  private isBusy(): boolean {
+    return this.isWorking() || this.bashRunning
+  }
+
+  /** The session id the screen currently renders. */
+  get currentSessionId(): string {
+    return String(this.agent.session.id)
+  }
+
+  /** Copy-pasteable resume hint, or undefined when the session has no durable events. */
+  private resumeHint(): string | undefined {
+    if (this.agent.session.seq === 0) return undefined
+    return `session: ${this.currentSessionId}\nresume: ${resumeCommand(this.currentSessionId)}`
+  }
+
+  /** Exit once; the app stops the alternate screen before printing the saved-session hint. */
+  private quit(): void {
+    if (this.quitting) return
+    this.quitting = true
+    this.onQuit(this.resumeHint())
+  }
+
+  /**
+   * The live session's working directory, from its durable header. Anchors
+   * `!`/`@`/exports so they match the tools' cwd even after a resume from
+   * another directory (resume cannot carry a fresh cwd — the session keeps
+   * the one it was created in).
+   */
+  private get cwd(): string {
+    return this.agent.session.header.cwd ?? this.config.cwd ?? process.cwd()
+  }
+
+  /**
+   * Whether a session or agent id names the session this screen currently renders.
+   * @param id - the session or agent id to test, in branded or string form.
+   * @returns true when `id` names the current session.
+   */
+  ownsSession(id: unknown): boolean {
+    return id === this.agent.session.id || String(id) === String(this.agent.session.id)
+  }
+
+  /**
+   * Seed the model selection so every step has a route, including RESUMED
+   * agents (whose creation never saw our agentOptions): the persisted
+   * request header wins, then the live selection, then startup fallbacks.
+   */
+  private seedSelection(): void {
+    const requestHeader = this.agent.session.requestHeader()
+    const header = requestHeader === undefined ? undefined : {
+      ...requestHeader.config,
+      ...requestHeader.adapterDefaults === undefined ? {} : { adapterDefaults: requestHeader.adapterDefaults },
+    }
+    const defaults = this.defaultSelection()
+    const prior = this.selection.current
+    this.selection.current = seedModelSelection({
+      ...(header !== undefined ? { header } : {}),
+      config: this.config,
+      agentOptions: this.agent.options,
+      ...(defaults !== undefined ? { defaults } : {}),
+      ...(prior !== undefined ? { prior } : {}),
+    })
+  }
+
+  /** The harness's shared default-model selection (same source as app.ts). */
+  private defaultSelection():
+    { provider?: string; model?: string; reasoningEffort?: string } | undefined {
+    return defaultModelSelection(this.ctx)
+  }
+
+  /** Repair saved or resumed efforts before the runtime validates each request. */
+  private installSelection(): () => void {
+    const agent = this.agent
+    const disposeRouting = installModelSelection(agent.ctx)
+    const disposeEffort = agent.ctx.on('agent/request', async ({ signal }, next) => {
+      const proposed = await next()
+      const effort = proposed.reasoningEffort
+      const llm = this.llm()
+      if (effort === undefined || llm === undefined) return proposed
+      const info = await llm.resolveModelInfo(proposed.provider, proposed.model, signal)
+      signal.throwIfAborted()
+      if (info.reasoning?.efforts.some(level => level.id === effort)) return proposed
+      const { reasoningEffort: _unsupported, ...withoutEffort } = proposed
+      const selected = this.selection.current
+      if (selected?.provider === proposed.provider && selected.model === proposed.model && selected.reasoningEffort === effort) {
+        this.selection.current = { provider: selected.provider, model: selected.model }
+      }
+      if (this.agent === agent) {
+        delete this.model.effort
+        this.pushNotice(`Reasoning effort ${effort} is not advertised for ${proposed.model}; using provider default`, 'info')
+      }
+      return withoutEffort
+    }, { prepend: true })
+    return () => { disposeEffort(); disposeRouting() }
+  }
+
+  /** Hide MCP/JEV schemas and policy context, and deny stale calls while their switches are off. */
+  private installMcpPolicy(): () => void {
+    const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly: import('@deepseek-ai/dsh-system-prompt').PromptAssembly, _context, next) => {
+      const assembly = await next() as import('@deepseek-ai/dsh-system-prompt').PromptAssembly
+      return this.mcpEnabled && this.jevEnabled && this.disabledMcpServers.size === 0
+        ? assembly
+        : { ...assembly, tools: assembly.tools.filter(tool =>
+          (!tool.name.startsWith(MCP_TOOL_PREFIX)
+            || (this.mcpEnabled && !this.disabledMcpServers.has(mcpServerName(tool.name))))
+          && (this.jevEnabled || !isJevTool(tool.name))) }
+    })
+    const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
+      const decision = await next()
+      if (this.jevEnabled || decision.kind === 'reject') return decision
+      return {
+        ...decision,
+        messages: decision.messages.filter(message =>
+          message.source.kind !== 'skill-invocation' || message.source.name !== JEV_POLICY_SKILL),
+      }
+    }, { prepend: true })
+    const tools = this.agent.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const disposeGuard = tools?.guard?.((execution) => {
+      if (!this.mcpEnabled && execution.name.startsWith(MCP_TOOL_PREFIX)) {
+        return 'MCP tools are disabled in this TUI; run /mcp on'
+      }
+      if (execution.name.startsWith(MCP_TOOL_PREFIX)
+        && this.disabledMcpServers.has(mcpServerName(execution.name))) {
+        return `MCP server "${mcpServerName(execution.name)}" is disabled in this TUI; run /mcp to enable it`
+      }
+      if (!this.jevEnabled && isJevTool(execution.name)) {
+        return 'JEV is disabled in this TUI; run /jev on'
+      }
+      return undefined
+    })
+    return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
+  }
+
+  /** Hide disabled skill discovery and deny both model and user invocation. */
+  private installSkillsPolicy(): () => void {
+    const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly: import('@deepseek-ai/dsh-system-prompt').PromptAssembly, _context, next) => {
+      const assembly = await next() as import('@deepseek-ai/dsh-system-prompt').PromptAssembly
+      return this.skillsEnabled
+        ? assembly
+        : { ...assembly, tools: assembly.tools.filter(tool => tool.name !== SKILL_TOOL_NAME) }
+    })
+    const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
+      const decision = await next()
+      if (decision.kind === 'reject') return decision
+      return {
+        ...decision,
+        messages: this.skillsEnabled
+          ? decision.messages.flatMap((message) => {
+            const filtered = filterDisabledSkills(message, this.disabledSkills)
+            return filtered === undefined ? [] : [filtered]
+          })
+          : decision.messages.filter((message) => {
+            const kind: string = message.source.kind
+            return kind !== 'skill-catalog' && kind !== 'skill-invocation'
+          }),
+      }
+    }, { prepend: true })
+    const tools = this.agent.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const disposeGuard = tools?.guard?.((execution) => {
+      if (execution.name !== SKILL_TOOL_NAME) return undefined
+      if (!this.skillsEnabled) return 'Skills are disabled in this TUI; run /skills on'
+      const args = execution.arguments
+      if (typeof args === 'object' && args !== null && 'name' in args
+        && typeof args.name === 'string' && this.disabledSkills.has(args.name)) {
+        return `Skill "${args.name}" is disabled in this TUI; run /skills to enable it`
+      }
+      return undefined
+    })
+    return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
+  }
+
+  /**
+   * Subscribe to the agent's process-local assistant-stream publication: the
+   * successor of the retired durable `assistant/chunk` events. Only chunk
+   * frames fold — the committed `assistant/message`/`assistant/attempt`
+   * session events still seal the items authoritatively.
+   */
+  private listenStream(): void {
+    this.cancelStreamSync()
+    this.disposeStream?.()
+    this.disposeStream = this.agent.ctx.on('agent/assistant-stream', ({ frame }) => {
+      if (frame.type === 'end' && this.streamSyncTimer !== undefined) this.sync(false)
+      if (frame.type !== 'chunk') return
+      const chunk = frame.chunk
+      if ((chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') || chunk.text === '') return
+      applyStreamChunk(this.model, frame.chunk)
+      // Coalesce UI work at the renderer's 16 ms cadence without postponing it on each delta.
+      this.streamSyncTimer ??= setTimeout(() => {
+        this.sync(false)
+      }, 16)
+    })
+  }
+
+  private cancelStreamSync(): void {
+    clearTimeout(this.streamSyncTimer)
+    this.streamSyncTimer = undefined
+  }
+
+  /**
+   * Rebind the screen to another live agent (new/fork/resume): tear down the
+   * old per-agent selection install, reset the transcript and scroll, reinstall
+   * and reseed the selection, replay the durable log, and repaint.
+   * @param next - the live agent to rebind the screen to.
+   */
+  async switchAgent(next: Agent): Promise<void> {
+    if (next === this.agent) {
+      this.transcriptScroll?.scrollToEnd()
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    this.contextOverlayClose?.()
+    // The pane streams a PTY session owned by the outgoing agent; it dies
+    // with that agent's scope.
+    this.closeShellPane()
+    this.disposeSelection?.()
+    this.disposeMcpPolicy?.()
+    this.disposeSkillsPolicy?.()
+    this.agent = next
+    this.mainSummary = createAgentSummary()
+    this.activeToolCalls.clear()
+    clearTimeout(this.activitySyncTimer)
+    this.activitySyncTimer = undefined
+    this.model = createModel()
+    this.views.clear()
+    this.messages.clear()
+    // Per-session UI state does not survive a switch.
+    this.lastFoldKey = ''
+    this.searchQuery = undefined
+    this.focusedToolId = undefined
+    this.handledMarkerSeq = undefined
+    this.expandedToolId = undefined
+    this.expandedAll = false
+    this.showBanner()
+    if (this.workingLoader !== undefined) {
+      this.workingLoader.stop()
+      this.workingLoader = undefined
+    }
+    this.seedSelection()
+    this.disposeSelection = this.installSelection()
+    this.disposeMcpPolicy = this.installMcpPolicy()
+    this.disposeSkillsPolicy = this.installSkillsPolicy()
+    this.listenStream()
+    this.listenJobs()
+    await this.replayTranscript(next)
+    this.seedHistory()
+    this.rebuildAutocomplete()
+    this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
+    this.sync()
+    this.transcriptScroll?.scrollToEnd()
+    this.refreshGitState()
+  }
+
+  /**
+   * Replay the complete session snapshot, including its inherited fork seed.
+   * Parent metadata records lineage; replay never opens an ancestor's log.
+   * Existing conversation context adds a read-only recap after the replay.
+   * @param agent - the live agent whose transcript is repainted.
+   */
+  replayTranscript(agent: Agent): Promise<void> {
+    this.replaying = true
+    try {
+      for (const event of replayEvents(agent.session)) {
+        this.handleEvent(event)
+      }
+      this.mainSummary = rebuildAgentSummary(replayEvents(agent.session))
+    } finally {
+      this.replaying = false
+    }
+    const recap = buildRecap(agent.session.deriveMessages())
+    if (recap !== undefined) pushNotice(this.model, recap)
+    // Replay batches: one reconcile after the whole log, not per event.
+    this.sync()
+    return Promise.resolve()
+  }
+
+  /**
+   * Close an externally driven replay batch (the boot path drives
+   * `replaying` directly): drop the batch flag and reconcile once.
+   */
+  finalizeReplay(): void {
+    this.replaying = false
+    this.mainSummary = rebuildAgentSummary(replayEvents(this.agent.session))
+    this.sync()
+  }
+
+  /** Welcome block at the top of the transcript (boot and every switch). */
+  showBanner(): void {
+    const route = this.currentRoute()
+    const preset = this.currentPresetId()
+    pushNotice(
+      this.model,
+      buildBanner({
+        ...(this.config.version !== undefined ? { version: this.config.version } : {}),
+        cwd: basename(this.cwd),
+        ...(preset !== undefined ? { preset } : {}),
+        model: route.model,
+      }),
+      'banner',
+    )
+  }
+
+  /**
+   * Seed the editor's ↑/↓ history from the current session's user messages
+   * (pi semantics: the session transcript, not just this-run submissions).
+   * Entries accumulate across switches, newest last; the editor caps at 100.
+   */
+  seedHistory(): void {
+    const userTexts = this.model.items
+      .filter(item => item.kind === 'user')
+      .map(item => item.text)
+    for (const text of userTexts.slice(-100)) {
+      this.editor.addToHistory(text)
+    }
+  }
+
+  /**
+   * Rebuild the editor's autocomplete provider (official + local slash
+   * commands, then file-path completion anchored at the current session
+   * cwd). Re-run after every agent switch so path completion follows the
+   * new session's directory and official commands reflect its preset.
+   */
+  private rebuildAutocomplete(): void {
+    const slashCommands: SlashCommand[] = [
+      ...(this.commands?.list(this.agent) ?? []).map(descriptor => ({
+        name: descriptor.name,
+        description: descriptor.description,
+      })),
+      { name: 'new', description: 'Start a fresh session' },
+      { name: 'exit', description: 'Exit and show the session resume command' },
+      { name: 'fork', description: 'Fork this session at its current end' },
+      { name: 'resume', description: 'List sessions / reopen one' },
+      { name: 'tree', description: 'Subagent session tree' },
+      {
+        name: 'model',
+        description: 'Switch model',
+        getArgumentCompletions: prefix => this.modelCompletions(prefix),
+      },
+      { name: 'preset', description: 'Switch the session preset' },
+      { name: 'preset-create', description: 'Create a new preset from pasted text' },
+      { name: 'suppress-prompt', description: 'Show strict prompt protection status' },
+      { name: 'mcp', description: 'Enable or disable MCP tools' },
+      { name: 'jev', description: 'Enable or disable JEV tools and policy context' },
+      { name: 'team-mode', description: 'Switch the team mode' },
+      { name: 'thinking', description: 'Choose reasoning level for the selected model' },
+      { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
+      { name: 'recon', description: 'Scan a target / list recon runs' },
+      { name: 'machines', description: 'SSH machines: list|probe|open' },
+      { name: 'key', description: 'Save a provider credential (masked)' },
+      { name: 'provider', description: 'Register a custom endpoint + key + models' },
+      { name: 'memory', description: 'Edit AGENTS.md (project or global)' },
+      { name: 'sessions', description: 'List / delete persisted sessions' },
+      { name: 'rewind', description: 'Rewind to an earlier prompt and resend' },
+      { name: 'clear', description: 'Clear the conversation (same session, fresh context)' },
+      { name: 'queue', description: 'Pending inbox: list|remove <id>|clear' },
+      { name: 'providers', description: 'List provider routes with model counts and key state' },
+      { name: 'skills', description: 'List, enable, or disable skills' },
+      { name: 'shell', description: 'Choose Windows, Kali, or close the shared shell' },
+      { name: 'agent-debug', description: 'Show or hide Agent Debug activity' },
+      { name: 'exec', description: 'List commands the agent executed' },
+      { name: 'wiki', description: 'View Wiki index or open Obsidian / Wiki folder' },
+      { name: 'agents', description: 'Inspect subagent messages and tools (Ctrl+Alt+G)' },
+      { name: 'jobs', description: 'List background jobs' },
+      { name: 'export', description: 'Write this transcript to a markdown file' },
+      { name: 'rename', description: 'Rename this session' },
+      { name: 'hotkeys', description: 'Show key bindings' },
+      {
+        name: 'copy',
+        description: 'Copy to clipboard: last|tool|error|id|resume',
+      },
+      { name: 'retry', description: 'Re-send the last prompt after a failure' },
+      { name: 'recap', description: 'Review the latest request, reply, and active checkpoint' },
+      { name: 'context', description: 'Compare the last request with current and queued context' },
+      { name: 'expand-all', description: 'Toggle folding of old messages' },
+    ]
+    this.editor.setAutocompleteProvider(
+      new PathAwareAutocomplete(new CombinedAutocompleteProvider(slashCommands, this.cwd)),
+    )
+    // Rebuild the provider once the skill catalog arrives so `/` completes
+    // user-invocable skills too (plain `/name` — the dsh pre-step gesture
+    // recognizes that token, not pi's `/skill:name` form).
+    const agent = this.agent
+    void this.listSkills().then((skills) => {
+      if (this.agent !== agent || !this.skillsEnabled) return
+      const withSkills: SlashCommand[] = [
+        ...slashCommands,
+        ...skills.map(skill => ({
+          name: skill.name,
+          description: skill.description,
+        })),
+      ]
+      this.editor.setAutocompleteProvider(
+        new PathAwareAutocomplete(new CombinedAutocompleteProvider(withSkills, this.cwd)),
+      )
+    })
+  }
+
+  /** Switch and notify the app layer (which owns old-handle disposal). */
+  private async commitSwitch(resolved: ResolvedAgent): Promise<void> {
+    await this.switchAgent(resolved.agent)
+    this.onAgentSwitch?.(resolved)
+  }
+
+  // ── session management commands ────────────────────────────────────────────
+
+  private sessionOptions() {
+    const route = this.currentRoute()
+    return {
+      provider: route.provider,
+      model: route.model,
+    }
+  }
+
+  private sessionMeta() {
+    const preset = this.currentPresetId() ?? this.config.preset
+    return {
+      cwd: this.cwd,
+      ...(preset !== undefined ? { agentPreset: preset } : {}),
+    }
+  }
+
+  private async cmdNew(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    const previousId = this.currentSessionId
+    const previousHasContent = this.agent.session.seq > 0
+    try {
+      const resolved = await resolveAgent(
+        this.ctx,
+        undefined,
+        this.sessionOptions(),
+        this.sessionMeta(),
+      )
+      await this.commitSwitch(resolved)
+      this.pushNotice(
+        `new session ${this.currentSessionId.slice(0, 8)} · ${resumeCommand(this.currentSessionId)}`,
+      )
+      if (previousHasContent) {
+        this.pushNotice(`previous ${previousId.slice(0, 8)} · ${resumeCommand(previousId)}`)
+      }
+    } catch (error) {
+      this.pushNotice(
+        `/new failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  private async cmdFork(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot fork while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    try {
+      const resolved = await forkSession(
+        this.ctx,
+        this.agent,
+        this.sessionOptions(),
+        this.sessionMeta(),
+      )
+      await this.commitSwitch(resolved)
+      this.pushNotice(
+        `forked → ${this.currentSessionId.slice(0, 8)} (history kept, lineage recorded) · ${resumeCommand(this.currentSessionId)}`,
+      )
+    } catch (error) {
+      this.pushNotice(
+        `/fork failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  private async cmdResume(raw: string): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    let target = raw.trim()
+    if (target === '') {
+      const headers = await listSessions(this.ctx)
+      if (headers.length === 0) {
+        this.pushNotice('no persisted sessions')
+        return
+      }
+      const summaries = await sessionSummaries(this.ctx, headers)
+      target =
+        (await pickFromListWithSearch(this.tui, {
+          title: 'Resume session',
+          items: headers.map((header) => {
+            const id = String(header.id)
+            const summary = summaries.get(id)
+            const title = summary?.title
+            return {
+              value: id,
+              label: title ?? (basename(header.cwd ?? '') || `session ${id.slice(0, 8)}`),
+              description: `${id.slice(0, 8)} · ${new Date(header.createdAt).toLocaleString()} · ${
+                summary?.events ?? '?'
+              } events${header.parentSession !== undefined ? ' · fork' : ''}${
+                title !== undefined && header.cwd !== undefined ? ` · ${basename(header.cwd)}` : ''
+              }`,
+            }
+          }),
+        })) ?? ''
+    }
+    if (target === '') return
+    try {
+      const resolved = await resolveAgent(
+        this.ctx,
+        target,
+        this.sessionOptions(),
+        this.sessionMeta(),
+      )
+      await this.commitSwitch(resolved)
+      this.pushNotice(`resumed ${this.currentSessionId.slice(0, 8)}`)
+    } catch (error) {
+      this.pushNotice(
+        `/resume failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  private async cmdTree(): Promise<void> {
+    const subs = this.ctx.get('subagents') as
+      | {
+        listDescendants(
+          root: unknown,
+          signal?: AbortSignal,
+        ): Promise<
+          readonly {
+            id: string
+            depth: number
+            mode: string
+            activity: string
+            hasChildren?: boolean
+          }[]
+        >
+      }
+      | undefined
+    if (subs === undefined) {
+      this.pushNotice('subagent service unavailable', 'error')
+      return
+    }
+    const nodes = await subs.listDescendants(this.agent.session.id).catch(() => [])
+    if (nodes.length === 0) {
+      this.pushNotice('no subagent sessions under this root')
+      return
+    }
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Session tree',
+      items: nodes.map(node => ({
+        value: node.id,
+        label: `${'  '.repeat(Math.min(node.depth, 6))}${node.mode === 'continuable' ? '◈' : '◦'} ${node.id.slice(0, 8)}`,
+        description: `${node.activity}${node.hasChildren === true ? ' · has children' : ''}`,
+      })),
+    })
+    if (picked !== undefined) {
+      const resolved = await resolveAgent(
+        this.ctx,
+        picked,
+        this.sessionOptions(),
+        this.sessionMeta(),
+      )
+      await this.commitSwitch(resolved)
+    }
+  }
+
+  private async cmdAgents(): Promise<void> {
+    if (this.agentsOverlayOpen || this.tui.hasOverlay()) return
+    const subs = this.ctx.get('subagents')
+    if (subs === undefined) {
+      this.pushNotice('subagent service unavailable', 'error')
+      return
+    }
+    this.agentsOverlayOpen = true
+    const owner = this.agent
+    const controller = new AbortController()
+    const stopLifecycle = this.ctx.effect(() => () => { controller.abort() }, 'subagent picker')
+    try {
+      const nodes = await subs.listDescendants(owner.id, controller.signal)
+      if (this.disposed || this.agent !== owner) return
+      if (nodes.length === 0) { this.pushNotice('no subagents'); return }
+      const picked = await pickFromListWithSearch(this.tui, {
+        title: 'Subagents · Enter inspect · Esc main agent',
+        signal: controller.signal,
+        items: nodes.map(node => ({
+          value: node.id,
+          label: `${'  '.repeat(Math.min(node.depth - 1, 6))}${node.kind === 'child' ? node.label ?? node.id.slice(0, 8) : node.id.slice(0, 8)}`,
+          description: node.kind === 'child' ? `${node.activity} · ${node.mode} · ${node.id}` : `history ${node.reason} · ${node.id}`,
+        })),
+      })
+      if (picked === undefined || controller.signal.aborted || this.agent !== owner) return
+      const node = nodes.find(node => node.id === picked)
+      if (node === undefined) return
+      if (node.kind !== 'child') { this.pushNotice(`subagent history ${node.reason}`, 'error'); return }
+      await inspectSubagent(this.ctx, this.tui, node.id, node.label ?? node.id.slice(0, 8), this.historyLimit)
+    } finally { await stopLifecycle(); this.agentsOverlayOpen = false }
+  }
+
+  /** Inspect the selected live child while global interrupt and quit keys belong to its overlay. */
+  private async inspectSubagentRun(id: Agent['id'], label: string): Promise<void> {
+    if (this.agentsOverlayOpen || this.tui.hasOverlay()) return
+    this.agentsOverlayOpen = true
+    try {
+      await inspectSubagent(this.ctx, this.tui, id, label, this.historyLimit)
+    } catch (error: unknown) {
+      if (!this.disposed) this.pushNotice(`subagent: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    } finally {
+      this.agentsOverlayOpen = false
+    }
+  }
+
+  private async cmdJobs(): Promise<void> {
+    const jobs = this.ctx.get('jobs')
+    if (jobs === undefined) {
+      this.pushNotice('jobs service unavailable', 'error')
+      return
+    }
+    const snapshots = jobs.list(this.agent.id)
+    if (snapshots.length === 0) {
+      this.pushNotice('no background jobs')
+      return
+    }
+    await pickFromListWithSearch(this.tui, {
+      title: 'Background jobs',
+      items: snapshots.map(job => ({
+        value: job.id,
+        label: `${job.id} · ${job.label || job.kind}`,
+        description: job.status,
+      })),
+    })
+  }
+
+  /**
+   * Submit one human turn or dispatch a slash/bang command.
+   * @param text - the editor text: a plain turn, a `!` shell line, or a `/` command.
+   */
+  submit(text: string): void {
+    if (this.quitting) return
+    const trimmed = text.trim()
+    if (this.presetSwitching && !/^\/exit(?:\s|$)/.test(trimmed)) {
+      this.pushNotice('preset switch in progress; send again when it finishes', 'info')
+      return
+    }
+    if (trimmed === '') {
+      this.editor.setText('')
+      return
+    }
+    this.editor.addToHistory(trimmed)
+    this.editor.setText('')
+    if (trimmed.startsWith('!')) {
+      void this.runBashCommand(trimmed)
+      return
+    }
+    if (trimmed.startsWith('/')) {
+      this.dispatchSlash(trimmed).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        this.pushNotice(`command failed: ${message}`, 'error')
+      })
+      return
+    }
+    const wasWorking = this.isWorking()
+    this.followup(trimmed)
+    if (wasWorking) {
+      const pending = this.agent.inbox.nextTurn.length
+      this.pushNotice(`queued — ${pending} pending · /queue to manage`, 'info')
+      this.sync()
+    }
+  }
+
+  private followup(text: string): void {
+    this.agent.followup(
+      createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'user' },
+      }),
+    )
+  }
+
+  /** Route a slash line: local UI commands → official registry → skills. */
+  private async dispatchSlash(line: string): Promise<void> {
+    const parsed = parseSlash(line)
+    if (parsed === undefined) {
+      this.followup(line)
+      return
+    }
+    if (parsed.name === 'exit') {
+      this.quit()
+      return
+    }
+    if (parsed.name === 'model') return this.cmdModel(parsed.raw.trim())
+    if (parsed.name === 'preset') return this.cmdPreset(parsed.raw.trim())
+    if (parsed.name === 'suppress-prompt' || parsed.name === 'suppress-promot') return this.cmdSuppressPrompt(parsed.raw.trim())
+    if (parsed.name === 'mcp') return this.cmdMcp(parsed.raw.trim())
+    if (parsed.name === 'jev') {
+      this.cmdJev(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'team-mode') return this.cmdTeamMode(parsed.raw.trim())
+    if (parsed.name === 'runs') return this.cmdRuns(parsed.raw.trim())
+    if (parsed.name === 'recon') return this.cmdRecon(parsed.raw.trim())
+    if (parsed.name === 'machines') return this.cmdMachines(parsed.raw.trim())
+    if (parsed.name === 'key') return this.cmdKey(parsed.raw.trim())
+    if (parsed.name === 'provider') return this.cmdProvider()
+    if (parsed.name === 'memory') return this.cmdMemory(parsed.raw.trim())
+    if (parsed.name === 'sessions') return this.cmdSessions(parsed.raw.trim())
+    if (parsed.name === 'rewind') return this.cmdRewind()
+    if (parsed.name === 'clear') {
+      this.cmdClear()
+      return
+    }
+    if (parsed.name === 'recap') {
+      if (parsed.raw.trim() !== '') {
+        this.pushNotice('usage: /recap', 'error')
+        return
+      }
+      this.pushNotice(buildRecap(this.agent.session.deriveMessages()) ?? 'Nothing to recap yet.')
+      return
+    }
+    if (parsed.name === 'context') {
+      if (parsed.raw.trim() !== '') {
+        this.pushNotice('usage: /context', 'error')
+        return
+      }
+      this.contextOverlayOpen = true
+      this.contextOverlayClose = showContextViewer(this.ctx, this.tui, this.agent, () => {
+        this.contextOverlayOpen = false
+        this.contextOverlayClose = undefined
+      })
+      return
+    }
+    if (parsed.name === 'queue') {
+      this.cmdQueue(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'preset-create') return this.cmdPresetCreate()
+    if (parsed.name === 'providers') return this.cmdProviders()
+    if (parsed.name === 'thinking') return this.cmdThinking(parsed.raw.trim())
+    if (parsed.name === 'skills') return this.cmdSkills(parsed.raw.trim())
+    if (parsed.name === 'shell') return this.cmdShell(parsed.raw.trim())
+    if (parsed.name === 'agent-debug') {
+      if (parsed.raw.trim() !== '') {
+        this.pushNotice('usage: /agent-debug', 'error')
+        return
+      }
+      this.agentDebugVisible = !this.agentDebugVisible
+      if (!this.agentDebugVisible && this.toolActivity.focused) {
+        if (this.shellFocused) this.shellPane?.setFocused(true)
+        this.tui.setFocus(this.shellFocused && this.shellPane !== undefined ? this.shellPane.editor : this.editor)
+      }
+      this.syncSidePane()
+      this.pushNotice(`agent debug: ${this.agentDebugVisible ? 'ON' : 'OFF'}`)
+      return
+    }
+    if (parsed.name === 'exec') return this.cmdExec()
+    if (parsed.name === 'wiki') return this.cmdWiki()
+    if (parsed.name === 'new') return this.cmdNew()
+    if (parsed.name === 'fork') return this.cmdFork()
+    if (parsed.name === 'resume') return this.cmdResume(parsed.raw)
+    if (parsed.name === 'tree') return this.cmdTree()
+    if (parsed.name === 'agents') return this.cmdAgents()
+    if (parsed.name === 'jobs') return this.cmdJobs()
+    if (parsed.name === 'export') return this.cmdExport()
+    if (parsed.name === 'rename') {
+      this.cmdRename(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'hotkeys') {
+      this.cmdHotkeys()
+      return
+    }
+    if (parsed.name === 'copy') {
+      this.cmdCopy(parsed.raw.trim())
+      return
+    }
+    if (parsed.name === 'retry') {
+      this.cmdRetry()
+      return
+    }
+    if (parsed.name === 'expand-all') {
+      this.cmdExpandAll()
+      return
+    }
+
+    if (await this.executeCommand(line)) return
+
+    // User-invocable skills ride a plain `/skillname` message; the
+    // dsh-tool-skill pre-step gesture picks it up. Don't swallow it.
+    const skills = await this.listSkills()
+    if (skills.some(skill => skill.name === parsed.name)) {
+      this.followup(line)
+      return
+    }
+    this.pushNotice(`unknown command: ${line}`, 'error')
+  }
+
+  /**
+   * Execute an official slash command through the registry with a
+   * cancellable signal (Esc aborts via `this.slashAbort`). Returns true when
+   * the command was dispatched — handled or failed — so callers stop
+   * fall-through; false means the registry returned nothing (unhandled line).
+   */
+  private async executeCommand(line: string): Promise<boolean> {
+    if (this.commands === undefined) return false
+    const controller = new AbortController()
+    this.slashAbort = controller
+    try {
+      // The TUI submits plain lines without composer attachments.
+      const execution = await this.commands.execute(this.agent, line, [], controller.signal)
+      if (execution !== undefined) {
+        const result = execution.result
+        if (result.kind === 'success') this.pushNotice(result.text ?? line)
+        else this.pushNotice(result.text, 'error')
+        return true
+      }
+      return false
+    } catch (error) {
+      if (controller.signal.aborted) {
+        this.pushNotice('command interrupted', 'info')
+      } else {
+        this.pushNotice(
+          `command failed: ${error instanceof Error ? error.message : String(error)}`,
+          'error',
+        )
+      }
+      return true
+    } finally {
+      if (this.slashAbort === controller) this.slashAbort = undefined
+    }
+  }
+
+  // ── local UI commands ─────────────────────────────────────────────────────
+
+  private llm(): LlmRuntime | undefined {
+    return this.ctx.get('llm')
+  }
+
+  private currentRoute(): ModelRoute {
+    const current = this.selection.current
+    if (current !== undefined) {
+      return { provider: current.provider, model: current.model }
+    }
+    const route = this.model.route
+    if (route?.provider !== undefined && route.model !== undefined) {
+      return { provider: route.provider, model: route.model }
+    }
+    return {
+      provider: this.config.provider ?? this.agent.options.provider ?? 'deepseek-official',
+      model: this.config.model ?? this.agent.options.model ?? 'deepseek-v4-flash',
+    }
+  }
+
+  private currentEffort(): string | undefined {
+    const current = this.selection.current
+    if (current?.reasoningEffort !== undefined) return current.reasoningEffort
+    if (current !== undefined && (current.provider !== this.model.route?.provider || current.model !== this.model.route?.model)) return
+    return this.model.effort
+  }
+
+  /** The mounted preset of the visible agent, shared by the banner and status bar. */
+  private currentPresetId(): string | undefined {
+    const presets = this.ctx.get('agentPresets') as
+      { composedPreset(agentCtx: Context): string | undefined } | undefined
+    return presets?.composedPreset(this.agent.ctx)
+  }
+
+  /** Pick one MCP server or toggle all MCP tools for this TUI process. */
+  private async cmdMcp(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /mcp [on|off|toggle|status]', 'error')
+      return
+    }
+    const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const mcpTools = tools?.schemas?.(this.agent)
+      .filter(tool => tool.name.startsWith(MCP_TOOL_PREFIX)) ?? []
+    const servers = [...new Set(mcpTools.map(tool => mcpServerName(tool.name)))].sort()
+    const enabledServers = servers.filter(server => !this.disabledMcpServers.has(server)).length
+    const enabledTools = mcpTools.filter(tool => !this.disabledMcpServers.has(mcpServerName(tool.name))).length
+    if (action === 'status') {
+      this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${this.mcpEnabled ? enabledServers : 0}/${servers.length} server(s) enabled · ${this.mcpEnabled ? enabledTools : 0}/${mcpTools.length} tool(s) available`)
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot change MCP tools while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    if (action === '') {
+      if (this.tui.hasOverlay()) return
+      if (servers.length === 0) {
+        this.pushNotice('no MCP servers available in this profile')
+        return
+      }
+      const picked = await pickFromListWithSearch(this.tui, {
+        title: 'MCP servers',
+        body: 'select a server to toggle it for this TUI process',
+        items: servers.map((server) => {
+          const enabled = !this.disabledMcpServers.has(server)
+          const count = mcpTools.filter(tool => mcpServerName(tool.name) === server).length
+          return {
+            value: server,
+            label: `${enabled ? 'ON ' : 'OFF'} ${server}`,
+            description: `${count} tool(s) · select to turn ${enabled ? 'off' : 'on'}`,
+            searchText: server,
+          }
+        }),
+      })
+      if (picked === undefined || this.quitting) return
+      const enabled = this.disabledMcpServers.has(picked)
+      if (enabled) this.disabledMcpServers.delete(picked)
+      else this.disabledMcpServers.add(picked)
+      const count = mcpTools.filter(tool => mcpServerName(tool.name) === picked).length
+      this.pushNotice(`mcp: ${picked} ${enabled ? 'ON' : 'OFF'} · ${count} tool(s) ${enabled && this.mcpEnabled ? 'available' : 'hidden'} · applies to the next request`)
+      return
+    }
+    this.mcpEnabled = action === 'on' ? true : action === 'off' ? false : !this.mcpEnabled
+    this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${this.mcpEnabled ? enabledServers : 0}/${servers.length} server(s) enabled · ${this.mcpEnabled ? enabledTools : 0}/${mcpTools.length} tool(s) available · applies to the next request`)
+  }
+
+  /** Toggle JEV policy context and open-dev-browser MCP tools for this TUI process. */
+  private cmdJev(argument: string): void {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /jev [on|off|toggle|status]', 'error')
+      return
+    }
+    const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const jevTools = tools?.schemas?.(this.agent).filter(tool => isJevTool(tool.name)) ?? []
+    const count = jevTools.length
+    const available = jevTools.filter(tool => !this.disabledMcpServers.has(mcpServerName(tool.name))).length
+    if (action === 'status') {
+      this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${available}/${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''}`)
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot change JEV while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    this.jevEnabled = action === 'on' ? true : action === 'off' ? false : !this.jevEnabled
+    this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${available}/${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''} · applies to the next request`)
+  }
+
+  /** Keep suppression disabled so every TUI request retains its system prompt. */
+  private async cmdSuppressPrompt(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /suppress-prompt [on|off|toggle|status]', 'error')
+      return
+    }
+    if (action === '' || action === 'status') {
+      this.pushNotice('suppress-prompt: OFF · locked by strict system prompt protection')
+      return
+    }
+    if (action === 'on' || action === 'toggle') {
+      this.pushNotice('Cannot suppress the system prompt: strict system prompt protection is enabled', 'error')
+      return
+    }
+    const settings = this.ctx.get('settings') as { update(ns: string, patch: object): Promise<void> } | undefined
+    if (settings === undefined) {
+      this.pushNotice('prompt suppression settings unavailable in this profile', 'error')
+      return
+    }
+    await settings.update('pentest-mode', { suppressSections: false })
+    this.pushNotice('suppress-prompt: OFF · locked by strict system prompt protection')
+  }
+
+  /** Pick or set the saved TUI team mode, applied to the next model request. */
+  private async cmdTeamMode(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (action !== '' && action !== 'status' && !TEAM_MODE_OPTIONS.some(option => option.value === action)) {
+      this.pushNotice('usage: /team-mode [blue|red|black|dead|status]', 'error')
+      return
+    }
+    const policy = this.ctx.get('pentestModePolicy') as
+      { current(): { mode: TeamMode; suppressSections: boolean } } | undefined
+    if (policy === undefined) {
+      this.pushNotice('team mode unavailable in this profile', 'error')
+      return
+    }
+    const current = policy.current().mode
+    if (action === 'status') {
+      this.pushNotice(`team-mode: ${current}${policy.current().suppressSections ? ' · prompt suppressed (Suppress ON)' : ''}`)
+      return
+    }
+    const settings = this.ctx.get('settings') as { update(ns: string, patch: object): Promise<void> } | undefined
+    if (settings === undefined) {
+      this.pushNotice('team mode settings unavailable in this profile', 'error')
+      return
+    }
+    let mode = action
+    if (action === '') {
+      if (this.teamModePickerOpen || this.tui.hasOverlay()) return
+      this.teamModePickerOpen = true
+      try {
+        const picked = await pickFromList(this.tui, {
+          title: 'Select Team Mode',
+          body: '\n' + style.muted('↑/↓ choose · number jump · Enter apply · Esc cancel') + '\n',
+          initial: current, numberKeys: true,
+          theme: { ...selectListTheme, selectedText: text => chalk.bgHex(BRAND_RED).black.bold(text) },
+          items: TEAM_MODE_OPTIONS.map((option, index) => ({
+            value: option.value, label: `${index + 1}. ${option.icon} ${option.label}${option.value === current ? ' (current)' : ''}`,
+            description: `Use the ${option.label} prompt`,
+          })),
+        })
+        if (picked === undefined || this.quitting) return
+        mode = picked
+      } finally { this.teamModePickerOpen = false }
+    }
+    await settings.update('pentest-mode', { mode })
+    this.pushNotice(`team-mode: ${mode} · applies to the next request${policy.current().suppressSections ? ' · prompt suppressed (Suppress ON)' : ''}`)
+  }
+
+  private async cmdPreset(query: string): Promise<void> {
+    if (this.isBusy() || this.presetSwitching) {
+      this.pushNotice('cannot switch presets while work is running', 'error')
+      return
+    }
+    const roster = await listPresets(this.ctx)
+    if (roster.length === 0) {
+      this.pushNotice('no agent presets available in this profile', 'error')
+      return
+    }
+    let pickedId: string | undefined
+    if (query !== '') {
+      const match =
+        roster.find(entry => entry.id === query) ??
+        roster.find(entry => (entry.name ?? entry.id).toLowerCase().includes(query.toLowerCase()))
+      if (match === undefined) {
+        this.pushNotice(
+          `preset "${query}" not found (available: ${roster.map(entry => entry.id).join(', ')})`,
+          'error',
+        )
+        return
+      }
+      pickedId = match.id
+    } else {
+      pickedId = await pickFromListWithSearch(this.tui, {
+        title: 'Select preset',
+        items: roster.map(entry => ({
+          value: entry.id,
+          label: entry.name ?? entry.id,
+          ...(entry.description !== undefined ? { description: entry.description } : {}),
+        })),
+      })
+      if (pickedId === undefined) return
+    }
+    try {
+      await this.switchPreset(pickedId)
+      // Make the choice the deployment default: write selectedDefault into
+      // the home patch row so new sessions open on this preset too.
+      try {
+        const home = (this.ctx.get('profileContext') as { home: string } | undefined)?.home ?? join(homedir(), '.dsh')
+        const patchPath = join(home, 'cordis.patch.yml')
+        const lines = readFileSync(patchPath, 'utf8').split('\n')
+        const row = lines.findIndex(line => line === '    - id: agent-presets')
+        if (row !== -1) {
+          const selected = '        selectedDefault: ' + pickedId
+          const existing = lines.findIndex(line => line.startsWith('        selectedDefault:'))
+          if (existing === -1) lines.splice(row + 1, 0, selected)
+          else lines[existing] = selected
+          writeFileSync(patchPath, lines.join('\n'))
+        }
+      } catch {
+        // Best effort; the session switch already applied.
+      }
+    } catch (error) {
+      this.pushNotice(
+        `preset switch failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  /** Open a child session under the new preset, retaining conversation without old instructions. */
+  private async switchPreset(preset: string): Promise<void> {
+    if (preset === this.currentPresetId()) return
+    if (this.isBusy() || this.presetSwitching) throw new Error('cannot switch presets while work is running')
+    this.presetSwitching = true
+    const source = this.agent
+    const selection = this.selection.current
+    try {
+      const resolved = await forkSession(this.ctx, source, this.sessionOptions(), {
+        cwd: this.cwd, agentPreset: preset,
+      }, true)
+      if (source !== this.agent || this.isBusy() || this.quitting) {
+        await resolved.handle?.dispose()
+        throw new Error('session changed while switching presets; try again when idle')
+      }
+      await this.commitSwitch(resolved)
+      this.selection.current = selection
+      this.pushNotice(`preset → ${preset} · new session ${this.currentSessionId.slice(0, 8)} · conversation kept`, 'info')
+      this.sync()
+    } finally {
+      this.presetSwitching = false
+    }
+  }
+
+  /** Drive the host pentest services in-process: the same managers the web
+   * dashboards reach through the Remote wire, called without one. */
+  private async cmdRuns(raw: string): Promise<void> {
+    const runs = this.ctx.get('pentestRuns') as PentestRunsFace | undefined
+    if (runs === undefined) {
+      this.pushNotice('pentest runs service unavailable in this profile', 'error')
+      return
+    }
+    const loop = this.ctx.get('pentestLoop') as PentestLoopFace | undefined
+    const [verb, ...rest] = raw.trim().split(/\s+/)
+    const arg = rest.join(' ').trim()
+    switch (verb) {
+      case '':
+      case 'list': {
+        const all = await runs.listRuns()
+        if (all.length === 0) {
+          this.pushNotice('no pentest runs yet — /runs new <objective>', 'info')
+          return
+        }
+        for (const run of all) {
+          this.pushNotice(`${run.id} [${run.mode}] ${run.status} — ${run.objective.slice(0, 60)}`, 'info')
+        }
+        return
+      }
+      case 'new': {
+        if (arg === '') {
+          this.pushNotice('usage: /runs new <objective>', 'error')
+          return
+        }
+        const run = await runs.createRun({ objective: arg, mode: 'red', authorizedTargets: [] })
+        this.pushNotice(`run created: ${run.id} [${run.mode}] — start it with /runs start ${run.id}`, 'info')
+        return
+      }
+      case 'start': {
+        if (loop === undefined) {
+          this.pushNotice('pentest loop service unavailable in this profile', 'error')
+          return
+        }
+        await loop.start(arg, {})
+        this.pushNotice(`loop started for ${arg} — /runs status ${arg} to follow`, 'info')
+        return
+      }
+      case 'stop': {
+        if (loop === undefined) {
+          this.pushNotice('pentest loop service unavailable in this profile', 'error')
+          return
+        }
+        await loop.stop(arg)
+        this.pushNotice(`loop stopped for ${arg}`, 'info')
+        return
+      }
+      case 'status': {
+        const snapshot = await runs.snapshot(arg)
+        this.pushNotice(renderRunStatus(snapshot), 'info')
+        return
+      }
+      case 'pause':
+      case 'resume':
+      case 'terminate': {
+        const run = await runs.controlRun(arg, { action: verb })
+        this.pushNotice(`run ${run.id} ${verb}d → ${run.status}`, 'info')
+        return
+      }
+      default:
+        this.pushNotice(
+          'usage: /runs [list|new <objective>|start <id>|stop <id>|status <id>|pause|resume|terminate <id>]',
+          'error',
+        )
+    }
+  }
+
+  private async cmdRecon(raw: string): Promise<void> {
+    const recon = this.ctx.get('reconRunController') as ReconRunControllerFace | undefined
+    if (recon === undefined) {
+      this.pushNotice('recon engine unavailable in this profile', 'error')
+      return
+    }
+    const target = raw.trim()
+    if (target === '') {
+      const entries = await recon.list()
+      if (entries.length === 0) {
+        this.pushNotice('no stored recon runs — /recon <target> scans one now', 'info')
+        return
+      }
+      for (const entry of entries) {
+        this.pushNotice(
+          `${entry.runId} [${entry.status ?? '?'}] ${entry.target} — ${entry.findings} findings, ${entry.interesting} interesting`,
+          'info',
+        )
+      }
+      return
+    }
+    this.pushNotice(`scanning ${target} …`, 'info')
+    const report = await recon.scan(target)
+    const lines = [
+      `recon ${report.run_id} [${report.status}] profile=${report.profile}${report.cached ? ' (cached)' : ''}`,
+      `target: ${report.target.input}`,
+      `findings: ${report.findings.length} | warnings: ${report.warnings.length}`,
+    ]
+    for (const warning of report.warnings.slice(0, 5)) {
+      lines.push(`- ${typeof warning === 'string' ? warning : JSON.stringify(warning)}`)
+    }
+    this.pushNotice(lines.join('\n'), 'info')
+  }
+
+  /** List, probe, and open saved SSH machines; `open` starts a fresh session
+   * whose cwd sits in the machine's remote-execution namespace. */
+  private async cmdMachines(raw: string): Promise<void> {
+    const machines = this.ctx.get('remoteMachines') as RemoteMachinesFace | undefined
+    if (machines === undefined) {
+      this.pushNotice('remote machines service unavailable in this profile', 'error')
+      return
+    }
+    const [verb, ...rest] = raw.trim().split(/\s+/)
+    const arg = rest.join(' ').trim()
+    switch (verb) {
+      case '':
+      case 'list': {
+        const { machines: all } = await machines.list()
+        if (all.length === 0) {
+          this.pushNotice('no saved machines — add one from the Web settings, then /machines list', 'info')
+          return
+        }
+        for (const machine of all) {
+          this.pushNotice(`${machine.id} — ${machine.name} (${machine.username}@${machine.host}:${machine.port})`, 'info')
+        }
+        return
+      }
+      case 'probe': {
+        if (arg === '') {
+          this.pushNotice('usage: /machines probe <id>', 'error')
+          return
+        }
+        const probe = await machines.probe({ id: arg })
+        this.pushNotice(
+          `${arg}: ${probe.trusted ? 'trusted' : 'untrusted fingerprint'} ${probe.platform ?? ''} home=${probe.home ?? '?'}`,
+          'info',
+        )
+        return
+      }
+      case 'open': {
+        const [id, ...pathRest] = arg.split(/\s+/)
+        if (id === undefined || id === '') {
+          this.pushNotice('usage: /machines open <id> [path]', 'error')
+          return
+        }
+        if (this.isBusy()) {
+          this.pushNotice('cannot switch sessions while work is running (Esc to interrupt)', 'error')
+          return
+        }
+        const { machines: all } = await machines.list()
+        const machine = all.find(entry => entry.id === id)
+        if (machine === undefined) {
+          this.pushNotice(`machine "${id}" not found — /machines to list`, 'error')
+          return
+        }
+        const cwd = remoteCwd(id, pathRest.join(' ') || machine.defaultPath || '/root')
+        const resolved = await resolveAgent(
+          this.ctx,
+          undefined,
+          this.sessionOptions(),
+          {
+            cwd,
+            ...(this.config.preset !== undefined ? { agentPreset: this.config.preset } : {}),
+          },
+        )
+        await this.commitSwitch(resolved)
+        this.pushNotice(`session opened on ${machine.id} at ${cwd}`, 'info')
+        return
+      }
+      default:
+        this.pushNotice('usage: /machines [list|probe <id>|open <id> [path]]', 'error')
+    }
+  }
+
+
+  /** Register a custom OpenAI/Anthropic-compatible provider: prompts for the
+   * endpoint and masked key, discovers the model list live, and writes the
+   * profile into the home patch's llm-pi-ai section (the overriding config
+   * source every profile reads; settings.mutate would refuse it). */
+  private async cmdProvider(): Promise<void> {
+    const settings = this.ctx.get('settings') as
+      | { mutate(ns: string, ops: readonly { op: 'set'; path: readonly string[]; value: unknown }[]): Promise<void> }
+      | undefined
+    const llm = this.llm() as
+      | { discoverModels(settingsNs: string, request: DiscoveredModelRequest): Promise<readonly DiscoveredModel[]> }
+      | undefined
+    if (settings === undefined || llm === undefined) {
+      this.pushNotice('settings or llm service unavailable in this profile', 'error')
+      return
+    }
+    const name = await promptText(this.tui, { title: 'Provider display name', body: 'e.g. OpenRouter, Chutes, local vLLM' })
+    if (name === undefined || name.trim() === '') {
+      this.pushNotice('provider setup cancelled', 'info')
+      return
+    }
+    const route = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (route === '') {
+      this.pushNotice('display name has no usable route characters', 'error')
+      return
+    }
+    const baseURL = await promptText(this.tui, { title: `API endpoint for ${route}`, body: 'https://host/v1' })
+    if (baseURL === undefined || !/^https?:\/\/.+/.test(baseURL.trim())) {
+      this.pushNotice('provider setup cancelled or endpoint is not an http(s) URL', 'info')
+      return
+    }
+    const api = await pickFromListWithSearch(this.tui, {
+      title: 'Wire protocol',
+      items: ['openai-completions', 'openai-responses', 'anthropic-messages'].map(label => ({ value: label, label })),
+    })
+    if (api === undefined) {
+      this.pushNotice('provider setup cancelled', 'info')
+      return
+    }
+    const key = await promptSecret(this.tui, {
+      title: `API key for ${route} (masked)`,
+      body: 'Paste and Enter to save · Esc to skip (provider-native auth)',
+    })
+    let apiKey: string | undefined
+    if (key !== undefined) {
+      const check = normalizeApiKey(key)
+      if (!check.ok) {
+        this.pushNotice(`invalid key: ${check.reason}`, 'error')
+        return
+      }
+      apiKey = check.value
+    }
+    this.pushNotice(`discovering models at ${baseURL.trim()} …`, 'info')
+    let discovered: readonly DiscoveredModel[]
+    try {
+      discovered = await llm.discoverModels('llm-pi-ai', {
+        baseURL: baseURL.trim(),
+        api,
+        ...(apiKey === undefined ? {} : { apiKey }),
+      })
+    } catch (error) {
+      this.pushNotice(
+        `model discovery failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+      return
+    }
+    if (discovered.length === 0) {
+      this.pushNotice('the endpoint advertised no models — nothing saved', 'error')
+      return
+    }
+    const keyRef = `${route.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
+    const profile = {
+      displayName: name.trim(),
+      api,
+      baseURL: baseURL.trim(),
+      models: discovered.map(model => ({
+        id: model.id,
+        name: model.name ?? model.id,
+        contextWindow: model.contextWindow ?? 128_000,
+        maxTokens: model.maxTokens ?? 8_192,
+        input: model.inputModalities === undefined ? ['text'] : [...model.inputModalities],
+      })),
+      ...(apiKey === undefined ? {} : { apiKeyEnv: keyRef }),
+    }
+    try {
+      saveProviderToHomePatch(route, profile)
+      if (apiKey !== undefined) {
+        const credentials = this.ctx.get('credentials') as
+          | { set(ref: string, value: string): Promise<void> }
+          | undefined
+        await credentials?.set(keyRef, apiKey)
+      }
+    } catch (error) {
+      this.pushNotice(
+        `provider save failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+      return
+    }
+    this.pushNotice(
+      `provider ${route} saved with ${discovered.length} model(s) — restart dsh to register, then /model (key: ${apiKey === undefined ? 'provider-native' : keyRef})`,
+      'info',
+    )
+  }
+
+  /** Create a new preset by pasting text: pick a base preset, edit the
+   * persona text in $EDITOR, and store the result as a fresh user preset
+   * through the host authoring API (tools and skills carry over). */
+  private async cmdPresetCreate(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot create a preset while work is running', 'error')
+      return
+    }
+    const presets = this.ctx.get('agentPresets') as
+      | {
+        list(): Promise<readonly { id: string; name?: string; description?: string; broken?: string; path: string }[]>
+        create(from: string, id: string, name: string | undefined, content: string): Promise<void>
+      }
+      | undefined
+    if (presets === undefined) {
+      this.pushNotice('agent presets service unavailable in this profile', 'error')
+      return
+    }
+    const name = await promptText(this.tui, { title: 'New preset name', body: 'e.g. My Pentest Persona' })
+    if (name === undefined || name.trim() === '') {
+      this.pushNotice('preset creation cancelled', 'info')
+      return
+    }
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (id === '') {
+      this.pushNotice('name has no usable id characters', 'error')
+      return
+    }
+    const roster = await presets.list()
+    if (roster.some(entry => entry.id === id)) {
+      this.pushNotice(`preset id "${id}" already exists — pick another name`, 'error')
+      return
+    }
+    const base = await pickFromListWithSearch(this.tui, {
+      title: 'Base preset (tools and composition carry over)',
+      items: roster.map(entry => ({
+        value: entry.id,
+        label: entry.name ?? entry.id,
+        ...(entry.description !== undefined ? { description: entry.description } : {}),
+      })),
+    })
+    if (base === undefined) {
+      this.pushNotice('preset creation cancelled', 'info')
+      return
+    }
+    // Seed the editor with the base preset's persona text, if it carries one.
+    let seedText = `You are ${name.trim()}.`
+    const source = roster.find(entry => entry.id === base)
+    const parseComposition = (path: string): { rows: { id: string; config?: { prefix?: string } }[]; doc: string } => {
+      const doc = parseDocument(readFileSync(path, 'utf8'), {
+        customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (v: string) => v }],
+      })
+      return { rows: doc.toJS() as { id: string; config?: { prefix?: string } }[], doc: String(doc) }
+    }
+    try {
+      if (source?.path !== undefined) {
+        const prefix = parseComposition(source.path).rows.find(row => row.id === 'persona')?.config?.prefix
+        if (typeof prefix === 'string' && prefix.trim() !== '') seedText = prefix
+      }
+    } catch {
+      // A readable base persona is a nicety; an empty template works too.
+    }
+    const tmp = join(tmpdir(), `preset-create-${id}-${Date.now()}.md`)
+    writeFileSync(tmp, seedText, 'utf8')
+    await this.editFileInEditor(tmp, 'persona text saved — creating the preset')
+    const text = (await readFile(tmp, 'utf8')).trim()
+    await rm(tmp, { force: true }).catch(() => undefined)
+    if (text === '') {
+      this.pushNotice('preset creation cancelled — persona text was empty', 'info')
+      return
+    }
+    try {
+      if (source === undefined) throw new Error('base preset vanished from the roster')
+      const parsed = parseComposition(source.path)
+      const personaRow = parsed.rows.find(row => row.id === 'persona')
+      if (personaRow?.config !== undefined) personaRow.config.prefix = text
+      await presets.create(base, id, name.trim(), parsed.doc)
+    } catch (error) {
+      this.pushNotice(
+        `preset creation failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+      return
+    }
+    this.pushNotice(`preset ${id} created — /preset to switch to it`, 'info')
+  }
+
+  /** Save a provider credential through the host credentials service: the
+   * entry is masked at render time, so the key never reaches the transcript. */
+  private async cmdKey(raw: string): Promise<void> {
+    const credentials = this.ctx.get('credentials') as
+      | { set(ref: string, value: string): Promise<void> }
+      | undefined
+    if (credentials === undefined) {
+      this.pushNotice('credentials service unavailable in this profile', 'error')
+      return
+    }
+    const ref = raw.trim() === '' ? 'DEEPSEEK_API_KEY' : raw.trim()
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) {
+      this.pushNotice(`credential reference "${ref}" must match [A-Za-z_][A-Za-z0-9_]*`, 'error')
+      return
+    }
+    const key = await promptSecret(this.tui, {
+      title: `API key for ${ref}`,
+      body: 'Paste the key and press Enter · Esc cancels',
+    })
+    if (key === undefined) {
+      this.pushNotice('credential entry cancelled', 'info')
+      return
+    }
+    const check = normalizeApiKey(key)
+    if (!check.ok) {
+      this.pushNotice(`invalid key: ${check.reason}`, 'error')
+      return
+    }
+    try {
+      await credentials.set(ref, check.value)
+      this.pushNotice(`credential saved for ${ref} — applies from the next request`, 'info')
+    } catch (error) {
+      this.pushNotice(
+        `credential save failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  /** Context windows the shared custom-provider profiles declare, keyed
+   * by 'provider/model' — the catalog itself carries no sizes. */
+  private profileContexts(): Map<string, number> {
+    const settings = this.ctx.get('settings') as
+      | { describe(): readonly { ns: string; value: unknown }[] }
+      | undefined
+    const contexts = new Map<string, number>()
+    try {
+      const section = settings?.describe().find(row => row.ns === 'llm-pi-ai')?.value as
+        | { providers?: Record<string, { models?: { id?: string; name?: string; contextWindow?: number }[] }> }
+        | undefined
+      for (const [route, profile] of Object.entries(section?.providers ?? {})) {
+        for (const model of profile.models ?? []) {
+          const id = model.id ?? model.name
+          if (model.contextWindow !== undefined && id !== undefined) {
+            contexts.set(`${route}/${id}`, model.contextWindow)
+          }
+        }
+      }
+    } catch {
+      // Settings are optional; the picker just shows no ctx column.
+    }
+    return contexts
+  }
+
+  /** Validate and apply one reasoning effort: resolve the call config, carry
+   * the selection across the session, and persist it like /model does. */
+  private async applyThinking(effort: string): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) return
+    const route = this.currentRoute()
+    try {
+      await llm.resolveCallConfig({
+        provider: route.provider,
+        model: route.model,
+        reasoningEffort: ReasoningEffortId(effort),
+      })
+      this.selection.current = {
+        provider: route.provider,
+        model: route.model,
+        reasoningEffort: ReasoningEffortId(effort),
+      }
+      // Persist like /model does, so the effort survives restarts and resumes.
+      try {
+        const defaults = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
+        await defaults?.saveSelection(this.selection.current)
+      } catch {
+        // Best effort; session selection already applied.
+      }
+      this.pushNotice(`thinking → ${effort} · from the next step`)
+      this.sync()
+    } catch (error) {
+      this.pushNotice(
+        `thinking switch failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  private async cmdModel(query: string): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) {
+      this.pushNotice('llm service unavailable', 'error')
+      return
+    }
+    if (query !== '') {
+      const routes = await listAllModels(llm, this.profileContexts())
+      const queryLower = query.toLowerCase()
+      const match =
+        routes.find(route => `${route.provider}/${route.model}` === query) ??
+        routes.find(route => route.provider === query) ??
+        routes.find(route => route.model === query) ??
+        routes.find(route => route.name?.toLowerCase() === queryLower) ??
+        routes.find(route => `${route.provider}/${route.model}`.toLowerCase().includes(queryLower)) ??
+        routes.find(route => route.name?.toLowerCase().includes(queryLower)) ??
+        routes.find(route => route.providerName?.toLowerCase().includes(queryLower)) ??
+        routes.find(route => route.provider.toLowerCase().includes(queryLower))
+      if (match !== undefined) {
+        await this.applyModel(match)
+        return
+      }
+    }
+    const picked = await pickModel(this.tui, llm, this.profileContexts(), this.currentRoute())
+    if (picked !== undefined) await this.applyModel(picked)
+  }
+
+  private async applyModel(route: ModelRoute): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) return
+    try {
+      const previousEffort = this.selection.current?.reasoningEffort
+      const info = previousEffort === undefined ? undefined : await llm.resolveModelInfo(route.provider, route.model)
+      const retainedEffort = info?.reasoning?.efforts.some(effort => effort.id === previousEffort) ? previousEffort : undefined
+      const resolved = await llm.resolveCallConfig({
+        provider: route.provider,
+        model: route.model,
+        ...retainedEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(retainedEffort) },
+      })
+      this.selection.current = {
+        provider: resolved.provider,
+        model: resolved.model,
+        ...(resolved.reasoningEffort !== undefined
+          ? { reasoningEffort: resolved.reasoningEffort }
+          : {}),
+      }
+      // Write the shared default too (grok rationale: the web host's outer
+      // waterfall fallback chain reads it, so a stale selection can't
+      // overwrite this one).
+      try {
+        const defaults = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
+        await defaults?.saveSelection(this.selection.current)
+      } catch {
+        // Best effort; session selection already applied.
+      }
+      // A changed model binding opens a child session without the previous preset's instructions.
+      await this.followModelPreset(resolved.provider, resolved.model)
+      this.pushNotice(`model → ${resolved.model} (${resolved.provider}) · from the next step`)
+      this.sync()
+    } catch (error) {
+      this.pushNotice(
+        `model switch failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  /** Follow the model's preset in a new session while preserving conversation. */
+  private async followModelPreset(provider: string, model: string): Promise<void> {
+    const presets = this.ctx.get('agentPresets') as
+      | {
+        presetIdForModel(provider: string, model: string): string
+      }
+      | undefined
+    if (presets === undefined) return
+    const target = resolveModelPreset(this.ctx, provider, model)
+    if (target === undefined || target === this.currentPresetId()) return
+    try {
+      await this.switchPreset(target)
+    } catch (error) {
+      if (this.isBusy() || this.presetSwitching) {
+        this.pushNotice(
+          `preset ${target} follows ${provider}/${model} but a turn is in progress — switch again when it ends`,
+          'info',
+        )
+        return
+      }
+      this.pushNotice(
+        `preset follow failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  private async cmdThinking(effort: string): Promise<void> {
+    if (effort === '' && this.reasoningPickerOpen) return
+    const llm = this.llm()
+    if (llm === undefined) {
+      this.pushNotice('llm service unavailable', 'error')
+      return
+    }
+    const route = this.currentRoute()
+    const agent = this.agent
+    if (effort === '') this.reasoningPickerOpen = true
+    try {
+      const info = await llm.resolveModelInfo(route.provider, route.model)
+      const efforts = info.reasoning?.efforts ?? []
+      if (efforts.length === 0) {
+        this.pushNotice(`No reasoning controls advertised for ${info.name || route.model}`, 'info')
+        return
+      }
+      if (effort === '') {
+        const picked = await pickReasoningLevel(this.tui, info, this.currentEffort())
+        if (picked === undefined) return
+        const current = this.currentRoute()
+        if (this.agent !== agent || current.provider !== route.provider || current.model !== route.model) {
+          this.pushNotice('Session or model changed; open the reasoning picker again', 'info')
+          return
+        }
+        await this.applyThinking(picked)
+        return
+      }
+      if (!efforts.some(entry => entry.id === effort)) {
+        const list = efforts.map(entry => entry.id).join('|')
+        this.pushNotice(
+          `thinking: ${list} · current: ${this.currentEffort() ?? info.reasoning?.defaultEffort ?? 'default'}`,
+        )
+        return
+      }
+      await this.applyThinking(effort)
+    } catch (error) {
+      this.pushNotice(`thinking picker failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    } finally {
+      if (effort === '') this.reasoningPickerOpen = false
+    }
+  }
+
+  /** Shift+Tab: cycle the session mode (normal ↔ plan), CC semantics. */
+  private async cycleMode(): Promise<void> {
+    if (this.commands === undefined) {
+      this.pushNotice('command registry unavailable', 'error')
+      return
+    }
+    const plan = this.planState()
+    const line = plan ? '/plan off' : '/plan'
+    await this.executeCommand(line)
+  }
+
+  /** Plan-mode state from the projection (active, or pending-on). */
+  private planState(): boolean {
+    try {
+      const projections = this.ctx.get('sessionProjections') as
+        SessionProjectionsService | undefined
+      const plan = projections?.snapshot(this.agent.session).values.plan as
+        { active?: boolean; wanted?: boolean | null } | undefined
+      return plan?.active === true || plan?.wanted === true
+    } catch {
+      return false
+    }
+  }
+
+  private async cmdWiki(): Promise<void> {
+    if (this.tui.hasOverlay()) return
+    const agent = this.agent
+    const notice = await pickWiki(this.ctx, agent, this.tui)
+    if (notice !== undefined && this.agent === agent) this.pushNotice(notice)
+  }
+
+  /**
+   * `/shell` opens a picker; explicit backend and close arguments remain supported.
+   * `Ctrl+P` opens the picker or cycles focus when the shell is already open.
+   * The pane shares the agent's named PTY session, so agent-run commands
+   * stream into it too. Opening is allowed while work runs — the pane is the
+   * live view onto that work.
+   * @param argument - `win`, `kali`, `close`, or empty.
+   */
+  private async cmdShell(argument: string): Promise<void> {
+    let arg = argument.trim().toLowerCase()
+    if (arg === '') {
+      if (this.tui.hasOverlay()) return
+      const owner = this.agent
+      this.shellPickerOpen = true
+      try {
+        const picked = await pickFromList(this.tui, {
+          title: 'Shell',
+          body: '↑/↓ or number · Enter select · Esc cancel',
+          items: [
+            { value: 'win', label: '1. Windows', description: 'PowerShell' },
+            { value: 'kali', label: '2. Kali', description: 'WSL shell' },
+            ...(this.shellPane !== undefined ? [{ value: 'close', label: '3. Close shell' }] : []),
+          ],
+          initial: this.shellPane?.variant ?? 'win',
+          numberKeys: true,
+        })
+        if (picked === undefined || this.disposed || this.agent !== owner) return
+        arg = picked
+      } finally {
+        this.shellPickerOpen = false
+      }
+    }
+    if (arg === 'close') {
+      this.closeShellPane()
+      return
+    }
+    if (arg !== 'win' && arg !== 'kali') {
+      this.pushNotice('usage: /shell [win|kali|close]', 'error')
+      return
+    }
+    const variant = arg
+    if (this.shellPane !== undefined) {
+      if (this.shellPane.variant === variant) {
+        this.focusShellPane()
+        return
+      }
+      await this.rebindShellPane(variant)
+      return
+    }
+    if (this.tui.terminal.columns < 100) {
+      this.pushNotice('shell pane needs a terminal at least 100 columns wide', 'error')
+      return
+    }
+    await this.openShellPane(variant)
+  }
+
+  /** Mount the visible right-column panels without resetting their editors or scroll state. */
+  private syncSidePane(): void {
+    this.paneSlot.clear()
+    if (this.agentDebugVisible) this.paneSlot.addChild(this.toolActivity, { basis: 0, grow: 1, minSize: 2 })
+    if (this.shellPane !== undefined) this.paneSlot.addChild(this.shellPane, { basis: 0, grow: 2, minSize: 4 })
+    this.screenRoot?.setOpen(this.agentDebugVisible || this.shellPane !== undefined)
+  }
+
+  /** Mount the pane for one variant into the stable split root and focus it. */
+  private async openShellPane(variant: ShellVariant): Promise<void> {
+    try {
+      const session = await resolveShellSession(this.ctx, this.agent, variant)
+      const pane = new ShellPane(
+        this.tui, session, variant, `Shell · ${variant}`, () => { this.closeShellPane() },
+        width => this.statusBar.render(Math.max(1, this.tui.terminal.columns - width - 3)).length,
+      )
+      try {
+        this.disposeShellDraft = this.installShellDraft(pane)
+      } catch (error) {
+        pane.dispose()
+        throw error
+      }
+      this.shellPane = pane
+      this.syncSidePane()
+      this.focusShellPane()
+      this.pushNotice(`shell ${variant} open on the right · Ctrl+P cycles focus, /shell close closes it`)
+    } catch (error) {
+      this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+  }
+
+  /** Register a human-reviewed draft handoff only while this agent's shell is open. */
+  private installShellDraft(pane: ShellPane): (() => void) | undefined {
+    const owner = this.agent
+    return owner.ctx.get('tools')?.register(defineTool({
+      name: 'shell_draft',
+      description: 'Place a command in the open TUI shell input for the user to review and submit manually. This does not execute or send terminal input, change focus, or overwrite existing input. The user must select a shell using /shell first. Use only for commands you can safely provide; do not use this to bypass a safety refusal, denied approval, or execution policy.',
+      parameters: {
+        shell: { type: 'string', enum: ['win', 'kali'], required: true, description: 'Must match the currently open shell backend.' },
+        command: { type: 'string', required: true, description: 'Command text for human review. No terminal control characters.' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      execute: (args, exec) => {
+        exec.signal.throwIfAborted()
+        if (this.disposed || this.agent !== owner || exec.agent !== owner || this.shellPane !== pane) {
+          throw new Error('this shell draft target is no longer active')
+        }
+        if (args.shell !== pane.variant) throw new Error(`open shell is ${pane.variant}; choose the matching backend before drafting`)
+        pane.stageCommand(args.command)
+        return Promise.resolve(`Draft staged in ${args.shell} shell input. Not executed. The user can review it, focus the shell with Ctrl+P, and press Enter to submit.`)
+      },
+    }))
+  }
+
+  /** Point the mounted pane at the other backend without touching the layout. */
+  private async rebindShellPane(variant: ShellVariant): Promise<void> {
+    if (this.shellPane === undefined) return
+    try {
+      const session = await resolveShellSession(this.ctx, this.agent, variant)
+      this.shellPane.rebind(session, variant, `Shell · ${variant}`)
+      this.focusShellPane()
+      this.pushNotice(`shell switched to ${variant}`)
+    } catch (error) {
+      this.pushNotice(`shell failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+  }
+
+  /** Give the shell pane keyboard focus and mark it focused. */
+  private focusShellPane(): void {
+    if (this.shellPane === undefined) return
+    this.shellFocused = true
+    this.shellPane.setFocused(true)
+    this.tui.setFocus(this.shellPane.editor)
+    this.sync()
+  }
+
+  /** Return keyboard focus to the chat editor; the pane keeps rendering. */
+  private unfocusShellPane(): void {
+    if (this.shellPane === undefined) return
+    this.shellFocused = false
+    this.shellPane.setFocused(false)
+    this.tui.setFocus(this.editor)
+    this.sync()
+  }
+
+  /**
+   * `Ctrl+P`: open the shell picker when no pane is mounted, otherwise
+   * cycle keyboard focus between the chat editor and the pane.
+   */
+  cycleShellFocus(): void {
+    if (this.shellPane === undefined) {
+      void this.cmdShell('')
+      return
+    }
+    if (this.shellFocused) this.unfocusShellPane()
+    else this.focusShellPane()
+  }
+
+  /** Remove the shell pane from the split layout and return focus to chat. */
+  private closeShellPane(): void {
+    if (this.shellPane === undefined) return
+    const pane = this.shellPane
+    this.shellPane = undefined
+    this.shellFocused = false
+    this.disposeShellDraft?.()
+    this.disposeShellDraft = undefined
+    pane.dispose()
+    this.syncSidePane()
+    this.tui.setFocus(this.editor)
+    this.sync()
+  }
+
+  /** List the shell commands the agent executed, classified by execution world. */
+  private async cmdExec(): Promise<void> {
+    const entries = collectExecHistory(replayEvents(this.agent.session))
+    if (entries.length === 0) {
+      this.pushNotice('no shell commands executed in this session yet')
+      return
+    }
+    entries.reverse()
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Executed commands',
+      body: 'newest first · Enter to open the transcript tool card · Esc to close',
+      items: entries.map((entry) => {
+        const mark = entry.shell === 'kali' ? 'KALI' : 'WIN '
+        const status = entry.status === 'ok' ? '✓' : entry.status === 'error' ? '✗' : '…'
+        const command = entry.command.split('\n')[0] ?? entry.command
+        return {
+          value: String(entry.seq),
+          label: `${mark} ${status} ${command.slice(0, 90)}`,
+          description: `${new Date(entry.time).toLocaleString()} · ${entry.tool} · ${entry.command.length} chars`,
+          searchText: `${mark} ${entry.command}`,
+        }
+      }),
+    })
+    if (picked === undefined) return
+    const seq = Number(picked)
+    const item = this.model.items.find(candidate => candidate.kind === 'tool' && candidate.seq === seq)
+    if (item === undefined) {
+      this.pushNotice('that tool card is no longer in the live transcript (rewound or cleared)')
+      return
+    }
+    this.expandedToolId = item.id
+    this.focusedToolId = item.id
+    this.jumpToMatch(item.id)
+  }
+
+  private async cmdSkills(argument: string): Promise<void> {
+    const action = argument.toLowerCase()
+    if (!['', 'toggle', 'on', 'off', 'status'].includes(action)) {
+      this.pushNotice('usage: /skills [on|off|toggle|status]', 'error')
+      return
+    }
+    const skills = await this.discoverSkills()
+    const enabledCount = skills.filter(skill => !this.disabledSkills.has(skill.name)).length
+    if (action === 'status') {
+      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${this.skillsEnabled ? enabledCount : 0}/${skills.length} skill(s) available`)
+      return
+    }
+    if (action !== '') {
+      if (this.isBusy()) {
+        this.pushNotice('cannot change skills while work is running (Esc to interrupt)', 'error')
+        return
+      }
+      this.skillsEnabled = action === 'on' ? true : action === 'off' ? false : !this.skillsEnabled
+      this.rebuildAutocomplete()
+      this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${this.skillsEnabled ? enabledCount : 0}/${skills.length} skill(s) available · applies to the next request`)
+      return
+    }
+    if (skills.length === 0) {
+      this.pushNotice('no skills available in this workspace')
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('cannot change skills while work is running (Esc to interrupt)', 'error')
+      return
+    }
+    if (this.tui.hasOverlay()) return
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Skills',
+      body: 'select a skill to toggle it for this TUI process',
+      items: skills.map(skill => ({
+        value: skill.name,
+        label: `${this.disabledSkills.has(skill.name) ? 'OFF' : 'ON '} ${skill.name}`,
+        description: `${skill.description} · select to turn ${this.disabledSkills.has(skill.name) ? 'on' : 'off'}`,
+        searchText: skill.name,
+      })),
+    })
+    if (picked === undefined || this.quitting) return
+    const enabled = this.disabledSkills.has(picked)
+    if (enabled) this.disabledSkills.delete(picked)
+    else this.disabledSkills.add(picked)
+    this.rebuildAutocomplete()
+    this.pushNotice(`skills: ${picked} ${enabled ? 'ON' : 'OFF'} · applies to the next request`)
+  }
+
+  private async listSkills(): Promise<readonly SkillSummary[]> {
+    if (!this.skillsEnabled) return []
+    return (await this.discoverSkills())
+      .filter(isUserInvocable)
+      .filter(skill => !this.disabledSkills.has(skill.name))
+  }
+
+  private async discoverSkills(): Promise<readonly SkillSummary[]> {
+    try {
+      const presets = this.ctx.get('agentPresets') as
+        { serviceFor(agent: unknown, key: string): unknown } | undefined
+      const registry = (presets?.serviceFor(this.agent, 'skills') ?? this.ctx.get('skills')) as
+        | { list(options: { cwd?: string; scope?: unknown }): Promise<readonly SkillSummary[]> }
+        | undefined
+      if (registry === undefined) return []
+      const all = await registry.list({ cwd: this.cwd, scope: this.agent })
+      return [...all].sort((left, right) => left.name.localeCompare(right.name))
+    } catch {
+      return []
+    }
+  }
+
+  private async cmdExport(): Promise<void> {
+    const fs = this.ctx.get('fs') as
+      | {
+        resolve(path: string): Promise<unknown>
+        writeText(target: unknown, content: string): Promise<void>
+      }
+      | undefined
+    if (fs === undefined) {
+      this.pushNotice('fs service unavailable', 'error')
+      return
+    }
+    const lines: string[] = []
+    for (const item of this.model.items) {
+      if (item.kind === 'user') {
+        lines.push(`## User\n\n${item.text}\n`)
+      } else if (item.kind === 'assistant') {
+        lines.push(`## Assistant\n\n${item.text}\n`)
+      } else if (item.kind === 'reasoning') {
+        lines.push(`<details><summary>Thinking</summary>\n\n${item.text}\n</details>\n`)
+      } else if (item.kind === 'tool') {
+        lines.push(
+          `### Tool: ${item.tool?.name ?? ''}\n\n\`\`\`\n${item.tool?.argsPreview ?? ''}\n\`\`\`\n\n${item.tool?.resultFull ?? item.tool?.resultPreview ?? ''}\n`,
+        )
+      } else {
+        lines.push(`> ${item.text}\n`)
+      }
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const path = `${this.cwd}/dsh-pi-tui-export-${stamp}-${this.currentSessionId.slice(0, 8)}.md`
+    try {
+      const target = await fs.resolve(path)
+      await fs.writeText(target, lines.join('\n'))
+      this.pushNotice(`exported → ${path}`)
+    } catch (error) {
+      this.pushNotice(
+        `export failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+
+
+  /** Clear the conversation in place: the SAME session (id, files, resume
+   * history) stays, the surface replace empties the context the model sees,
+   * and the transcript prunes immediately — delivery timing never decides
+   * whether the pane clears. */
+  private cmdClear(): void {
+    if (this.isBusy()) {
+      this.pushNotice('cannot clear while work is running (Esc to interrupt first)', 'error')
+      return
+    }
+    const nodes = this.agent.session.surface.nodes
+    const active = new Set(nodes)
+    const events = replayEvents(this.agent.session)
+    // The system prompt occupies the leading surface node(s) and a replace
+    // may not touch them. UI notices and attempts are not surface nodes.
+    const first = events.find(event => active.has(event.seq)
+      && event.type !== 'system/message'
+      && !(event.type === 'developer/message' && event.data.message.source.kind === 'session-edit'))?.seq
+    const tail = nodes.at(-1)
+    if (first === undefined || tail === undefined || first > tail) {
+      this.model.targets.clear()
+      this.model.items = this.model.items.filter(item => item.notice === 'banner')
+        .map((item, id) => ({ ...item, id }))
+      this.model.openAssistant = undefined
+      this.model.openReasoning = undefined
+      this.views.clear()
+      this.lastFoldKey = ''
+      this.searchQuery = undefined
+      this.focusedToolId = undefined
+      this.expandedToolId = undefined
+      this.pushNotice('session cleared — same session, fresh context', 'compact')
+      return
+    }
+    const nextTurn = events.findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    // The replace op must cite every surface node it shadows.
+    const shadowed = nodes.filter(node => node >= first && node <= tail)
+    const marker = this.agent.session.append('developer/message', {
+      turn: nextTurn + 1,
+      step: 1,
+      message: createDeveloperMessage({
+        source: { kind: 'session-edit' },
+        content: [{ type: 'text', text: 'the operator cleared the conversation; the earlier surface is shadowed in the log' }],
+      }),
+    }, {
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(first), endSeq: tail },
+      sourceEventSeqs: shadowed,
+    })
+    this.handleEvent(marker)
+  }
+
+  /** Refresh the above-editor banner that lists messages queued for after
+   * the current turn (Codex-style), so a waiting user sees exactly what is
+   * pending without running /queue. Empty inbox clears the banner. */
+  private updateQueueBanner(): void {
+    const inbox = this.agent.inbox
+    const queued = [...inbox.nextStep, ...inbox.nextTurn]
+    const key = queued.map(message => String(message.id)).join(',')
+    if (key === this.lastQueueKey) return
+    this.lastQueueKey = key
+    if (queued.length === 0) {
+      this.queueBanner.setText('')
+      return
+    }
+    const textOf = (message: { content: unknown }): string =>
+      (message.content as { type: string; text?: string }[])
+        .filter(block => block.type === 'text')
+        .map(block => block.text ?? '')
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    const header = style.queueHeader(
+      `⏳ ${queued.length} message${queued.length > 1 ? 's' : ''} to send after this turn`,
+    )
+    const hint = style.muted(' (Esc to send now)')
+    const rows = queued.map(message => `${style.muted('└')} ${style.queueItem(textOf(message).slice(0, 120))}`)
+    this.queueBanner.setText([header + hint, ...rows].join('\n'))
+  }
+
+  /** Inspect and manage the agent's pending inbox: queued turns, steering,
+   * removal by id, and clearing everything pending. */
+  private cmdQueue(raw: string): void {
+    const [verb, ...rest] = raw.trim().split(/\s+/)
+    const arg = rest.join(' ').trim()
+    const inbox = this.agent.inbox
+    const textOf = (message: { content: unknown }): string => {
+      const blocks = message.content as { type: string; text?: string }[]
+      return blocks.filter(block => block.type === 'text').map(block => block.text ?? '').join(' ')
+    }
+    if (verb === '' || verb === 'list') {
+      const turns = inbox.nextTurn
+      const steps = inbox.nextStep
+      if (turns.length === 0 && steps.length === 0) {
+        this.pushNotice('inbox empty — nothing queued', 'info')
+        return
+      }
+      for (const message of turns) {
+        const text = textOf(message).slice(0, 80)
+        this.pushNotice(`[turn] ${String(message.id)} — ${text}`, 'info')
+      }
+      for (const message of steps) {
+        const text = textOf(message).slice(0, 80)
+        this.pushNotice(`[steer] ${String(message.id)} — ${text}`, 'info')
+      }
+      return
+    }
+    if (verb === 'remove') {
+      if (arg === '') {
+        this.pushNotice('usage: /queue remove <id> — ids from /queue', 'error')
+        return
+      }
+      const removed = inbox.remove(MessageId(arg))
+      this.sync()
+      this.pushNotice(removed ? `removed ${arg}` : `no pending message ${arg}`, removed ? 'info' : 'error')
+      return
+    }
+    if (verb === 'clear') {
+      const count = inbox.nextTurn.length + inbox.nextStep.length
+      inbox.clear()
+      this.sync()
+      this.pushNotice(`cleared ${count} pending item(s)`, 'info')
+      return
+    }
+    this.pushNotice('usage: /queue [list|remove <id>|clear]', 'error')
+  }
+
+  /** List every registered provider route with its model count, display
+   * name, and credential state — the provider face the web Models page shows. */
+  private async cmdProviders(): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) {
+      this.pushNotice('llm service unavailable', 'error')
+      return
+    }
+    const settings = this.ctx.get('settings') as
+      | { describe(): readonly { ns: string; value: unknown }[] }
+      | undefined
+    const credentials = this.ctx.get('credentials') as
+      | { describe(ref: string): Promise<{ configured: boolean }> }
+      | undefined
+    const profiles = (settings?.describe().find(row => row.ns === 'llm-pi-ai')?.value as
+      | { providers?: Record<string, { displayName?: string; apiKeyEnv?: string; models?: unknown[] }> }
+      | undefined)?.providers ?? {}
+    const current = this.currentRoute().provider
+    for (const provider of llm.listProviders()) {
+      const models = await llm.listModels(provider.id).catch(() => [])
+      const profile = profiles[provider.id]
+      const keyRef = profile?.apiKeyEnv
+      let keyState = 'provider-native auth'
+      if (keyRef !== undefined) {
+        let described: { configured: boolean } | undefined
+        try {
+          described = await credentials?.describe(keyRef)
+        } catch (_error) {
+          // A failed metadata read is unavailable, not an absent key; no secret value is resolved.
+        }
+        keyState = described === undefined ? `key status unavailable (${keyRef})`
+          : described.configured ? `key ✓ (${keyRef})` : `key ✗ — /key ${keyRef}`
+      }
+      const marker = provider.id === current ? ' ← current' : ''
+      this.pushNotice(
+        `${provider.id}${marker} — ${provider.name} · ${models.length} model(s) · ${keyState}`,
+        'info',
+      )
+    }
+  }
+
+  /** Rewind: pick an earlier prompt, shadow everything after it, and put
+   * its text back in the editor to edit and resend. */
+  private async cmdRewind(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot rewind while work is running (Esc to interrupt first)', 'error')
+      return
+    }
+    const prompts = this.model.items
+      .filter(item => item.kind === 'user' && item.seq !== undefined && item.text !== '')
+      .slice(-30)
+      .reverse()
+    if (prompts.length === 0) {
+      this.pushNotice('no prompts to rewind to in this session', 'info')
+      return
+    }
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Rewind to prompt',
+      body: 'the conversation after it is shadowed; its text returns to the editor',
+      items: prompts.map(prompt => ({
+        value: String(prompt.seq),
+        label: prompt.text.length > 90 ? `${prompt.text.slice(0, 90)}…` : prompt.text,
+      })),
+    })
+    if (picked === undefined) return
+    const seq = Number(picked)
+    const original = prompts.find(prompt => prompt.seq === seq)
+    if (original === undefined) return
+    const nodes = this.agent.session.surface.nodes
+    const tail = nodes.at(-1)
+    if (tail === undefined || tail < seq) {
+      this.pushNotice('that prompt is no longer on the current surface', 'error')
+      return
+    }
+    const nextTurn = replayEvents(this.agent.session).findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    // The replace op must cite every surface node it shadows.
+    const shadowed = nodes.filter(node => node >= seq && node <= tail)
+    this.agent.session.append('developer/message', {
+      turn: nextTurn + 1,
+      step: 1,
+      message: createDeveloperMessage({
+        source: { kind: 'session-edit' },
+        content: [{ type: 'text', text: 'the operator rewound to the question below; its later exchange is shadowed in the log' }],
+      }),
+    }, {
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(seq), endSeq: tail },
+      sourceEventSeqs: shadowed,
+    })
+    this.sync()
+    this.editor.setText(original.text)
+    this.tui.setFocus(this.editor)
+    this.tui.requestRender()
+    this.pushNotice('rewound — edit the prompt and send', 'info')
+  }
+
+  /** Open an instruction file in $EDITOR: project AGENTS.md by default,
+   * `global` for the harness-home file. The agent-instructions loader picks
+   * project changes up on the next request; global on the next session. */
+  private async cmdMemory(raw: string): Promise<void> {
+    const scope = raw.trim()
+    if (scope !== '' && scope !== 'global') {
+      this.pushNotice('usage: /memory [global]', 'error')
+      return
+    }
+    const path = scope === 'global'
+      ? join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'AGENTS.md')
+      : join(this.cwd, 'AGENTS.md')
+    await this.editFileInEditor(path, scope === 'global'
+      ? 'changes apply from the next session'
+      : 'changes apply from the next request')
+  }
+
+  /** List persisted sessions, or permanently delete one by id. */
+  private async cmdSessions(raw: string): Promise<void> {
+    const persistence = this.ctx.get('sessionPersistence') as
+      | {
+        list(): Promise<readonly { header: { id: string } }[]>
+        delete(id: string): Promise<boolean>
+      }
+      | undefined
+    if (persistence === undefined) {
+      this.pushNotice('session persistence unavailable in this profile', 'error')
+      return
+    }
+    const [verb, ...rest] = raw.trim().split(/\s+/)
+    const arg = rest.join(' ').trim()
+    if (verb === '' || verb === 'list') {
+      const all = (await persistence.list()).map(snapshot => snapshot.header.id)
+      if (all.length === 0) {
+        this.pushNotice('no persisted sessions', 'info')
+        return
+      }
+      for (const id of all) {
+        const current = id === this.agent.session.id ? ' ← current' : ''
+        this.pushNotice(`${id}${current}`, 'info')
+      }
+      return
+    }
+    if (verb === 'delete') {
+      if (arg === '') {
+        this.pushNotice('usage: /sessions delete <session-id>', 'error')
+        return
+      }
+      if (arg === this.agent.session.id) {
+        this.pushNotice('refusing to delete the current session — /new first', 'error')
+        return
+      }
+      const deleted = await persistence.delete(arg)
+      this.pushNotice(deleted ? `deleted ${arg}` : `no persisted session ${arg}`, deleted ? 'info' : 'error')
+      return
+    }
+    this.pushNotice('usage: /sessions [list|delete <session-id>]', 'error')
+  }
+
+  /** Open one file in $EDITOR/$VISUAL, pausing the TUI like Ctrl+G does. */
+  private async editFileInEditor(path: string, onReturn: string): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot open the editor while work is running', 'error')
+      return
+    }
+    const editor = process.env.VISUAL ?? process.env.EDITOR
+    if (editor === undefined || editor === '') {
+      this.pushNotice('set $EDITOR (or $VISUAL) to use the external editor', 'error')
+      return
+    }
+    const shell = this.ctx.get('shell') as
+      { run(req: unknown): Promise<{ exitCode: number | null }> } | undefined
+    if (shell === undefined) {
+      this.pushNotice('shell service unavailable', 'error')
+      return
+    }
+    await writeFile(path, '', { flag: 'a' }).catch(() => undefined)
+    this.tui.stop()
+    try {
+      await shell.run({
+        command: `${editor} ${JSON.stringify(path)}`,
+        workdir: this.cwd,
+        sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: this.cwd },
+        timeoutMs: 30 * 60 * 1000,
+      })
+    } finally {
+      this.tui.start()
+      this.tui.setFocus(this.editor)
+      this.tui.requestRender()
+    }
+    this.pushNotice(`${path} saved — ${onReturn}`)
+  }
+
+  private cmdRename(title: string): void {
+    if (title === '') {
+      this.pushNotice('usage: /rename <title>', 'error')
+      return
+    }
+    const service = this.ctx.get('sessionTitle') as
+      { rename(session: unknown, title: string): void } | undefined
+    if (service === undefined) {
+      this.pushNotice('session title service unavailable', 'error')
+      return
+    }
+    try {
+      service.rename(this.agent.session, title)
+      this.model.title = title
+      this.sync()
+      this.pushNotice(`session renamed: ${title}`)
+    } catch (error) {
+      this.pushNotice(
+        `rename failed: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      )
+    }
+  }
+
+  private cmdHotkeys(): void {
+    this.pushNotice(
+      [
+        'keys:',
+        '  Esc        interrupt · cancel autocomplete · exit card browse',
+        '  Ctrl+C     running→interrupt · text→clear · empty→again exits',
+        '  Ctrl+D     exit when the editor is empty',
+        '  Ctrl+T     toggle thinking display',
+        '  Ctrl+O     toggle full tool output / diff',
+        '  Ctrl+F     find in transcript · Alt+C copy last assistant',
+        '  Ctrl+L     model picker · Ctrl+X reasoning picker',
+        '  Ctrl+R     search message history · Shift+Tab cycle mode',
+        '  Ctrl+Z     suspend to background',
+        '  Ctrl+G     edit input in $EDITOR',
+        '  Ctrl+Alt+G inspect subagent messages and tools · Esc returns',
+        '  Ctrl+P     shell pane: open · cycle pane/chat focus (Esc leaves pane)',
+        '  /agent-debug  show or hide Agent Debug · Ctrl+Alt+D focus · ↑/↓ select · Enter details',
+        '  Ctrl+Alt+←/→  resize chat/shell split (or drag the divider)',
+        '  Tab        complete paths · / slash commands · @ attach files',
+        '             (empty editor: cycle tool-card focus · Enter expand)',
+        'commands: /new /fork /resume /recap /context /tree /model /thinking /team-mode /suppress-prompt /mcp /jev /skills /shell /agent-debug /wiki /agents /jobs /export /rename /copy /retry /expand-all /hotkeys',
+      ].join('\n'),
+    )
+  }
+
+  // ── find in transcript ────────────────────────────────────────────────────
+
+  /** Cache of the latest find, kept in sync with `searchQuery`. */
+  private findMatches: TranscriptSearchMatch[] = []
+
+  /**
+   * Ctrl+F: search the transcript and jump to matches. The overlay re-runs
+   * the search per keystroke and live-jumps to the first match; ↑/↓ cycle;
+   * Esc closes (the highlight persists, Esc again clears it).
+   */
+  private async cmdFindInTranscript(): Promise<void> {
+    if (this.model.items.length === 0) {
+      this.pushNotice('nothing to search yet')
+      return
+    }
+    this.findMatches = buildSearchIndex(this.model.items, this.searchQuery ?? '')
+    await openFindOverlay(this.tui, {
+      initialQuery: this.searchQuery ?? '',
+      search: (query) => {
+        this.searchQuery = query.trim() === '' ? undefined : query
+        this.findMatches = buildSearchIndex(this.model.items, query)
+        this.sync()
+        return this.findMatches.length
+      },
+      jump: (index) => {
+        const match = this.findMatches[index]
+        if (match !== undefined) this.jumpToMatch(match.itemId)
+      },
+    })
+  }
+
+  /** Scroll the transcript so the matched item sits at the top, highlighted. */
+  private jumpToMatch(itemId: number): void {
+    // A match below the fold boundary is invisible; expand to reveal it.
+    const window = foldWindow(this.model.items.length, this.expandedAll, this.historyLimit)
+    if (window.key.startsWith('folded:') && itemId < window.boundary) {
+      this.expandedAll = true
+    }
+    this.sync()
+    const width = this.tui.terminal.columns
+    this.transcriptScroll?.scrollTo(this.measureOffset(itemId, width))
+    this.tui.requestRender()
+  }
+
+  /**
+   * Sum of rendered line heights of every VISIBLE view before `targetId`
+   * (views are keyed by sequential item id, so Map order is transcript
+   * order). Folded views are not rendered by the layout, so they are
+   * skipped and the fold notice's height is added — the result matches
+   * exactly what the ScrollView content shows.
+   */
+  private measureOffset(targetId: number, width: number): number {
+    const window = foldWindow(this.model.items.length, this.expandedAll, this.historyLimit)
+    return visibleItemsBefore(
+      targetId,
+      window,
+      (id) => {
+        const view = this.views.get(id)
+        return view !== undefined ? view.render(width).length : 0
+      },
+      this.foldNotice !== undefined ? this.foldNotice.render(width).length : 1,
+    )
+  }
+
+  /** Esc with a find active: drop the highlight, restore normal rendering. */
+  private clearFindHighlight(): void {
+    this.searchQuery = undefined
+    this.sync()
+  }
+
+  // ── clipboard copy ────────────────────────────────────────────────────────
+
+  private copyToClipboard(text: string, label: string): void {
+    if (text === '') {
+      this.pushNotice('nothing to copy', 'error')
+      return
+    }
+    this.tui.terminal.write(osc52Encode(text))
+    this.pushNotice(`copied ${label} (${text.length} chars)`)
+  }
+
+  /** Newest non-empty assistant text, or undefined. */
+  private lastAssistantText(): string | undefined {
+    for (let index = this.model.items.length - 1; index >= 0; index -= 1) {
+      const item = this.model.items[index]
+      if (item === undefined) continue
+      if (item.kind === 'assistant' && item.text !== '') return item.text
+    }
+    return undefined
+  }
+
+  /** Newest tool result (full when available, else the preview), or undefined. */
+  private lastToolResult(): string | undefined {
+    for (let index = this.model.items.length - 1; index >= 0; index -= 1) {
+      const item = this.model.items[index]
+      if (item === undefined) continue
+      if (item.kind !== 'tool' || item.tool === undefined) continue
+      const full = item.tool.resultFull
+      if (full !== undefined && full !== '') return full
+      const preview = item.tool.resultPreview
+      if (preview !== undefined && preview !== '') return preview
+    }
+    return undefined
+  }
+
+  /** Newest error notice text, or undefined. */
+  private lastErrorText(): string | undefined {
+    for (let index = this.model.items.length - 1; index >= 0; index -= 1) {
+      const item = this.model.items[index]
+      if (item === undefined) continue
+      if (item.kind === 'notice' && item.notice === 'error' && item.text !== '') return item.text
+    }
+    return undefined
+  }
+
+  /** Alt+C: copy the newest assistant message. */
+  private copyLastAssistant(): void {
+    const text = this.lastAssistantText()
+    if (text === undefined) {
+      this.pushNotice('no assistant message to copy', 'error')
+      return
+    }
+    this.copyToClipboard(text, 'last assistant message')
+  }
+
+  private cmdCopy(sub: string): void {
+    switch (sub) {
+      case 'last':
+        this.copyLastAssistant()
+        return
+      case 'tool': {
+        const text = this.lastToolResult()
+        if (text === undefined) {
+          this.pushNotice('no tool result to copy', 'error')
+          return
+        }
+        this.copyToClipboard(text, 'last tool result')
+        return
+      }
+      case 'error': {
+        const text = this.lastErrorText()
+        if (text === undefined) {
+          this.pushNotice('no error to copy', 'error')
+          return
+        }
+        this.copyToClipboard(text, 'last error')
+        return
+      }
+      case 'id':
+        this.copyToClipboard(this.currentSessionId, 'session id')
+        return
+      case 'resume': {
+        if (this.agent.session.seq === 0) {
+          this.pushNotice('session has no durable content yet', 'error')
+          return
+        }
+        this.copyToClipboard(resumeCommand(this.currentSessionId), 'resume command')
+        return
+      }
+      default:
+        this.pushNotice('usage: /copy last|tool|error|id|resume', 'error')
+    }
+  }
+
+  // ── retry / expand-all ────────────────────────────────────────────────────
+
+  /** Re-send the last plain human prompt (after a failed or aborted turn). */
+  private cmdRetry(): void {
+    const text = this.model.lastUserText
+    if (text === undefined || text === '') {
+      this.pushNotice('nothing to retry', 'error')
+      return
+    }
+    if (this.isBusy()) {
+      this.pushNotice('still working — press Esc to interrupt first', 'error')
+      return
+    }
+    this.followup(text)
+    this.pushNotice('retrying last prompt')
+  }
+
+  /** Toggle the long-session fold (show all messages / fold old ones). */
+  private cmdExpandAll(): void {
+    this.expandedAll = !this.expandedAll
+    this.pushNotice(this.expandedAll ? 'showing all messages' : 'folding old messages again')
+    this.sync()
+  }
+
+  // ── status bar git ────────────────────────────────────────────────────────
+
+  /** Refresh the git branch/dirty state for the session cwd (boot + switch). */
+  private refreshGitState(): void {
+    const cwd = this.cwd
+    this.gitState = undefined
+    void readGitState(cwd).then((state) => {
+      if (this.disposed) return
+      if (state === undefined || state === this.gitState) return
+      // A session switch may have changed the cwd while the read ran; the
+      // stale result must not paint the new session's status bar.
+      if (cwd !== this.cwd) return
+      this.gitState = state
+      this.sync(false)
+    })
+  }
+
+  // ── boot hint ─────────────────────────────────────────────────────────────
+
+  /**
+   * After boot replay, surface how many persisted sessions exist so users
+   * know history is one Ctrl+R / /resume away. Called once from the app
+   * layer (after the durable log replays), so the hint lands after history.
+   */
+  pushRecentSessionHint(): void {
+    void listSessions(this.ctx)
+      .then((headers) => {
+        const others = headers.filter(header => String(header.id) !== this.currentSessionId)
+        if (others.length === 0) return
+        pushNotice(
+          this.model,
+          `${others.length} persisted session${others.length === 1 ? '' : 's'} — Ctrl+R to search · /resume to reopen`,
+          'info',
+        )
+        this.sync()
+      })
+      .catch(() => {
+        // Best effort.
+      })
+  }
+
+  // ── tool-card browse mode ─────────────────────────────────────────────────
+
+  /** Finished tool-card ids, newest last; folded cards are skipped. */
+  private settledToolIds(): number[] {
+    const { items } = this.model
+    const boundary = foldWindow(items.length, this.expandedAll, this.historyLimit).boundary
+    const ids: number[] = []
+    for (const item of items) {
+      if (item.kind !== 'tool' || item.tool === undefined || item.tool.status === 'running') {
+        continue
+      }
+      if (item.id < boundary) continue
+      ids.push(item.id)
+    }
+    return ids
+  }
+
+  /** Tab with an empty editor: enter or advance the card focus ring. */
+  private cycleToolFocus(): void {
+    const ids = this.settledToolIds()
+    if (ids.length === 0) {
+      this.pushNotice('no finished tool cards to focus', 'error')
+      return
+    }
+    const entering = this.focusedToolId === undefined
+    const current = ids.indexOf(this.focusedToolId ?? -1)
+    this.focusedToolId = ids[(current + 1) % ids.length]
+    this.expandedToolId = undefined
+    if (entering) {
+      this.pushNotice('tool-card browse: Enter expand · Tab next · Esc exit')
+    }
+    this.sync()
+  }
+
+  /** Enter in browse mode: toggle the focused card's expansion. */
+  private toggleFocusedTool(): void {
+    if (this.focusedToolId === undefined) return
+    this.expandedToolId =
+      this.expandedToolId === this.focusedToolId ? undefined : this.focusedToolId
+    this.sync()
+  }
+
+  /** Esc in browse mode: drop the focus ring (and any per-card expansion). */
+  private exitBrowseMode(): void {
+    this.focusedToolId = undefined
+    this.expandedToolId = undefined
+    this.sync()
+  }
+
+  // ── ! shell command (user full authority) ──────────────────────────────────
+
+  private bashRunning = false
+  private bashAbort: AbortController | undefined
+
+  /**
+   * `!cmd` runs a shell command in the session cwd with user full authority
+   * (danger-full-access, pi/Claude Code semantics) and streams its output
+   * into a transcript card; the output joins the model context unless the
+   * `!!` prefix excluded it. Esc aborts.
+   */
+  private async runBashCommand(line: string): Promise<void> {
+    const parsed = parseBang(line)
+    if (parsed === undefined) return
+    if (this.bashRunning) {
+      this.pushNotice('a shell command is already running — press Esc to cancel it first', 'error')
+      return
+    }
+    const shell = this.ctx.get('shell') as
+      | {
+        start(spec: {
+          command: string
+          workdir?: string
+          signal?: AbortSignal
+          sandboxPolicy?: { mode: string; workspaceRoot: string }
+        }): BashProcess
+      }
+      | undefined
+    if (shell === undefined) {
+      this.pushNotice('shell service unavailable', 'error')
+      return
+    }
+    const { command, excluded } = parsed
+    this.bashRunning = true
+    this.bashAbort = new AbortController()
+    const card = pushNotice(this.model, `$ ${command}`, 'info')
+    this.sync()
+
+    try {
+      const process = shell.start({
+        command,
+        workdir: this.cwd,
+        signal: this.bashAbort.signal,
+        sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: this.cwd },
+      })
+      // Drain incremental output until the process settles: read first (no
+      // initial lag), then wait for settlement or a short poll tick.
+      let output = ''
+      const tick = (): Promise<boolean> =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(false)
+          }, 50)
+        })
+      while (true) {
+        const read = process.readOutput()
+        if (read.delta !== '') {
+          output += read.delta
+          card.text = `$ ${command}${output === '' ? '' : `\n${output}`}`
+          this.sync()
+        }
+        if (process.status !== 'running') break
+        // Wake immediately on settlement, otherwise poll on a short tick.
+        const settled = await Promise.race([process.done.then(() => true), tick()])
+        if (settled) break
+      }
+      await process.done
+      const read = process.readOutput()
+      if (read.delta !== '') output += read.delta
+      card.text = `$ ${command}${output === '' ? '' : `\n${output}`}`.trimEnd()
+      const exitCode = process.exitCode
+      if (exitCode === 0) {
+        card.notice = 'info'
+      } else {
+        card.notice = 'error'
+        card.text += `\n[exit ${exitCode ?? process.signal ?? 'killed'}]`
+      }
+      if (!excluded) {
+        // Join the model context without waking the driver (pi's
+        // recordBashResult equivalent).
+        this.agent.inject(
+          createUserMessage({
+            content: [{ type: 'text', text: `$ ${command}${output === '' ? '' : `\n${output}`}` }],
+            // The TUI's own producer source (not `user`) so the fold does not
+            // render this injected context as a second user bubble — the
+            // notice card above is the visible record; this only feeds the
+            // model.
+            source: {
+              kind: 'pi-tui',
+              form: 'notice',
+              summary: boundContextSummary(`ran shell command: ${command}`),
+            },
+          }),
+        )
+      }
+    } catch (error) {
+      card.notice = 'error'
+      card.text += `\nfailed: ${error instanceof Error ? error.message : String(error)}`
+    } finally {
+      this.bashRunning = false
+      this.bashAbort = undefined
+      this.sync()
+    }
+  }
+
+  // ── @ file attachment ─────────────────────────────────────────────────────
+
+  /** Bare `@` at a token start opens the fuzzy file-attachment picker. */
+  private maybeOpenAtPicker(text: string): void {
+    if (this.atPickerOpen || this.tui.hasOverlay()) return
+    const match = /(?:^|[\s(])@\s*$/.exec(text)
+    if (match === null) return
+    this.atPickerOpen = true
+    void this.openAtPicker().finally(() => {
+      this.atPickerOpen = false
+    })
+  }
+
+  private async openAtPicker(): Promise<void> {
+    const files = await this.listWorkspaceFiles()
+    if (files.length === 0) {
+      this.pushNotice('no files found to attach')
+      return
+    }
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Attach file',
+      items: files.map(file => ({ value: file, label: file })),
+      shouldShow: (query, item) => shouldShowPath(query, item.label),
+    })
+    if (picked !== undefined) {
+      const text = this.editor.getText()
+      this.editor.setText(text.replace(/(?:^|[\s(])@\s*$/, ` @${picked} `))
+      this.tui.setFocus(this.editor)
+      this.tui.requestRender()
+    }
+  }
+
+  private rgCache: { cwd: string; files: string[] } | undefined
+
+  /**
+   * Enumerate attachable files. Primary source: one ripgrep run with the
+   * standard ignore convention (.gitignore/.ignore nested + unconditional
+   * excludes); falls back to the ctx.fs walker when rg is unavailable.
+   */
+  private async listWorkspaceFiles(): Promise<string[]> {
+    if (this.rgCache?.cwd === this.cwd) return this.rgCache.files
+    const viaRg = await this.tryRgListing()
+    const files = viaRg.length > 0 ? viaRg : await this.walkFallback()
+    this.rgCache = { cwd: this.cwd, files }
+    return files
+  }
+
+  private async tryRgListing(): Promise<string[]> {
+    try {
+      const { rgPath } = await import('@vscode/ripgrep')
+      return await runRgFiles(rgPath, this.cwd)
+    } catch {
+      return []
+    }
+  }
+
+  /** Bounded recursive walk through the dsh fs seam (rg-unavailable fallback). */
+  private async walkFallback(): Promise<string[]> {
+    const fs = this.ctx.get('fs') as
+      | {
+        resolve(path: string): Promise<{ displayPath: string }>
+        listDir(
+          target: unknown,
+          signal?: AbortSignal,
+        ): Promise<
+          {
+            name: string
+            type: 'file' | 'directory' | 'other'
+            target: { displayPath: string }
+          }[]
+        >
+      }
+      | undefined
+    if (fs === undefined) return []
+    const results: string[] = []
+    const visited = new Set<string>()
+    // Build artifacts and VCS metadata never belong in an attach list.
+    const ignored = new Set([
+      'node_modules',
+      '.git',
+      '.dsh',
+      'lib',
+      'dist',
+      'build',
+      'coverage',
+      '.turbo',
+      '.next',
+      '.cache',
+      '__pycache__',
+      '.svn',
+      '.hg',
+      '.bzr',
+      '.jj',
+      '.sl',
+    ])
+    const junkFiles = new Set(['.DS_Store', 'Thumbs.db'])
+    let root: unknown
+    try {
+      root = await fs.resolve(this.cwd)
+    } catch {
+      return []
+    }
+    const walk = async (target: unknown, depth: number): Promise<void> => {
+      if (depth > 8 || results.length >= 5000) return
+      let entries
+      try {
+        entries = await fs.listDir(target)
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        if (results.length >= 5000) return
+        if (entry.type === 'file') {
+          if (junkFiles.has(entry.name) || entry.name.endsWith('.pyc')) continue
+          const rel = relative(this.cwd, entry.target.displayPath) || entry.name
+          if (!visited.has(rel)) {
+            visited.add(rel)
+            results.push(rel)
+          }
+        } else if (entry.type === 'directory' && !ignored.has(entry.name)) {
+          await walk(entry.target, depth + 1)
+        }
+      }
+    }
+    await walk(root, 0)
+    return results.sort()
+  }
+
+  private async modelCompletions(prefix: string) {
+    const llm = this.llm()
+    if (llm === undefined) return null
+    const routes = await listAllModels(llm, this.profileContexts())
+    const items = routes
+      .filter(route => route.model.startsWith(prefix))
+      .map(route => ({ value: route.model, label: route.model }))
+    return items.length > 0 ? items : null
+  }
+
+  // ── transcript plumbing ───────────────────────────────────────────────────
+
+  /**
+   * Push a UI-side notice into the transcript.
+   * @param text - the notice body.
+   * @param notice - the flavor selecting the marker and styling.
+   */
+  pushNotice(text: string, notice: 'info' | 'error' | 'compact' = 'info'): void {
+    pushNotice(this.model, text, notice)
+    this.sync()
+  }
+
+  /**
+   * Fold one session event and reconcile the component tree.
+   * @param event - the durable session event to fold into the transcript.
+   */
+  handleEvent(event: SessionEvent): void {
+    if (event.type === 'turn/start') {
+      this.turnStartedAt = Date.now()
+      this.turnStartTokens = this.model.tokens.input + this.model.tokens.output
+    }
+    if (this.handledMarkerSeq !== undefined && event.seq === this.handledMarkerSeq) {
+      return
+    }
+    const before = this.model.items
+    applyEvent(this.model, event)
+    const marker = event.type === 'developer/message'
+      ? event as SessionEvent & { surfaceOp?: { op?: string } }
+      : undefined
+    if (!this.replaying) {
+      if (marker?.surfaceOp?.op === 'replace') this.mainSummary = rebuildAgentSummary(replayEvents(this.agent.session))
+      else foldAgentSummary(this.mainSummary, event)
+    }
+    if (this.model.items !== before) {
+      this.handledMarkerSeq = event.seq
+      // A surface replace pruned items and re-densified ids: stale views and
+      // container children must go before sync rebuilds from the new list.
+      this.views.clear()
+      this.lastFoldKey = ''
+    }
+    if (event.type === 'tool/result' && !this.replaying) {
+      const card = this.model.items.find(item => item.tool?.callId === event.data.message.source.callId)
+      const view = card === undefined ? undefined : this.views.get(card.id)
+      if (card !== undefined && view instanceof ToolCardView) void this.resolveImages(card, view)
+    }
+    if (event.type === 'turn/end' && !this.replaying) {
+      const reason = (event.data as { reason?: { kind?: string } }).reason
+      const startedAt = this.turnStartedAt
+      this.turnStartedAt = undefined
+      if (reason?.kind === 'completed' && startedAt !== undefined) {
+        const seconds = (Date.now() - startedAt) / 1000
+        const delta = this.model.tokens.input + this.model.tokens.output - this.turnStartTokens
+        this.pushNotice(`✓ done in ${seconds.toFixed(1)}s · +${shortTokens(delta)} tok`, 'compact')
+      }
+    }
+    // Replay batches: each sync reconciles every view and schedules a render,
+    // so per-event syncs over a large durable log square the work. The
+    // replay driver issues one final sync when its batch completes.
+    if (!this.replaying) this.sync()
+  }
+
+  /** Observe all runs; their Cordis carrier filters select the visible agent's descendants. */
+  private listenSubagents(): void {
+    const runs = this.subagentRuns
+    // Cordis exposes the scoped carrier filter only as this callback's dynamic `this`.
+    // oxlint-disable-next-line typescript/no-this-alias -- Capture Cordis's scoped carrier for the run predicate.
+    const screen = this
+    const refresh = () => { this.sync(false) }
+    this.ctx.events.on('subagent/start', function (
+      this: { [Context.filter]?: (ctx: Context) => boolean } | null,
+      info: SubagentRunInfo,
+    ) {
+      const filter = this?.[Context.filter]
+      if (filter === undefined) return
+      const admits = (agentCtx: Context) => filter.call(this, agentCtx)
+      runs.set(info.runId, admits)
+      const child = screen.ctx.agents.get(info.id)
+      const inherited = child?.session.inheritedEventCount
+      const ownedEvents = child === undefined ? [] : replayEvents(child.session).filter(event =>
+        inherited === undefined || event.seq >= inherited)
+      const fallbackTask = foldSubagentDescriptor(ownedEvents)?.label
+      const summary = rebuildAgentSummary(ownedEvents, fallbackTask)
+      const entry: ActivityEntry = {
+        seq: screen.model.activity.at(-1)?.seq ?? 0,
+        key: `subagent:${info.runId}`,
+        category: 'Sub Agent',
+        status: 'running',
+        label: `${info.provider} · ${info.id}`,
+        detail: formatAgentSummary(summary),
+        time: Date.now(),
+      }
+      screen.subagentActivity.set(info.runId, {
+        entry,
+        ...(child === undefined ? {} : { child }),
+        parent: screen.agent,
+        admits,
+        summary,
+        ...(fallbackTask === undefined ? {} : { fallbackTask }),
+      })
+      screen.trimSubagentActivity()
+      refresh()
+    }, { global: true })
+    this.ctx.events.on('subagent/end', (info: SubagentRunEndInfo) => {
+      this.subagentRuns.delete(info.runId)
+      const run = this.subagentActivity.get(info.runId)
+      if (run !== undefined) {
+        run.entry.status = info.stopReason === 'error' ? 'error' : info.stopReason === 'aborted' ? 'cancelled' : 'ok'
+        run.entry.detail = `${formatAgentSummary(run.summary)} · Subagent ${info.stopReason}.`
+        run.entry.endedAt = Date.now()
+      }
+      this.trimSubagentActivity()
+      this.sync(false)
+    }, { global: true })
+    this.ctx.events.on('session/event', (session, event: SessionEvent) => {
+      for (const run of this.subagentActivity.values()) {
+        const child = run.child
+        if (run.entry.endedAt !== undefined || child === undefined || child.session !== session) continue
+        const marker = event.type === 'developer/message'
+          ? event as SessionEvent & { surfaceOp?: { op?: string } }
+          : undefined
+        if (marker?.surfaceOp?.op === 'replace') {
+          const inherited = child.session.inheritedEventCount
+          const owned = replayEvents(child.session).filter(accepted => accepted.seq >= inherited)
+          run.summary = rebuildAgentSummary(owned, run.fallbackTask)
+        } else foldAgentSummary(run.summary, event)
+        run.entry.detail = formatAgentSummary(run.summary)
+        if (event.type === 'tool/call') {
+          run.latestCall = { callId: event.data.callId, name: event.data.name }
+          run.entry.status = 'preparing'
+        }
+        else if (event.type === 'tool/result') {
+          const latestCall = run.latestCall
+          if (latestCall !== undefined && latestCall.callId === event.data.message.source.callId) {
+            run.entry.status = 'running'
+          }
+        }
+        if (run.admits(this.agent.ctx)) this.scheduleActivitySync()
+      }
+    }, { global: true })
+    this.ctx.events.on('tools/execute', (exec: ToolDispatchExecution, next: () => Promise<ToolExecutionResult>) => {
+      for (const run of this.subagentActivity.values()) {
+        if (run.child === exec.agent && run.entry.endedAt === undefined) {
+          run.entry.detail = formatAgentSummary(run.summary)
+          run.entry.status = 'executing'
+          this.scheduleActivitySync()
+        }
+      }
+      return next()
+    }, { global: true })
+  }
+
+  private trimSubagentActivity(): void {
+    const settled = [...this.subagentActivity.entries()].filter(([, run]) => run.entry.endedAt !== undefined)
+    for (const [id] of settled.slice(0, Math.max(0, settled.length - 20))) this.subagentActivity.delete(id)
+  }
+
+  /** Observe dispatched calls and MCP progress without recording transient data in the session. */
+  private listenToolActivity(): void {
+    this.ctx.events.on('tools/execute', async (exec: ToolDispatchExecution, next: () => Promise<ToolExecutionResult>) => {
+      if (exec.agent === this.agent && !this.disposed) {
+        this.activeToolCalls.set(exec.callId, exec.token)
+        const row = this.model.activity.find(entry => entry.key === `tool:${exec.callId}` || entry.key === `ptc:${exec.callId}`)
+        if (row !== undefined && row.endedAt === undefined) {
+          row.status = 'executing'
+          delete row.progress
+        }
+        this.scheduleActivitySync()
+      }
+      try {
+        return await next()
+      } finally {
+        if (exec.agent === this.agent && this.activeToolCalls.get(exec.callId) === exec.token) {
+          this.activeToolCalls.delete(exec.callId)
+        }
+      }
+    }, { global: true })
+  }
+
+  private scheduleActivitySync(): void {
+    if (this.disposed || this.activitySyncTimer !== undefined) return
+    this.activitySyncTimer = setTimeout(() => {
+      this.activitySyncTimer = undefined
+      this.sync(false)
+    }, 16)
+  }
+
+  /** Observe visible job output through non-consuming registry cursors. */
+  private listenJobs(): void {
+    this.disposeJobs?.()
+    this.jobInputWatch.dispose()
+    this.jobReadOffsets.clear()
+    for (const timer of this.jobReadTimers.values()) clearTimeout(timer)
+    this.jobReadTimers.clear()
+    const jobs = this.ctx.get('jobs')
+    if (jobs === undefined) {
+      this.jobSnapshots = []
+      return
+    }
+    const observe = (job: JobView) => {
+      if (job.status !== 'running') return
+      const from = Math.max(job.output.earliest, job.output.total - JOB_INPUT_WATCH_TAIL_BYTES)
+      try {
+        const read = jobs.readAt(job.id, from, this.agent.id)
+        this.jobReadOffsets.set(job.id, read.next)
+        this.feedJobOutputRead(job.id, read)
+      } catch (error: unknown) {
+        this.ctx.logger.debug('Agent Debug could not observe job output during registration.', error)
+        this.jobReadOffsets.delete(job.id)
+      }
+    }
+    this.jobSnapshots = jobs.list(this.agent.id)
+    for (const job of this.jobSnapshots) observe(job)
+    this.disposeJobs = jobs.events.subscribe({ owner: this.agent.id }, (event) => {
+      if (this.disposed) return
+      if (event.type === 'output') {
+        this.jobInputWatch.activity(event.id)
+        this.scheduleJobOutputRead(event.id)
+        return
+      }
+      if (event.type === 'registered') {
+        this.jobSnapshots = [...this.jobSnapshots.filter(job => job.id !== event.job.id), event.job]
+        observe(event.job)
+        this.scheduleActivitySync()
+      } else if (event.type === 'progress') {
+        this.clearJobOutputWatch(event.job.id)
+        this.jobSnapshots = [...this.jobSnapshots.filter(job => job.id !== event.job.id), event.job]
+        this.scheduleActivitySync()
+      } else {
+        this.clearJobOutputWatch(event.job.id)
+        this.jobReadOffsets.delete(event.job.id)
+        this.sync()
+      }
+    })
+  }
+
+  private scheduleJobOutputRead(id: JobId): void {
+    if (this.jobReadTimers.has(id)) return
+    this.jobReadTimers.set(id, setTimeout(() => {
+      this.jobReadTimers.delete(id)
+      const jobs = this.ctx.get('jobs')
+      const job = jobs?.get(id, this.agent.id)
+      if (jobs === undefined || job?.status !== 'running') {
+        this.clearJobOutputWatch(id)
+        return
+      }
+      const earliest = Math.max(job.output.earliest, job.output.total - JOB_INPUT_WATCH_TAIL_BYTES)
+      const priorOffset = this.jobReadOffsets.get(id)
+      const from = Math.max(priorOffset ?? earliest, earliest)
+      if (priorOffset !== undefined && from > priorOffset) this.jobInputWatch.reset(id)
+      try {
+        const read = jobs.readAt(id, from, this.agent.id)
+        this.jobReadOffsets.set(id, read.next)
+        this.feedJobOutputRead(id, read)
+      } catch (error: unknown) {
+        this.ctx.logger.debug('Agent Debug could not read the current job output tail.', error)
+        this.clearJobOutputWatch(id)
+        this.jobReadOffsets.delete(id)
+      }
+    }, 0))
+  }
+
+  private feedJobOutputRead(id: JobId, read: JobOutputRead): void {
+    if (read.lossy) this.jobInputWatch.reset(id)
+    for (const chunk of read.chunks) {
+      if (chunk.gapBefore === true) this.jobInputWatch.reset(id)
+      this.jobInputWatch.output(id, chunk.text.slice(-JOB_INPUT_WATCH_TAIL_BYTES))
+    }
+  }
+
+  private clearJobOutputWatch(id: JobId): void {
+    const timer = this.jobReadTimers.get(id)
+    if (timer !== undefined) clearTimeout(timer)
+    this.jobReadTimers.delete(id)
+    this.jobInputWatch.clear(id)
+  }
+
+  /**
+   * Resolve image-attachment refs from read_image results into inline
+   * base64 for the tool card (best effort; the text envelope still shows).
+   */
+  private async resolveImages(card: ChatItem, view: ToolCardView): Promise<void> {
+    if (card.tool?.imageRefs === undefined) return
+    const attachments = this.ctx.get('attachments') as
+      { readImage(ref: unknown, signal?: AbortSignal): Promise<{ data: Uint8Array }> } | undefined
+    if (attachments === undefined) return
+    const images: { base64: string; mediaType: string }[] = []
+    for (const ref of card.tool.imageRefs) {
+      try {
+        const stored = await attachments.readImage(ref)
+        images.push({
+          base64: Buffer.from(stored.data).toString('base64'),
+          mediaType: ref.mediaType,
+        })
+      } catch {
+        // Resolution is best effort.
+      }
+    }
+    if (images.length === 0) return
+    if (!this.disposed && this.views.get(card.id) === view) {
+      view.setImages(images)
+      this.sync()
+    }
+  }
+
+  /** Ctrl+Z: stop the renderer, suspend the process, redraw on SIGCONT. */
+  private suspend(): void {
+    this.tui.stop()
+    process.once('SIGCONT', () => {
+      this.tui.start()
+      this.tui.setFocus(this.editor)
+      this.tui.requestRender()
+    })
+    process.kill(process.pid, 'SIGTSTP')
+  }
+
+  /** Ctrl+G: edit the input in $EDITOR/$VISUAL (user full authority). */
+  private async externalEditor(): Promise<void> {
+    if (this.isBusy()) {
+      this.pushNotice('cannot open the editor while work is running', 'error')
+      return
+    }
+    const editor = process.env.VISUAL ?? process.env.EDITOR
+    if (editor === undefined || editor === '') {
+      this.pushNotice('set $EDITOR (or $VISUAL) to use the external editor', 'error')
+      return
+    }
+    const shell = this.ctx.get('shell') as
+      { run(req: unknown): Promise<{ exitCode: number | null }> } | undefined
+    if (shell === undefined) {
+      this.pushNotice('shell service unavailable', 'error')
+      return
+    }
+    const tmp = join(tmpdir(), `dsh-pi-tui-${Date.now()}.md`)
+    await writeFile(tmp, this.editor.getText(), 'utf8')
+    this.tui.stop()
+    try {
+      await shell.run({
+        command: `${editor} ${JSON.stringify(tmp)}`,
+        workdir: this.cwd,
+        sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: this.cwd },
+        timeoutMs: 30 * 60 * 1000,
+      })
+      const text = await readFile(tmp, 'utf8')
+      this.editor.setText(text)
+    } finally {
+      try {
+        await rm(tmp, { force: true })
+      } catch {
+        // Best effort.
+      }
+      this.tui.start()
+      this.tui.setFocus(this.editor)
+      this.tui.requestRender()
+    }
+  }
+
+  /** Create views for new items, refresh changed ones, fix the chrome. */
+  private sync(refreshSessionState = true): void {
+    this.cancelStreamSync()
+    if (refreshSessionState) {
+      this.jobSnapshots = this.ctx.get('jobs')?.list(this.agent.id) ?? []
+      this.cachedJobsRunning = this.jobSnapshots.filter(job => job.status === 'running' || job.status === 'stopping').length || undefined
+      this.cachedJevCost = jevSessionCost(this.model.items)
+    }
+    const { items } = this.model
+    const subagentEntries = [...this.subagentActivity.values()]
+      .filter(run => run.admits(this.agent.ctx))
+      .map(run => run.entry)
+    const activity = [...this.model.activity, ...subagentEntries].sort((left, right) => left.seq - right.seq)
+    if (
+      activity.length !== this.debugEntries.length
+      || activity.some((entry, index) => this.debugEntries[index] !== entry)
+    ) this.debugEntries = activity
+    const summaryVisible = this.mainSummary.task !== undefined || this.mainSummary.startedAt !== undefined
+      || this.mainSummary.latestTool !== undefined || this.mainSummary.todos !== undefined
+    this.toolActivity.update(this.debugEntries, this.jobSnapshots, this.model.targets.getSnapshot(),
+      summaryVisible ? formatAgentSummary(this.mainSummary) : undefined, this.waitingJobIds)
+    const foldKey = foldWindow(items.length, this.expandedAll, this.historyLimit)
+    for (const id of this.views.keys()) {
+      if (id < foldKey.boundary) this.views.delete(id)
+    }
+    for (let index = foldKey.boundary; index < items.length; index++) {
+      const item = items[index]
+      if (item === undefined || this.views.has(item.id)) continue
+      const view = createView(item)
+      this.views.set(item.id, view)
+      if (view instanceof ToolCardView) void this.resolveImages(item, view)
+    }
+
+    // Working loader between messages and the status bar (before the fold
+    // reconcile so a rebuilt container includes it).
+    if (this.model.working && this.workingLoader === undefined) {
+      const startedAt = this.turnStartedAt ?? Date.now()
+      const loader = new Loader(
+        this.tui,
+        style.spinner,
+        text => style.workingLabel(`${text} ${Math.floor((Date.now() - startedAt) / 1000)}s`),
+        'Working…',
+        {
+          frames: [
+            '⟦█▓░·····⟧', '⟦▓█▓░····⟧', '⟦░▓█▓░···⟧', '⟦·░▓█▓░··⟧',
+            '⟦··░▓█▓░·⟧', '⟦···░▓█▓░⟧', '⟦····░▓█▓⟧', '⟦·····░▓█⟧',
+            '⟦····░▓█▓⟧', '⟦···░▓█▓░⟧', '⟦··░▓█▓░·⟧', '⟦·░▓█▓░··⟧',
+            '⟦░▓█▓░···⟧', '⟦▓█▓░····⟧',
+          ].map(style.spinner),
+          intervalMs: 80,
+        },
+      )
+      this.workingLoader = loader
+      this.messages.addChild(loader)
+    } else if (!this.model.working && this.workingLoader !== undefined) {
+      this.workingLoader.stop()
+      this.messages.removeChild(this.workingLoader)
+      this.workingLoader = undefined
+    }
+
+    // Long-session fold: rebuild the visible child list only when the fold
+    // window moved (threshold crossed, expand toggled, or session switch).
+    // When unfolded, the container is append-only — just add views created
+    // above (the loader, if present, must stay AFTER all views).
+    if (foldKey.key !== this.lastFoldKey) {
+      this.lastFoldKey = foldKey.key
+      this.reconcileContainer(items, foldKey)
+    } else if (foldKey.boundary === 0) {
+      const loaderOffset = this.workingLoader !== undefined ? 1 : 0
+      const firstMissing = this.messages.children.length - loaderOffset
+      if (firstMissing < items.length) {
+        if (this.workingLoader !== undefined) this.messages.removeChild(this.workingLoader)
+        for (let id = firstMissing; id < items.length; id++) {
+          const view = this.views.get(id)
+          if (view !== undefined) this.messages.addChild(view)
+        }
+        if (this.workingLoader !== undefined) this.messages.addChild(this.workingLoader)
+      }
+    }
+
+    for (const [id, view] of this.views) {
+      updateView(view, this.expandReasoning, this.expandTools, this.searchQuery)
+      if (view instanceof ToolCardView) view.setFocused(id === this.focusedToolId)
+    }
+
+    // Session projections (todo list, token meter, permissions) are the
+    // authoritative UI read models; read ONE snapshot and fold it, falling
+    // back to the locally folded counters.
+    let tokens = this.model.tokens
+    let todos: { done: number; total: number } | undefined
+    let planActive: boolean | undefined
+    let goalPhase: string | undefined
+    let contextPct: number | undefined
+    let contextUsed: number | undefined
+    let contextTotal: number | undefined
+    let sandboxMode: string | undefined
+    try {
+      const projections = this.ctx.get('sessionProjections') as
+        SessionProjectionsService | undefined
+      const values = projections?.snapshot(this.agent.session).values
+      const projection = collectProjection(values, this.model.tokens)
+      tokens = projection.tokens
+      todos = projection.todos
+      planActive = projection.planActive
+      goalPhase = projection.goalPhase
+      contextPct = projection.contextPct
+      contextUsed = projection.contextUsed
+      contextTotal = projection.contextTotal
+      // Permission preset rides the same snapshot (no second call).
+      const permissions = values?.permissions as { currentValue?: string } | undefined
+      sandboxMode = permissions?.currentValue
+    } catch {
+      // Projections are an optional capability; the folded counters suffice.
+    }
+    if (sandboxMode === undefined) {
+      try {
+        const policy = this.ctx.get('sandboxPolicy') as
+          { resolve(request?: { session?: unknown }): { mode: string } } | undefined
+        sandboxMode = policy?.resolve({ session: this.agent.session }).mode
+      } catch {
+        // Optional service.
+      }
+    }
+
+    // Registry reads and cost totals stay outside the assistant chunk hot path.
+    const jobsRunning = this.cachedJobsRunning
+
+    const route = this.currentRoute()
+    const effort = this.currentEffort()
+    const preset = this.currentPresetId()
+    const teamPolicy = this.ctx.get('pentestModePolicy') as { current(): { mode: string } } | undefined
+    const teamMode = TEAM_MODE_OPTIONS.find(option => option.value === teamPolicy?.current().mode)?.value
+    const jevAvailable = (this.ctx.get('tools') as ToolPolicyRuntime | undefined)?.schemas?.(this.agent)
+      .some(tool => isJevTool(tool.name)) ?? false
+    const jevCost = this.cachedJevCost
+    this.updateQueueBanner()
+    const status: StatusBarData = {
+      model: route.model,
+      working: this.isBusy(),
+      ...(effort !== undefined ? { effort } : {}),
+      sessionId: String(this.agent.session.id),
+      cwd: basename(this.cwd),
+      tokens,
+      ...(this.gitState !== undefined ? { git: this.gitState } : {}),
+      ...(todos !== undefined ? { todos } : {}),
+      ...(preset !== undefined ? { preset } : {}),
+      ...(teamMode !== undefined ? { teamMode } : {}),
+      jev: {
+        state: !jevAvailable ? 'unavailable' : this.mcpEnabled && this.jevEnabled ? 'on' : 'off',
+        ...(jevCost !== undefined ? { cost: jevCost } : {}),
+      },
+      wikiAvailable: this.ctx.get('tools')?.get('knowledge_list', this.agent) !== undefined,
+      ...(planActive !== undefined ? { planActive } : {}),
+      ...(goalPhase !== undefined ? { goalPhase } : {}),
+      ...(contextPct !== undefined ? { contextPct } : {}),
+      ...(contextUsed !== undefined ? { contextUsed } : {}),
+      ...(contextTotal !== undefined ? { contextTotal } : {}),
+      ...(sandboxMode !== undefined ? { sandboxMode } : {}),
+      ...(jobsRunning !== undefined ? { jobsRunning } : {}),
+      subagentsRunning: [...this.subagentRuns.values()].filter(admits => admits(this.agent.ctx)).length,
+      queuePending: this.agent.inbox.nextTurn.length + this.agent.inbox.nextStep.length,
+      ...(this.shellPane !== undefined
+        ? { shellPane: { variant: this.shellPane.variant, focused: this.shellFocused } }
+        : {}),
+    }
+    this.statusBar.update(status)
+    this.tui.requestRender()
+  }
+
+  /** Rebuild the transcript container for the current fold window: a fold
+   * notice (when folded), the visible views in order, then the loader. */
+  private reconcileContainer(items: readonly ChatItem[], window: FoldWindow): void {
+    this.messages.clear()
+    if (window.key.startsWith('folded:')) {
+      const folded = Number(window.key.slice('folded:'.length))
+      if (this.foldNotice === undefined) this.foldNotice = new Text('', 1, 0)
+      this.foldNotice.setText(
+        style.muted(
+          `… ${folded} earlier message${folded === 1 ? '' : 's'} folded — /expand-all shows all`,
+        ),
+      )
+      this.messages.addChild(this.foldNotice)
+    }
+    for (let index = window.boundary; index < items.length; index++) {
+      const item = items[index]
+      const view = item === undefined ? undefined : this.views.get(item.id)
+      if (view !== undefined) this.messages.addChild(view)
+    }
+    if (this.workingLoader !== undefined) this.messages.addChild(this.workingLoader)
+  }
+
+  /**
+   * Fuzzy search over the transcript plus the first user prompt of recently
+   * persisted sessions (CC-style cross-session history); picking a message
+   * loads it into the editor for re-sending or editing.
+   */
+  private async cmdHistorySearch(): Promise<void> {
+    const entries = this.model.items
+      .filter(item => item.kind === 'user' || item.kind === 'assistant')
+      .map(item => ({
+        id: `cur:${item.id}`,
+        text: item.text,
+        label: `${item.kind === 'user' ? '❯ ' : '✎ '}${item.text.replace(/\s+/g, ' ').slice(0, 80)}`,
+        kind: item.kind,
+      }))
+    const past = await this.pastPrompts()
+    const items = [
+      ...entries.map(entry => ({
+        value: entry.id,
+        label: entry.label,
+        description: `this session · ${entry.kind}`,
+      })),
+      ...past.map(prompt => ({
+        value: `past:${prompt.index}`,
+        label: `⏱ ${prompt.cwd} · ${prompt.text.replace(/\s+/g, ' ').slice(0, 70)}`,
+        description: `past session ${prompt.sessionId.slice(0, 8)}`,
+      })),
+    ]
+    if (items.length === 0) {
+      this.pushNotice('no messages yet')
+      return
+    }
+    const picked = await pickFromListWithSearch(this.tui, {
+      title: 'Search history',
+      ...(past.length > 0
+        ? { body: 'this session first, then the first prompt of recent persisted sessions' }
+        : {}),
+      items,
+    })
+    if (picked === undefined) return
+    if (picked.startsWith('past:')) {
+      const index = Number(picked.slice(5))
+      const prompt = past[index]
+      if (prompt !== undefined) {
+        this.editor.setText(prompt.text)
+        this.tui.setFocus(this.editor)
+        this.tui.requestRender()
+      }
+      return
+    }
+    const entry = entries.find(candidate => candidate.id === picked)
+    if (entry !== undefined) {
+      this.editor.setText(entry.text)
+      this.tui.setFocus(this.editor)
+      this.tui.requestRender()
+    }
+  }
+
+  /** First user prompt of each recent persisted session (lazy, bounded). */
+  private async pastPrompts(): Promise<
+    { index: number; sessionId: string; cwd: string; text: string }[]
+  > {
+    try {
+      const headers = (await listSessions(this.ctx)).slice(0, 15)
+      const results: { index: number; sessionId: string; cwd: string; text: string }[] = []
+      for (const header of headers) {
+        if (String(header.id) === this.currentSessionId) continue
+        try {
+          const loaded = await loadPersistedSession(this.ctx, String(header.id))
+          if (loaded === undefined) continue
+          const first = loaded.events.find(
+            event =>
+              event.type === 'user/message' &&
+              (event.data as { source?: { kind?: string } }).source?.kind === 'user',
+          )
+          if (first !== undefined) {
+            const text = textOf((first.data as { content?: Parameters<typeof textOf>[0] }).content)
+            if (text !== '') {
+              results.push({
+                index: results.length,
+                sessionId: String(header.id),
+                cwd: basename(header.cwd ?? '') || 'session',
+                text,
+              })
+            }
+          }
+        } catch {
+          // Skip unreadable sessions.
+        }
+      }
+      return results
+    } catch {
+      return []
+    }
+  }
+
+  private async openModelPicker(): Promise<void> {
+    const llm = this.llm()
+    if (llm === undefined) {
+      this.pushNotice('llm service unavailable', 'error')
+      return
+    }
+    const picked = await pickModel(this.tui, llm, this.profileContexts(), this.currentRoute())
+    if (picked !== undefined) await this.applyModel(picked)
+  }
+}
+
+/**
+ * Create the alternate-screen viewport TUI over a terminal.
+ * @param terminal - the terminal abstraction the TUI renders through.
+ * @returns the viewport TUI instance the screens render into.
+ */
+export function createTui(terminal: import('@earendil-works/pi-tui').Terminal): ViewportTUI {
+  return new TuiAltScreen(terminal)
+}
+
+/** Minimal ShellProcess surface the `!` command consumes. */
+interface BashProcess {
+  status: 'running' | 'completed' | 'killed'
+  exitCode: number | null
+  signal: string | null
+  readonly done: Promise<void>
+  readOutput(): { delta: string; lossy: boolean }
+}
+
+/**
+ * Tab-restraint wrapper (option B): the editor consults
+ * `shouldTriggerFileCompletion` before a forced Tab completion, so returning
+ * false for non-path-like tokens makes Tab a no-op on plain words. The
+ * inline `/`-command and `@`-mention triggers never pass through this gate.
+ */
+class PathAwareAutocomplete implements AutocompleteProvider {
+  /** Forwarded from the wrapped provider; left absent when it declares none
+   * (the editor treats an absent property and an undefined value the same). */
+  triggerCharacters?: string[]
+
+  private readonly inner: AutocompleteProvider
+
+  constructor(inner: AutocompleteProvider) {
+    this.inner = inner
+    const triggerCharacters = inner.triggerCharacters
+    if (triggerCharacters !== undefined) this.triggerCharacters = triggerCharacters
+  }
+
+  shouldTriggerFileCompletion(lines: string[], cursorLine: number, cursorCol: number): boolean {
+    const before = (lines[cursorLine] ?? '').slice(0, cursorCol)
+    const token = before.slice(before.lastIndexOf(' ') + 1)
+    return isPathLikeToken(token)
+  }
+
+  async getSuggestions(
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
+    options: { signal: AbortSignal; force?: boolean },
+  ) {
+    const before = (lines[cursorLine] ?? '').slice(0, cursorCol)
+    const token = before.slice(before.lastIndexOf(' ') + 1)
+    const suggestions = await this.inner.getSuggestions(lines, cursorLine, cursorCol, options)
+    if (suggestions === null) return null
+    // Belt and braces: outside slash/@ contexts, only path-like tokens may
+    // receive file suggestions.
+    if (token.startsWith('/') || token.startsWith('@') || isPathLikeToken(token)) {
+      return suggestions
+    }
+    return null
+  }
+
+  applyCompletion(
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
+    item: { value: string; label: string; description?: string },
+    prefix: string,
+  ) {
+    return this.inner.applyCompletion(lines, cursorLine, cursorCol, item, prefix)
+  }
+}
+
+/** Structural face of the host `pentestRuns` service the TUI calls in-process. */
+interface PentestRunsFace {
+  listRuns(): Promise<readonly PentestRunRow[]>
+  createRun(request: { objective: string; mode: string; authorizedTargets: readonly string[] }): Promise<PentestRunRow>
+  snapshot(runId: string): Promise<PentestRunSnapshotView>
+  controlRun(runId: string, request: { action: 'pause' | 'resume' | 'terminate' }): Promise<PentestRunRow>
+}
+
+/** Structural face of the host `pentestLoop` service. */
+interface PentestLoopFace {
+  start(runId: string, request: { maxCycles?: number }): Promise<void>
+  stop(runId: string): Promise<void>
+}
+
+/** Structural face of the host recon run controller. */
+interface ReconRunControllerFace {
+  list(): Promise<readonly ReconRunRow[]>
+  scan(request: unknown): Promise<ReconReportView>
+}
+
+/** The run fields the run list renders; the full record stays host-side. */
+interface PentestRunRow {
+  id: string
+  objective: string
+  mode: string
+  status: string
+}
+
+/** The snapshot slices the status renderer reads. */
+interface PentestRunSnapshotView {
+  run: PentestRunRow & { updatedAt?: string }
+  tasks: readonly { id: string; status: string; objective: string }[]
+  coverage: {
+    phases: readonly { kind: string; status: string; required: boolean }[]
+    complete: boolean
+    nextRequiredTaskKind?: string
+  }
+  findings: readonly unknown[]
+  evidence: readonly unknown[]
+  observations: readonly unknown[]
+  convergence: { warnings?: readonly unknown[] }
+}
+
+/** The recon list/report fields the /recon renderer reads. */
+interface ReconRunRow {
+  runId: string
+  target: string
+  status?: string
+  findings: number
+  interesting: number
+}
+
+interface ReconReportView {
+  run_id: string
+  status: string
+  profile: string
+  cached: boolean
+  target: { input: string }
+  findings: readonly unknown[]
+  warnings: readonly unknown[]
+}
+
+const PHASE_MARKS: Record<string, string> = { covered: '[x]', active: '[~]', pending: '[ ]' }
+
+/** Render one run snapshot as the compact notice /runs status prints. */
+function renderRunStatus(snapshot: PentestRunSnapshotView): string {
+  const phases = snapshot.coverage.phases
+    .map(phase => `${PHASE_MARKS[phase.status] ?? '[?]'}${phase.kind}`)
+    .join(' ')
+  const open = snapshot.tasks.filter(task => task.status !== 'done' && task.status !== 'completed').length
+  const lines = [
+    `run ${snapshot.run.id} [${snapshot.run.mode}] ${snapshot.run.status}`,
+    `objective: ${snapshot.run.objective.slice(0, 80)}`,
+    `coverage: ${phases}${snapshot.coverage.complete ? ' COMPLETE' : ` — next: ${snapshot.coverage.nextRequiredTaskKind ?? '?'}`}`,
+    `tasks: ${open} open / ${snapshot.tasks.length} total | findings: ${snapshot.findings.length} | evidence: ${snapshot.evidence.length} | observations: ${snapshot.observations.length}`,
+  ]
+  const warnings = snapshot.convergence.warnings ?? []
+  if (warnings.length > 0) lines.push(`convergence warnings: ${warnings.length}`)
+  return lines.join('\n')
+}
+
+/** Structural face of the host `remoteMachines` service the TUI calls in-process. */
+interface RemoteMachinesFace {
+  list(): Promise<{ machines: readonly RemoteMachineRow[] }>
+  probe(request: { id: string }): Promise<{ fingerprint: string; trusted: boolean; home?: string; platform?: string }>
+}
+
+/** The machine fields the /machines renderer reads; secrets stay redacted host-side. */
+interface RemoteMachineRow {
+  id: string
+  name: string
+  host: string
+  port: number
+  username: string
+  defaultPath?: string
+}
+
+/** One model a discovery interrogation returned for a draft provider. */
+interface DiscoveredModel {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  inputModalities?: readonly string[]
+}
+
+/** The discovery request fields the /provider flow sends. */
+interface DiscoveredModelRequest {
+  baseURL?: string
+  api?: string
+  apiKey?: string
+}
+
+/**
+ * Insert one provider profile into the home patch's `llm-pi-ai.providers`
+ * section. The home patch overrides this namespace, so the settings service
+ * refuses mutations — the YAML file is the authoritative document, and the
+ * profile registers on the next dsh boot.
+ * @param route - normalized provider route key.
+ * @param profile - the provider profile fields to write.
+ */
+function saveProviderToHomePatch(route: string, profile: Record<string, unknown>): void {
+  const patchPath = join(homedir(), '.dsh', 'cordis.patch.yml')
+  let content = ''
+  try {
+    content = readFileSync(patchPath, 'utf8')
+  } catch {
+    throw new Error(`home patch not found at ${patchPath}`)
+  }
+  const lines = content.split('\n')
+  const providersLine = lines.findIndex(line => line === '    providers:')
+  if (providersLine === -1) {
+    throw new Error('home patch has no llm-pi-ai providers section to extend (expected "    providers:")')
+  }
+  if (lines.some(line => line === `      ${route}:`)) {
+    throw new Error(`provider "${route}" already exists in the home patch — edit ${patchPath} directly`)
+  }
+  const yamlLines = Object.entries(profile).flatMap(([field, value]) => {
+    if (field === 'models') {
+      const models = value as { id: string; name: string; contextWindow: number; maxTokens: number; input: string[] }[]
+      return [
+        '        models:',
+        ...models.flatMap(model => [
+          `          - id: ${model.id}`,
+          `            name: ${model.name}`,
+          `            contextWindow: ${model.contextWindow}`,
+          `            maxTokens: ${model.maxTokens}`,
+          `            input: [${model.input.join(', ')}]`,
+        ]),
+      ]
+    }
+    return [`        ${field}: ${String(value)}`]
+  })
+  lines.splice(providersLine + 1, 0, `      ${route}:`, ...yamlLines)
+  writeFileSync(patchPath, lines.join('\n'))
+}

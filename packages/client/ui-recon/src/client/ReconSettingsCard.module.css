@@ -1,0 +1,10 @@
+.advanced {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 12px 0 0;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}

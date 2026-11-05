@@ -1,0 +1,30 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../bundle/web-app" },
+    { "path": "../../../vendor/cosmokit" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
+    { "path": "../../core/agent" },
+    { "path": "../../core/session" },
+    { "path": "../../core/tools" },
+    { "path": "../../interaction/commands" },
+    { "path": "../../jobs/jobs" },
+    { "path": "../../interaction/user-approval" },
+    { "path": "../../interaction/user-questions" },
+    { "path": "../../llm/llm" },
+    { "path": "../../llm/token-meter" },
+    { "path": "../../terminal/terminal" },
+    { "path": "../../terminal/terminal-bash" },
+    { "path": "../../terminal/tool-terminal" },
+    { "path": "../../util/native-command" },
+    { "path": "../../fs/tool-fs-search" },
+    { "path": "../../skill/skill" },
+    { "path": "../../subagent/subagent" }
+  ]
+}
