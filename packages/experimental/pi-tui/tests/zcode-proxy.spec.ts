@@ -17,6 +17,7 @@ import AgentDefaultModel from '../../../core/agent-default-model/src/index.ts'
 import AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionStore from '@deepseek-ai/dsh-session'
 import AgentPreset from '../../../preset/agent-preset/src/index.ts'
 import * as piTui from '../src/index.ts'
 import { ensureSbProxy, ensureZcodeProxy } from '../src/core/zcode-proxy.ts'
@@ -148,7 +149,7 @@ describe('TUI startup through Loader with optional proxies', () => {
       ctx.provide('workspaceRegistry', { resolveByPath: async () => ({ attachSession: async () => {} }) })
       await ctx.plugin(Loader)
       Object.assign(ctx.loader.builtins, {
-        include: Include, loop: AgentLoop, agents: AgentRegistry, agentPresets: AgentPresetRegistry,
+        include: Include, loop: AgentLoop, sessions: SessionStore, agents: AgentRegistry, agentPresets: AgentPresetRegistry,
         preset: AgentPreset, projections: SessionProjectionRegistry, model: AgentDefaultModel,
         policy: PentestModePolicy, persona: Persona, tui: piTui,
       })

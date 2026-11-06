@@ -2261,9 +2261,7 @@ export class ChatScreen {
   /** Follow the model's preset in a new session while preserving conversation. */
   private async followModelPreset(provider: string, model: string): Promise<void> {
     const presets = this.ctx.get('agentPresets') as
-      | {
-        presetIdForModel(provider: string, model: string): string
-      }
+      | { presetIdForModel?(provider: string, model: string): string }
       | undefined
     if (presets === undefined) return
     const target = resolveModelPreset(this.ctx, provider, model)

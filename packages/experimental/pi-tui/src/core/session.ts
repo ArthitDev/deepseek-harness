@@ -101,7 +101,8 @@ export interface SessionMeta {
  */
 export function resolveModelPreset(ctx: Context, provider: string, model: string): string | undefined {
   const presets = ctx.get('agentPresets') as
-    { presetIdForModel(provider: string, model: string): string } | undefined
+    | { presetIdForModel?(provider: string, model: string): string; config?: { default?: string } }
+    | undefined
   const config = readWebProfileConfig(ctx, 'agent-presets')
   if (config !== undefined) {
     const selected = config.get('modeSelectionEnabled') === false
@@ -112,7 +113,11 @@ export function resolveModelPreset(ctx: Context, provider: string, model: string
     }
     return selected
   }
-  return presets?.presetIdForModel(provider, model)
+  // The registry face has no model→preset table; its configured default is the
+  // model-following answer. The legacy face keeps per-model resolution.
+  if (presets?.presetIdForModel !== undefined) return presets.presetIdForModel(provider, model)
+  const fallback = presets?.config?.default
+  return typeof fallback === 'string' && fallback.trim() !== '' ? fallback : undefined
 }
 
 /**
