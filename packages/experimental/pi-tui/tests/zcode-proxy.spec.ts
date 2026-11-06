@@ -145,7 +145,7 @@ describe('TUI startup through Loader with optional proxies', () => {
       await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: 'DIRECT_MODEL_SYSTEM' } })
       ctx.llm.registerAdapter(['direct', 'zcode-direct', 'gateway'], adapter)
       ctx.provide('cmdlineArgs', { get: () => [] })
-      ctx.provide('profileContext', { home, name: 'tui', installAnchor: anchor })
+      ctx.provide('profileContext', { home, dir: home, name: 'tui', installAnchor: anchor })
       ctx.provide('workspaceRegistry', { resolveByPath: async () => ({ attachSession: async () => {} }) })
       await ctx.plugin(Loader)
       Object.assign(ctx.loader.builtins, {
