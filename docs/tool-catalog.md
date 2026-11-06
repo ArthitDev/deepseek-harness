@@ -44,6 +44,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message`, `wait_agent` | `ctx.tools`, `ctx.subagents`, `ctx.agents` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The shared control tools discover and contact agents in the subagent tree, interrupt owned descendants, and wait for input in the caller’s inbox. Provider-bound `tool-subagent` instances supply delegation tools. |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands and PTY sends are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-tool-agent-team` | `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `ctx.subagents`, `an exact live Team member Agent` | `tool/call`, `team/task`, `tool/result` | - | Four task-board tools share the subagent tree’s root Session. Enabling Team mode on the root Session adds task-board guidance alongside standard subagent delegation and control tools. Standard subagent controls provide required identity independently of Team mode. |
+| `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `experimental-team/task`, `tool/result` | - | The experimental Agent Teams variant of the team tools over `@deepseek-ai/dsh-experimental-agent-team`: the same collaboration surface — teammates, durable mailbox, and shared task board — persisted under the experimental-team/* event scope. Deployments mount this or the stable team tools, never both. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-working-directory` | `working_directory` | `ctx.tools`, `ctx.workingDirectory` | `tool/call`, `working-directory/change`, `user context for directory changes`, `tool/result` | - | Reads or changes the calling Session directory. Existing shells and processes retain their own directories; origin metadata and permission roots stay fixed. |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | `create_worktree` | `ctx.tools`, `ctx.worktrees`, `a calling Agent` | `tool/call`, `Git branch and checkout`, `working-directory/change`, `tool/result` | - | Enabled through the Change requests & worktrees bundle on Web and Desktop; other profiles can select the standalone bundle. Creates a new branch and checkout from a pinned local commit under existing write permissions, then changes the Session directory. Leaving retains the branch and checkout. |
@@ -2432,6 +2433,296 @@ Compare-and-set a shared task action using the latest revision from team_task_ge
 Source: [`packages/team/tool-agent-team/src/index.ts`](../packages/team/tool-agent-team/src/index.ts)
 
 Four task-board tools share the subagent tree’s root Session. Enabling Team mode on the root Session adds task-board guidance alongside standard subagent delegation and control tools. Standard subagent controls provide required identity independently of Team mode.
+
+<a id="deepseek-aidsh-experimental-tool-agent-team"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-agent-team`
+
+### `interrupt_agent`
+
+Interrupt one teammate's current turn while preserving its pending inbox. Team Lead only.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Teammate target returned by spawn_teammate or list_agents."
+    }
+  },
+  "required": [
+    "target"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `list_agents`
+
+List the Lead and every durable teammate with an addressable target and current availability. inactive means no turn is executing, not a task result. provisioning and failed describe member creation.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `send_message`
+
+Send one durable message to another Team member. A running target receives it at the nearest step boundary; an inactive target starts or resumes a turn.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Member target returned by spawn_teammate or list_agents, including lead."
+    },
+    "message": {
+      "type": "string",
+      "description": "Self-contained message for the target."
+    }
+  },
+  "required": [
+    "target",
+    "message"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `spawn_teammate`
+
+Create one named, durable teammate. Only the Team Lead may call this tool.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique lower-kebab-case teammate name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the delegated responsibility."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Complete initial task for the teammate."
+    },
+    "context": {
+      "type": "string",
+      "description": "fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.",
+      "enum": [
+        "fresh",
+        "fork"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "prompt"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_create`
+
+Create one unowned pending task on the shared Team task board.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string",
+      "description": "Concise task title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Complete task details and acceptance criteria."
+    },
+    "blocked_by": {
+      "type": "array",
+      "description": "Task ids that must complete first.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "write_scopes": {
+      "type": "array",
+      "description": "Advisory workspace-relative file or directory prefixes this task expects to modify.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "subject",
+    "description"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_get`
+
+Read the complete latest value of one shared task before changing or executing it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Shared task id."
+    }
+  },
+  "required": [
+    "task_id"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_list`
+
+List shared tasks, including readiness, owner, revision, blockers, and write-scope warnings.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Optional exact status filter.",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed"
+      ]
+    },
+    "owner": {
+      "type": "string",
+      "description": "Optional member target from spawn_teammate or list_agents, matching ownerName; use unowned for tasks without an owner."
+    },
+    "ready": {
+      "type": "boolean",
+      "description": "Optional readiness filter."
+    },
+    "cursor": {
+      "type": "integer",
+      "description": "Zero-based result offset. Defaults to 0."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Number of rows, 1 through 100. Defaults to 50."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_update`
+
+Compare-and-set a shared task action using the latest revision from team_task_get or team_task_list.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Shared task id."
+    },
+    "expected_revision": {
+      "type": "integer",
+      "description": "Current task revision used as the CAS precondition."
+    },
+    "action": {
+      "type": "string",
+      "description": "Task transition to apply.",
+      "enum": [
+        "claim",
+        "release",
+        "edit",
+        "set_dependencies",
+        "complete",
+        "reopen",
+        "reassign",
+        "delete"
+      ]
+    },
+    "subject": {
+      "type": "string",
+      "description": "Replacement title for edit."
+    },
+    "description": {
+      "type": "string",
+      "description": "Replacement details for edit."
+    },
+    "blocked_by": {
+      "type": "array",
+      "description": "Complete blocker list for set_dependencies.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "write_scopes": {
+      "type": "array",
+      "description": "Replacement advisory write scopes for edit.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "owner": {
+      "type": "string",
+      "description": "Member target from spawn_teammate or list_agents for Lead-only reassign; omit to unassign."
+    }
+  },
+  "required": [
+    "task_id",
+    "expected_revision",
+    "action"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `wait_agent`
+
+Wait for the next teammate status, mailbox, or shared-task change after this call starts. This never wakes inactive members and returns noProgress immediately when no other member is running or provisioning. Re-list after wakeup or timeout instead of polling.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "timeout_ms": {
+      "type": "integer",
+      "description": "Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+The experimental Agent Teams variant of the team tools over `@deepseek-ai/dsh-experimental-agent-team`: the same collaboration surface — teammates, durable mailbox, and shared task board — persisted under the experimental-team/* event scope. Deployments mount this or the stable team tools, never both.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

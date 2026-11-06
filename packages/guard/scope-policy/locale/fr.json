@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de garde qui refuse les appels d'outils référençant des cibles hors du périmètre réseau autorisé par l'opérateur."
+  }
+}

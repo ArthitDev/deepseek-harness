@@ -74,5 +74,8 @@ One page per subsystem of the DeepSeek Harness: what it is, the data structures 
 | [session-telemetry.md](session-telemetry.md) | the outbound session-reporting capability seam: `SessionTelemetryRecord`/`SessionTelemetrySeverity`, the `SessionTelemetrySink` contract, and the `session-telemetry/record` redact waterfall |
 | [otel.md](otel.md) | Shared ordinary-event and Session-log OTLP channels |
 | [product-telemetry.md](product-telemetry.md) | Explicit product analytics submission and OTLP/HTTP transport |
+| [pentest.md](pentest.md) | the pentest control plane: durable run state (`ctx.pentestRuns`), the background control loop (`ctx.pentestLoop`), mode policy, and operator assistance over authorized penetration-testing runs |
+| [remote-machines.md](remote-machines.md) | saved SSH machine profiles (`ctx.remoteMachines`): fingerprint probe and per-machine trust gating workspace execution |
+| [invariants.md](invariants.md) | the runtime invariant registry (`ctx.invariants`): selection filters, package-attributed installers, and the companion contract |
 
 > Type declarations and their JSDoc on these pages are source-equivalent and drift-checked by `pnpm run verify-type-equiv` (see [development.md](../development.md#documenting-types-verbatim-ts-type-equiv)). Ordinary blocks preserve complete declarations; `public-api` blocks preserve body-stripped public class declarations. Cordis services and events use each page's generated **Cordis API** section.

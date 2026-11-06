@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Guard plugin that denies new tool calls once the token or wall-clock budget is exhausted, ending the run with a partial report."
+  }
+}

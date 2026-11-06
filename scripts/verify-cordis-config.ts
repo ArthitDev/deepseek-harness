@@ -64,6 +64,12 @@ if (import.meta.main) {
 
   for (const file of files) {
     const document = loadCordisYaml(readFileSync(resolve(root, file), 'utf8'))
+    if (typeof document === 'string') {
+      // A bare root string is an include pointer to another config or patch
+      // file (the snapshot harness's live-profile patches use one); the
+      // pointed file is scanned as its own glob match.
+      continue
+    }
     if (!isUnknownArray(document)) {
       errors.push(`${file}: root must be a Loader entry array`)
       continue

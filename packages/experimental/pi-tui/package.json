@@ -1,8 +1,7 @@
 {
-  "name": "dsh-pi-tui",
+  "name": "@deepseek-ai/dsh-pi-tui",
   "description": "Shield Break TUI: pi-tui interactive terminal front door for Shield Break Harness agents",
-  "version": "0.4.1",
-  "private": true,
+  "version": "0.2.2-rc.1",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -16,11 +15,20 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib",
+    "lib/index.js",
     "cordis.patch.yml",
+    "lib/app-*.js",
     "tools/antigravity-proxy",
-    "README.md"
+    "lib/types/**/*.d.ts"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/experimental/pi-tui"
+  },
   "license": "MIT",
   "dsh": {
     "bundle": {
@@ -41,6 +49,7 @@
     "@deepseek-ai/dsh-terminal": "workspace:*",
     "@deepseek-ai/dsh-terminal-bash": "workspace:*",
     "@deepseek-ai/dsh-tool-fs-search": "workspace:*",
+    "@deepseek-ai/dsh-tool-skill": "workspace:*",
     "@deepseek-ai/dsh-tool-terminal": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-user-approval": "workspace:*",

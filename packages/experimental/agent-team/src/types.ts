@@ -207,13 +207,13 @@ export interface TeamWaitResult {
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /** Whole teammate lifecycle value, stored only in the Team Lead Session. */
-    'team/member': { version: 2; teamId: TeamId; member: TeamMemberSnapshot }
+    'experimental-team/member': { version: 2; teamId: TeamId; member: TeamMemberSnapshot }
     /** Whole shared-task value, stored only in the Team Lead Session. */
-    'team/task': { version: 2; teamId: TeamId; task: TeamTaskSnapshot }
+    'experimental-team/task': { version: 2; teamId: TeamId; task: TeamTaskSnapshot }
     /** Durable mailbox enqueue, stored before delivery is attempted. */
-    'team/message/queued': { version: 2; teamId: TeamId; message: TeamMessageSnapshot }
+    'experimental-team/message/queued': { version: 2; teamId: TeamId; message: TeamMessageSnapshot }
     /** Durable acknowledgement that the target Session recorded the message. */
-    'team/message/delivered': {
+    'experimental-team/message/delivered': {
       version: 2
       teamId: TeamId
       messageId: TeamMessageId

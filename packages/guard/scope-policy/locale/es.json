@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de guardia que deniega las llamadas a herramientas que referencian objetivos fuera del alcance de red autorizado por el operador."
+  }
+}

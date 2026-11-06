@@ -52,7 +52,7 @@ The Service Definition package does **not** declare `hook/*` session events (the
 ## Alternatives considered
 
 - **Shipping pre-tool INPUT rewrite as part of this extension-point set** — deferred as the over-reach signal; the section above carries the consistency problem (audit, history, and presentation all read `tool/call.arguments` logged before execution), and [the pre-tool input-rewrite proposal](../../proposed/feature/2026-06-30-pre-tool-input-rewrite.md) owns the design.
-- **Declaring the durable `hook/*` SessionEvents alongside the extension points** — rejected: a native plugin uses the typed Decisions with no hook log at all (the worked example proves it), so the durable log belongs to [the hook-protocol library](../../../../packages/hooks/hook-protocol/README.md), not the extension surface.
+- **Declaring the durable `hook/*` SessionEvents alongside the extension points** — rejected: a native plugin uses the typed Decisions with no hook log at all (the worked example proves it), so the durable log belongs to [the hook-protocol library](../../../../packages/experimental/hook-protocol/README.md), not the extension surface.
 
 ## Consequences
 

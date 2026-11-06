@@ -20,9 +20,11 @@
   font-size: 12px;
 }
 
-.trigger:hover,
-.iconButton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .trigger:hover,
+  .iconButton:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .count {

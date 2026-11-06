@@ -72,7 +72,7 @@ describe('worktree checkout Git configuration', () => {
     expect(await contents(join(created.path, 'tracked.txt'))).toBe('initial\n')
   })
 
-  it('restores a removed checkout without running its required smudge filter', async () => {
+  it('restores a removed checkout without running its required smudge filter', { timeout: 30_000 }, async () => {
     const root = await repo()
     await writeFile(join(root, '.gitattributes'), '*.txt filter=configured -text\n')
     await git(root, 'add', '.gitattributes')

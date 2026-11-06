@@ -115,7 +115,7 @@ function TechnologyChips({ technologies, none }: {
 
 /** Stored reports from before API Recon have no endpoint array. */
 function apiEndpointsOf(report: ReconReport): readonly ReconViewApiEndpoint[] {
-  const value: unknown = (report as unknown as { readonly api_endpoints?: unknown }).api_endpoints
+  const value: unknown = (report as { readonly api_endpoints?: unknown }).api_endpoints
   return Array.isArray(value) ? value as readonly ReconViewApiEndpoint[] : []
 }
 

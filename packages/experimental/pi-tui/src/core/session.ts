@@ -572,8 +572,8 @@ export async function listPresets(ctx: Context): Promise<PresetInfo[]> {
 }
 
 /** The reserved remote-execution path namespace, mirrored from
- * packages/workspace/workspace/src/remote-path.ts (that file is the
- * canonical constant; dsh-remote-machines/path.ts keeps the same value). */
+ * packages/remote/remote-machines/src/path.ts (that file is the
+ * canonical constant; this copy keeps the same value). */
 const REMOTE_PATH_ROOT = '/__dsh_ssh__/'
 const MACHINE_ID_PATTERN = /^[a-z][a-z0-9-]{0,63}$/
 

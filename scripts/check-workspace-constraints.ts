@@ -188,6 +188,10 @@ export function readWorkspaceManifests(repositoryRoot: string): WorkspaceManifes
 const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // Tools entry points share error classes and invocation stages through runtime chunks.
   '@deepseek-ai/dsh-tools': ['lib/pipeline.js', 'lib/shared-*.js'],
+  // The team invariant checker is a separately imported entry beside the lib.
+  '@deepseek-ai/dsh-experimental-agent-team': ['lib/invariant.js'],
+  // The connection entry shares its path resolution through a runtime chunk.
+  '@deepseek-ai/dsh-remote-machines': ['lib/path.js'],
   // The embedded OAR implementation retains its upstream license.
   '@deepseek-ai/dsh-experimental-subagent-oar': ['LICENSE-OAR'],
   // CUA publishes its client API and attributed native source for local macOS builds.
@@ -266,6 +270,9 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-experimental-webworker-packer': ['bin.js', 'lib/repository-*.js'],
   // Startup and runtime share the advertised URL parser.
   '@deepseek-ai/dsh-web-app': ['lib/public-url-*.js'],
+  // The TUI patch rows point the model provider at the in-repo local proxy;
+  // tsdown shares the app tree through hashed runtime chunks.
+  '@deepseek-ai/dsh-pi-tui': ['lib/app-*.js', 'tools/antigravity-proxy'],
   // The headless entry and its startup row share the JSON projection code
   // through a hashed tsdown chunk; both import it by relative path.
   '@deepseek-ai/dsh-headless': ['lib/json-stream-*.js'],

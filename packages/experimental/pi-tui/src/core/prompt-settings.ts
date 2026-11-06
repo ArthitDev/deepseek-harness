@@ -17,6 +17,16 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/**
+ * Install the TUI's web-profile prompt settings: validate the saved team
+ * settings against the active pentest-mode plugin entry, require intact
+ * system prompts for model requests, and mount the synchronous re-lock
+ * listener that refreshes the policy when the profile changes.
+ * @param ctx - TUI context carrying the Loader and the pentest mode policy.
+ * @returns a promise settling once the settings are installed and validated.
+ * @throws when the Loader or the pentest mode policy is missing, or the
+ * active pentest-mode entry cannot be found.
+ */
 export async function installWebPromptSettings(ctx: Context): Promise<void> {
   const loader = ctx.get('loader') as {
     entries(): IterableIterator<{

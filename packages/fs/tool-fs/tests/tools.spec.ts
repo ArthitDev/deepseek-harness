@@ -1206,7 +1206,7 @@ describe('scope-aware filesystem guidance', () => {
 
 /** Preserve the default persona and exact section separators in the oracle. */
 function withPersona(...sections: string[]): string {
-  return ['You are an AI agent powered by DeepSeek Harness.', ...sections].join('\n\n')
+  return ['Runtime host: Shield Break Harness.', ...sections].join('\n\n')
 }
 
 /** Schema assembly only: these cases never execute user code. */

@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de proxy direct qui évalue chaque connexion par rapport au périmètre, la résout une seule fois et l'épingle à l'adresse validée."
+  }
+}

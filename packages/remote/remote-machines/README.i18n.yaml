@@ -1,6 +1,55 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/remote/remote-machines/README.md
-README.md: 6f2132bc5edf7f0afa7b299650fd02e4053d06e9
-README.zh.md: bffc061b0088e5b2c404b3b5c6078aabdeb590d6
+/:
+  en: 97f15da8186998fd
+  zh: 75e0f6a62b74a1ee
+/deepseek-ai-dsh-remote-machines:
+  en: 04a03fa954d23c3d
+  zh: 8960e7ff1a171eb4
+/deepseek-ai-dsh-remote-machines/summary:
+  en: 84f5e4c2405df022
+  zh: e6adec9cebb1e1a0
+/deepseek-ai-dsh-remote-machines/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 0cd57b7b8d8c9b59
+/deepseek-ai-dsh-remote-machines/use-this-package:
+  en: d0e5f001b27dda87
+  zh: 01593b46874b1556
+/deepseek-ai-dsh-remote-machines/use-this-package/when-to-choose-it:
+  en: eea692a3f4f9ce26
+  zh: eac9f4738566cade
+/deepseek-ai-dsh-remote-machines/use-this-package/minimal-configuration:
+  en: 8cb585f9557d56a3
+  zh: 04659c8e59c8bc1f
+/deepseek-ai-dsh-remote-machines/use-this-package/connection-trust-and-failures:
+  en: d4788becacb71985
+  zh: 80b81cc1c6c2da98
+/deepseek-ai-dsh-remote-machines/understand-the-implementation:
+  en: db8309dd3ae1e560
+  zh: 2435ece01cc06362
+/deepseek-ai-dsh-remote-machines/further-exploration:
+  en: bc0a1747db8cea7f
+  zh: ce52c170d05bd54d
+/deepseek-ai-dsh-remote-machines/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-remote-machines/model-experience/remote-workspace-execution:
+  en: 9474a2a2f01ff96c
+  zh: ec616c7ed03505ee
+/deepseek-ai-dsh-remote-machines/model-experience/remote-workspace-execution/what-the-model-sees:
+  en: d46388109f32d672
+  zh: 8bb66e7be35824c4
+/deepseek-ai-dsh-remote-machines/model-experience/remote-workspace-execution/token-effect:
+  en: 9fdfd52e1c43df13
+  zh: 3daa85128d9d681e
+/deepseek-ai-dsh-remote-machines/model-experience/remote-workspace-execution/kv-cache-effect:
+  en: c05e5964af3b823f
+  zh: f32974914a014a47
+/deepseek-ai-dsh-remote-machines/known-limitations-and-deferred-work:
+  en: 8e5587bccff83f75
+  zh: 3fd5619fc50b7cc2
+/deepseek-ai-dsh-remote-machines/known-limitations-and-deferred-work/dev-note:
+  en: f3ed0b223e730a07
+  zh: dc95de2be65dccf6

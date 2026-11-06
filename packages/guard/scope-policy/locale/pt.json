@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de guarda que nega chamadas de ferramentas que referenciam alvos fora do escopo de rede autorizado pelo operador."
+  }
+}

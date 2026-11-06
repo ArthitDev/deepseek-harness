@@ -53,7 +53,7 @@ function props(actions: TeamActionInjected, sessionId: SessionId = SESSION): Tea
     sessionId,
     ...actions,
     t: makeTranslate(zh, commonZh),
-  } as unknown as TeamActionProps
+  } as TeamActionProps
 }
 
 function actions(overrides: Partial<TeamActionInjected> = {}): TeamActionInjected {
@@ -237,7 +237,9 @@ describe('TeamAction', () => {
     const trigger = screen.getByRole('button', { name: /Agent Team/u })
     fireEvent.click(trigger)
     const panel = await screen.findByRole('dialog')
-    expect(rendered.container.contains(panel)).toBe(false)
+    // 0.2.2 replaced the v2 portal + anchored-position panel with an inline panel
+    // capped by `useAnchoredMaxHeight`, so the panel renders inside the container.
+    expect(rendered.container.contains(panel)).toBe(true)
     expect(document.activeElement).toBe(panel)
     fireEvent.pointerDown(panel)
     expect(screen.getByRole('dialog')).toBe(panel)

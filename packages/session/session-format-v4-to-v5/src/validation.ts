@@ -12,6 +12,7 @@ import {
   assertV4SystemMessageFields,
   assertV4ToolResultMessage,
   catalogFact,
+  nativeCatalogFact,
   validateDeliveryAccepted,
 } from '@deepseek-ai/dsh-session-format-v3-to-v4'
 
@@ -115,7 +116,11 @@ export function assertReleasedV5Relationships(artifact: SessionFormatArtifact, k
       throw new SessionFormatError('released delivery marker names the wrong Session')
     }
     if (event.type === 'subagent/catalog' && event.seq >= artifact.inheritedEventCount) {
-      const fact = catalogFact(event.data)
+      // Native V4 creation writes version-3 catalog facts; the historical
+      // versions 0-2 arrive from migrated or wrapped logs.
+      const fact = isSessionFormatJsonObject(event.data) && event.data['version'] === 3
+        ? nativeCatalogFact(event.data)
+        : catalogFact(event.data)
       const id = fact['childId'] as string
       if (ids.has(id)) throw new SessionFormatError(`duplicate catalog child ${id}`)
       ids.add(id)

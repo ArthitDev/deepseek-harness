@@ -196,7 +196,7 @@ export class TeamMailbox {
       if (Buffer.byteLength(JSON.stringify(this.deliveryContent(queued)), 'utf8') > this.maxMessageBytes) {
         throw new TeamError(`team message exceeds ${this.maxMessageBytes} bytes`, 'TEAM_MESSAGE_TOO_LARGE')
       }
-      await this.journal.appendAndFlush(root, 'team/message/queued', {
+      await this.journal.appendAndFlush(root, 'experimental-team/message/queued', {
         version: 2,
         teamId: TeamId(root.id),
         message: queued,
@@ -347,7 +347,7 @@ export class TeamMailbox {
       if (state.delivered.includes(messageId)) return
       const queued = state.messages.find(message => message.id === messageId)
       if (queued === undefined || queued.targetId !== targetId) return
-      await this.journal.appendAndFlush(root, 'team/message/delivered', {
+      await this.journal.appendAndFlush(root, 'experimental-team/message/delivered', {
         version: 2,
         teamId: TeamId(root.id),
         messageId,

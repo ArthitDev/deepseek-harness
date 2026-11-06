@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de proxy directo que evalúa cada conexión contra el alcance, la resuelve una vez y la fija a la dirección validada."
+  }
+}

@@ -13,7 +13,7 @@ const ROOT = SessionId('team-root')
 const TEAM = TeamId(ROOT)
 const CHILD = SessionId('child-a')
 
-function event<T extends Extract<SessionEventType, `team/${string}`>>(type: T, data: SessionEventMap[T], seq: SessionSeq): SessionEvent<T> {
+function event<T extends Extract<SessionEventType, `experimental-team/${string}`>>(type: T, data: SessionEventMap[T], seq: SessionSeq): SessionEvent<T> {
   return { type, data, seq, time: seq } as unknown as SessionEvent<T>
 }
 
@@ -103,22 +103,22 @@ describe('Agent Teams projection events', () => {
     }] as unknown as TeamMessageSnapshot['content'] })
     const retired = { ...valid, messages: [retiredMessage] }
     expect(() => restore(JSON.parse(JSON.stringify(retired)))).toThrow()
-    expect(() => projectTeam(ROOT, [event('team/message/queued', {
+    expect(() => projectTeam(ROOT, [event('experimental-team/message/queued', {
       version: 2, teamId: TEAM, message: retiredMessage,
-    }, SessionSeq(0))])).toThrow(/team\/message\/queued payload is invalid/)
+    }, SessionSeq(0))])).toThrow(/experimental-team\/message\/queued payload is invalid/)
   })
 
   it('projects current-team records independently from inherited records', () => {
     const records: SessionEvent[] = [
-      event('team/member', { version: 2, teamId: TeamId('ancestor'), member: member() }, SessionSeq(0)),
-      event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(1)),
-      event('team/member', {
+      event('experimental-team/member', { version: 2, teamId: TeamId('ancestor'), member: member() }, SessionSeq(0)),
+      event('experimental-team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(1)),
+      event('experimental-team/member', {
         version: 2,
         teamId: TEAM,
         member: member({ phase: 'active' }),
       }, SessionSeq(2)),
-      event('team/task', { version: 2, teamId: TEAM, task: task({ id: TeamTaskId('task-7') }) }, SessionSeq(3)),
-      event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(4)),
+      event('experimental-team/task', { version: 2, teamId: TEAM, task: task({ id: TeamTaskId('task-7') }) }, SessionSeq(3)),
+      event('experimental-team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(4)),
     ]
     const projected = project(ROOT, records)
     const state = teamState(projected)
@@ -134,29 +134,29 @@ describe('Agent Teams projection events', () => {
   })
 
   it('enforces teammate identity and lifecycle', () => {
-    const base = event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0))
-    expect(() => projectTeam(ROOT, [event('team/member', {
+    const base = event('experimental-team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0))
+    expect(() => projectTeam(ROOT, [event('experimental-team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ phase: 'active' }),
     }, SessionSeq(0))])).toThrow(/must begin provisioning/)
-    expect(() => projectTeam(ROOT, [base, event('team/member', {
+    expect(() => projectTeam(ROOT, [base, event('experimental-team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ name: 'renamed', phase: 'active' }),
     }, SessionSeq(1))])).toThrow(/immutable identity/)
-    expect(() => projectTeam(ROOT, [base, event('team/member', {
+    expect(() => projectTeam(ROOT, [base, event('experimental-team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ phase: 'active' }),
-    }, SessionSeq(1)), event('team/member', {
+    }, SessionSeq(1)), event('experimental-team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ phase: 'failed' }),
     }, SessionSeq(2))])).toThrow(/invalid active -> failed/)
 
     const duplicateName = member({ id: SessionId('child-b') })
-    expect(() => projectTeam(ROOT, [base, event('team/member', {
+    expect(() => projectTeam(ROOT, [base, event('experimental-team/member', {
       version: 2,
       teamId: TEAM,
       member: duplicateName,
@@ -164,13 +164,13 @@ describe('Agent Teams projection events', () => {
   })
 
   it('enforces task revision continuity', () => {
-    const first = event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0))
-    expect(() => projectTeam(ROOT, [event('team/task', {
+    const first = event('experimental-team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0))
+    expect(() => projectTeam(ROOT, [event('experimental-team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ revision: 2 }),
     }, SessionSeq(0))])).toThrow(/begin at revision 1/)
-    expect(() => projectTeam(ROOT, [first, event('team/task', {
+    expect(() => projectTeam(ROOT, [first, event('experimental-team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ revision: 3 }),
@@ -178,8 +178,8 @@ describe('Agent Teams projection events', () => {
   })
 
   it('rejects every invalid persisted task dependency relation', () => {
-    const first = event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0))
-    const second = event('team/task', {
+    const first = event('experimental-team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0))
+    const second = event('experimental-team/task', {
       version: 2,
       teamId: TEAM,
       task: task({
@@ -189,7 +189,7 @@ describe('Agent Teams projection events', () => {
     }, SessionSeq(1))
     const invalid: Array<{ records: SessionEvent[]; message: RegExp }> = [
       {
-        records: [event('team/task', {
+        records: [event('experimental-team/task', {
           version: 2,
           teamId: TEAM,
           task: task({ blockedBy: [TeamTaskId('missing')] }),
@@ -197,7 +197,7 @@ describe('Agent Teams projection events', () => {
         message: /blocker task "missing" .* is missing or deleted/,
       },
       {
-        records: [event('team/task', {
+        records: [event('experimental-team/task', {
           version: 2,
           teamId: TEAM,
           task: task({ blockedBy: [TeamTaskId('task-1')] }),
@@ -205,14 +205,14 @@ describe('Agent Teams projection events', () => {
         message: /cannot block itself/,
       },
       {
-        records: [first, event('team/task', {
+        records: [first, event('experimental-team/task', {
           ...second.data,
           task: { ...second.data.task, blockedBy: [TeamTaskId('task-1'), TeamTaskId('task-1')] },
         }, SessionSeq(1))],
         message: /repeats blocker/,
       },
       {
-        records: [first, second, event('team/task', {
+        records: [first, second, event('experimental-team/task', {
           version: 2,
           teamId: TEAM,
           task: task({ revision: 2, blockedBy: [TeamTaskId('task-2')] }),
@@ -220,7 +220,7 @@ describe('Agent Teams projection events', () => {
         message: /dependency cycle/,
       },
       {
-        records: [first, second, event('team/task', {
+        records: [first, second, event('experimental-team/task', {
           version: 2,
           teamId: TEAM,
           task: task({ revision: 2, status: 'deleted' }),
@@ -235,7 +235,7 @@ describe('Agent Teams projection events', () => {
   })
 
   it('leaves numeric allocation unchanged for a branded nonstandard task id', () => {
-    const state = projectTeam(ROOT, [event('team/task', {
+    const state = projectTeam(ROOT, [event('experimental-team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ id: TeamTaskId('external-task') }),
@@ -244,16 +244,16 @@ describe('Agent Teams projection events', () => {
   })
 
   it('rejects a persisted numeric task id outside the safe integer range', () => {
-    expect(() => projectTeam(ROOT, [event('team/task', {
+    expect(() => projectTeam(ROOT, [event('experimental-team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ id: TeamTaskId('task-9007199254740992') }),
-    }, SessionSeq(0))])).toThrow(/persisted Agent Teams team\/task payload is invalid/)
+    }, SessionSeq(0))])).toThrow(/persisted Agent Teams experimental-team\/task payload is invalid/)
   })
 
   it('enforces mailbox queue and acknowledgement relations', () => {
-    const queued = event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(0))
-    const delivered = event('team/message/delivered', {
+    const queued = event('experimental-team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(0))
+    const delivered = event('experimental-team/message/delivered', {
       version: 2,
       teamId: TEAM,
       messageId: TeamMessageId('message-1'),
@@ -262,7 +262,7 @@ describe('Agent Teams projection events', () => {
     expect(pending(projectTeam(ROOT, [queued, delivered]))).toEqual([])
     expect(() => projectTeam(ROOT, [queued, queued])).toThrow(/queued twice/)
     expect(() => projectTeam(ROOT, [delivered])).toThrow(/delivered before queueing/)
-    expect(() => projectTeam(ROOT, [queued, event('team/message/delivered', {
+    expect(() => projectTeam(ROOT, [queued, event('experimental-team/message/delivered', {
       ...delivered.data,
       targetId: SessionId('other'),
     }, SessionSeq(1))])).toThrow(/target changed/)
@@ -272,15 +272,15 @@ describe('Agent Teams projection events', () => {
   it('validates every current-version persisted payload before projecting it', () => {
     const malformed = [
       {
-        ...event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0)),
+        ...event('experimental-team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0)),
         data: { version: 2, teamId: TEAM, member: { ...member(), name: 42 } },
       },
       {
-        ...event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0)),
+        ...event('experimental-team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0)),
         data: { version: 2, teamId: TEAM, task: { ...task(), blockedBy: [42] } },
       },
       {
-        ...event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(0)),
+        ...event('experimental-team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(0)),
         data: {
           version: 2,
           teamId: TEAM,
@@ -288,7 +288,7 @@ describe('Agent Teams projection events', () => {
         },
       },
       {
-        ...event('team/message/delivered', {
+        ...event('experimental-team/message/delivered', {
           version: 2,
           teamId: TEAM,
           messageId: TeamMessageId('message-1'),
@@ -302,11 +302,11 @@ describe('Agent Teams projection events', () => {
         },
       },
       {
-        ...event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0)),
+        ...event('experimental-team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0)),
         data: { version: 2, teamId: TEAM, member: member(), unexpected: true },
       },
       {
-        ...event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0)),
+        ...event('experimental-team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0)),
         data: { version: 2, teamId: 42, task: task() },
       },
     ] as unknown as SessionEvent[]
@@ -319,7 +319,7 @@ describe('Agent Teams projection events', () => {
 
   it('retains merge-extensible content blocks while rejecting malformed core variants', () => {
     const extension = { type: 'plugin/custom', payload: { value: 1 } } as never
-    const state = projectTeam(ROOT, [event('team/message/queued', {
+    const state = projectTeam(ROOT, [event('experimental-team/message/queued', {
       version: 2,
       teamId: TEAM,
       message: message({ content: [extension] }),
@@ -330,7 +330,7 @@ describe('Agent Teams projection events', () => {
   it('preserves opaque JSON through projection and checkpoints', () => {
     const extension = JSON.parse('{"type":"plugin/custom","__proto__":{"saved":true},"constructor":{"saved":false},"content":[{"__proto__":{"nested":true},"opaque":true}]}') as ContentBlock
     const content = [extension]
-    const queued = event('team/message/queued', { version: 2, teamId: TEAM, message: message({ content }) }, SessionSeq(0))
+    const queued = event('experimental-team/message/queued', { version: 2, teamId: TEAM, message: message({ content }) }, SessionSeq(0))
     const before = JSON.stringify(queued)
     const projected = projectTeam(ROOT, [queued])
     expect(projected.messages[0]?.content).toEqual(content)
@@ -350,8 +350,8 @@ describe('Agent Teams projection events', () => {
   ])('rejects malformed content in events and checkpoints: %j', (block) => {
     const content: unknown = [block]
     const saved = message({ content: content as ContentBlock[] })
-    const queued = event('team/message/queued', { version: 2, teamId: TEAM, message: saved }, SessionSeq(0))
-    expect(() => projectTeam(ROOT, [queued])).toThrow(/team\/message\/queued payload is invalid/)
+    const queued = event('experimental-team/message/queued', { version: 2, teamId: TEAM, message: saved }, SessionSeq(0))
+    expect(() => projectTeam(ROOT, [queued])).toThrow(/experimental-team\/message\/queued payload is invalid/)
     expect(() => teamProjectionDefinition.stateSchema.parse({ ...project(ROOT, []), messages: [saved] })).toThrow()
   })
 
@@ -362,11 +362,11 @@ describe('Agent Teams projection events', () => {
       await registry
       await ctx.sessionProjections.register(teamProjectionDefinition)
       const extension = JSON.parse('{"type":"plugin/custom","__proto__":{"saved":true}}') as ContentBlock
-      const queued = event('team/message/queued', {
+      const queued = event('experimental-team/message/queued', {
         version: 2, teamId: TEAM, message: message({ content: [extension] }),
       }, SessionSeq(0))
       const oldContent: unknown = [{ type: 'plugin/custom' }]
-      const oldState = project(ROOT, [event('team/message/queued', {
+      const oldState = project(ROOT, [event('experimental-team/message/queued', {
         version: 2, teamId: TEAM, message: message({ content: oldContent as ContentBlock[] }),
       }, SessionSeq(0))])
       const restored = ctx.sessionProjections.restore(
@@ -384,12 +384,12 @@ describe('Agent Teams projection events', () => {
   })
 
   it('records unsupported event versions without applying them', () => {
-    const invalid = event('team/task', {
+    const invalid = event('experimental-team/task', {
       version: 1 as 2,
       teamId: TEAM,
       task: task(),
     }, SessionSeq(0))
-    const later = event('team/task', {
+    const later = event('experimental-team/task', {
       version: 2,
       teamId: TEAM,
       task: task(),
@@ -400,7 +400,7 @@ describe('Agent Teams projection events', () => {
   })
 
   it('isolates unsupported inherited Team records from the current Team', () => {
-    const inherited = event('team/task', {
+    const inherited = event('experimental-team/task', {
       version: 1 as 2,
       teamId: TeamId('ancestor'),
       task: task(),
@@ -412,7 +412,7 @@ describe('Agent Teams projection events', () => {
 
   it('ignores malformed current-version records inherited from another Team', () => {
     const inherited = {
-      ...event('team/task', {
+      ...event('experimental-team/task', {
         version: 2,
         teamId: TeamId('ancestor'),
         task: task(),

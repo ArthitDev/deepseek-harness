@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-scope-proxy",
   "description": "Scope-pinning forward proxy plugin: every connection is scope-judged, resolved once, and pinned to the validated address, closing the DNS rebinding race without a sandbox",
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

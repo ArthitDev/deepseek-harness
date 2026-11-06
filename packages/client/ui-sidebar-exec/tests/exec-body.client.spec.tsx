@@ -40,7 +40,7 @@ function mountBody(window: SessionEventWindow, dictionary: typeof en = en) {
   const props = {
     useEvents: (select: (value: SessionEventWindow) => unknown) => select(window),
     t: makeTranslate(dictionary),
-  } as unknown as ExecBodyProps
+  } as ExecBodyProps
   return render(<ExecBody {...props} />)
 }
 
@@ -102,12 +102,12 @@ it.each([en, zh])('renders the whole list and the live chip count in either loca
     useTabInfo: () => ({ tab: { title: dictionary.type } }),
     useEvents: (select: (value: SessionEventWindow) => unknown) => select(windowOf(FIXTURE)),
     t: makeTranslate(dictionary),
-  } as unknown as ExecTitleProps
+  } as ExecTitleProps
   const title = render(<ExecTitle {...titleProps} />)
   expect(title.container.textContent).toBe(dictionary.chip.replace('{count}', '3'))
   const idleTitle = render(<ExecTitle {...{
     ...titleProps,
     useEvents: (select: (value: SessionEventWindow) => unknown) => select(windowOf([])),
-  } as unknown as ExecTitleProps} />)
+  } as ExecTitleProps} />)
   expect(idleTitle.container.textContent).toBe(dictionary.type)
 })

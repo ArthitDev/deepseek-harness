@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { execa } from 'execa'
 import type { SessionFormatJsonObject } from '@deepseek-ai/dsh-session-format'
+import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { encodeSegment, generationLogFilename, type JsonlCompression } from '../packages/session/session-persistence-jsonl/src/format.ts'
 import { compressZstdFrame, decompressZstdFrame, scanZstdFrames } from '../packages/session/session-persistence-jsonl/src/zstd.ts'
 import { runMigrationJobs } from './migrate-sessions-to-v4.ts'
@@ -84,7 +85,9 @@ async function fixture(
   return { path, bytes, directory }
 }
 
-describe('one-time V4 migration command', () => {
+// The command is version-locked by design (`SESSION_FORMAT_VERSION` must be 4), so the
+// suite runs exactly when the tool's own precondition holds and skips in a V5 world.
+describe.skipIf((SESSION_FORMAT_VERSION as number) !== 4)('one-time V4 migration command', () => {
   it('bounds active jobs and retries changed-source inputs only after the initial pass drains', async () => {
     const entered = Array.from({ length: 4 }, () => Promise.withResolvers<undefined>())
     const release = Array.from({ length: 4 }, () => Promise.withResolvers<undefined>())

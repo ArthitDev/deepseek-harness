@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de garde qui refuse les nouveaux appels d'outils une fois le budget de jetons ou de temps épuisé, et termine l'exécution par un rapport partiel."
+  }
+}

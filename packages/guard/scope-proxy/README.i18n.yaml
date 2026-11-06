@@ -1,6 +1,40 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/guard/scope-proxy/README.md
-README.md: bbbcb5f43f26e7e9e25fbe03c66866593f3352da
-README.zh.md: a5724919e40a9face3532666b7702e202bdf87d1
+/:
+  en: 938453eaf5cb3eee
+  zh: f700f374a3c7ec62
+/scope-proxy:
+  en: 50bbef09f69445e6
+  zh: 8c67885a81f5b717
+/scope-proxy/summary:
+  en: e56582258ca2b772
+  zh: dc05d07cbd2ecfa0
+/scope-proxy/table-of-contents:
+  en: 6b770c6072086886
+  zh: d00a103660504b08
+/scope-proxy/config:
+  en: 2a49a462f465659c
+  zh: ba2cb5bbf182ac2d
+/scope-proxy/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/scope-proxy/model-experience/scoped-forward-proxy:
+  en: 507c22e4c6aaa767
+  zh: 8abf5f46934bf4e4
+/scope-proxy/model-experience/scoped-forward-proxy/what-the-model-sees:
+  en: fcd26ef4d53480fb
+  zh: 49ed4adfcf1a2f63
+/scope-proxy/model-experience/scoped-forward-proxy/token-effect:
+  en: d55240a82246bd73
+  zh: 9cb10293e4b79482
+/scope-proxy/model-experience/scoped-forward-proxy/kv-cache-effect:
+  en: 0726c7ca6a41b2a3
+  zh: 19368db3302b9e86
+/scope-proxy/known-limitations-and-deferred-work:
+  en: f953176ba430acc9
+  zh: 65b87850bb091b15
+/scope-proxy/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 6c5f9788c6536776

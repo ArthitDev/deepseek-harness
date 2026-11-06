@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Guard-Plugin, das Tool-Aufrufe ablehnt, die Ziele außerhalb des vom Bediener autorisierten Netzwerkbereichs referenzieren."
+  }
+}

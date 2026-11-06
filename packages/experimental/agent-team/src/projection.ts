@@ -98,26 +98,26 @@ const teamMemberEventSchema = z.object({
   version: z.literal(2),
   teamId: teamIdSchema,
   member: teamMemberSnapshotSchema,
-}).strict() as z.ZodType<SessionEventMap['team/member']>
+}).strict() as z.ZodType<SessionEventMap['experimental-team/member']>
 
 const teamTaskEventSchema = z.object({
   version: z.literal(2),
   teamId: teamIdSchema,
   task: teamTaskSnapshotSchema,
-}).strict() as z.ZodType<SessionEventMap['team/task']>
+}).strict() as z.ZodType<SessionEventMap['experimental-team/task']>
 
 const teamMessageQueuedEventSchema = z.object({
   version: z.literal(2),
   teamId: teamIdSchema,
   message: teamMessageSnapshotSchema,
-}).strict() as z.ZodType<SessionEventMap['team/message/queued']>
+}).strict() as z.ZodType<SessionEventMap['experimental-team/message/queued']>
 
 const teamMessageDeliveredEventSchema = z.object({
   version: z.literal(2),
   teamId: teamIdSchema,
   messageId: teamMessageIdSchema,
   targetId: sessionIdSchema,
-}).strict() as z.ZodType<SessionEventMap['team/message/delivered']>
+}).strict() as z.ZodType<SessionEventMap['experimental-team/message/delivered']>
 
 /** Current Team state selected by durable Team identity. */
 export interface TeamState {
@@ -168,10 +168,10 @@ const teamProjectionEntrySchema = z.object({
 
 /** Whether one event belongs to the Team domain. */
 export type TeamEventType =
-  | 'team/member'
-  | 'team/task'
-  | 'team/message/queued'
-  | 'team/message/delivered'
+  | 'experimental-team/member'
+  | 'experimental-team/task'
+  | 'experimental-team/message/queued'
+  | 'experimental-team/message/delivered'
 
 /** One event owned by the Team domain. */
 type TeamSessionEvent = SessionEvent<TeamEventType>
@@ -182,10 +182,10 @@ type TeamSessionEvent = SessionEvent<TeamEventType>
  * @returns whether the event has a Team-owned type.
  */
 export function isTeamEvent(event: SessionEvent): event is TeamSessionEvent {
-  return event.type === 'team/member'
-    || event.type === 'team/task'
-    || event.type === 'team/message/queued'
-    || event.type === 'team/message/delivered'
+  return event.type === 'experimental-team/member'
+    || event.type === 'experimental-team/task'
+    || event.type === 'experimental-team/message/queued'
+    || event.type === 'experimental-team/message/delivered'
 }
 
 /** Decode one persisted Team value and retain the schema failure as its cause. */
@@ -200,13 +200,13 @@ function parsePersisted<T>(type: TeamEventType, schema: z.ZodType<T>, value: unk
 /** Decode the complete current-version payload selected by one Team event type. */
 function parseCurrentTeamEvent(event: TeamSessionEvent): TeamSessionEvent {
   switch (event.type) {
-    case 'team/member':
+    case 'experimental-team/member':
       return { ...event, data: parsePersisted(event.type, teamMemberEventSchema, event.data) }
-    case 'team/task':
+    case 'experimental-team/task':
       return { ...event, data: parsePersisted(event.type, teamTaskEventSchema, event.data) }
-    case 'team/message/queued':
+    case 'experimental-team/message/queued':
       return { ...event, data: parsePersisted(event.type, teamMessageQueuedEventSchema, event.data) }
-    case 'team/message/delivered':
+    case 'experimental-team/message/delivered':
       return { ...event, data: parsePersisted(event.type, teamMessageDeliveredEventSchema, event.data) }
     /* v8 ignore next 2 -- TeamEventType is closed and every member is handled above. */
     default:
@@ -232,7 +232,7 @@ function applyProjectionEvent(state: TeamProjectionState, event: SessionEvent): 
 
 function applyCurrentTeamEvent(state: TeamState, event: TeamSessionEvent): void {
   switch (event.type) {
-    case 'team/member': {
+    case 'experimental-team/member': {
       const member = event.data.member
       const index = state.members.findIndex(candidate => candidate.id === member.id)
       const prior = state.members[index]
@@ -254,7 +254,7 @@ function applyCurrentTeamEvent(state: TeamState, event: TeamSessionEvent): void 
       else state.members[index] = member
       break
     }
-    case 'team/task': {
+    case 'experimental-team/task': {
       const task = event.data.task
       const index = state.tasks.findIndex(candidate => candidate.id === task.id)
       const prior = state.tasks[index]
@@ -277,7 +277,7 @@ function applyCurrentTeamEvent(state: TeamState, event: TeamSessionEvent): void 
       else state.tasks[index] = task
       break
     }
-    case 'team/message/queued': {
+    case 'experimental-team/message/queued': {
       const message = event.data.message
       if (state.messages.some(candidate => candidate.id === message.id)) {
         throw new Error(`team message "${message.id}" was queued twice`)
@@ -285,7 +285,7 @@ function applyCurrentTeamEvent(state: TeamState, event: TeamSessionEvent): void 
       state.messages.push(message)
       break
     }
-    case 'team/message/delivered': {
+    case 'experimental-team/message/delivered': {
       const queued = state.messages.find(message => message.id === event.data.messageId)
       if (queued === undefined) throw new Error(`team message "${event.data.messageId}" was delivered before queueing`)
       if (queued.targetId !== event.data.targetId) throw new Error(`team message "${event.data.messageId}" target changed`)

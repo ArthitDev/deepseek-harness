@@ -14,6 +14,12 @@ DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL B
 
 Review the [safety notice](SAFETY.md) before running the project.
 
+## Shield Break fork
+
+This repository is the **Shield Break** fork of DeepSeek Harness, tracking upstream `0.2.2-rc.1` with the full upstream feature set plus the Shield Break security-testing capabilities: the pentest control plane (durable runs, supervisor/executor episodes, deterministic recon), target-scope and run-budget guards, saved SSH machines, runtime package invariants, team-based agent swarms, the Exa and Perplexity web-search providers, and the Shield Break terminal UI with Kali WSL integration.
+
+Before using the security-testing features, review the [pentest lab authorization template](docs/pentest-lab-authorization-template.md) and the [Kali WSL guide](docs/user/guide/kali-wsl.md).
+
 ## Run
 
 ### Run from `npm`

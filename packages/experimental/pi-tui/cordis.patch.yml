@@ -29,7 +29,7 @@
     # the TUI unmounts. `dsh --profile pi-tui --resume <session-id>`
     # reaches the plugin through ctx.cmdlineArgs.
     - id: pi-tui
-      name: 'dsh-pi-tui'
+      name: '@deepseek-ai/dsh-pi-tui'
       # provider/model are intentionally unset: the TUI resolves them from
       # the harness's agent-default-model selection (settings.yaml) unless
       # this row explicitly overrides them. `--resume` reaches the app

@@ -72,7 +72,9 @@ import * as ToolJobs from '@deepseek-ai/dsh-tool-jobs'
 import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
 import * as StagehandBrowserTools from '@deepseek-ai/dsh-experimental-browser-use-stagehand-native'
 import TeamService from '@deepseek-ai/dsh-agent-team'
+import { TeamService as ExperimentalTeamService } from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-tool-agent-team'
+import * as ToolTeamExperimental from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import type PluginManager from '@deepseek-ai/dsh-plugin-manager'
 import * as PluginManagerTools from '@deepseek-ai/dsh-plugin-manager/tools'
@@ -131,6 +133,28 @@ class CatalogSessionPersistence extends SessionPersistence {
   flush = unavailableCatalogPersistence
   stat = unavailableCatalogPersistence
   list = unavailableCatalogPersistence
+}
+
+/**
+ * Register one idle Team Lead agent over a fresh tool-catalog session so the
+ * team tools resolve a calling Agent during harvest.
+ * @param ctx - the entry's isolated harvest context.
+ * @returns the registered Lead agent.
+ */
+async function mountCatalogTeamAgent(ctx: Context): Promise<Agent> {
+  const session = ctx.sessions.create(SessionId('tool-catalog-team-lead'))
+  let agent!: Agent
+  await ctx.plugin(Object.assign(async (inner: Context) => {
+    agent = {
+      id: session.id,
+      session,
+      options: {},
+      status: 'idle',
+    } as unknown as Agent
+    Object.assign(agent, { ctx: createScope(inner, agent).ctx })
+    await inner.agents.register(agent)
+  }, { inject: ['tools', 'systemPrompt', 'agents', 'agentTeams'] }))
+  return agent
 }
 
 /** Storage operations are unreachable during schema collection. */
@@ -631,18 +655,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(SubagentRuntime)
       await ctx.plugin(CatalogSessionPersistence)
       await ctx.plugin(TeamService)
-      const session = ctx.sessions.create(SessionId('tool-catalog-team-lead'))
-      let agent!: Agent
-      await ctx.plugin(Object.assign(async (inner: Context) => {
-        agent = {
-          id: session.id,
-          session,
-          options: {},
-          status: 'idle',
-        } as unknown as Agent
-        Object.assign(agent, { ctx: createScope(inner, agent).ctx })
-        await inner.agents.register(agent)
-      }, { inject: ['tools', 'systemPrompt', 'agents', 'agentTeams'] }))
+      const agent = await mountCatalogTeamAgent(ctx)
       await ctx.agentTeams.setEnabled(agent, true)
       await ctx.plugin(ToolTeam)
       catalogChildScopes.set(ctx, agent)
@@ -650,6 +663,26 @@ const TOOL_PACKAGES: ToolPackage[] = [
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
       'Four task-board tools share the subagent tree’s root Session. Enabling Team mode on the root Session adds task-board guidance alongside standard subagent delegation and control tools. Standard subagent controls provide required identity independently of Team mode.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-agent-team',
+    dir: 'tool-agent-team',
+    source: 'packages/experimental/tool-agent-team/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.agentTeams', 'an exact live Team member Agent'],
+    writes: ['tool/call', 'experimental-team/task', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(AgentRegistry)
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(SubagentRuntime)
+      await ctx.plugin(CatalogSessionPersistence)
+      await ctx.plugin(ExperimentalTeamService)
+      const agent = await mountCatalogTeamAgent(ctx)
+      await ctx.plugin(ToolTeamExperimental)
+      catalogChildScopes.set(ctx, agent)
+    },
+    scope: ctx => catalogChildScopes.get(ctx) as Agent,
+    note:
+      'The experimental Agent Teams variant of the team tools over `@deepseek-ai/dsh-experimental-agent-team`: the same collaboration surface — teammates, durable mailbox, and shared task board — persisted under the experimental-team/* event scope. Deployments mount this or the stable team tools, never both.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

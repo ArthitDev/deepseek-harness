@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-run-budget",
   "description": "Run-budget guard plugin: denies new tool calls once the token or wall-clock budget is exhausted, so the run ends in a partial report",
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

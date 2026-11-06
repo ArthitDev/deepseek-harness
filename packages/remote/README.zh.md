@@ -34,6 +34,7 @@ remote 包组让一个 DSH Host 使用保存在 SSH 机器上的工作区。`rem
 - [文件系统子系统](../../docs/subsystems/filesystem.zh.md) - remote 工作区实现的文件操作。
 - [子进程子系统](../../docs/subsystems/subprocess.zh.md) - 通过 SSH 路由的命令和终端操作。
 - [已保存 SSH 机器决策](../../.agents/notes/implemented/feature/2026-09-12-remote-ssh-machines.zh.md) - 信任、凭据和工作区归属决策。
+- [远程机器子系统](../../docs/subsystems/remote-machines.zh.md) - `ctx.remoteMachines` 服务参考。
 
 <a id="dev-note"></a>
 ## 开发备注

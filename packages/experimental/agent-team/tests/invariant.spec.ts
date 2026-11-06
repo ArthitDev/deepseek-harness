@@ -30,12 +30,12 @@ describe('Agent Teams stream invariant', () => {
       phase: 'provisioning' as const,
     }
     expect(() => {
-      session.append('team/member', { version: 2, teamId: TeamId(session.id), member })
+      session.append('experimental-team/member', { version: 2, teamId: TeamId(session.id), member })
     }).not.toThrow()
 
     const invalid = ctx.sessions.create(SessionId('team-invariant-invalid'))
     expect(() => {
-      invalid.append('team/member', {
+      invalid.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(invalid.id),
         member: { ...member, phase: 'active' },
@@ -52,7 +52,7 @@ describe('Agent Teams stream invariant', () => {
     const session = ctx.sessions.create(SessionId('team-task-invariant'))
 
     expect(() => {
-      session.append('team/task', {
+      session.append('experimental-team/task', {
         version: 2,
         teamId: TeamId(session.id),
         task: {

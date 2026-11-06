@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Interactive terminal front door for Shield Break Harness agents, built on pi-tui."
+  }
+}

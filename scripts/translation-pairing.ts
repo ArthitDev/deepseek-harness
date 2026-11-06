@@ -123,11 +123,13 @@ const NON_SOURCE_DIRECTORIES = new Set([
   '.pytest_cache',
   '.artifacts',
   'vendor',
+  'work',
 ])
 
 /** Glob traversal exclusions corresponding to the non-source path predicate. */
 export const TRANSLATION_SCOPE_GLOB_EXCLUDES = [
   '.agents/notes/archived/**',
+  'work/**',
   '**/node_modules/**',
   '**/lib/**',
   '**/.pnpm-store/**',

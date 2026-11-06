@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-session-format-v4-to-v5",
   "description": "Identity Session migration from V4 to V5 with widened read-side message sources",
-  "version": "0.1.7-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

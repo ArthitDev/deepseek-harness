@@ -236,7 +236,8 @@ export class TeamRoster {
   /**
    * Release exact teammate Activations through the continuation lifecycle owner.
    * @param root - exact live Team Lead authorizing release.
-   * @param childIds - selected roster child ids.
+   * @param _childIds - selected roster child ids; the release drains every
+   * descendant of the Lead, so the selection does not narrow the drain.
    */
   async stopTeammates(root: Agent, _childIds: readonly SessionId[]): Promise<void> {
     await this.lifecycle.withTimeout(this.ctx.subagents.drainDescendants([root]))
@@ -274,7 +275,7 @@ export class TeamRoster {
       if (state.members.length >= this.maxMembers) {
         throw new TeamError(`Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
       }
-      await this.journal.appendAndFlush(root, 'team/member', { version: 2, teamId: TeamId(root.id), member })
+      await this.journal.appendAndFlush(root, 'experimental-team/member', { version: 2, teamId: TeamId(root.id), member })
     })
 
     let started: SubagentActivation
@@ -423,7 +424,7 @@ export class TeamRoster {
           phase,
           ...phase === 'failed' ? { error: failure } : {},
         }
-        await this.journal.appendAndFlush(root, 'team/member', {
+        await this.journal.appendAndFlush(root, 'experimental-team/member', {
           version: 2,
           teamId: TeamId(root.id),
           member: settled,
@@ -471,7 +472,7 @@ export class TeamRoster {
         throw new TeamError(`provisioned teammate "${terminal.id}" disappeared`, 'TEAM_PROVISIONING_CONFLICT')
       }
       if (current.phase !== 'provisioning') return current.phase
-      await this.journal.appendAndFlush(root, 'team/member', {
+      await this.journal.appendAndFlush(root, 'experimental-team/member', {
         version: 2,
         teamId: TeamId(root.id),
         member: terminal,

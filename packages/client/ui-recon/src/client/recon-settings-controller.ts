@@ -83,7 +83,7 @@ const jsonObjectField = (field: string): SettingsFieldSpec => ({
   parse: (text) => {
     if (text.trim() === '') return { kind: 'clear' }
     try {
-      const value = JSON.parse(text) as unknown
+      const value: unknown = JSON.parse(text)
       return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? { kind: 'set', value }
         : undefined

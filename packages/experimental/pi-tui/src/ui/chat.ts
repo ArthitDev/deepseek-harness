@@ -35,6 +35,7 @@ import type { ActivityEntry } from '../core/activity.js'
 import type { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { boundContextSummary, createDeveloperMessage, createUserMessage, MessageId, ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type MessageSource, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'
+import type { SkillCatalogSource } from '@deepseek-ai/dsh-tool-skill'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineTool, type ToolDispatchExecution, type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import {
@@ -176,13 +177,6 @@ const sameRouteSelection = (left: ModelSelection, right: ModelSelection): boolea
 interface SkillCatalogEntry {
   readonly name: string
   readonly description: string
-}
-
-interface SkillCatalogSource {
-  readonly kind: 'skill-catalog'
-  readonly form: 'catalog'
-  readonly update?: true
-  readonly entries: readonly SkillCatalogEntry[]
 }
 
 function isSkillCatalogEntry(entry: unknown): entry is SkillCatalogEntry {

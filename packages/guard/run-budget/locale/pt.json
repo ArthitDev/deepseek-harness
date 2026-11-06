@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de guarda que nega novas chamadas de ferramentas assim que o orçamento de tokens ou de tempo se esgota, encerrando a execução com um relatório parcial."
+  }
+}

@@ -187,10 +187,13 @@ export class RemoteMachines extends TypertRemoteService {
 
   /**
    * Delete a saved profile that has no registered workspace.
+   *
+   * The wire name avoids the client namespace service's reserved `remove` bookkeeping member, which no
+   * remote method may share (`remoteMachines/remove` breaks client mounting).
    * @param request - Saved machine identifier.
    * @returns confirmation after settings and cached credentials are cleared.
    */
-  @Remote('remove')
+  @Remote('deleteMachine')
   async remove(request: RemoteMachineIdRequest): Promise<RemoteMachineRemoveValue> {
     this.requireProfile(request.id)
     const workspaces = this.ctx.get('workspaceRegistry') as undefined | { list(): readonly { path: string }[] }

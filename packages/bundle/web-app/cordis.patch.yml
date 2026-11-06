@@ -62,6 +62,10 @@
     - id: web-search-policy
       name: '@deepseek-ai/dsh-tool-web/settings'
 
+    # General Settings row for the always-search preference above.
+    - id: ui-web-search-mode
+      name: '@deepseek-ai/dsh-client-ui-web-search-mode'
+
     # Host-owned mode selected by the composer; ordinary sessions read its
     # live policy while durable Supervisor/Executor runs shadow it per run.
     - id: pentest-runs
@@ -90,6 +94,10 @@
       name: '@deepseek-ai/dsh-recon-engine'
       config:
         allowAnyTarget: true
+
+    # Conversation view tab that reads the recon runs and evidence above.
+    - id: ui-recon
+      name: '@deepseek-ai/dsh-client-ui-recon'
 
     - id: message-feedback
       name: '@deepseek-ai/dsh-message-feedback'
@@ -322,6 +330,11 @@
     # The right Sidebar: one docking surface per session over ui-dockkit.
     - id: ui-sidebar-right
       name: '@deepseek-ai/dsh-client-ui-sidebar-right'
+
+    # The right Sidebar's executed-commands tab: classified shell history
+    # with paired result status.
+    - id: ui-sidebar-exec
+      name: '@deepseek-ai/dsh-client-ui-sidebar-exec'
 
 
     - id: office-to-pdf

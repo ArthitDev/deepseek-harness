@@ -109,7 +109,10 @@
     "@deepseek-ai/dsh-cua-bundle": "workspace:*",
     "@deepseek-ai/dsh-experimental-plugin-market-bundle": "workspace:*",
     "@deepseek-ai/dsh-personalized-recommendations": "workspace:*",
-    "@deepseek-ai/dsh-experimental-forge-bundle": "workspace:*"
+    "@deepseek-ai/dsh-experimental-forge-bundle": "workspace:*",
+    "@deepseek-ai/dsh-scope-proxy": "workspace:*",
+    "@deepseek-ai/dsh-scope-policy": "workspace:*",
+    "@deepseek-ai/dsh-run-budget": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-skill-badge": "workspace:*",

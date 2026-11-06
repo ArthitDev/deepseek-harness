@@ -30,9 +30,9 @@ kind: "package-bundle"
 
 启动时先等待预设注册表和模型默认值就绪，再创建会话；缺少服务会阻止 TUI 激活。新会话使用共享 Web 设置中与所选提供方和模型绑定的预设；未绑定时使用配置的默认预设。`--preset <id>` 优先；恢复的会话保留其记录的预设。
 
-源码检出在每次交互式启动时于后台启动透明 SB 转发服务。[内置 ZCode 代理](../../../third-party/zcode-api/INTEGRATION.md)在首次实际发出 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求时启动；选择其他提供方不会启动 ZCode 辅助进程。同一 TUI 进程中的并发请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。健康服务会被复用，并在 TUI 关闭后继续运行。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
+源码检出在每次交互式启动时于后台启动透明 SB 转发服务。内置 ZCode 代理在首次实际发出 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求时启动；选择其他提供方不会启动 ZCode 辅助进程。同一 TUI 进程中的并发请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。健康服务会被复用，并在 TUI 关闭后继续运行。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
 
-`pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式请参阅 [ZCode 集成](../../../third-party/zcode-api/INTEGRATION.md)。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
+`pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式由下文环境变量控制。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
 
 迁移到另一台机器时，复制包含 `scripts/` 和 `third-party/` 的完整检出，安装 Node `^22.19 || >=24`、pnpm 与 Bun，再运行 `pnpm install`、`pnpm zcode:setup` 和 `pnpm build`。单独安装并配置系统 9router，注册目标机器的 ZCode 端点与密钥，并在该机器登录 ZCode。提供方路径为 Harness → 9router → ZCode → 提供方；可选 SB 转发位于 Harness 与 9router 之间。下文列出的本地集成必须另行恢复；仅复制 npm TUI 包不包含检出级启动脚本。
 

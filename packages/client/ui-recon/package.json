@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-recon",
   "description": "Recon run viewer as a conversation view tab: stored deterministic recon runs, findings, and lazy evidence reading",
-  "version": "0.1.7-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },
@@ -61,8 +61,6 @@
     "@deepseek-ai/dsh-client-ui-model-selection": "workspace:*",
     "@deepseek-ai/dsh-recon-engine": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

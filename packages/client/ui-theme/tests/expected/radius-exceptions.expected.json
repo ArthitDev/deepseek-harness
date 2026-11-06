@@ -8,6 +8,20 @@
   "ui-plan/src/client/PlanPreview.module.css": [
     ".cardIcon: border-radius: 10px"
   ],
+  "ui-recon/src/client/ReconTargetControl.module.css": [
+    ".field input: border-radius: 8px"
+  ],
+  "ui-recon/src/client/ReconView.module.css": [
+    ".scanInput: border-radius: 7px",
+    ".loadingState: border-radius: 12px",
+    ".runRow: border-radius: 9px",
+    ".runOpen: border-radius: 9px",
+    ".deleteRun: border-radius: 8px",
+    ".summary div: border-radius: 9px",
+    ".records li: border-radius: 9px",
+    ".evidenceText: border-radius: 9px",
+    ".error: border-radius: 9px"
+  ],
   "ui-schedule/src/client/ClockPicker.module.css": [
     ".option: border-radius: 10px"
   ],
@@ -60,5 +74,8 @@
     ".keyBadge: border-radius: 10px",
     ".unbound: border-radius: 10px",
     ".recorder: border-radius: 10px"
+  ],
+  "ui-sidebar-exec/src/client/ExecBody.module.css": [
+    ".commandText, .resultText: border-radius: 6px"
   ]
 }

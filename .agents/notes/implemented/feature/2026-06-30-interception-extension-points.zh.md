@@ -52,7 +52,7 @@ Service Definition 包**不**声明 `hook/*` 会话事件（持久的钩子调�
 ## 曾考虑的替代方案
 
 - **将工具执行前输入重写作为本扩展点集合的一部分发布**：推迟，视为越界信号；上文已阐述一致性问题（审计、历史和展示都读取执行前记录的 `tool/call.arguments`），[工具执行前输入重写提案](../../proposed/feature/2026-06-30-pre-tool-input-rewrite.zh.md)负责该设计。
-- **将持久的 `hook/*` SessionEvents 与扩展点一起声明**：否决。原生插件使用类型化 Decision 而完全不需要钩子日志（实际示例已证明），因此持久日志属于[钩子协议库](../../../../packages/hooks/hook-protocol/README.zh.md)，而非扩展接口。
+- **将持久的 `hook/*` SessionEvents 与扩展点一起声明**：否决。原生插件使用类型化 Decision 而完全不需要钩子日志（实际示例已证明），因此持久日志属于[钩子协议库](../../../../packages/experimental/hook-protocol/README.zh.md)，而非扩展接口。
 
 ## 后果
 

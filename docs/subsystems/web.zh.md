@@ -143,6 +143,10 @@ HTTP 提供方不限制目的地址：`web_fetch` 会像访问其他主机一样
 
 `WebRuntime` 注册搜索与抓取提供方，以 `WEB_DUPLICATE_PROVIDER` 拒绝重复 id，并在执行时以结构化的选择错误解析提供方。本地抓取后端仅接受 HTTP(S)、拒绝凭证、经已安装的代理策略发送每个请求、对每一次同源重定向跳转重复 URL 校验、限制重定向次数、字节数、字符数和时间，并解码正文；展示由工具负责。
 
+## Web 搜索策略
+
+`ctx.webSearchPolicy` 在搜索与抓取 seam 旁持有部署的全局 web 搜索偏好：其 `always` 设置要求每次回答前先调用一次 `web_search`。该设置持久保存在共享设置命名空间（`web-search-policy`）中，`Config` schema 将其标记为 volatile，使更改对下一个请求生效，每个按 preset 划分的 tool-web 实例都在请求时通过 `current()` 读取它，而不是在激活时缓存。
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -237,6 +241,22 @@ async fetchReady(llmProvider?: string): Promise<boolean>
 ```
 
 Source: [`packages/web/web/src/index.ts`](../../packages/web/web/src/index.ts)
+
+<a id="ctxwebsearchpolicy--websearchpolicyconfig"></a>
+
+### `ctx.webSearchPolicy` — `WebSearchPolicyConfig`
+
+Own the global setting read by every preset-scoped tool-web instance.
+
+```ts cordis-catalog
+/**
+ * Read the setting at request time so changes apply without a restart.
+ * @returns the current global web-search policy.
+ */
+current(): WebSearchPolicySettings
+```
+
+Source: [`packages/web/tool-web/src/settings.ts`](../../packages/web/tool-web/src/settings.ts)
 
 <a id="web-events"></a>
 

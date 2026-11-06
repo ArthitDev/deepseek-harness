@@ -1,6 +1,67 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/session/session-format-v4-to-v5/README.md
-README.md: c1700a8cf59c0ca4edb0a35c6a5f3d599025cfb7
-README.zh.md: a745831faf1fe909f9654b058150d77c04970e72
+/:
+  en: b605922a8a92bd32
+  zh: 050e517a349ebbfe
+/deepseek-ai-dsh-session-format-v4-to-v5:
+  en: 5c911c36fc777867
+  zh: 523c41bb93008361
+/deepseek-ai-dsh-session-format-v4-to-v5/summary:
+  en: 2da9350a67e0e16f
+  zh: 239c3806252e0119
+/deepseek-ai-dsh-session-format-v4-to-v5/table-of-contents:
+  en: 141a720f330c683f
+  zh: d1ca7be674ae2829
+/deepseek-ai-dsh-session-format-v4-to-v5/use-this-package:
+  en: d980ea9b02ea4362
+  zh: 21367f5107b9501b
+/deepseek-ai-dsh-session-format-v4-to-v5/v4-to-v5-specification:
+  en: 2becdae5a8bf70bc
+  zh: 6fada4e96106c17a
+/deepseek-ai-dsh-session-format-v4-to-v5/v4-to-v5-specification/header-and-physical-framing:
+  en: 4142765c34c051c1
+  zh: 9e0b76777569b964
+/deepseek-ai-dsh-session-format-v4-to-v5/v4-to-v5-specification/body-conversion:
+  en: 325c409ec62d9b9f
+  zh: 30a929bfe7ce8aef
+/deepseek-ai-dsh-session-format-v4-to-v5/v4-to-v5-specification/sequence-references-and-inheritance:
+  en: 20ce5bffa759601c
+  zh: d69a758069e736b1
+/deepseek-ai-dsh-session-format-v4-to-v5/v4-to-v5-specification/delivery-generations:
+  en: 67243937cdbf5b8d
+  zh: b6f6a0824c830496
+/deepseek-ai-dsh-session-format-v4-to-v5/v4-to-v5-specification/source-audit-and-refusal:
+  en: 0b8ee7f885e31e20
+  zh: 7d57d8ef894df832
+/deepseek-ai-dsh-session-format-v4-to-v5/native-v5-admission:
+  en: 18a5c2ede1667603
+  zh: 4b75184ae16f1a72
+/deepseek-ai-dsh-session-format-v4-to-v5/understand-the-implementation:
+  en: 383d6bc61b7c8c6f
+  zh: ce78093d1c1c0c1b
+/deepseek-ai-dsh-session-format-v4-to-v5/further-exploration:
+  en: d54326f96c09a0a0
+  zh: 8e7cfa7baa9f396e
+/deepseek-ai-dsh-session-format-v4-to-v5/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-session-format-v4-to-v5/model-experience/historical-restoration:
+  en: e63dd8ef6de7cf7c
+  zh: f1e356f01b601079
+/deepseek-ai-dsh-session-format-v4-to-v5/model-experience/historical-restoration/what-the-model-sees:
+  en: bb230e78ceb2afbe
+  zh: 96c4c42d0a129a8c
+/deepseek-ai-dsh-session-format-v4-to-v5/model-experience/historical-restoration/token-effect:
+  en: adb2bef43125d1df
+  zh: 9be15c4400d54617
+/deepseek-ai-dsh-session-format-v4-to-v5/model-experience/historical-restoration/kv-cache-effect:
+  en: 143ddba012e03d0c
+  zh: 35532aa8047fa8d0
+/deepseek-ai-dsh-session-format-v4-to-v5/known-limitations-and-deferred-work:
+  en: 434b90433c0545c3
+  zh: 35ce24a52a6da3cf
+/deepseek-ai-dsh-session-format-v4-to-v5/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 8ec3e73528ddb1a6

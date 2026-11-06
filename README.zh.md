@@ -14,6 +14,12 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 运行本项目前，请阅读[安全说明](SAFETY.zh.md)。
 
+## Shield Break 分支
+
+本仓库是 DeepSeek Harness 的 **Shield Break** 分支，跟随上游 `0.2.2-rc.1`，在完整上游功能之外加入 Shield Break 安全测试能力：渗透测试控制平面（持久化运行、Supervisor/Executor 回合、确定性侦察）、目标范围与运行预算守卫、已保存的 SSH 机器、运行时包不变量、团队化 Agent 集群、Exa 与 Perplexity 网络搜索提供商，以及集成 Kali WSL 的 Shield Break 终端界面。
+
+使用安全测试功能前，请先阅读[渗透测试实验室授权模板](docs/pentest-lab-authorization-template.zh.md)与 [Kali WSL 指南](docs/user/guide/kali-wsl.zh.md)。
+
 <a id="run"></a>
 
 ## 运行

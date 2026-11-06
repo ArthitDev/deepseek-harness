@@ -1,6 +1,40 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/guard/scope-policy/README.md
-README.md: 1631c0f5106be39b3e92dd15a9c721fc78f4cc0f
-README.zh.md: 611626404fbbb6747938b845015d9ca57b62dc7c
+/:
+  en: 9f0e3212fcb53040
+  zh: 59cf3eec2abdec6d
+/scope-policy:
+  en: b2d9e66ef252683f
+  zh: 15089974255e7125
+/scope-policy/summary:
+  en: e6e0a3de1370066b
+  zh: 10dbf55d5af5535e
+/scope-policy/table-of-contents:
+  en: 6b770c6072086886
+  zh: d00a103660504b08
+/scope-policy/config:
+  en: 4e16f3cea3bd1555
+  zh: 0ead988f412d7ced
+/scope-policy/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/scope-policy/model-experience/scope-policy-enforcement:
+  en: 46028f37ea3cada7
+  zh: 0965dbb83e50deab
+/scope-policy/model-experience/scope-policy-enforcement/what-the-model-sees:
+  en: e92cb8dbe19cc096
+  zh: 7ca639fa329aa693
+/scope-policy/model-experience/scope-policy-enforcement/token-effect:
+  en: 428ce490107d6529
+  zh: faa2014d9702daf6
+/scope-policy/model-experience/scope-policy-enforcement/kv-cache-effect:
+  en: ea1c79c2e92ec5a1
+  zh: 1673f30025ae83cd
+/scope-policy/known-limitations-and-deferred-work:
+  en: 96dbdec62f698503
+  zh: 6fc30ca1918e9773
+/scope-policy/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 6c5f9788c6536776

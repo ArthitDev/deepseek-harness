@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Pestaña lateral que lista los comandos de shell ejecutados con su clasificación de plataforma y el estado emparejado del resultado."
+  }
+}

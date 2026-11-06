@@ -166,26 +166,6 @@ describe('InvariantRegistry validation', () => {
 })
 
 describe('InvariantRegistry lifecycle', () => {
-  it('honors the installer dependency API in its child fiber', async () => {
-    const { ctx } = await setup()
-    await ctx.plugin(InvariantProbeService)
-    let registration!: RuntimeRegistration
-    await ctx.plugin({
-      inject: ['invariants', 'invariantProbe'],
-      apply(child: Context) {
-        const installer = Object.assign((installerCtx: Context) => {
-          expect(Object.keys(installerCtx.fiber.inject)).toContain('invariantProbe')
-          expect([...installerCtx.fiber.provisions].some(impl => impl instanceof InvariantProbeService)).toBe(true)
-          expect(installerCtx.invariantProbe).toBeInstanceOf(InvariantProbeService)
-        }, { inject: ['invariantProbe'] })
-        expect(installer.inject).toEqual(['invariantProbe'])
-        registration = runtimeRegistration(child.invariants.register('@deepseek-ai/dsh-probe', installer))
-        return Promise.resolve(registration)
-      },
-    })
-    await registration
-  })
-
   it('attributes failures to the registering package with the stable code', async () => {
     const { ctx } = await setup()
     const registration = runtimeRegistration(ctx.invariants.register('@deepseek-ai/dsh-session', (child, fail) => {

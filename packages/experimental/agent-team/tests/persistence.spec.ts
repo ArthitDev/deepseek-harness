@@ -207,12 +207,12 @@ for (const backend of backends) {
       await Promise.resolve()
       await Promise.resolve()
 
-      activeRoot.session.append('team/member', {
+      activeRoot.session.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(activeRoot.id),
         member: provisioning(childId, 'recoverable'),
       })
-      failedRoot.session.append('team/member', {
+      failedRoot.session.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(failedRoot.id),
         member: provisioning(SessionId(`${backend.name}-missing`), 'missing'),
@@ -276,7 +276,7 @@ for (const backend of backends) {
       const root = await first.ctx.agentLoop.create(rootId, { provider: 'mock', model: 'mock' })
       await Promise.resolve()
       await Promise.resolve()
-      root.session.append('team/member', {
+      root.session.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(root.id),
         member: provisioning(childId, 'pending-worker'),
@@ -406,7 +406,7 @@ for (const backend of backends) {
         targetId: started.member.id,
         content: [{ type: 'text', text: 'already recorded before acknowledgement' }],
       }
-      firstLead.session.append('team/message/queued', {
+      firstLead.session.append('experimental-team/message/queued', {
         version: 2,
         teamId: TeamId(rootId),
         message: queued,
@@ -422,7 +422,7 @@ for (const backend of backends) {
       const releaseCheckpoint = Promise.withResolvers<undefined>()
       const delayedCheckpoint = vi.spyOn(second.ctx.sessions, 'flush').mockImplementation(async (session) => {
         if (session.id === rootId && session.snapshotEvents().some(event =>
-          event.type === 'team/message/delivered' && event.data.messageId === messageId)) {
+          event.type === 'experimental-team/message/delivered' && event.data.messageId === messageId)) {
           checkpointEntered.resolve(undefined)
           await releaseCheckpoint.promise
         }
@@ -488,17 +488,17 @@ for (const backend of backends) {
         targetId: childId,
         content: [{ type: 'text', text: 'already durable in target inbox' }],
       }
-      root.session.append('team/member', {
+      root.session.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(root.id),
         member: provisioned,
       })
-      root.session.append('team/member', {
+      root.session.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(root.id),
         member: active,
       })
-      root.session.append('team/message/queued', {
+      root.session.append('experimental-team/message/queued', {
         version: 2,
         teamId: TeamId(root.id),
         message: queued,

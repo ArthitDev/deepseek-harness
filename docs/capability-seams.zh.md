@@ -317,6 +317,22 @@ flowchart LR
   svc_cordisInspect["ctx.cordisInspect<br/>Dynamic Cordis inspect registry"]
   pkg_experimental_liveshare["experimental-liveshare"]
   svc_liveshareShares["ctx.liveshareShares<br/>Owner share management Remote"]
+  pkg_invariants["invariants"]
+  svc_invariants["ctx.invariants<br/>Runtime invariant registry"]
+  pkg_pentest_run["pentest-run"]
+  svc_pentestRuns["ctx.pentestRuns<br/>Pentest run state"]
+  pkg_pentest_executor["pentest-executor"]
+  svc_pentestRunController["ctx.pentestRunController<br/>Pentest run Remote"]
+  svc_pentestLoop["ctx.pentestLoop<br/>Pentest control loop"]
+  svc_pentestModePolicy["ctx.pentestModePolicy<br/>Pentest mode policy"]
+  svc_pentestAssistance["ctx.pentestAssistance<br/>Pentest operator assistance"]
+  pkg_recon_engine["recon-engine"]
+  svc_reconEngineOptions["ctx.reconEngineOptions<br/>Recon engine options"]
+  pkg_scope_proxy["scope-proxy"]
+  svc_scopeProxy["ctx.scopeProxy<br/>Pentest network scope proxy"]
+  pkg_remote_machines["remote-machines"]
+  svc_remoteMachines["ctx.remoteMachines<br/>Remote SSH machines"]
+  svc_webSearchPolicy["ctx.webSearchPolicy<br/>Global web-search policy"]
   pkg_action_cards --> svc_actionCards
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
@@ -395,6 +411,7 @@ flowchart LR
   pkg_host_product_telemetry_otel --> svc_productTelemetry
   pkg_host_webserver --> svc_webServer
   pkg_inspector --> svc_inspector
+  pkg_invariants --> svc_invariants
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
@@ -409,6 +426,12 @@ flowchart LR
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
   pkg_otel --> svc_otel
+  pkg_pentest_executor --> svc_pentestAssistance
+  pkg_pentest_executor --> svc_pentestLoop
+  pkg_pentest_executor --> svc_pentestModePolicy
+  pkg_pentest_run --> svc_pentestLoop
+  pkg_pentest_run --> svc_pentestRunController
+  pkg_pentest_run --> svc_pentestRuns
   pkg_permission_presets --> svc_permissionPresets
   pkg_plan_mode --> svc_planMode
   pkg_plugin_manager --> svc_pluginManager
@@ -418,12 +441,15 @@ flowchart LR
   pkg_ptc_runtime --> svc_ptcRuntime
   pkg_ptc_runtime_node --> svc_ptcRuntime
   pkg_pwsh_local --> svc_shell
+  pkg_recon_engine --> svc_reconEngineOptions
+  pkg_remote_machines --> svc_remoteMachines
   pkg_sandbox --> svc_sandbox
   pkg_sandbox_local --> svc_sandbox
   pkg_sandbox_policy --> svc_sandboxPolicy
   pkg_sandbox_ssh --> svc_sandbox
   pkg_sandbox_windows_acl --> svc_skills
   pkg_schedule --> svc_schedule
+  pkg_scope_proxy --> svc_scopeProxy
   pkg_session --> svc_sessions
   pkg_session_log_deepseek --> svc_deepseekLlmApiExtensions
   pkg_session_log_deepseek --> svc_sessionLogDeepSeek
@@ -468,6 +494,7 @@ flowchart LR
   pkg_terminal_bash --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
+  pkg_tool_web --> svc_webSearchPolicy
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
@@ -530,6 +557,7 @@ flowchart LR
   svc_fs --> pkg_tool_fs
   svc_headlessStartup --> pkg_headless
   svc_hmr --> pkg_app_boot
+  svc_invariants --> pkg_tool_cordis
   svc_jobs --> pkg_api_job_controller
   svc_jobs --> pkg_tool_bash
   svc_jobs --> pkg_tool_jobs
@@ -542,6 +570,8 @@ flowchart LR
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
+  svc_pentestRunController --> pkg_pentest_run
+  svc_pentestRuns --> pkg_pentest_executor
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
   svc_pluginMarket --> pkg_client_ui_plugin_market
@@ -554,6 +584,7 @@ flowchart LR
   svc_remoteAccess --> pkg_api_gateway
   svc_remoteAccess --> pkg_api_session_controller
   svc_remoteAccess --> pkg_api_workspace_controller
+  svc_remoteMachines --> pkg_remote_machines
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -760,5 +791,15 @@ flowchart LR
 | `ctx.dynamicCordisRunner` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 拥有内存定义注册表、Host 半的 vm 沙箱和 request-run 往返流程；浏览器页面通过其 Remote 命名空间在线访问同一服务。 |
 | `ctx.cordisInspect` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 注册 Host inspect 提供方、镜像 Client 提供方 manifest，并通过动态 Cordis 传输路由 Client 查询。 |
 | `ctx.liveshareShares` | `service` | [`experimental-liveshare`](../packages/experimental/liveshare) | - | - | - | 以单个 Typert Remote 命名空间发布 owner 分享管理操作，供 owner 客户端面调用；每个方法都委托给同源路由原先使用的同一组操作。 |
+| `ctx.invariants` | `service` | [`invariants`](../packages/runtime-diagnostics/invariants) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 在每个包专属的子 fiber 中注册包自有 invariant 检查，带正则选择过滤器和按包归因的失败。 |
+| `ctx.pentestRuns` | `service` | [`pentest-run`](../packages/pentest/pentest-run) | - | [`pentest-executor`](../packages/pentest/pentest-executor) | - | 在 SQLite 中持有持久运行、任务、租约、证据、发现与关系攻击图；快照为全新剧集投影整个运行。 |
+| `ctx.pentestRunController` | `service` | [`pentest-run`](../packages/pentest/pentest-run) | - | [`pentest-run`](../packages/pentest/pentest-run) | - | 把操作者运行控制（列表、快照、工件、范围替换、运行与任务控制）作为单个 Typert Remote 命名空间发布在 `ctx.pentestRuns` 之上。 |
+| `ctx.pentestLoop` | `service` | [`pentest-executor`](../packages/pentest/pentest-executor) | [`pentest-run`](../packages/pentest/pentest-run) | - | - | 创建并恢复运行，驱动后台循环，把一次一个有边界的任务租约给全新的 Supervisor 与 Executor 剧集。 |
+| `ctx.pentestModePolicy` | `service` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 持有运行模式与每模式提示词覆盖，应用重启前的同步，并为一个模式解析生效的提示词文本。 |
+| `ctx.pentestAssistance` | `service` | [`pentest-executor`](../packages/pentest/pentest-executor) | - | - | - | 读取辅助设置，报告每目标进度状态，搜索剧集记忆，并在收敛时评审运行证据。 |
+| `ctx.reconEngineOptions` | `service` | [`recon-engine`](../packages/pentest/recon-engine) | - | - | - | 携带侦察工具读取的确定性侦察引擎配置。 |
+| `ctx.scopeProxy` | `service` | [`scope-proxy`](../packages/guard/scope-proxy) | - | - | - | 运行本地正向代理，只放行经授权的 pentest 目标，并公开供沙箱代理环境变量使用的代理 URL。 |
+| `ctx.remoteMachines` | `service` | [`remote-machines`](../packages/remote/remote-machines) | - | [`remote-machines`](../packages/remote/remote-machines) | - | 存储 SSH 机器 profile，探测主机指纹，并以按机器的指纹信任作为工作区执行的前提。 |
+| `ctx.webSearchPolicy` | `service` | [`tool-web`](../packages/web/tool-web) | - | - | - | 持有持久的必搜索偏好，每个按 preset 划分的 tool-web 实例都在请求时读取它。 |
 
 维护模式：混合模式。服务从 Cordis 声明中发现；接口、实现和消费方角色在 `scripts/gen-doc-graphs.ts` 中分类，并设有完整性守卫。

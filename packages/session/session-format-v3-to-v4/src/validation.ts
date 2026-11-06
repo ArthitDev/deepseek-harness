@@ -141,7 +141,10 @@ export function assertReleasedV4Relationships(artifact: SessionFormatArtifact, k
  * @param value - native `subagent/catalog` payload.
  * @returns validated catalog payload.
  */
-function nativeCatalogFact(value: SessionFormatJsonValue): SessionFormatJsonObject {
+/** Validate one catalog fact of any era: native V4 (version 3) or the historical versions 0-2.
+ * @param value - native `subagent/catalog` payload.
+ * @returns validated catalog payload. */
+export function nativeCatalogFact(value: SessionFormatJsonValue): SessionFormatJsonObject {
   if (!isSessionFormatJsonObject(value) || value['version'] !== 3) return catalogFact(value)
   if (typeof value['childId'] !== 'string'
     || (value['mode'] !== 'continuable' && value['mode'] !== 'external')

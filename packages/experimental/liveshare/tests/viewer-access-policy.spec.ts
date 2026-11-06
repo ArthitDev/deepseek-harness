@@ -48,6 +48,9 @@ const SESSION_READS = [
   'commands/list', 'fileUploads/upload', 'goals/get', 'session/attachment', 'session/control',
   'session/events', 'session/follow', 'session/list', 'session/observeEvent', 'session/observeProjections',
   'session/observeState', 'session/page', 'session/projections', 'session/state', 'session/wait',
+  'pentestLoop/running', 'pentestRuns/list', 'pentestRuns/loadArtifact', 'pentestRuns/snapshot',
+  'reconRuns/evidence', 'reconRuns/list', 'reconRuns/load', 'reconRuns/loadDynamic', 'reconRuns/queue',
+  'reconRuns/status',
   'skills/list', 'toolResults/watch', 'workspace/follow',
 ] as const
 const SESSION_EVENTS = [

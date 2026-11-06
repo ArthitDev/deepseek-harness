@@ -247,7 +247,9 @@ it('stops a fetch once the repository grows past its limit, and deletes the repo
   expect(readdirSync(join(root, 'cache'))).toEqual([])
 })
 
-it('refuses a repository that a completed fetch left past its limit', async () => {
+// The 1000-directory clone exceeds the default 5s budget on slower hosts and Windows
+// Git; the assertion is unchanged, only the load-sensitive fetch gets room to finish.
+it('refuses a repository that a completed fetch left past its limit', { timeout: 30_000 }, async () => {
   // Distinct files make distinct trees, so the fetch adds one tree object per directory.
   const source = repository('e2', Object.fromEntries(Array.from({ length: 1000 }, (_value, index) => [`dir${String(index)}/f.txt`, String(index)])))
   const repositories = cache({ maxRepositoryBytes: 4096, sizePollMs: 3_600_000 })

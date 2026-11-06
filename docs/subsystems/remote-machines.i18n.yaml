@@ -1,0 +1,10 @@
+# Bilingual-pair consistency record for remote-machines.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/subsystems/remote-machines.md
+/remote-machines:
+  en: 1e794bf2968db76d
+  zh: 749d761733f31574
+/remote-machines/profiles-and-trust:
+  en: 1a7e3f00fd617c6a
+  zh: 6dd028dde727b7a7

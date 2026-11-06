@@ -25,6 +25,7 @@
     { "path": "../../util/native-command" },
     { "path": "../../fs/tool-fs-search" },
     { "path": "../../skill/skill" },
+    { "path": "../../skill/tool-skill" },
     { "path": "../../subagent/subagent" }
   ]
 }

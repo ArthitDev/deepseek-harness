@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-sidebar-exec",
   "description": "Executed shell commands tab for the right Sidebar: KALI/WIN classified command history with paired result status",
-  "version": "0.1.7-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },
@@ -56,15 +56,12 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@testing-library/react": "^16.1.0",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "files": [
     "lib/index.js",
     "lib/client.js",
-    "lib/client.*.js",
     "lib/types/**/*.d.ts"
   ]
 }

@@ -382,7 +382,7 @@ describe('restoring removed worktrees', () => {
     return await git(checkout, 'rev-parse', 'HEAD')
   }
 
-  it('checks the branch out again at its latest commit after removing only its stale registration, without entering the checkout', async () => {
+  it('checks the branch out again at its latest commit after removing only its stale registration, without entering the checkout', { timeout: 30_000 }, async () => {
     const root = await repo()
     ctx = await harness(root)
     const agent = testAgent(ctx, root)

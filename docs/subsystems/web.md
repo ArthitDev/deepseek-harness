@@ -143,6 +143,10 @@ The HTTP provider does not restrict destination addresses: `web_fetch` reaches l
 
 `WebRuntime` registers search and fetch providers, rejects duplicate ids with `WEB_DUPLICATE_PROVIDER`, and resolves providers at execution time with structured selection errors. The local fetch backend accepts only HTTP(S), rejects credentials, sends each request through the installed proxy policy, repeats URL validation for every same-origin redirect hop, caps redirects, bytes, characters, and time, and decodes the body; the tool owns presentation.
 
+## Web search policy
+
+`ctx.webSearchPolicy` owns the deployment's global web-search preference beside the search and fetch seam: its `always` setting requires a `web_search` call before every answer. The setting is durable in the shared settings namespace (`web-search-policy`), the `Config` schema marks it volatile so changes apply to the next request, and every preset-scoped tool-web instance reads it through `current()` at request time rather than caching it at activation.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -237,6 +241,22 @@ async fetchReady(llmProvider?: string): Promise<boolean>
 ```
 
 Source: [`packages/web/web/src/index.ts`](../../packages/web/web/src/index.ts)
+
+<a id="ctxwebsearchpolicy--websearchpolicyconfig"></a>
+
+### `ctx.webSearchPolicy` — `WebSearchPolicyConfig`
+
+Own the global setting read by every preset-scoped tool-web instance.
+
+```ts cordis-catalog
+/**
+ * Read the setting at request time so changes apply without a restart.
+ * @returns the current global web-search policy.
+ */
+current(): WebSearchPolicySettings
+```
+
+Source: [`packages/web/tool-web/src/settings.ts`](../../packages/web/tool-web/src/settings.ts)
 
 <a id="web-events"></a>
 

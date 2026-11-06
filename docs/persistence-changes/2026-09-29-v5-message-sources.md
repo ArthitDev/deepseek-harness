@@ -31,19 +31,19 @@ changes:
     after: "22c6899a78214dd841c266348ae997027ef391174ddb21127f1b71dc1b362824"
     decision: version-bump
   - root: "event:agent/inbox/spliced"
-    previous: "2026-09-16-session-format-v4"
+    previous: "2026-10-27-retry-control-input"
     after: "bfe81731c910941e7d570fb5d685bf1f73a1f85083ac0f386a89dafcf7cdc274"
     decision: version-bump
   - root: "event:developer/message"
-    previous: "2026-09-16-session-format-v4"
+    previous: "2026-10-27-retry-control-input"
     after: "006ee1adcd84ffc4eaf4427ee9bd183b76e30027358caf14db1b2ebc85beef53"
     decision: version-bump
   - root: "event:session/title-llm-request"
-    previous: "2026-09-16-session-format-v4"
+    previous: "2026-10-27-retry-control-input"
     after: "bbe8dd6dc5965b080f86cc29d404032b1afe51c3b93184942a4bf71c3be21049"
     decision: version-bump
   - root: "event:user/message"
-    previous: "2026-09-16-session-format-v4"
+    previous: "2026-10-27-retry-control-input"
     after: "8dee047122fe20a6f3e76cb8dcfe8f3b54cc4945b5d728fd8be35d1b3042ffe9"
     decision: version-bump
   - root: "event:web-search/mode"

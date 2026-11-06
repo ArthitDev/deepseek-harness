@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Porta de entrada interativa de terminal para os agentes do Shield Break Harness, construída sobre pi-tui."
+  }
+}

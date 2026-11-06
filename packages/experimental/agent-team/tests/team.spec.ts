@@ -215,7 +215,7 @@ describe('Team identity and provisioning', () => {
       context: 'fresh' as const,
       phase: 'provisioning' as const,
     }
-    lead.session.append('team/member', {
+    lead.session.append('experimental-team/member', {
       version: 2,
       teamId: TeamId(lead.id),
       member: provisioning,
@@ -376,7 +376,7 @@ describe('Team identity and provisioning', () => {
     vi.spyOn(second.ctx.subagents, 'startActivation').mockImplementationOnce(async () => {
       const provisioning = durable(second.lead).members[0]
       if (provisioning === undefined) throw new Error('missing provisioning edge')
-      second.lead.session.append('team/member', {
+      second.lead.session.append('experimental-team/member', {
         version: 2,
         teamId: TeamId(second.lead.id),
         member: { ...provisioning, phase: 'active' },
@@ -587,7 +587,7 @@ describe('Team shared task DAG', () => {
   it('fails loudly when the durable numeric task id space is exhausted', async () => {
     const { ctx, lead } = await setup([])
     const id = TeamTaskId(`task-${Number.MAX_SAFE_INTEGER}`)
-    lead.session.append('team/task', {
+    lead.session.append('experimental-team/task', {
       version: 2,
       teamId: TeamId(lead.id),
       task: {
@@ -937,7 +937,7 @@ describe('Team mailbox and waiting', () => {
       targetId: lead.id,
       content: content('progress report'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2,
       teamId: TeamId(lead.id),
       message,
@@ -976,16 +976,16 @@ describe('Team mailbox and waiting', () => {
         message.source.kind === 'team-message' && messageIds.has(message.source.messageId))) {
         return ['agent/inbox/spliced']
       }
-      if (event.type === 'team/message/delivered' && messageIds.has(event.data.messageId)) {
-        return ['team/message/delivered']
+      if (event.type === 'experimental-team/message/delivered' && messageIds.has(event.data.messageId)) {
+        return ['experimental-team/message/delivered']
       }
       return []
     })
     expect(receiptOrder).toEqual([
       'agent/inbox/spliced',
-      'team/message/delivered',
+      'experimental-team/message/delivered',
       'agent/inbox/spliced',
-      'team/message/delivered',
+      'experimental-team/message/delivered',
     ])
 
     const receiptCount = lead.session.snapshotEvents().filter(event => event.type === 'agent/inbox/spliced'
@@ -1022,7 +1022,7 @@ describe('Team mailbox and waiting', () => {
       targetId: target.id,
       content: content('durable pending receipt'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2,
       teamId: TeamId(lead.id),
       message,
@@ -1058,7 +1058,7 @@ describe('Team mailbox and waiting', () => {
       id: TeamMessageId('disappearing-pending-message'),
       content: content('canceled before checkpoint'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2,
       teamId: TeamId(lead.id),
       message: disappearing,
@@ -1184,7 +1184,7 @@ describe('Team mailbox and waiting', () => {
       targetId: started.member.id,
       content: content('earlier steer'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2,
       teamId: TeamId(lead.id),
       message: earlier,
@@ -1223,7 +1223,7 @@ describe('Team mailbox and waiting', () => {
       targetId: live.id,
       content: content('already in live history'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2, teamId: TeamId(lead.id), message,
     })
     await ctx.sessions.flush(lead.session)
@@ -1255,7 +1255,7 @@ describe('Team mailbox and waiting', () => {
       ...message,
       id: TeamMessageId('wrong-target-message'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2, teamId: TeamId(lead.id), message: wrongTarget,
     })
     await ctx.sessions.flush(lead.session)
@@ -1572,7 +1572,7 @@ describe('Team mailbox and waiting', () => {
       context: 'fresh' as const,
       phase: 'provisioning' as const,
     }
-    lead.session.append('team/member', {
+    lead.session.append('experimental-team/member', {
       version: 2,
       teamId: TeamId(lead.id),
       member,
@@ -1587,7 +1587,7 @@ describe('Team mailbox and waiting', () => {
       signal: SIGNAL,
     })
     await waitRunning(ctx, childId)
-    lead.session.append('team/member', {
+    lead.session.append('experimental-team/member', {
       version: 2,
       teamId: TeamId(lead.id),
       member: {
@@ -1654,7 +1654,7 @@ describe('Team mailbox and waiting', () => {
       targetId: lead.id,
       content: content('acknowledge before disposal'),
     }
-    lead.session.append('team/message/queued', {
+    lead.session.append('experimental-team/message/queued', {
       version: 2,
       teamId: TeamId(lead.id),
       message,
@@ -1809,7 +1809,7 @@ describe('Team mailbox and waiting', () => {
       context: 'fresh' as const,
       phase: 'provisioning' as const,
     }
-    first.lead.session.append('team/member', {
+    first.lead.session.append('experimental-team/member', {
       version: 2, teamId: TeamId(first.lead.id), member: provisioning,
     })
     const reconcileFirst = teamInternals(first.ctx).roster
@@ -1829,7 +1829,7 @@ describe('Team mailbox and waiting', () => {
     const second = await setup([])
     const childId = SessionId('concurrently-settled-child')
     const member = { ...provisioning, id: childId, name: 'concurrent-child' }
-    second.lead.session.append('team/member', {
+    second.lead.session.append('experimental-team/member', {
       version: 2, teamId: TeamId(second.lead.id), member,
     })
     const entered = Promise.withResolvers<undefined>()
@@ -1842,7 +1842,7 @@ describe('Team mailbox and waiting', () => {
     const reconcileSecond = teamInternals(second.ctx).roster
     const reconciling = reconcileSecond.reconcileProvisioning(second.lead, SIGNAL)
     await entered.promise
-    second.lead.session.append('team/member', {
+    second.lead.session.append('experimental-team/member', {
       version: 2,
       teamId: TeamId(second.lead.id),
       member: { ...member, phase: 'failed', error: 'settled elsewhere' },

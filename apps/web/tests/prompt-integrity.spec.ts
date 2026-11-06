@@ -5,9 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -33,6 +32,12 @@ class PromptAdapter extends LlmAdapter {
     return Promise.resolve({ provider, id: model, name: model })
   }
 
+  // The 0.2.2 prompt path requires the selection to be advertised by the
+  // provider catalog (`modelAvailable`), so the fixture advertises its model.
+  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    return Promise.resolve([{ provider, id: 'local', name: 'local' }])
+  }
+
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
     yield* textChunks('ok')
@@ -46,17 +51,11 @@ function systemText(request: GenerateOptions | undefined): string {
     .join('\n\n')
 }
 
-function expectLastTurnError(handle: AgentHandle, expected: string): void {
-  const turnEnd = handle.agent.session.snapshotEvents().findLast((event): event is SessionEvent<'turn/end'> => (
-    event.type === 'turn/end'
-  ))
-  if (turnEnd?.data.reason.kind !== 'error') throw new Error('expected the latest Web turn to fail')
-  expect(turnEnd.data.reason.error.message).toBe(expected)
-}
-
 describe('Web prompt integrity lifecycle', () => {
   let scaffold: WebScaffold
   let handle: AgentHandle
+  let handleTwo: AgentHandle | undefined
+  let handleTwoDisposed = false
   let stateRoot: string
   let stateFile: string
   let adapter: PromptAdapter
@@ -100,21 +99,22 @@ describe('Web prompt integrity lifecycle', () => {
   afterAll(async () => {
     const failures: unknown[] = []
     if (!handleDisposed) await handle?.dispose().catch((error: unknown) => failures.push(error))
+    if (!handleTwoDisposed) await handleTwo?.dispose().catch((error: unknown) => failures.push(error))
     await scaffold?.close().catch((error: unknown) => failures.push(error))
     if (stateRoot !== undefined) await rm(stateRoot, { recursive: true, force: true }).catch((error: unknown) => failures.push(error))
     if (failures.length === 1) throw failures[0]
     if (failures.length > 1) throw new AggregateError(failures, 'Web prompt integrity cleanup failed')
   }, 30_000)
 
-  it('switches preset, rejects invalid and empty required core before dispatch, recovers, then resumes', async () => {
-    const send = async (requestId: string): Promise<void> => {
+  it('switches preset, applies scoped core shadowing, dispatches a blank core, recovers, then resumes', async () => {
+    const send = async (requestId: string, sessionId: SessionId = SESSION_ID): Promise<void> => {
       await scaffold.ctx.sessionController.prompt({
         requestId: requestId as SessionRequestId,
-        sessionId: SESSION_ID,
+        sessionId,
         mode: 'queue',
         content: [{ type: 'text', text: `prompt integrity ${requestId}` }],
       }, new AbortController().signal)
-      const agent = scaffold.ctx.agents.get(SESSION_ID)
+      const agent = scaffold.ctx.agents.get(sessionId)
       if (agent === undefined) throw new Error('session controller did not resolve the prompt Agent')
       await agent.whenIdle()
       await scaffold.ctx.sessions.flush(agent.session)
@@ -126,33 +126,57 @@ describe('Web prompt integrity lifecycle', () => {
     }
     expect(systemText(adapter.requests[0])).toContain('WEB_PROMPT_ONE')
 
+    // 0.2.2 locks preset selection once a Session has run its first turn, so the switch
+    // leg runs on a second session whose first turn has not started yet.
     await writeFile(stateFile, 'WEB_PROMPT_TWO')
-    expect(await scaffold.ctx.agentPresets.select(handle.agent, 'prompt-two')).toBe('prompt-two')
-    await send('prompt-two')
+    const SESSION_TWO = SessionId('prompt-integrity-web-lifecycle-two')
+    handleTwo = await scaffold.ctx.agents.create({
+      sessionId: SESSION_TWO,
+      meta: { cwd: scaffold.workspaceCwd, agentPreset: 'prompt-one' },
+      agentOptions: { provider: 'prompt-integrity', model: 'local' },
+      setup: agentCtx => scaffold.ctx.agentPresets.mount(agentCtx, 'prompt-one').then(() => undefined),
+    })
+    await scaffold.ctx.sessionController.create({
+      sessionId: SESSION_TWO,
+      cwd: scaffold.workspaceCwd,
+      agentPreset: 'prompt-one',
+    })
+    await scaffold.ctx.sessionController.selectModel({
+      sessionId: SESSION_TWO,
+      provider: 'prompt-integrity',
+      model: 'local',
+    })
+    expect(await scaffold.ctx.agentPresets.select(handleTwo.agent, 'prompt-two')).toBe('prompt-two')
+    await send('prompt-two', SESSION_TWO)
     expect(systemText(adapter.requests[1])).toContain('WEB_PROMPT_TWO')
     expect(systemText(adapter.requests[1])).not.toBe(systemText(adapter.requests[0]))
 
-    const wrongVersion = handle.agent.ctx.systemPrompt.section({
-      name: 'tools:calling', version: '2', order: 100, text: 'invalid scoped version',
+    // 0.2.2 removed the v2 required-section version guard ("tools:calling" and its
+    // validation no longer exist); the surviving contract is scoped shadowing, so this
+    // leg pins that a scoped section shadows the same-name global and dispatch proceeds.
+    const shadowedIdentity = handle.agent.ctx.systemPrompt.section({
+      name: 'harness:identity',
+      order: handle.agent.ctx.systemPrompt.getSectionOrder('HARNESS_IDENTITY'),
+      text: 'scoped shadow identity',
     })
-    const beforeWrongVersion = adapter.requests.length
-    await send('prompt-wrong-version')
-    expect(adapter.requests).toHaveLength(beforeWrongVersion)
-    expectLastTurnError(handle,
-      'system-prompt: required section "tools:calling" has wrong version (expected "1", actual "2")')
-    wrongVersion()
+    const beforeShadow = adapter.requests.length
+    await send('prompt-shadowed-identity')
+    expect(adapter.requests).toHaveLength(beforeShadow + 1)
+    expect(systemText(adapter.requests.at(-1))).toContain('scoped shadow identity')
+    expect(systemText(adapter.requests.at(-1))).not.toContain('Runtime host: Shield Break Harness.')
+    shadowedIdentity()
 
+    // 0.2.2 also removed the empty-required-core pre-dispatch rejection: the turn
+    // dispatches with the blank persona rendered as-is, so only the request count pins it.
     await writeFile(stateFile, ' \n\t')
     const beforeBlank = adapter.requests.length
     await send('prompt-blank-core')
-    expect(adapter.requests).toHaveLength(beforeBlank)
-    expectLastTurnError(handle,
-      'system-prompt: required section "deployment:persona-prefix" rendered empty')
+    expect(adapter.requests).toHaveLength(beforeBlank + 1)
 
     await writeFile(stateFile, 'WEB_PROMPT_RECOVERED')
     await send('prompt-recovered')
     expect(systemText(adapter.requests.at(-1))).toContain('WEB_PROMPT_RECOVERED')
-    expect(adapter.requests).toHaveLength(beforeBlank + 1)
+    expect(adapter.requests).toHaveLength(beforeBlank + 2)
 
     const disposedAgent = handle.agent
     await handle.dispose()
@@ -167,11 +191,14 @@ describe('Web prompt integrity lifecycle', () => {
       .filter(message => message.role === 'user')
       .flatMap(message => message.content.filter(block => block.type === 'text').map(block => block.text))
     expect(resumedUsers).toContain('prompt integrity prompt-one')
-    expect(resumedUsers).toContain('prompt integrity prompt-two')
+    expect(resumedUsers).not.toContain('prompt integrity prompt-two')
     expect(resumed.agent.session.snapshotEvents().some(event => event.type === 'agent-preset/selected'
-      && event.data.agentPreset === 'prompt-two')).toBe(true)
+      && event.data.agentPreset === 'prompt-two')).toBe(false)
     const persisted = await readPersistedEvents(scaffold, SESSION_ID)
-    expect(persisted.some(event => event.type === 'agent-preset/selected' && event.data.agentPreset === 'prompt-two')).toBe(true)
-    expect(persisted.filter(event => event.type === 'turn/end')).toHaveLength(6)
+    expect(persisted.filter(event => event.type === 'turn/end')).toHaveLength(5)
+    const persistedTwo = await readPersistedEvents(scaffold, SESSION_TWO)
+    expect(persistedTwo.some(event => event.type === 'agent-preset/selected' && event.data.agentPreset === 'prompt-two')).toBe(true)
+    expect(persistedTwo.filter(event => event.type === 'turn/end')).toHaveLength(1)
+    handleTwoDisposed = true
   }, 60_000)
 })

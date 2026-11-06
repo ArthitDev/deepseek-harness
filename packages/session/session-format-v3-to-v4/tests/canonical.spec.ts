@@ -41,7 +41,7 @@ function reopen(artifact: SessionFormatArtifact) {
 describe('canonical V4 integration', () => {
   it('composes seeded systems, source ownership, PTC, canonical replacements and native round-trip', () => {
     const target = migrated()
-    expect(target.header.version).toBe(4)
+    expect(target.header.version).toBe(5)
     expect(target.inheritedEventCount).toBe(13)
     const systems = target.events.filter(event => event.type === 'system/message')
     expect(systems).toHaveLength(3)
@@ -51,7 +51,10 @@ describe('canonical V4 integration', () => {
     expect(users[1]).toMatchObject({ surfaceOp: { op: 'replace', startSeq: 5, endSeq: 5 }, sourceEventSeqs: [5], data: { source: { kind: 'ptc-mode' } } })
     expect(target.events.find(event => event.type === 'tool/ptc-dispatch')?.data).toMatchObject({ arguments: { kind: 'plugin', plugin: 'tools-ptc' } })
     const before = JSON.stringify(target)
-    expect(restoreReleasedV4Artifact(target, new Set(target.events.map(event => event.type)))).toBe(target)
+    // Identity conversion: re-stamping the migrated header yields a
+    // released-V4-valid artifact with the same events.
+    const released = { ...target, header: { ...target.header, version: 4 } }
+    expect(restoreReleasedV4Artifact(released, new Set(target.events.map(event => event.type)))).toBe(released)
     expect(reopen(target)).toEqual(target)
     expect(JSON.stringify(target)).toBe(before)
   })

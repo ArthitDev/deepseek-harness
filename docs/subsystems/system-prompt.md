@@ -163,6 +163,21 @@ context(context: PromptContext): () => void
 suppressRuntimeContext(): () => void
 
 /**
+ * Suppress registered prompt sections in the calling context's scope: every
+ * assembly keeps only the allowlisted sections, while the services that own
+ * or enforce those sections stay mounted. Multiple suppressors remain
+ * independently disposable; a section stays visible unless every suppressor
+ * allows it.
+ * @param options - `except` names the sections that remain visible, as a
+ *   static list or a provider re-evaluated at every assembly for live toggles.
+ *   The provider receives effective scoped names, the per-assembly context,
+ *   and all effective section names, in that order.
+ *   An undefined provider result disables suppression; an empty list permits no gated sections.
+ * @returns the exact Cordis effect disposer.
+ */
+suppressSections(options?: { except?: readonly string[] | (( scopedNames: readonly string[], context: AssembleContext, sectionNames: readonly string[], ) => readonly string[] | undefined) globalOnly?: boolean }): () => void
+
+/**
  * Register a tool-schema provider in the calling context's scope. Global and
  * matching scoped providers both contribute; returning the reserved
  * {@link TOOL_ORDER_REST} name makes assembly fail.

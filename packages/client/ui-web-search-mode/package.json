@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-web-search-mode",
   "description": "Global always-search toggle in General Settings",
-  "version": "0.1.5-rc.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },
@@ -55,7 +55,6 @@
     "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-tool-web": "workspace:*",
-    "@types/react": "~18.3.1",
     "react": "^18.2.0"
   },
   "files": [

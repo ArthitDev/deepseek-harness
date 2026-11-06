@@ -5,7 +5,6 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import { WebSearchModeControl } from '../src/client/WebSearchModeControl.tsx'
-import type { WebSearchModeInjected } from '../src/client/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
 
@@ -39,7 +38,12 @@ describe('ui-web-search-mode browser apply', () => {
     expect(b.get).toHaveBeenCalledWith('web-search-policy')
     const entry = b.slots.entries('settings.general.item')[0]!
     expect(entry.component).toBe(WebSearchModeControl)
-    const injected = (entry.inject as unknown as () => WebSearchModeInjected)()
+    // The registry stores the factory loosely typed; this row's contract is the
+    // plugin's own WebSearchModeInjected, asserted structurally here.
+    const injected = entry.inject!() as {
+      hooks: { webSearchMode: unknown }
+      setAlways: (always: boolean) => Promise<void>
+    }
     expect(injected.hooks.webSearchMode).toBe(b.settings.scope)
     await injected.setAlways(true)
     expect(b.settings.set).toHaveBeenCalledWith('always', true)

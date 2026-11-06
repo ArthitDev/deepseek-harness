@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/pi-tui/README.md
-README.md: e847ee7b40ada2afa5bbcb6367d1aed8e46f57d8
-README.zh.md: 5d94b13f550511b9dae07c7a0fc8352421eaad43
+/:
+  en: 1602ee61df7304d3
+  zh: 1d24ccaae39d46fe
+/pi-tui:
+  en: f684467b69133d4a
+  zh: 7ac865b2108bc7f9
+/pi-tui/summary:
+  en: 1aadbec9bd69427a
+  zh: 7b901b98c5ebdb43
+/pi-tui/table-of-contents:
+  en: 118b0ee0431943da
+  zh: d0325bc3847325a7
+/pi-tui/use-this-package:
+  en: c56098b43e37e710
+  zh: efa0d5f9192fb4ea
+/pi-tui/local-mcp-skills-and-plugins:
+  en: 19101a6de1635c74
+  zh: 122ed5d56993414c
+/pi-tui/commands:
+  en: ea607828ab1cb5ab
+  zh: 626bbc5ddbe3dff0
+/pi-tui/connect-antigravity:
+  en: 3a4523f80ccf914c
+  zh: c313511702492b97
+/pi-tui/dev-note:
+  en: ef3997f598d43502
+  zh: c190376590571fc0
+/pi-tui/model-experience:
+  en: 215e7ba838619b7b
+  zh: 215e7ba838619b7b
+/pi-tui/model-experience/bounded-pentest-conversation:
+  en: 48aa4ff1e0690fe6
+  zh: ed079264ba41a9c8
+/pi-tui/model-experience/bounded-pentest-conversation/what-the-model-sees:
+  en: b01a34ba50394b43
+  zh: f579794a50ac8d9b
+/pi-tui/model-experience/bounded-pentest-conversation/token-effect:
+  en: c818f23866b6d6e0
+  zh: 337c8bb241b899b7
+/pi-tui/model-experience/bounded-pentest-conversation/kv-cache-effect:
+  en: 99fc4c44b6d16345
+  zh: dbd648abb097a2d3
+/pi-tui/known-limitations-and-deferred-work:
+  en: 7a128e2d82b0f691
+  zh: 05d3fc38ce288f4d
+/pi-tui/known-limitations-and-deferred-work/dev-note:
+  en: fead2555f7c30c5f
+  zh: 0c6876a3d03d37c7

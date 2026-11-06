@@ -730,6 +730,9 @@
   "packages/client/ui-trajectory/tests/views.client.spec.tsx": {
     "958ba19bf4d19e2dd44b271fa784091302bd3a2fdf291db6839fc49da543c5cf": 2
   },
+  "packages/client/ui-web-search-mode/tests/web-search-mode-control.client.spec.tsx": {
+    "0a527ea462e50009981a70f9f6ea0f64a5a08cd6cce6601b5bf3f886f1404ba5": 1
+  },
   "packages/client/ui-workflow-run/tests/workflow-run.client.spec.tsx": {
     "9f5585ad6cebba08252165f2dcc63c1e16101e0306fab754afb641b417e7789d": 1
   },
@@ -967,6 +970,23 @@
   "packages/document/office-to-pdf/tests/queue.spec.ts": {
     "bbe31b89b81048bb47c7158e78670deec5f2973286f9abc591290a8fdd851cf1": 1
   },
+  "packages/experimental/agent-team/src/journal.ts": {
+    "364930a7ddcc79316a9ffc126602f45ae56a3cecdb80484c5c8a79686f8f1057": 1
+  },
+  "packages/experimental/agent-team/tests/persistence.spec.ts": {
+    "15d7ad5bbdbd8d45c194510989abe90a9cb1064af60ba8200461f06cf47b69eb": 1,
+    "8b69c71e9aa06dbf70a289e9121e606e919c52a4c9e7127a7074d9c500cda07f": 1
+  },
+  "packages/experimental/agent-team/tests/projection-events.spec.ts": {
+    "6f067c03470eb51f8f182393c2c0ed5b4147166ec0cdcb4b37b9e17adeb5355b": 1,
+    "71ffbcca0bb71d3b595143632491d4c5d580aaf6ac384c22116e038995b2f2b5": 1,
+    "a57e2099debfbb9bb4f90170d4f9979aea6fd597e27a7e211aec606d8a9b3b06": 1,
+    "bd3a42d7bc38a7deb366d7ad1364f2ab01be2af077aae04e49b9c8a61b9e1c7d": 1
+  },
+  "packages/experimental/agent-team/tests/team.spec.ts": {
+    "15d7ad5bbdbd8d45c194510989abe90a9cb1064af60ba8200461f06cf47b69eb": 3,
+    "3ae979a4364fe22772c89133e79ea216cdb4f3163c7cb02c47eb1a5d4788e661": 1
+  },
   "packages/experimental/browser-use-runtime/src/index.ts": {
     "04bc8a44533574365dfedf563e2356458bcf95f990a00906938c977c1d683356": 1
   },
@@ -982,6 +1002,10 @@
   "packages/experimental/browser-use-stagehand-native/tests/worker.spec.ts": {
     "019c354b579e6d5cfa63e106e3b3047817fe5a37eee532abd7ab4aa80d28676a": 1,
     "4777453719b1a12ac03d7405a7cc1662ac1873b8eb0016a08ccd11f27076e803": 1
+  },
+  "packages/experimental/client-ui-agent-team/tests/browser-plugin.client.spec.ts": {
+    "22baf2573ca146a7904b9ffc8b34a43692c4e042f01f43016d85443828bc88b1": 1,
+    "87ef7d60538b938bd8b5748cf4c0a5956ecedb860826c57d9ec789daea2f0355": 5
   },
   "packages/experimental/computer-use-cua-driver-mcp/tests/composition.spec.ts": {
     "154da39139a0074bad3d13a624e5fa62d1f7ce19dc8b9c28a73af3263cd7f10e": 1
@@ -1076,6 +1100,17 @@
   "packages/experimental/inspector/tests/plugin.client.spec.ts": {
     "148509a0193d8d3c16a606a15f5145770f454c2ebc70dd0ccaa51fc1a0f43e99": 1,
     "2066ad746457f15b6737d62124c4ec81f2140fc3fa425187eac8e3b1c3b6ab0b": 8
+  },
+  "packages/experimental/pi-tui/src/core/model.ts": {
+    "971ec45a1146ab52f2fb13f75b782d5d35c0fb2ddba1fb9ccab14cc54f7291d5": 1
+  },
+  "packages/experimental/pi-tui/tests/exec-history.spec.ts": {
+    "4754249fbf551dd84d14af5b1d6a1a160da8399a2da83fcad17c8bb14e9d217e": 1,
+    "e32ff5c441d4be4389d9e4dbe4056d0ed1480d3bb64ec4cd0bfaf2140c09d6d2": 1
+  },
+  "packages/experimental/pi-tui/tests/status-bar.spec.ts": {
+    "7547148c46cebd8c8de6d58e59db849b9fa44ba4c6d5dd69206c7d39c06b4728": 2,
+    "c192579d57d3a46f6fa5a08a473c5c7f2ddbfd3480867acf4d070c599420b525": 3
   },
   "packages/experimental/ptc-runtime-python/src/index.ts": {
     "b121cee14635b00f7891217013e4682493cf96f676710be60722fdf8b862aea3": 1
@@ -1355,6 +1390,31 @@
     "063e3ecccec43fb70cf70f0265b19eb2ce3b6faa0efd8701433905a7b275cbc5": 1,
     "6fe9024d30e0d4757a348b83d246925b3f5aeaf2e79a0eff4bf12f3c9fb5826b": 2
   },
+  "packages/pentest/pentest-executor/tests/evaluation.spec.ts": {
+    "2f339f1d37ca47f11f5ca324d3aa2ba959eee74f79860a9f2f9ea7918eda8f64": 1
+  },
+  "packages/pentest/pentest-executor/tests/executor.spec.ts": {
+    "5710f4e6d9684382d538adadbb058642b05a7aa1d4d0c03d9fc67ef6daadf487": 1,
+    "a0c7289cea7618cdb5b9ffd6546854cd91532bebdf0c9054c30ab59c5d27a155": 1,
+    "f660937201ab2ce9eeeec7f827af3fa5ccf884fcc72acd24818be272e6808c57": 1
+  },
+  "packages/pentest/pentest-run/src/spec.ts": {
+    "de07da784fbcd6aa63ca9178f06d4e4af9884002e44c17fe236ad13fc43c3b5f": 1
+  },
+  "packages/pentest/recon-engine/src/index.ts": {
+    "6fe9024d30e0d4757a348b83d246925b3f5aeaf2e79a0eff4bf12f3c9fb5826b": 1
+  },
+  "packages/pentest/recon-engine/src/scanners/dns.ts": {
+    "44cfd5e37f110cca157f63f6179a88a039884bbb4d0ea53dd9ea08c1c8779cda": 1
+  },
+  "packages/pentest/recon-engine/tests/recon-engine.spec.ts": {
+    "198b248c83b655060411d60b19c3c6b1a98ab037ad5ca2384773a294f1dc5457": 1,
+    "2f9ba7cab39e480e2d6f2a83dedf2db079ddd48e71df0aa78af8247296b31bd9": 1,
+    "35e3782f520f598282f124dbacab1e01f5edd4d61b686707e8f41560bf10f1f0": 1,
+    "84befc46d769935e017b7a2bebb2fcc714d5bc80b95573add1658c9fbb2360ff": 1,
+    "afe87de81b4e1ddedefed4d5b17b9ea57b4b92abaa30c7ca3a4df2337b131c68": 1,
+    "c1c1f9750f26030947e344e08755f87020c140d2af86b2d677d045cfa757d92a": 1
+  },
   "packages/plan/plan-mode/src/index.ts": {
     "1422d291f0118635ac06f265a9018dd86dbbd4a97f76a7ed5abb5c2a42e81b53": 1
   },
@@ -1513,10 +1573,10 @@
     "5a8270cf9b1e554ae0cff6eaf7086e44c22f61a08e5f91dc7e1397eccaa726a5": 2
   },
   "packages/session/session-format-v3-to-v4/tests/attribution.spec.ts": {
-    "7705a694f19a2409a0d8bc84036a0a0144755e5f2aa8795e8ab657564927d394": 1
+    "8b1dd5f9c8c1ba446c6c7721f13b464a778cf9e9e9c7eaa092cd5bc1eeaa39a4": 1
   },
   "packages/session/session-format-v3-to-v4/tests/developer-relationships.spec.ts": {
-    "b7b0048f08f63c22d5c0a9cc512a95f7ae9bd5188181f703058deff58b0edc68": 1
+    "8b1dd5f9c8c1ba446c6c7721f13b464a778cf9e9e9c7eaa092cd5bc1eeaa39a4": 1
   },
   "packages/session/session-format-v3-to-v4/tests/fork.spec.ts": {
     "0311422ffc9c766724a844aede6e2bcb77cb52cee8d1bee59bc18634193d354f": 1
@@ -1954,6 +2014,15 @@
   },
   "packages/web/tool-web/tests/spill.spec.ts": {
     "ecf3420d023d28e1cbc687d438bb66ee49d55a4ae4cb0828dd0f59b926363903": 1
+  },
+  "packages/web/web-search-exa/tests/exa.spec.ts": {
+    "37c9617ff75d6a383f58dd63f939a88803e4ff5e1676bfe7e1c0cc340fc65014": 7,
+    "598014dcfe77101781e3c6a02709097e3b0151a335e909c44719fac08fdea433": 2
+  },
+  "packages/web/web-search-perplexity/tests/perplexity.spec.ts": {
+    "37c9617ff75d6a383f58dd63f939a88803e4ff5e1676bfe7e1c0cc340fc65014": 5,
+    "598014dcfe77101781e3c6a02709097e3b0151a335e909c44719fac08fdea433": 2,
+    "ed2fec09418bc1a78fde5097fd01d5aabf903166ed1bf480a5e38bccdd3948a6": 1
   },
   "packages/workflow/tool-workflow/tests/tool-workflow.spec.ts": {
     "061944ebda38f8da144d88cfa668e6336efc68c33441a9fe3215d8c001124526": 2

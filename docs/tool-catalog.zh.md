@@ -48,6 +48,7 @@
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message`、`wait_agent` | `ctx.tools`、`ctx.subagents`、`ctx.agents` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 共享控制工具发现并联系 subagent 树中的 Agent，中断有权控制的后代，并等待调用者收件箱中的输入。绑定提供方的 `tool-subagent` 实例提供委派工具。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令与 PTY 发送 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-tool-agent-team` | `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `ctx.subagents`, `an exact live Team member Agent` | `tool/call`, `team/task`, `tool/result` | - | 四个任务板工具共享 subagent 树的根 Session。在根 Session 开启 Team 模式，会在标准 subagent 委派和控制工具之外增加任务板指导。标准 subagent 控制工具提供必需身份，不受 Team 模式影响。 |
+| `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `experimental-team/task`, `tool/result` | - | `@deepseek-ai/dsh-experimental-agent-team` 之上的团队工具实验变体：同样的协作表面——队友、持久收件箱与共享任务板——以 experimental-team/* 事件范围持久化。部署要么挂载本包，要么挂载稳定的团队工具，绝不两者都挂。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-working-directory` | `working_directory` | `ctx.tools`, `ctx.workingDirectory` | `tool/call`, `working-directory/change`, `user context for directory changes`, `tool/result` | - | 读取或改变调用方 Session 的目录。已有 shell 和进程保留自己的目录；原始元数据和权限根目录保持不变。 |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | `create_worktree` | `ctx.tools`, `ctx.worktrees`, `a calling Agent` | `tool/call`, `Git branch and checkout`, `working-directory/change`, `tool/result` | - | 在 Web 和 Desktop 上通过变更请求与工作树组合包启用；其他 profile 可以选择独立组合包。在现有写权限下从固定的本地提交创建新分支与检出目录，再改变 Session 工作目录。离开时保留分支与检出目录。 |
@@ -2438,6 +2439,296 @@ subagent_oar 工具在为外部提供方配置的别名之间选择。本目录�
 来源：[`packages/team/tool-agent-team/src/index.ts`](../packages/team/tool-agent-team/src/index.ts)
 
 四个任务板工具共享 subagent 树的根 Session。在根 Session 开启 Team 模式，会在标准子代理委派和控制工具之外增加任务板指导。标准子代理控制工具提供必需身份，不受 Team 模式影响。
+
+<a id="deepseek-aidsh-experimental-tool-agent-team"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-agent-team`
+
+### `interrupt_agent`
+
+中断一个队友的当前回合，保留其待投递收件箱。仅 Team Lead 可用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Teammate target returned by spawn_teammate or list_agents."
+    }
+  },
+  "required": [
+    "target"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `list_agents`
+
+列出 Lead 与每个持久队友的可寻址目标及当前可用性。inactive 表示没有回合在执行，不是任务结果。provisioning 与 failed 描述成员创建状态。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `send_message`
+
+向另一个 Team 成员发送一条持久消息。运行中的目标在最近的步骤边界收到它；非活动目标会开始或恢复一个回合。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Member target returned by spawn_teammate or list_agents, including lead."
+    },
+    "message": {
+      "type": "string",
+      "description": "Self-contained message for the target."
+    }
+  },
+  "required": [
+    "target",
+    "message"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `spawn_teammate`
+
+创建一个命名的持久队友。仅 Team Lead 可调用此工具。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique lower-kebab-case teammate name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the delegated responsibility."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Complete initial task for the teammate."
+    },
+    "context": {
+      "type": "string",
+      "description": "fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.",
+      "enum": [
+        "fresh",
+        "fork"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "prompt"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_create`
+
+在共享 Team 任务板上创建一个无 owner 的 pending task。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string",
+      "description": "Concise task title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Complete task details and acceptance criteria."
+    },
+    "blocked_by": {
+      "type": "array",
+      "description": "Task ids that must complete first.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "write_scopes": {
+      "type": "array",
+      "description": "Advisory workspace-relative file or directory prefixes this task expects to modify.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "subject",
+    "description"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_get`
+
+在修改或执行共享任务前，读取其完整的最新值。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Shared task id."
+    }
+  },
+  "required": [
+    "task_id"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_list`
+
+列出共享任务，包括就绪状态、owner、revision、阻塞项与 write-scope 警告。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Optional exact status filter.",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed"
+      ]
+    },
+    "owner": {
+      "type": "string",
+      "description": "Optional member target from spawn_teammate or list_agents, matching ownerName; use unowned for tasks without an owner."
+    },
+    "ready": {
+      "type": "boolean",
+      "description": "Optional readiness filter."
+    },
+    "cursor": {
+      "type": "integer",
+      "description": "Zero-based result offset. Defaults to 0."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Number of rows, 1 through 100. Defaults to 50."
+    }
+  }
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_task_update`
+
+使用 team_task_get 或 team_task_list 返回的最新 revision 对共享任务动作做 compare-and-set。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Shared task id."
+    },
+    "expected_revision": {
+      "type": "integer",
+      "description": "Current task revision used as the CAS precondition."
+    },
+    "action": {
+      "type": "string",
+      "description": "Task transition to apply.",
+      "enum": [
+        "claim",
+        "release",
+        "edit",
+        "set_dependencies",
+        "complete",
+        "reopen",
+        "reassign",
+        "delete"
+      ]
+    },
+    "subject": {
+      "type": "string",
+      "description": "Replacement title for edit."
+    },
+    "description": {
+      "type": "string",
+      "description": "Replacement details for edit."
+    },
+    "blocked_by": {
+      "type": "array",
+      "description": "Complete blocker list for set_dependencies.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "write_scopes": {
+      "type": "array",
+      "description": "Replacement advisory write scopes for edit.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "owner": {
+      "type": "string",
+      "description": "Member target from spawn_teammate or list_agents for Lead-only reassign; omit to unassign."
+    }
+  },
+  "required": [
+    "task_id",
+    "expected_revision",
+    "action"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `wait_agent`
+
+等待本次调用开始后的下一个队友状态、收件箱或共享任务变化。它不会唤醒非活动成员；当没有其他成员在运行或创建中时立即返回 noProgress。唤醒或超时后请重新列出，而不是轮询。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "timeout_ms": {
+      "type": "integer",
+      "description": "Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000."
+    }
+  }
+}
+```
+
+来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+`@deepseek-ai/dsh-experimental-agent-team` 之上的团队工具实验变体：同样的协作表面——队友、持久收件箱与共享任务板——以 experimental-team/* 事件范围持久化。部署要么挂载本包，要么挂载稳定的团队工具，绝不两者都挂。
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

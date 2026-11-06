@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Forward-Proxy-Plugin, das jede Verbindung am Bereich misst, sie einmal auflöst und an die geprüfte Adresse bindet."
+  }
+}

@@ -34,6 +34,7 @@ The group currently has one package that owns the complete saved-machine path.
 - [Filesystem subsystem](../../docs/subsystems/filesystem.md) - the file operations that remote workspaces implement.
 - [Subprocess subsystem](../../docs/subsystems/subprocess.md) - the command and terminal operations routed through SSH.
 - [Saved SSH machine decision](../../.agents/notes/implemented/feature/2026-09-12-remote-ssh-machines.md) - trust, credential, and workspace ownership choices.
+- [Remote machines subsystem](../../docs/subsystems/remote-machines.md) - the `ctx.remoteMachines` service reference.
 
 <a id="dev-note"></a>
 ## Dev Note

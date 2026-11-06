@@ -1748,6 +1748,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'invariants',
+    summary: 'Package-owned invariant registry with global and regex-based selection.',
+    description: 'Package-owned invariant registry with global and regex-based selection.',
+    methods: [
+      {
+        signature: 'register(packageName: string, installer: InvariantInstaller): () => void',
+        description: 'Register one package\'s invariant installer. The package name is reserved even when filtering disables its checks. Enabled installers run in a child fiber; failure disposes that fiber and releases the reservation.',
+        parameters: [{ name: 'packageName', description: 'full npm package name that owns the contribution.' }, { name: 'installer', description: 'listener or startup-check installer for the child context.' }],
+        returns: 'an effect-scoped disposer for the registration.',
+      },
+    ],
+  },
+  {
     key: 'jobController',
     summary: 'Host service backing the generated `ctx.remote.job` namespace.',
     description: 'Host service backing the generated `ctx.remote.job` namespace.',
@@ -2173,6 +2186,240 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'pentestAssistance',
+    summary: 'Host plugin shared by the TUI and Web profile.',
+    description: 'Host plugin shared by the TUI and Web profile.',
+    methods: [
+      {
+        signature: 'current(): AssistanceSettings',
+        description: 'Read the current assistance settings without changing the shared namespace.',
+        parameters: [],
+        returns: 'Live values from the shared settings namespace.',
+      },
+      {
+        signature: 'install(agentCtx: Context, lease: PentestTaskLease, sessionId: SessionId): void',
+        description: 'Add accounting to a fresh executor without replacing its existing guard.',
+        parameters: [{ name: 'agentCtx', description: 'Executor-scoped context.' }, { name: 'lease', description: 'Run and target identities of this episode.' }, { name: 'sessionId', description: 'Executor session whose delegated descendants inherit the accounting.' }],
+      },
+      {
+        signature: 'async status(runId: string): Promise<{ targets: readonly TargetAssistanceState[]; review?: ProgressReviewState }>',
+        description: 'Read shared accounting and the last reviewer outcome for an existing run.',
+        parameters: [{ name: 'runId', description: 'Canonical run identity.' }],
+        returns: 'Shared target states and the bounded review ledger.',
+      },
+      {
+        signature: 'adviceFor(snapshot: PentestRunSnapshot): { episodeId: string; recommendation: string } | undefined',
+        description: 'Read advice only when it reviews the latest completed episode in this snapshot.',
+        parameters: [{ name: 'snapshot', description: 'Snapshot used to schedule the next executor.' }],
+        returns: 'Evidence-linked advice, or undefined after newer work or a failed review.',
+      },
+      {
+        signature: 'async search(runId: string, query: string, signal?: AbortSignal): Promise<AssistanceMemoryResult>',
+        description: 'Search on demand and cache only complete, source-attributed retrieval results.',
+        parameters: [{ name: 'runId', description: 'Run whose evidence may be searched.' }, { name: 'query', description: 'Literal search terms.' }, { name: 'signal', description: 'Optional cancellation.' }],
+        returns: 'Bounded Wiki and evidence passages, never raw artifacts.',
+      },
+      {
+        signature: 'reviewIfNeeded(snapshot: PentestRunSnapshot, agentOptions: AgentOptions, signal?: AbortSignal): Promise<void>',
+        description: 'Invoke a tool-restricted reviewer only after evidence stagnation and within its own quota.',
+        parameters: [{ name: 'snapshot', description: 'Canonical state already loaded by the control cycle.' }, { name: 'agentOptions', description: 'Existing Supervisor model route.' }, { name: 'signal', description: 'Parent loop cancellation.' }],
+      },
+    ],
+  },
+  {
+    key: 'pentestLoop',
+    summary: 'Owns at most one live background control loop per run and backs the generated `ctx.remote.pentestLoop` namespace.',
+    description: 'Owns at most one live background control loop per run and backs the generated `ctx.remote.pentestLoop` namespace. The loop is host-process state: after a process restart the operator restarts it, and canonical state resumes from the database.',
+    methods: [
+      {
+        signature: '@Remote create(request: CreatePentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Create one authorized penetration-test run.',
+        parameters: [{ name: 'request', description: 'Objective, mode, and scope strings captured from the operator.' }],
+        returns: 'the durable run record.',
+      },
+      {
+        signature: '@Remote async start(runId: string, request: PentestLoopStartRequest): Promise<void>',
+        description: 'Start one run\'s background control loop.',
+        parameters: [{ name: 'runId', description: 'Run to advance toward completion.' }, { name: 'request', description: 'Optional tool restriction and bounded loop limits.' }],
+      },
+      {
+        signature: '@Remote async stop(runId: string): Promise<void>',
+        description: 'Abort one run\'s live background control loop.',
+        parameters: [{ name: 'runId', description: 'Run whose loop should stop after the current cycle unwinds.' }],
+      },
+      {
+        signature: '@Remote running(): Promise<readonly string[]>',
+        description: 'List runs whose background control loop is live in this process.',
+        parameters: [],
+        returns: 'run identities with a running loop, most recent start first.',
+      },
+    ],
+  },
+  {
+    key: 'pentestModePolicy',
+    summary: 'Host-owned global mode setting and ordinary-session prompt policy.',
+    description: 'Host-owned global mode setting and ordinary-session prompt policy.',
+    methods: [
+      {
+        signature: 'apply(updates: Partial<PentestModeSettings>): void',
+        description: 'Apply one sync\'s values before the config restart lands them: the system prompt for the CURRENT turn assembles before a pre-step hook can complete an asynchronous config update, so the fresh values must be readable in the same turn synchronously. Values survive until the restarted config carries them, at which point the override and the config agree.',
+        parameters: [{ name: 'updates', description: 'the sync\'s fresh mode and prompt values.' }],
+      },
+      {
+        signature: 'current(): PentestModeSettings',
+        description: 'Read the effective settings for this turn\'s prompt assembly: the persisted config values overlaid with the overrides apply recorded, so a sync applied between the profile write and the config restart is visible immediately.',
+        parameters: [],
+        returns: 'the current mode and prompt settings with overrides applied.',
+      },
+      {
+        signature: 'policyText(mode: PentestMode): string',
+        description: 'Resolve the policy text injected for one mode: the operator override when it carries non-whitespace content, otherwise the \'-\' placeholder.',
+        parameters: [{ name: 'mode', description: 'Operating mode to resolve.' }],
+        returns: 'the effective mode policy text.',
+      },
+    ],
+  },
+  {
+    key: 'pentestRunController',
+    summary: 'Host service backing the generated `ctx.remote.pentestRuns` namespace.',
+    description: 'Host service backing the generated `ctx.remote.pentestRuns` namespace.',
+    methods: [
+      {
+        signature: '@Remote list(): Promise<readonly PentestRunRecord[]>',
+        description: 'List the durable penetration-test runs for the operator surface.',
+        parameters: [],
+        returns: 'every canonical penetration-test run visible to this host.',
+      },
+      {
+        signature: '@Remote snapshot(runId: string): Promise<PentestRunSnapshot>',
+        description: 'Project one durable run for the operator surface.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }],
+        returns: 'the complete canonical run projection.',
+      },
+      {
+        signature: '@Remote loadArtifact(runId: string, artifactId: string): Promise<PentestArtifactContent>',
+        description: 'Read one retained raw artifact back through the run\'s spill backend.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }, { name: 'artifactId', description: 'canonical artifact identity from the run snapshot.' }],
+        returns: 'the artifact metadata plus its verbatim content.',
+      },
+      {
+        signature: '@Remote control(runId: string, request: ControlPentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Apply an operator-owned run lifecycle transition.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }, { name: 'request', description: 'requested run lifecycle transition.' }],
+        returns: 'the updated canonical run record.',
+      },
+      {
+        signature: '@Remote controlTask(taskId: string, request: ControlPentestTaskRequest): Promise<PentestTaskRecord>',
+        description: 'Apply an operator-owned task action.',
+        parameters: [{ name: 'taskId', description: 'task identity from the Remote caller.' }, { name: 'request', description: 'requested operator task action.' }],
+        returns: 'the updated canonical task record.',
+      },
+      {
+        signature: '@Remote replaceScope(runId: string, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>',
+        description: 'Replace a run\'s operator-approved target scope.',
+        parameters: [{ name: 'runId', description: 'run identity from the Remote caller.' }, { name: 'request', description: 'complete replacement authorization scope.' }],
+        returns: 'the updated canonical run record.',
+      },
+    ],
+  },
+  {
+    key: 'pentestRuns',
+    summary: 'Owns canonical penetration-test run state outside Session history.',
+    description: 'Owns canonical penetration-test run state outside Session history.',
+    methods: [
+      {
+        signature: 'createRun(request: CreatePentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Create one active run. An empty authorized list means the run is unrestricted; listed targets still bound it, and exclusions always win.',
+        parameters: [{ name: 'request', description: 'Objective and optional scope strings captured from the operator.' }],
+        returns: 'the durable run record.',
+      },
+      {
+        signature: 'createTask(runId: PentestRunId, request: CreatePentestTaskRequest): Promise<PentestTaskRecord>',
+        description: 'Add one bounded task to an existing active run.',
+        parameters: [{ name: 'runId', description: 'Owning run identity.' }, { name: 'request', description: 'Objective, scheduling values, and prerequisite tasks.' }],
+        returns: 'the durable task record.',
+      },
+      {
+        signature: 'leaseTask(taskId: PentestTaskId, request: LeasePentestTaskRequest): Promise<PentestTaskLease>',
+        description: 'Lease one runnable task while no other task is active in its run.',
+        parameters: [{ name: 'taskId', description: 'Task selected by the supervisor.' }, { name: 'request', description: 'Explicit deadline for this attempt.' }],
+        returns: 'The bounded packet for a fresh executor.',
+      },
+      {
+        signature: 'startTask(leaseId: PentestLeaseId): Promise<PentestTaskRecord>',
+        description: 'Mark a leased attempt as running.',
+        parameters: [{ name: 'leaseId', description: 'Current lease identity.' }],
+        returns: 'The updated task.',
+      },
+      {
+        signature: 'completeTask(leaseId: PentestLeaseId): Promise<PentestTaskRecord>',
+        description: 'Complete a running task attempt.',
+        parameters: [{ name: 'leaseId', description: 'Current lease identity.' }],
+        returns: 'The terminal task record.',
+      },
+      {
+        signature: 'failTask(leaseId: PentestLeaseId, error: string): Promise<PentestTaskRecord>',
+        description: 'Fail one leased or running attempt and apply its retry limit.',
+        parameters: [{ name: 'leaseId', description: 'Current lease identity.' }, { name: 'error', description: 'Failure diagnostic retained for the supervisor.' }],
+        returns: 'A ready retry or terminal failed task.',
+      },
+      {
+        signature: 'recoverExpiredLeases(now: string = new Date().toISOString()): Promise<number>',
+        description: 'Recover expired active attempts so a restarted controller can continue.',
+        parameters: [{ name: 'now', description: 'timestamp used as the recovery cutoff.' }],
+        returns: 'the number of task leases recovered.',
+      },
+      {
+        signature: 'completeRun(runId: PentestRunId): Promise<PentestRunRecord>',
+        description: 'Mark a run complete only after every task is terminal and canonical evidence exists.',
+        parameters: [{ name: 'runId', description: 'run to complete.' }],
+        returns: 'the completed canonical run record.',
+      },
+      {
+        signature: 'controlRun(runId: PentestRunId, request: ControlPentestRunRequest): Promise<PentestRunRecord>',
+        description: 'Apply an operator-owned run lifecycle transition.',
+        parameters: [{ name: 'runId', description: 'run to control.' }, { name: 'request', description: 'requested lifecycle transition.' }],
+        returns: 'the updated canonical run record.',
+      },
+      {
+        signature: 'controlTask(taskId: PentestTaskId, request: ControlPentestTaskRequest): Promise<PentestTaskRecord>',
+        description: 'Resolve a blocked task or change one task before it starts.',
+        parameters: [{ name: 'taskId', description: 'task to control.' }, { name: 'request', description: 'requested operator action.' }],
+        returns: 'the updated canonical task record.',
+      },
+      {
+        signature: 'replaceScope(runId: PentestRunId, request: ReplacePentestScopeRequest): Promise<PentestRunRecord>',
+        description: 'Replace operator scope while preserving every still-open task target.',
+        parameters: [{ name: 'runId', description: 'run whose authorization scope changes.' }, { name: 'request', description: 'replacement authorized and excluded targets.' }],
+        returns: 'the updated canonical run record.',
+      },
+      {
+        signature: 'commitEpisode( leaseId: PentestLeaseId, request: CommitPentestEpisodeRequest, ): Promise<CommittedPentestEpisode>',
+        description: 'Compile one fresh executor episode into canonical records and release its task lease.',
+        parameters: [{ name: 'leaseId', description: 'Running lease that produced the episode.' }, { name: 'request', description: 'Structured result and secret-free tool traces.' }],
+        returns: 'every record written by the commit.',
+      },
+      {
+        signature: 'loadArtifact(runId: PentestRunId, artifactId: PentestArtifactId): Promise<PentestArtifactContent>',
+        description: 'Read one run\'s retained artifact back through the configured spill backend. The owner scope is the producing executor episode\'s session, so a locator is resolvable only inside that session\'s storage; an expired or swept artifact rejects without touching canonical state.',
+        parameters: [{ name: 'runId', description: 'Run that owns the artifact.' }, { name: 'artifactId', description: 'Canonical artifact identity from the run snapshot.' }],
+        returns: 'the artifact metadata plus its verbatim content.',
+      },
+      {
+        signature: 'snapshot(runId: PentestRunId): Promise<PentestRunSnapshot>',
+        description: 'Build a complete point-in-time run projection after preceding writes settle.',
+        parameters: [{ name: 'runId', description: 'Run to project.' }],
+        returns: 'canonical records belonging to the run.',
+      },
+      {
+        signature: 'listRuns(): Promise<readonly PentestRunRecord[]>',
+        description: 'List canonical runs with the most recently changed run first.',
+        parameters: [],
+        returns: 'every canonical run ordered by most recent update.',
+      },
+    ],
+  },
+  {
     key: 'permissionPresets',
     summary: 'Owns the deployment\'s configured permission presets, the fixed Auto integration hook, and their write path.',
     description: 'Owns the deployment\'s configured permission presets, the fixed Auto integration hook, and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
@@ -2502,6 +2749,73 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'reconEngineOptions',
+    summary: 'Deployment-varying limits and scope the engine runs under.',
+    description: 'Deployment-varying limits and scope the engine runs under.',
+    methods: [
+      {
+        signature: 'readonly dynamicTools?: readonly DynamicReconToolName[]',
+        description: 'Operator-selected tools exposed to AI Dynamic Recon.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxPages: number',
+        description: 'Maximum pages the deep crawl visits.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxDepth: number',
+        description: 'Maximum link depth the deep crawl follows.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly crawlConcurrency: number',
+        description: 'Concurrent requests inside the deep crawl.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxSourceMaps: number',
+        description: 'Maximum source maps downloaded in the deep profile.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxApiEndpoints: number',
+        description: 'Maximum endpoints inventoried and probed in the deep profile.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxHosts: number',
+        description: 'Maximum in-scope hosts resolved and probed in the deep profile.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxTotalRequests: number',
+        description: 'Hard cap on total HTTP requests per run (deep profile).',
+        parameters: [],
+      },
+      {
+        signature: 'readonly maxRunDurationMs: number',
+        description: 'Hard wall-clock budget per run in milliseconds.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly fingerprintOverlayPath?: string',
+        description: 'Path to an operator JSON overlay of extra fingerprint entries.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly signal?: AbortSignal',
+        description: 'Cooperative cancel signal observed between requests.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly externalTools?: ExternalReconRunner',
+        description: 'Optional CLI-backed expansion executed in the selected local or SSH workspace.',
+        parameters: [],
+      },
+    ],
+  },
+  {
     key: 'remoteAccess',
     summary: 'Registry of access policies, the Gateway\'s access decisions, list filtering, and the per-Peer access snapshot.',
     description: 'Registry of access policies, the Gateway\'s access decisions, list filtering, and the per-Peer access snapshot. Every composition that mounts the Gateway mounts this service too.',
@@ -2541,6 +2855,54 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Stream the calling Peer\'s access snapshot: one baseline, then `upsert` and `remove` frames after each `invalidate()` and each policy registration or removal that changes a grant. The owner receives only `{ owner: true }`. The generation ends when `signal` aborts or this service unloads, so a reloaded service starts every reader from a fresh baseline.',
         parameters: [{ name: 'signal', description: 'generation cancellation.' }],
         returns: 'the access frames of one generation.',
+      },
+    ],
+  },
+  {
+    key: 'remoteMachines',
+    summary: 'Owns saved SSH profiles, fingerprint trust, and shared remote transports.',
+    description: 'Owns saved SSH profiles, fingerprint trust, and shared remote transports.',
+    methods: [
+      {
+        signature: 'readonly connections: SshConnectionPool',
+        description: 'Fingerprint-verified connection pool shared by filesystem and subprocess providers.',
+        parameters: [],
+      },
+      {
+        signature: 'profile(id: string): RemoteMachineProfile | undefined',
+        description: 'Read a Host-only profile with any lifetime-only password applied.',
+        parameters: [{ name: 'id', description: 'Saved machine identifier.' }],
+        returns: 'the complete profile, or undefined when it is absent.',
+      },
+      {
+        signature: '@Remote(\'list\') list(): RemoteMachinesValue',
+        description: 'List every saved machine without credential fields.',
+        parameters: [],
+        returns: 'redacted views for every saved machine.',
+      },
+      {
+        signature: '@Remote(\'save\') async save(request: RemoteMachineSaveRequest): Promise<RemoteMachineValue>',
+        description: 'Create or update one saved profile.',
+        parameters: [{ name: 'request', description: 'Validated profile fields and optional secrets.' }],
+        returns: 'the redacted saved profile.',
+      },
+      {
+        signature: '@Remote(\'deleteMachine\') async remove(request: RemoteMachineIdRequest): Promise<RemoteMachineRemoveValue>',
+        description: 'Delete a saved profile that has no registered workspace.\n\nThe wire name avoids the client namespace service\'s reserved `remove` bookkeeping member, which no remote method may share (`remoteMachines/remove` breaks client mounting).',
+        parameters: [{ name: 'request', description: 'Saved machine identifier.' }],
+        returns: 'confirmation after settings and cached credentials are cleared.',
+      },
+      {
+        signature: '@Remote(\'probe\') async probe(request: RemoteMachineProbeRequest): Promise<RemoteMachineProbeValue>',
+        description: 'Observe an SSH host key and platform without trusting a new key.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier and optional lifetime-only password.' }],
+        returns: 'the observed fingerprint and remote platform details.',
+      },
+      {
+        signature: '@Remote(\'trust\') async trust(request: RemoteMachineTrustRequest): Promise<RemoteMachineValue>',
+        description: 'Re-probe and save one exact SSH host fingerprint.',
+        parameters: [{ name: 'request', description: 'Saved machine identifier and observed fingerprint.' }],
+        returns: 'the updated redacted profile.',
       },
     ],
   },
@@ -2673,6 +3035,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Update or delete one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nAn update applies every patch field in one write and recomputes the next occurrence when the rule changes or the task resumes. A supplied `expectedUpdatedAt` that differs from the stored value returns `schedule_conflict`.',
         parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
+      },
+    ],
+  },
+  {
+    key: 'scopeProxy',
+    summary: 'The local forward proxy.',
+    description: 'The local forward proxy. Mounted through `ctx.plugin(ScopeProxy, config)`; `ctx.scopeProxy.url` is the `http://host:port` URL to point `HTTP_PROXY`/`HTTPS_PROXY` at. Disposing the owning fiber stops the listener and destroys every open tunnel.',
+    methods: [
+      {
+        signature: 'whenReady(): Promise<void>',
+        description: 'Resolves once the listener is bound; rejects if the port could not be taken.',
+        parameters: [],
+      },
+      {
+        signature: 'stop(): void',
+        description: 'Stop the listener and destroy every open connection. Idempotent.',
+        parameters: [],
       },
     ],
   },
@@ -3838,6 +4217,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the exact Cordis effect disposer.',
       },
       {
+        signature: 'suppressSections(options?: { except?: readonly string[] | (( scopedNames: readonly string[], context: AssembleContext, sectionNames: readonly string[], ) => readonly string[] | undefined) globalOnly?: boolean }): () => void',
+        description: 'Suppress registered prompt sections in the calling context\'s scope: every assembly keeps only the allowlisted sections, while the services that own or enforce those sections stay mounted. Multiple suppressors remain independently disposable; a section stays visible unless every suppressor allows it.',
+        parameters: [{ name: 'options', description: '`except` names the sections that remain visible, as a static list or a provider re-evaluated at every assembly for live toggles. The provider receives effective scoped names, the per-assembly context, and all effective section names, in that order. An undefined provider result disables suppression; an empty list permits no gated sections.' }],
+        returns: 'the exact Cordis effect disposer.',
+      },
+      {
         signature: 'tools(provider: (context: AssembleContext) => ToolProviderResult): () => void',
         description: 'Register a tool-schema provider in the calling context\'s scope. Global and matching scoped providers both contribute; returning the reserved TOOL_ORDER_REST name makes assembly fail.',
         parameters: [{ name: 'provider', description: 'evaluated for each assembly with its context.' }],
@@ -4374,6 +4759,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Start every currently matching rule and return before any callback settles.',
         parameters: [{ name: 'delivery', description: 'authenticated provider data; snapshotted before dispatch.' }],
         throws: ['synchronously when the runtime is closing or the delivery is malformed.'],
+      },
+    ],
+  },
+  {
+    key: 'webSearchPolicy',
+    summary: 'Own the global setting read by every preset-scoped tool-web instance.',
+    description: 'Own the global setting read by every preset-scoped tool-web instance.',
+    methods: [
+      {
+        signature: 'current(): WebSearchPolicySettings',
+        description: 'Read the setting at request time so changes apply without a restart.',
+        parameters: [],
+        returns: 'the current global web-search policy.',
       },
     ],
   },
@@ -5672,6 +6070,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n    interpolate?: boolean;\n}',
   },
   {
+    name: 'AssistanceMemoryHit',
+    declaration: 'export interface AssistanceMemoryHit {\n    readonly source: \'wiki\' | \'evidence\';\n    readonly reference: string;\n    readonly summary: string;\n    readonly runId?: string;\n    readonly taskId?: string;\n    readonly target?: string;\n    readonly createdAt?: string;\n}',
+  },
+  {
+    name: 'AssistanceMemoryResult',
+    declaration: 'export interface AssistanceMemoryResult {\n    readonly hits: readonly AssistanceMemoryHit[];\n    readonly truncated: boolean;\n}',
+  },
+  {
+    name: 'AssistanceSettings',
+    declaration: 'export interface AssistanceSettings {\n    repeatLimit: number;\n    burstLimit: number;\n    burstWindowMs: number;\n    reviewAfterEpisodes: number;\n    reviewCooldownMs: number;\n    maxReviewsPerRun: number;\n    reviewMaxTokens: number;\n    reviewTimeoutMs: number;\n    wikiRoots: string[];\n    memoryMaxFiles: number;\n    memoryMaxFileBytes: number;\n    memoryMaxResults: number;\n    memoryMaxOutputBytes: number;\n    memoryCacheTtlMs: number;\n}',
+  },
+  {
     name: 'AssistantMessage',
     declaration: 'export interface AssistantMessage extends MessageBase {\n    readonly role: \'assistant\';\n    readonly source: ModelMessageSource;\n}',
   },
@@ -6140,10 +6550,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CreateShareRequest {\n    readonly sessionId: string;\n    readonly sessionTitle?: string;\n    readonly accessMode?: \'open\' | \'selected\';\n    readonly ttlMinutes?: number;\n    readonly allowedSubjectIds?: readonly string[];\n    readonly allowsFork?: boolean;\n    readonly sessionMode?: \'view\' | \'write\';\n}',
   },
   {
-    name: 'CreateTeamTaskRequest',
-    declaration: 'export interface CreateTeamTaskRequest {\n    readonly subject: string;\n    readonly description: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n}',
-  },
-  {
     name: 'CreateWorktreePhase',
     declaration: 'export type CreateWorktreePhase = \'prepare\' | \'checkout\';',
   },
@@ -6344,6 +6750,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DynamicCordisRunRequest {\n    requestId: ApprovalRequestId;\n    agentId: SessionId;\n    pluginId: CordisDynamicPluginId;\n    packageId: CordisDynamicPackageId;\n    mode: CordisDynamicRunMode;\n    name: string;\n    purpose: string;\n    requiresApproval: boolean;\n}',
   },
   {
+    name: 'DynamicReconToolName',
+    declaration: 'export type DynamicReconToolName = typeof DYNAMIC_RECON_TOOL_NAMES[number];',
+  },
+  {
     name: 'EditGoalRequest',
     declaration: 'export interface EditGoalRequest {\n    readonly objective?: string;\n    readonly maxGoalRounds?: number;\n}',
   },
@@ -6376,6 +6786,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EveryScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'every\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly everySeconds: number;\n    readonly scheduledAt: string;\n}',
   },
   {
+    name: 'ExternalReconInput',
+    declaration: 'export interface ExternalReconInput {\n    readonly host: string;\n    readonly origin: string;\n    readonly cwd: string;\n    readonly runId: string;\n    readonly deadline: number;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'ExternalReconResult',
+    declaration: 'export interface ExternalReconResult {\n    readonly services: readonly ReconService[];\n    readonly hosts: readonly ReconHostObservation[];\n    readonly findings: readonly ReconFinding[];\n    readonly warnings: readonly ReconWarning[];\n    readonly evidence: readonly ExternalToolEvidence[];\n    readonly ports_probed: number;\n}',
+  },
+  {
+    name: 'ExternalReconRunner',
+    declaration: 'export type ExternalReconRunner = (input: ExternalReconInput) => Promise<ExternalReconResult>;',
+  },
+  {
+    name: 'ExternalToolEvidence',
+    declaration: 'export interface ExternalToolEvidence {\n    readonly name: \'nmap\' | \'subfinder\' | \'nuclei\';\n    readonly argv: readonly string[];\n    readonly exit_code: number | null;\n    readonly stdout: string;\n    readonly stderr: string;\n    readonly truncated: boolean;\n}',
+  },
+  {
     name: 'FeedbackCategory',
     declaration: 'export type FeedbackCategory = \'task-result\' | \'instruction-following\' | \'product-interaction\' | \'service-stability\' | \'resource-cost\' | \'security-privacy-permission\' | \'other\';',
   },
@@ -6390,10 +6816,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FileBlock',
     declaration: 'export interface FileBlock {\n    type: \'file\';\n    attachment: FileAttachmentRef;\n}',
-  },
-  {
-    name: 'FileDiff',
-    declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
   },
   {
     name: 'FileLocation',
@@ -6712,10 +7134,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
   },
   {
-    name: 'ImageAttachmentRef',
-    declaration: 'export interface ImageAttachmentRef {\n    attachmentId: AttachmentId;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    name?: string;\n    originalDimensions?: {\n        width: number;\n        height: number;\n    };\n}',
-  },
-  {
     name: 'ImageBlock',
     declaration: 'export interface ImageBlock {\n    type: \'image\';\n    attachment: ImageAttachmentRef;\n    offloaded?: true;\n}',
   },
@@ -6774,6 +7192,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'InstallSpecKind',
     declaration: 'export type InstallSpecKind = \'registry\' | \'path\' | \'git\' | \'tarball\';',
+  },
+  {
+    name: 'InvariantFailure',
+    declaration: 'export type InvariantFailure = (message: string) => never;',
+  },
+  {
+    name: 'InvariantInstaller',
+    declaration: 'export interface InvariantInstaller {\n    (ctx: Context, fail: InvariantFailure): void | Promise<void>;\n    readonly inject?: Inject;\n}',
   },
   {
     name: 'InvocationDescriptor',
@@ -7520,6 +7946,42 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PendingRemoteEventInfo {\n    readonly event: string;\n    readonly agentId: RemoteEventAgentId;\n}',
   },
   {
+    name: 'PentestArtifactId',
+    declaration: 'export type PentestArtifactId = Branded<\'PentestArtifactId\'>;',
+  },
+  {
+    name: 'PentestLeaseId',
+    declaration: 'export type PentestLeaseId = Branded<\'PentestLeaseId\'>;',
+  },
+  {
+    name: 'PentestLoopStartRequest',
+    declaration: 'export interface PentestLoopStartRequest {\n    readonly allowedTools?: readonly string[];\n    readonly leaseMs?: number;\n    readonly maxCycles?: number;\n}',
+  },
+  {
+    name: 'PentestMode',
+    declaration: 'export type PentestMode = typeof PENTEST_MODES[number];',
+  },
+  {
+    name: 'PentestModeSettings',
+    declaration: 'export interface PentestModeSettings {\n    readonly mode: PentestMode;\n    readonly bluePrompt: string;\n    readonly redPrompt: string;\n    readonly blackPrompt: string;\n    readonly deadPrompt: string;\n    readonly suppressSections: boolean;\n}',
+  },
+  {
+    name: 'PentestRunId',
+    declaration: 'export type PentestRunId = Branded<\'PentestRunId\'>;',
+  },
+  {
+    name: 'PentestRunRecord',
+    declaration: 'export type PentestRunRecord = z.infer<typeof pentestRunRecordSchema>;',
+  },
+  {
+    name: 'PentestTaskId',
+    declaration: 'export type PentestTaskId = Branded<\'PentestTaskId\'>;',
+  },
+  {
+    name: 'PentestTaskRecord',
+    declaration: 'export type PentestTaskRecord = z.infer<typeof pentestTaskRecordSchema>;',
+  },
+  {
     name: 'PermissionCatalog',
     declaration: 'export interface PermissionCatalog {\n    options: PresetOption[];\n    defaultOptions: PresetOption[];\n    defaultPreset: string;\n}',
   },
@@ -7712,6 +8174,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\';\n}',
   },
   {
+    name: 'ProgressReviewState',
+    declaration: 'export type ProgressReviewState = z.infer<typeof reviewState>;',
+  },
+  {
     name: 'ProjectionChangeListener',
     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: SessionSeq) => void;',
   },
@@ -7738,10 +8204,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionKeySelection',
     declaration: 'export type ProjectionKeySelection = readonly Extract<keyof SessionProjectionMap, string>[] | ReadonlySet<Extract<keyof SessionProjectionMap, string>>;',
-  },
-  {
-    name: 'ProjectionSnapshot',
-    declaration: 'export interface ProjectionSnapshot {\n    asOfSeq: SessionSeqCursor;\n    values: Partial<SessionProjectionMap>;\n}',
   },
   {
     name: 'PromptAssembly',
@@ -7868,6 +8330,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RecommendationDetails = {\n    readonly status: \'available\';\n    readonly title: LocalizedText;\n    readonly description: LocalizedText;\n    readonly enabled: boolean;\n} | {\n    readonly status: \'refused\';\n    readonly reason: \'unknown\' | \'unavailable\' | \'not-live-root\' | \'closing\';\n};',
   },
   {
+    name: 'ReconFinding',
+    declaration: 'export interface ReconFinding {\n    readonly type: string;\n    readonly severity: \'info\' | \'low\' | \'medium\' | \'high\';\n    readonly name: string;\n    readonly detail: string;\n    readonly cwe_ids?: readonly string[];\n    readonly evidence_ref: string;\n}',
+  },
+  {
+    name: 'ReconHostObservation',
+    declaration: 'export interface ReconHostObservation {\n    readonly host: string;\n    readonly source: \'ct\' | \'san\' | \'link\' | \'spec\' | \'subfinder\';\n    readonly ips: readonly string[];\n    readonly probed: boolean;\n    readonly status?: number;\n}',
+  },
+  {
+    name: 'ReconService',
+    declaration: 'export interface ReconService {\n    readonly port: number;\n    readonly status: \'open\';\n    readonly source?: \'builtin\' | \'nmap\';\n    readonly service?: string;\n    readonly product?: string;\n    readonly version?: string;\n    readonly banner_technology?: string;\n    readonly evidence_ref?: string;\n}',
+  },
+  {
+    name: 'ReconWarning',
+    declaration: 'export interface ReconWarning {\n    readonly module: string;\n    readonly reason: string;\n    readonly target?: string;\n    readonly severity: \'warning\' | \'error\';\n}',
+  },
+  {
     name: 'RecurringScheduleRecord',
     declaration: 'export type RecurringScheduleRecord = EveryScheduleRecord | DailyScheduleRecord | WeeklyScheduleRecord | CronScheduleRecord | RRuleScheduleRecord;',
   },
@@ -7970,6 +8448,50 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RemoteEventHostInfo',
     declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
+  },
+  {
+    name: 'RemoteMachineAuth',
+    declaration: 'export type RemoteMachineAuth = \'agent\' | \'password\' | \'password-prompt\' | \'private-key\';',
+  },
+  {
+    name: 'RemoteMachineIdRequest',
+    declaration: 'export interface RemoteMachineIdRequest {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'RemoteMachineProbeRequest',
+    declaration: 'export interface RemoteMachineProbeRequest extends RemoteMachineIdRequest {\n    readonly password?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineProbeValue',
+    declaration: 'export interface RemoteMachineProbeValue {\n    readonly fingerprint: string;\n    readonly trusted: boolean;\n    readonly home?: string;\n    readonly platform?: \'linux\' | \'darwin\' | \'windows\' | \'unknown\';\n}',
+  },
+  {
+    name: 'RemoteMachineProfile',
+    declaration: 'export interface RemoteMachineProfile {\n    readonly id: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly password?: string;\n    readonly privateKey?: string;\n    readonly passphrase?: string;\n    readonly fingerprint?: string;\n}',
+  },
+  {
+    name: 'RemoteMachineRemoveValue',
+    declaration: 'export interface RemoteMachineRemoveValue {\n    readonly removed: true;\n}',
+  },
+  {
+    name: 'RemoteMachineSaveRequest',
+    declaration: 'export interface RemoteMachineSaveRequest {\n    readonly id?: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port?: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly password?: string;\n    readonly privateKey?: string;\n    readonly passphrase?: string;\n}',
+  },
+  {
+    name: 'RemoteMachinesValue',
+    declaration: 'export interface RemoteMachinesValue {\n    readonly machines: readonly RemoteMachineView[];\n}',
+  },
+  {
+    name: 'RemoteMachineTrustRequest',
+    declaration: 'export interface RemoteMachineTrustRequest {\n    readonly id: string;\n    readonly fingerprint: string;\n}',
+  },
+  {
+    name: 'RemoteMachineValue',
+    declaration: 'export interface RemoteMachineValue {\n    readonly machine: RemoteMachineView;\n}',
+  },
+  {
+    name: 'RemoteMachineView',
+    declaration: 'export interface RemoteMachineView {\n    readonly id: string;\n    readonly name: string;\n    readonly host: string;\n    readonly port: number;\n    readonly username: string;\n    readonly auth: RemoteMachineAuth;\n    readonly defaultPath?: string;\n    readonly fingerprint?: string;\n    readonly hasPassword: boolean;\n    readonly hasPrivateKey: boolean;\n    readonly hasPassphrase: boolean;\n}',
   },
   {
     name: 'RemoteStream',
@@ -8644,10 +9166,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SessionProjectionFrame = {\n    readonly type: \'ready\';\n} | SessionProjectionChange;',
   },
   {
-    name: 'SessionProjectionHints',
-    declaration: 'export interface SessionProjectionHints {\n    readonly kind: \'cached\' | \'sequenced\';\n    readonly asOfSeq: number;\n    readonly values: Partial<SessionProjectionSummaryValues>;\n}',
-  },
-  {
     name: 'SessionProjectionMap',
     declaration: 'export interface SessionProjectionMap {\n}',
   },
@@ -8658,14 +9176,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionProjectionSummaryExcluded',
     declaration: 'export type SessionProjectionSummaryExcluded<T> = T & {\n    readonly [sessionProjectionSummaryExcluded]: true;\n};',
-  },
-  {
-    name: 'SessionProjectionSummaryExcludedKey',
-    declaration: 'export type SessionProjectionSummaryExcludedKey = {\n    [K in keyof SessionProjectionMap]: NonNullable<SessionProjectionMap[K]> extends SessionProjectionSummaryExcluded<unknown> ? K : never;\n}[keyof SessionProjectionMap];',
-  },
-  {
-    name: 'SessionProjectionSummaryValues',
-    declaration: 'export type SessionProjectionSummaryValues = Omit<SessionProjectionViewValues, SessionProjectionSummaryExcludedKey>;',
   },
   {
     name: 'SessionProjectionsValue',
@@ -8686,10 +9196,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionProjectionViewValue',
     declaration: 'export type SessionProjectionViewValue<T> = T extends SessionProjectionSummaryExcluded<infer Value> ? Value : T;',
-  },
-  {
-    name: 'SessionProjectionViewValues',
-    declaration: 'export type SessionProjectionViewValues = {\n    [K in keyof SessionProjectionMap]: SessionProjectionViewValue<SessionProjectionMap[K]>;\n};',
   },
   {
     name: 'SessionPromptRequest',
@@ -8806,10 +9312,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionStorageMetadata',
     declaration: 'export interface SessionStorageMetadata {\n    readonly meta: SessionHeader;\n    readonly inheritedEventCount: SessionLogOffset;\n}',
-  },
-  {
-    name: 'SessionSummary',
-    declaration: 'export interface SessionSummary {\n    readonly agentAvailable: boolean;\n    readonly formatStatus?: \'current\' | \'migration-required\';\n    readonly sessionId: SessionId;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly blank: boolean;\n    readonly parentSessionId?: SessionId;\n    readonly origin?: \'subagent\';\n    readonly cwd?: string;\n    readonly projections?: SessionProjectionHints;\n}',
   },
   {
     name: 'SessionSurface',
@@ -9188,6 +9690,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SpillSource = {\n    kind: \'tool\';\n    toolName: string;\n    callId: ToolCallId;\n    label: string;\n} | {\n    kind: \'session-reference\';\n    sessionId: SessionId;\n    label: string;\n};',
   },
   {
+    name: 'SshConnectionPool',
+    declaration: 'export class SshConnectionPool {\n    constructor(private readonly profileOf: (id: string) => RemoteMachineProfile | undefined);\n    async probe(id: string): Promise<RemoteMachineProbeValue>;\n    async client(id: string): Promise<Client>;\n    async sftp(id: string): Promise<SFTPWrapper>;\n    async exec(id: string, command: string, options: object = {}): Promise<ClientChannel>;\n    invalidate(id?: string): void;\n}',
+  },
+  {
     name: 'SshStreamEndpoint',
     declaration: 'export type SshStreamEndpoint = z.infer<typeof streamEndpointSchema>;',
   },
@@ -9405,7 +9911,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SystemPrompt',
-    declaration: 'export class SystemPrompt extends Service {\n    static Config: z<Config>;\n    constructor(ctx: Context, config: Config);\n    section(section: PromptSection): () => void;\n    getSectionOrder(name: PromptSectionOrderName): number;\n    getContextOrder(name: PromptContextOrderName): number;\n    context(context: PromptContext): () => void;\n    suppressRuntimeContext(): () => void;\n    tools(provider: (context: AssembleContext) => ToolProviderResult): () => void;\n    variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void;\n    refreshContext(assembly: PromptAssembly, context: AssembleContext = {}): PromptAssembly;\n    async assemble(context: AssembleContext = {}): Promise<PromptAssembly>;\n}',
+    declaration: 'export class SystemPrompt extends Service {\n    static Config: z<Config>;\n    constructor(ctx: Context, config: Config);\n    section(section: PromptSection): () => void;\n    getSectionOrder(name: PromptSectionOrderName): number;\n    getContextOrder(name: PromptContextOrderName): number;\n    context(context: PromptContext): () => void;\n    suppressRuntimeContext(): () => void;\n    suppressSections(options?: {\n        except?: readonly string[] | ((scopedNames: readonly string[], context: AssembleContext, sectionNames: readonly string[]) => readonly string[] | undefined);\n        globalOnly?: boolean;\n    }): () => void;\n    tools(provider: (context: AssembleContext) => ToolProviderResult): () => void;\n    variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void;\n    refreshContext(assembly: PromptAssembly, context: AssembleContext = {}): PromptAssembly;\n    async assemble(context: AssembleContext = {}): Promise<PromptAssembly>;\n}',
   },
   {
     name: 'SystemPromptMessageSource',
@@ -9424,20 +9930,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
   },
   {
-    name: 'TeamTaskAction',
-    declaration: 'export type TeamTaskAction = \'claim\' | \'release\' | \'edit\' | \'set_dependencies\' | \'complete\' | \'reopen\' | \'reassign\' | \'delete\';',
-  },
-  {
-    name: 'TeamTaskId',
-    declaration: 'export type TeamTaskId = Branded<\'TeamTaskId\'>;',
-  },
-  {
-    name: 'TeamTaskStatus',
-    declaration: 'export type TeamTaskStatus = \'pending\' | \'in_progress\' | \'completed\' | \'deleted\';',
-  },
-  {
-    name: 'TeamTaskView',
-    declaration: 'export interface TeamTaskView {\n    readonly id: TeamTaskId;\n    readonly revision: number;\n    readonly subject: string;\n    readonly description: string;\n    readonly status: TeamTaskStatus;\n    readonly blockedBy: TeamTaskId[];\n    readonly writeScopes: string[];\n    readonly ownerId?: SessionId;\n    readonly ownerName?: string;\n    readonly ready: boolean;\n    readonly writeScopeWarnings: string[];\n}',
+    name: 'TargetAssistanceState',
+    declaration: 'export type TargetAssistanceState = z.infer<typeof targetState>;',
   },
   {
     name: 'TerminalBackend',
@@ -9952,10 +10446,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UpdateSharePermissionsRequest {\n    readonly shareId: string;\n    readonly sessionMode?: \'view\' | \'write\';\n    readonly allowsFork?: boolean;\n    readonly ttlMinutes?: number | null;\n}',
   },
   {
-    name: 'UpdateTeamTaskRequest',
-    declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: SessionId;\n}',
-  },
-  {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends MessageBase {\n    readonly role: \'user\';\n}',
   },
@@ -10070,6 +10560,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebRouteKind',
     declaration: 'export type WebRouteKind = \'exact\' | \'prefix\';',
+  },
+  {
+    name: 'WebSearchPolicySettings',
+    declaration: 'export interface WebSearchPolicySettings {\n    always: boolean;\n}',
   },
   {
     name: 'WebSearchProvider',

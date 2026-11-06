@@ -265,7 +265,12 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/util/native-command': { kind: 'none', reason: 'The host-side subprocess runner registers nothing model-facing.' },
   'packages/web/web': { kind: 'indirect', reason: 'The provider registry delegates model rendering to dsh-tool-web.' },
   'packages/web/web-fetch-http': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
+  'packages/web/web-search-exa': { kind: 'indirect', reason: 'The provider returns result fields and failure strings that dsh-tool-web renders into tool output.' },
   'packages/workflow/workflow': { kind: 'indirect', reason: 'The service delegates parent and child model rendering to its consumer and engine.' },
+  'packages/client/ui-sidebar-exec': { kind: 'none', reason: 'The exec page renders Session events as browser history and registers nothing the model sees.' },
+  'packages/client/ui-web-search-mode': { kind: 'indirect', reason: 'The mode writes the shared web-search preference that dsh-tool-web reads when assembling each request.' },
+  'packages/experimental/client-ui-agent-team': { kind: 'none', reason: 'The browser projection registers no model-facing input; the Team tools and ordinary submission own model-visible use.' },
+  'packages/runtime-diagnostics/invariants': { kind: 'none', reason: 'The observer validates requests and durable state without rewriting request context.' },
 }
 
 interface Failure {

@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Plugin de proxy direto que julga cada conexão contra o escopo, resolve uma vez e fixa no endereço validado."
+  }
+}

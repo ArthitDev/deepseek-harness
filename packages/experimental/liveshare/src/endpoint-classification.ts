@@ -242,9 +242,9 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'reconRuns/queue': 'reader-session-read', // recon queue readback
   'reconRuns/scan': 'owner-only', // owner recon control
   'reconRuns/status': 'reader-session-read', // recon status readback
+  'remoteMachines/deleteMachine': 'owner-only', // owner machine inventory
   'remoteMachines/list': 'owner-only', // owner machine inventory
   'remoteMachines/probe': 'owner-only', // owner machine inventory
-  'remoteMachines/remove': 'owner-only', // owner machine inventory
   'remoteMachines/save': 'owner-only', // owner machine inventory
   'remoteMachines/trust': 'owner-only', // owner machine inventory
   'schedule/catalog': 'owner-only', // owner schedules

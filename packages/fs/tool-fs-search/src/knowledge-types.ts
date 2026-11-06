@@ -27,7 +27,7 @@ declare module '@deepseek-ai/dsh-llm' {
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    /** @persistenceAttribution Synthetic empty developer message masking pre-reset context. */
+    /** Synthetic empty developer message masking pre-reset context. @persistenceAttribution */
     'session-edit': { kind: 'session-edit' }
   }
 }

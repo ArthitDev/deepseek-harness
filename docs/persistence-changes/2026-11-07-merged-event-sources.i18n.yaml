@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-07-merged-event-sources.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-07-merged-event-sources.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: 09db6ce50a99724a
+/2026-11-07-merged-event-sources:
+  en: 975d761577df4384
+  zh: 2bdb25638833726d
+/2026-11-07-merged-event-sources/summary:
+  en: e1df934889d67ebf
+  zh: 2b95829f905d0dc6
+/2026-11-07-merged-event-sources/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 6cf314a069ceb451
+/2026-11-07-merged-event-sources/declaration:
+  en: 6907136f28e48c90
+  zh: 6907136f28e48c90
+/2026-11-07-merged-event-sources/compatibility:
+  en: eacee5da94cb9635
+  zh: 5f64bf83281d97a6
+/2026-11-07-merged-event-sources/verification:
+  en: a66953df857ceda5
+  zh: 6c2bcf9a797e629e
+/2026-11-07-merged-event-sources/dev-note:
+  en: 3b6de73e9d52ccea
+  zh: 3c32eaf88c2edf13

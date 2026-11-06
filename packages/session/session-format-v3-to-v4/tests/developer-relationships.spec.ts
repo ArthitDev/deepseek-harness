@@ -1,5 +1,6 @@
 /** Developer surface positions and admission remain distinct from unknown ignorable records. */
 import { describe, expect, it } from 'vitest'
+import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import { SessionFormatEventCollector } from '@deepseek-ai/dsh-session-format'
@@ -44,8 +45,12 @@ describe('V4 developer relationship admission', () => {
       ...coordinates, message: { id: 'replacement', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: 'Updated' }] },
     } }
     const input = restore([...begin, system, emptyDeveloper, replacement])
-    const session = Session.fromRestore(SessionId(input.header.id), input.events as SessionEvent[],
-      input.header as unknown as SessionHeader, SessionLogOffset(0), 'detached')
+    // Live adoption rides the persistence migration chain to the current writer.
+    const reader = sessionFormatCatalog.createRestore({ type: 'session', ...input.header }, { recovery: 'strict', validation: 'current' })
+    for (const event of input.events) reader.decodeRow(event)
+    const migrated = reader.finish()
+    const session = Session.fromRestore(SessionId(input.header.id), migrated.events as SessionEvent[],
+      migrated.header as unknown as SessionHeader, SessionLogOffset(0), 'detached')
     expect(session.surface.nodes).toEqual([4, 3])
     expect(session.deriveMessages().map(message => message.id)).toEqual(['replacement'])
     expect(input.events[3]?.data).toEqual(emptyDeveloper.data)

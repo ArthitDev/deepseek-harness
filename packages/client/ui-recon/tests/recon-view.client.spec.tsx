@@ -7,10 +7,48 @@ import { ReconView, evidenceSectionOf, reconChatPrompt, type ReconViewProps } fr
 import { ReconTargetControl, type ReconTargetControlProps } from '../src/client/ReconTargetControl.tsx'
 import { en } from '../src/client/locales.ts'
 import type { DynamicReconResult, ReconQueueEntry, ReconReport } from '@deepseek-ai/dsh-recon-engine/types'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 const t = makeTranslate(en, commonEn) as never
+
+/** The session- and global-scope standard props the Conversation View contract requires. */
+const sessionStandardProps = {
+  useConversation: vi.fn(),
+  useInput: vi.fn(),
+  inputActions: {
+    insertQuote: vi.fn(() => true),
+    captureInsertion: vi.fn(),
+    insertText: vi.fn(() => true),
+    setDraft: vi.fn(),
+    persistDraft: vi.fn(),
+    addAttachments: vi.fn(() => true),
+    removeAttachment: vi.fn(),
+    pruneAttachments: vi.fn(),
+    submit: vi.fn(),
+  },
+  useChat: vi.fn(),
+  useSession: vi.fn(),
+  sessionId: 'recon-session' as SessionId,
+  useProjection: vi.fn(),
+  useAccess: vi.fn(() => true),
+  useTrajectory: vi.fn(),
+  useResource: vi.fn(),
+  useContextMenu: vi.fn(),
+  useWorkspaces: vi.fn(),
+  usePanelInfo: vi.fn(),
+  useSessions: vi.fn(),
+  useSessionStatus: vi.fn(),
+  useSessionRetainInfo: vi.fn(),
+  useSessionAccess: vi.fn(() => true),
+  useWorkspaceAccess: vi.fn(() => true),
+  useRemoteAccess: vi.fn(() => true),
+  inspectCall: undefined,
+  viewRequest: null,
+  openView: vi.fn(),
+  completeViewRequest: vi.fn(),
+}
 
 const report: ReconReport = {
   run_id: 'recon_abc123',
@@ -104,7 +142,7 @@ describe('ReconView', () => {
     let finishEnqueue!: (value: ReconQueueEntry) => void
     const enqueue = vi.fn(() => new Promise<ReconQueueEntry>((resolve) => { finishEnqueue = resolve }))
     const openRecon = vi.fn()
-    render(<ReconTargetControl {...({ enqueue, openRecon, t } as unknown as ReconTargetControlProps)} />)
+    render(<ReconTargetControl {...({ enqueue, openRecon, t } as ReconTargetControlProps)} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Recon Target' }))
     expect(openRecon).not.toHaveBeenCalled()
@@ -127,7 +165,7 @@ describe('ReconView', () => {
   it('opens stored Recon runs from the toolbar without scanning', () => {
     const enqueue = vi.fn()
     const openRecon = vi.fn()
-    render(<ReconTargetControl {...({ enqueue, openRecon, t } as unknown as ReconTargetControlProps)} />)
+    render(<ReconTargetControl {...({ enqueue, openRecon, t } as ReconTargetControlProps)} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Recon Target' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'View Recon' }))
@@ -140,7 +178,7 @@ describe('ReconView', () => {
   it('queues AI Recon outside Chat and opens the Recon view', async () => {
     const enqueue = vi.fn(async () => ({ ...queueJob, aiAssisted: true }))
     const openRecon = vi.fn()
-    render(<ReconTargetControl {...({ enqueue, openRecon, t } as unknown as ReconTargetControlProps)} />)
+    render(<ReconTargetControl {...({ enqueue, openRecon, t } as ReconTargetControlProps)} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Recon Target' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'New Recon' }))
@@ -166,9 +204,10 @@ describe('ReconView', () => {
     const sendToChat = vi.fn(async () => {})
     const loadDynamic = vi.fn(async () => dynamicResult)
 
-    render(<ReconView {...({
+    render(<ReconView {...{
+      ...sessionStandardProps,
       loadRuns, loadRun, deleteRun, loadEvidence, loadDynamic, sendToChat, scan: vi.fn(async () => report), t,
-    } as unknown as ReconViewProps)} />)
+    }} />)
 
     await waitFor(() => { expect(screen.getAllByText(/recon_abc123/).length).toBeGreaterThan(0) })
     fireEvent.click(screen.getByText(/recon_abc123/))
@@ -228,7 +267,7 @@ describe('ReconView', () => {
     render(<ReconView {...({
       loadRuns: vi.fn(async () => []),
       t,
-    } as unknown as ReconViewProps)} />)
+    } as ReconViewProps)} />)
     await waitFor(() => { expect(screen.getByText(/No stored recon runs yet/)).toBeTruthy() })
   })
 
@@ -250,7 +289,7 @@ describe('ReconView', () => {
       }]),
       loadRun,
       t,
-    } as unknown as ReconViewProps)} />)
+    } as ReconViewProps)} />)
 
     await screen.findByText('Recon queue')
     expect(screen.queryByRole('button', { name: /recon_running/ })).toBeNull()
@@ -265,7 +304,7 @@ describe('ReconView', () => {
       .mockResolvedValueOnce([])
       .mockImplementationOnce(() => new Promise<readonly never[]>((resolve) => { finishReload = resolve }))
     const enqueue = vi.fn(() => new Promise<ReconQueueEntry>((resolve) => { finishEnqueue = resolve }))
-    render(<ReconView {...({ loadRuns, loadQueue: vi.fn(async () => []), enqueue, t } as unknown as ReconViewProps)} />)
+    render(<ReconView {...({ loadRuns, loadQueue: vi.fn(async () => []), enqueue, t } as ReconViewProps)} />)
 
     await waitFor(() => { expect(screen.getByText(/No stored recon runs yet/)).toBeTruthy() })
     fireEvent.change(screen.getByPlaceholderText('https://target.example'), { target: { value: 'https://lab.test' } })
@@ -315,7 +354,7 @@ describe('ReconView', () => {
       }]),
       loadRun,
       t,
-    } as unknown as ReconViewProps)} />)
+    } as ReconViewProps)} />)
     fireEvent.click(await screen.findByText(/recon_abc123/))
     await waitFor(() => { expect(screen.getByText(/Legacy scan, rescan recommended/)).toBeTruthy() })
     await waitFor(() => { expect(screen.getByText(/Backend not observable/)).toBeTruthy() })
@@ -329,7 +368,7 @@ describe('ReconView', () => {
         { ...queueJob, id: 'recon-job-2', target: 'https://second.test', status: 'queued', position: 1 },
       ]),
       t,
-    } as unknown as ReconViewProps)} />)
+    } as ReconViewProps)} />)
     await waitFor(() => { expect(screen.getByText('Recon queue')).toBeTruthy() })
     expect(screen.getByText('Running')).toBeTruthy()
     expect(screen.getByText('Queued · #1')).toBeTruthy()
@@ -347,7 +386,7 @@ describe('ReconView', () => {
       }]),
       clearQueue,
       t,
-    } as unknown as ReconViewProps)} />)
+    } as ReconViewProps)} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Clear failed' }))
     await waitFor(() => { expect(clearQueue).toHaveBeenCalledOnce() })

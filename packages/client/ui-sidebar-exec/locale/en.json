@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Sidebar tab listing executed shell commands with their platform classification and paired result status."
+  }
+}

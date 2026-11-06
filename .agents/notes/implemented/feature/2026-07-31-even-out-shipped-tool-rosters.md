@@ -30,7 +30,7 @@ Two capabilities stay out on the evidence their own packages record, and are lis
 
 `@deepseek-ai/dsh-mcp-client` becomes a runtime dependency of the CLI without a row in any shipped config. The plugin mounts exactly one server per instance and `command` is required, so a default would have to name a third-party server and spawn it as a child process on every launch — outside `ctx.shell`, and therefore outside the sandbox policy the Web surface composes.
 
-The layer that would make MCP a default is the one this repository does not have yet: a bridge that reads a user's server list and mounts one client per entry, the same shape [`dsh-hooks-claude-code`](../../../../packages/hooks/hooks-claude-code/README.md) already has for a Claude Code `hooks.json`. Shipping the dependency means an installed `dsh` can mount servers from `$DSH_HOME/config.yaml`; the CLI README carries the YAML.
+The layer that would make MCP a default is the one this repository does not have yet: a bridge that reads a user's server list and mounts one client per entry, the same shape [`dsh-hooks-claude-code`](../../../../packages/experimental/hooks-claude-code/README.md) already has for a Claude Code `hooks.json`. Shipping the dependency means an installed `dsh` can mount servers from `$DSH_HOME/config.yaml`; the CLI README carries the YAML.
 
 ## Testing
 

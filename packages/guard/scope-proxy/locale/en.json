@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Forward proxy plugin that judges every connection against the scope, resolves it once, and pins it to the validated address."
+  }
+}

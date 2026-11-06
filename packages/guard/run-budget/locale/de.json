@@ -1,0 +1,5 @@
+{
+  "meta": {
+    "description": "Guard-Plugin, das neue Tool-Aufrufe ablehnt, sobald das Token- oder Zeitbudget erschöpft ist, und den Lauf mit einem Teilbericht beendet."
+  }
+}
