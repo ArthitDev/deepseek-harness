@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as ScopePolicy from '@deepseek-ai/dsh-scope-policy'
 import type { AddressResolver, Config } from '@deepseek-ai/dsh-scope-policy'
@@ -26,7 +26,11 @@ async function harness(config: Config = {}, resolve: AddressResolver = PUBLIC_AN
 }
 
 function probe(ctx: Context, args: unknown): Promise<{ isError: boolean; info: Record<string, unknown>; text: string }> {
-  return ctx.tools.execute({ signal: new AbortController().signal, callId: ToolCallId('c1'), name: 'probe', arguments: args })
+  return ctx.tools.execute({
+    calls: [{ type: 'tool-call', id: ToolCallId('c1'), name: 'probe', arguments: JSON.stringify(args ?? {}) }],
+    signal: new AbortController().signal,
+  })
+    .then(batch => batch.results[0]!.result)
     .then(result => ({
       isError: result.isError === true,
       info: (result.error?.info ?? {}) as Record<string, unknown>,

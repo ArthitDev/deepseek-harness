@@ -21,6 +21,8 @@ import { ChatScreen } from '../src/ui/chat.ts'
 import { ShellPane, PANE_POLL_MS, type ShellPaneSession } from '../src/ui/shell-pane.ts'
 import { StatusBar, ToolCardView } from '../src/ui/views.ts'
 import { fixtureAgent } from './fixture-agent.ts'
+// Type-only: the knowledge-context MessageSourceMap merge for history replay.
+import type {} from '@deepseek-ai/dsh-tool-fs-search/src/knowledge-types.ts'
 import * as gitState from '../src/core/git.ts'
 
 /** Wait for the fake terminal's scheduled render and read its visible text. */
@@ -43,7 +45,7 @@ describe('running subagents in the status bar', () => {
       columns: 100, rows: 40, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
@@ -75,7 +77,7 @@ describe('running subagents in the status bar', () => {
       columns: 40, rows: 80, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
@@ -159,14 +161,14 @@ describe('Agent Debug tool progress', () => {
       columns: 120, rows: 30, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
     tui.start()
     const callId = ToolCallId('debug-progress-call')
     const activity = async () => await renderScreen(tui)
-    let pending: ReturnType<typeof ctx.tools.execute> | undefined
+    let pending: Promise<{ isError?: boolean; content?: { type: string; text?: string }[] }> | undefined
     try {
       screen.handleEvent(agent.session.append('assistant/message', {
         turn: 1, step: 1,
@@ -180,9 +182,7 @@ describe('Agent Debug tool progress', () => {
       }))
       expect(await activity()).toContain('[PREPARING] Tool · progress-tool')
 
-      pending = ctx.tools.execute({
-        agent, name: 'progress-tool', arguments: {}, callId, signal: new AbortController().signal,
-      })
+      pending = ctx.tools.execute({ calls: [{ type: 'tool-call', id: callId, name: 'progress-tool', arguments: '{}' }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
       const execution = await started.promise
       expect(await activity()).toContain('[EXECUTING] Tool · progress-tool')
 
@@ -243,7 +243,7 @@ describe('Agent Debug subagent lifecycle', () => {
       columns: 120, rows: 30, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent: parent, config: {}, onQuit: vi.fn() })
@@ -317,7 +317,8 @@ describe('exit and resume hints', () => {
     const agent = fixtureAgent(ctx, session)
     const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
-      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
+      setProgress: vi.fn(), setProgramStatus: vi.fn() })
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
     tui.start()
     try {
@@ -351,7 +352,8 @@ describe('exit and resume hints', () => {
     const agent = fixtureAgent(ctx, session)
     const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
-      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
+      setProgress: vi.fn(), setProgramStatus: vi.fn() })
     const screen = new ChatScreen({ ctx, tui, agent, config: { historyLimit: 3 }, onQuit: vi.fn() })
     const setImages = vi.spyOn(ToolCardView.prototype, 'setImages')
     tui.start()
@@ -378,7 +380,8 @@ describe('exit and resume hints', () => {
     const agent = fixtureAgent(ctx, session)
     const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
-      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
+      setProgress: vi.fn(), setProgramStatus: vi.fn() })
     const screen = new ChatScreen({ ctx, tui, agent,
       config: historyLimit === undefined ? {} : { historyLimit }, onQuit: vi.fn() })
     const createView = vi.spyOn(await import('../src/ui/views.ts'), 'createView')
@@ -427,7 +430,8 @@ describe('exit and resume hints', () => {
     const resumed = fixtureAgent(ctx, resumedSession)
     const tui = new TuiAltScreen({ columns: 120, rows: 30, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
-      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() })
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
+      setProgress: vi.fn(), setProgramStatus: vi.fn() })
     const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
     tui.start()
     try {
@@ -478,7 +482,7 @@ describe('exit and resume hints', () => {
       start: (onInput) => { terminalInput = onInput },
       stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
       hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
-      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     })
     const screen = new ChatScreen({
       ctx, tui, agent: first, config: {}, onQuit: vi.fn(),
@@ -539,7 +543,7 @@ describe('exit and resume hints', () => {
       columns: 40, rows: 12, kittyProtocolActive: false,
       start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
       hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
-      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     })
     const onQuit = vi.fn()
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit })
@@ -612,7 +616,7 @@ describe('exit and resume hints', () => {
       columns: 100, rows: 40, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const onQuit = vi.fn()
@@ -644,7 +648,7 @@ describe('exit and resume hints', () => {
       columns: 100, rows: 40, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const onQuit = vi.fn()
@@ -679,7 +683,7 @@ describe('/new model selection', () => {
       columns: 100, rows: 80, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const onAgentSwitch = vi.fn()
@@ -755,7 +759,7 @@ describe('preset switches with conversation history', () => {
       columns: 120, rows: 80, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const onAgentSwitch = vi.fn()
@@ -823,7 +827,7 @@ describe('reasoning picker commands', () => {
       columns: 120, rows: 50, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const show = vi.spyOn(tui, 'showOverlay')
@@ -887,7 +891,7 @@ describe('/providers', () => {
       columns: 140, rows: 50, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('providers')), route)
@@ -945,7 +949,7 @@ describe('/clear transcript', () => {
         columns: 100, rows: 60, kittyProtocolActive: false,
         start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
         moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-        clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+        clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
       }
       const tui = new TuiAltScreen(terminal)
       const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
@@ -1023,7 +1027,7 @@ describe('/clear transcript', () => {
         columns: 100, rows: 80, kittyProtocolActive: false,
         start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
         moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-        clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+        clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
       }
       const tui = new TuiAltScreen(terminal)
       const screen = new ChatScreen({ ctx, tui, agent, config: { version: 'test' }, onQuit: vi.fn() })
@@ -1115,14 +1119,11 @@ describe('the split-pane shell', () => {
       columns: 100, rows: 40, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
-    const draft = (command: unknown, shell = 'win') => ctx.tools.execute({
-      name: 'shell_draft', arguments: { command, shell }, agent,
-      callId: ToolCallId('draft-call'), signal: new AbortController().signal,
-    })
+    const draft = (command: unknown, shell = 'win') => ctx.tools.execute({ calls: [{ type: 'tool-call', id: ToolCallId('draft-call'), name: 'shell_draft', arguments: JSON.stringify({ command, shell }) }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
     const schemas = (scope = agent) => ctx.tools.schemas(scope).map(tool => tool.name)
     const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
     tui.start()
@@ -1200,7 +1201,7 @@ describe('the split-pane shell', () => {
       columns: 100, rows: 40, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
@@ -1370,7 +1371,7 @@ describe('the split-pane shell', () => {
       columns: 100, rows: 40, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
@@ -1434,7 +1435,7 @@ describe('the split-pane shell', () => {
       columns: 46, rows: 20, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     vi.useFakeTimers()
@@ -1489,7 +1490,7 @@ describe('the split-pane shell', () => {
       columns: 46, rows: 20, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     tui.start()
@@ -1530,7 +1531,7 @@ describe('the split-pane shell', () => {
       columns: 60, rows: 16, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const pane = new ShellPane(tui, session, 'kali', 'Shell · kali', undefined, () => 2)

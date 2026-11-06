@@ -175,7 +175,7 @@ describe('InvariantRegistry lifecycle', () => {
       apply(child: Context) {
         const installer = Object.assign((installerCtx: Context) => {
           expect(Object.keys(installerCtx.fiber.inject)).toContain('invariantProbe')
-          expect(Object.keys(installerCtx.fiber.store ?? {})).toContain('invariantProbe')
+          expect([...installerCtx.fiber.provisions].some(impl => impl instanceof InvariantProbeService)).toBe(true)
           expect(installerCtx.invariantProbe).toBeInstanceOf(InvariantProbeService)
         }, { inject: ['invariantProbe'] })
         expect(installer.inject).toEqual(['invariantProbe'])

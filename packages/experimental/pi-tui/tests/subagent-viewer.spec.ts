@@ -35,7 +35,7 @@ async function setup() {
   const size = { columns: 100, rows: 32 }
   const terminal: Terminal = { get columns() { return size.columns }, get rows() { return size.rows }, kittyProtocolActive: false,
     start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
-    clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() }
+    clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn() }
   const tui = new TuiAltScreen(terminal)
   let screen!: ChatScreen
   const onAgentSwitch = vi.fn()

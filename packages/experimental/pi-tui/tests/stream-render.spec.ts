@@ -22,7 +22,7 @@ async function fixture() {
     columns: 100, rows: 80, kittyProtocolActive: false,
     start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
   }
   const tui = new TuiAltScreen(terminal)
   const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })

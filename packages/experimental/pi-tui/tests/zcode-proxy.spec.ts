@@ -14,7 +14,8 @@ import PentestModePolicy from '@deepseek-ai/dsh-pentest-executor'
 import { type Terminal } from '@earendil-works/pi-tui'
 import { describe, expect, it, vi } from 'vitest'
 import AgentDefaultModel from '../../../core/agent-default-model/src/index.ts'
-import AgentPresets, { COMPOSITION_FILE } from '../../../preset/agent-presets/src/index.ts'
+import AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
+import AgentPreset from '../../../preset/agent-preset/src/index.ts'
 import * as piTui from '../src/index.ts'
 import { ensureSbProxy, ensureZcodeProxy } from '../src/core/zcode-proxy.ts'
 
@@ -23,7 +24,7 @@ const { terminal } = vi.hoisted(() => ({ terminal: {
   start: vi.fn<Terminal['start']>(), stop: vi.fn(), drainInput: async () => {},
   write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
   clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(),
-  setTitle: vi.fn(), setProgress: vi.fn(),
+  setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
 } }))
 vi.mock('../src/ui/clipboard-terminal.js', () => ({
   ClipboardTerminal: function ClipboardTerminal() { return terminal },
@@ -144,19 +145,14 @@ describe('TUI startup through Loader with optional proxies', () => {
       ctx.provide('profileContext', { home, name: 'tui', installAnchor: anchor })
       ctx.provide('workspaceRegistry', { resolveByPath: async () => ({ attachSession: async () => {} }) })
       await ctx.plugin(Loader)
-      const presets = join(home, 'presets')
-      await mkdir(join(presets, 'test'), { recursive: true })
-      await writeFile(join(presets, 'test', COMPOSITION_FILE), JSON.stringify([
-        { id: 'persona', name: 'cordis:persona', config: { prefix: 'DIRECT_MODEL_SYSTEM' } },
-      ]))
-      Object.assign(ctx.loader.builtins, { include: Include, loop: AgentLoop, presets: AgentPresets,
+      Object.assign(ctx.loader.builtins, { include: Include, loop: AgentLoop, presets: AgentPresetRegistry, preset: AgentPreset,
         model: AgentDefaultModel, policy: PentestModePolicy, persona: Persona, tui: piTui })
       const composition = join(home, 'cordis.yml')
       await writeFile(composition, JSON.stringify([
         { id: 'agent-loop', name: 'cordis:loop', config: { agents: [] } },
         { id: 'pentest-mode', name: 'cordis:policy', config: { mode: 'red', suppressSections: false } },
-        { id: 'agent-presets', name: 'cordis:presets', config: { default: 'test', includeUserRoot: false,
-          includeShippedRoot: false, roots: [{ path: presets, trust: 'user' }] } },
+        { id: 'agent-preset-registry', name: 'cordis:presets', config: { default: 'test' } },
+        { id: 'agent-preset-test', name: 'cordis:preset', config: { id: 'test', name: 'Test', plugins: [] } },
         { id: 'agent-default-model', name: 'cordis:model', config: { provider, model } },
         { id: 'tui', name: 'cordis:tui', config: { cwd: home } },
       ]))

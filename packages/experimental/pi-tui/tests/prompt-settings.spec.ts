@@ -73,7 +73,7 @@ describe('TUI Web prompt settings', () => {
       }
       if (savedWeb) await save(initial)
       const fallback = savedWeb ? false : initial
-      await mountAgentLoopTestDependencies(ctx, { systemPrompt: { preserveSections: true } })
+      await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(LocalFileSystem, { cwd: root })
       ctx.provide('profileContext', { name: 'tui', home: root })
       await ctx.plugin(Loader)
@@ -363,7 +363,7 @@ describe('TUI Web prompt settings', () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-team-prompt-surface-'))
     const ctx = new Context()
     try {
-      await mountAgentLoopTestDependencies(ctx, { systemPrompt: { preserveSections: true } })
+      await mountAgentLoopTestDependencies(ctx)
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'other built-in guidance' })
       const patchPath = join(root, 'profile.patch.yml')
       ctx.provide('profileContext', { name: surface, home: root, patchPath })

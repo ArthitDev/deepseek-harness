@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -145,8 +145,11 @@ describe('wall clock', () => {
 describe('direct executes', () => {
   it('bypass the budget (no agent to key on)', async () => {
     const ctx = await harness({ maxTotalTokens: 1 }, 500)
-    const result = await ctx.tools.execute({ signal: new AbortController().signal, callId: ToolCallId('d1'), name: 'probe', arguments: {} })
-    expect(result.isError).toBe(false)
+    const batch = await ctx.tools.execute({
+      calls: [{ type: 'tool-call', id: ToolCallId('d1'), name: 'probe', arguments: '{}' }],
+      signal: new AbortController().signal,
+    })
+    expect(batch.results[0]?.result.isError).toBe(false)
   })
 })
 

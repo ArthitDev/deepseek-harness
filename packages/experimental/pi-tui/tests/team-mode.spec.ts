@@ -64,7 +64,7 @@ describe('/team-mode', () => {
       const terminal: Terminal = { columns: 120, rows: 60, kittyProtocolActive: false,
         start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
         hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
-        clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() }
+        clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn() }
       tui = new TuiAltScreen(terminal)
       const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
       tui.start()

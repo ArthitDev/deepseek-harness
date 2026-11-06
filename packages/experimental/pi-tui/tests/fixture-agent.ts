@@ -11,6 +11,7 @@ export function fixtureAgent(ctx: Context, session: Session, options: AgentOptio
       nextTurn: [], nextStep: [], clear: vi.fn(), append: vi.fn(), prepend: vi.fn(),
       replace: vi.fn(() => false), remove: vi.fn(() => false), splice: vi.fn(() => []),
     },
+    model: { current: vi.fn(() => ({ provider: 'fixture', model: 'fixture' })), select: vi.fn() },
     cancel: vi.fn(), whenIdle: vi.fn(async () => {}), runMaintenance: vi.fn(),
     send: vi.fn(), followup: vi.fn(), steer: vi.fn(), inject: vi.fn(),
   }

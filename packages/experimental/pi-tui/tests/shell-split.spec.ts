@@ -9,7 +9,7 @@ function fixture() {
     columns: 100, rows: 5, kittyProtocolActive: false,
     start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
   } satisfies Terminal
   const tui = new TuiAltScreen(terminal)
   const split = new ShellSplit(new Text('chat', 0, 0), new Text('shell', 0, 0), tui)

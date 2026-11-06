@@ -17,7 +17,7 @@ import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
 declare module '@deepseek-ai/dsh-jobs' {
-  interface JobKindMap { pwsh: 'pwsh'; workflow: 'workflow' }
+  interface JobKindMap { pwsh: 'pwsh'; workflow: 'workflow'; subagent: 'subagent' }
 }
 
 describe('background job status in Agent Debug', () => {
@@ -27,7 +27,8 @@ describe('background job status in Agent Debug', () => {
     const start = vi.fn<Terminal['start']>()
     const terminal: Terminal = { columns: 120, rows: 38, kittyProtocolActive: false,
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
-      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn() }
+      clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
+      setProgress: vi.fn(), setProgramStatus: vi.fn() }
     const tui = new TuiAltScreen(terminal)
     const now = vi.spyOn(Date, 'now').mockReturnValue(1000)
     let screen!: ChatScreen

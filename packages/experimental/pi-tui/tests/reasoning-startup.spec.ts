@@ -38,7 +38,7 @@ function terminal(): Terminal {
     columns: 120, rows: 50, kittyProtocolActive: false,
     start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
   }
 }
 

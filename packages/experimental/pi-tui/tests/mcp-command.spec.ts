@@ -78,7 +78,7 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
     columns: 150, rows: 40, kittyProtocolActive: false,
     start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
   }
   const tui = new TuiAltScreen(terminal)
   const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
@@ -87,34 +87,16 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
   const messageSources = async (subject = agent) => {
     const decision = await agentEvents(ctx, subject).waterfall(
       'agent/pre-step',
-      { messages: [], turn: 1, step: 1, signal: new AbortController().signal },
+      { messages: [], turn: 1, step: 1, signal: new AbortController().signal, modelSelection: { provider: 'fixture', model: 'fixture' } },
       async () => ({ kind: 'enter' as const, messages: [] }),
     )
     return decision.kind === 'enter'
       ? decision.messages.map(message => message.source.kind === 'skill-invocation' ? message.source.name : message.source.kind)
       : []
   }
-  const runMcp = () => ctx.tools.execute({
-    signal: new AbortController().signal,
-    callId: ToolCallId('mcp-call'),
-    name: MCP_TOOL,
-    arguments: {},
-    agent,
-  })
-  const runJev = () => ctx.tools.execute({
-    signal: new AbortController().signal,
-    callId: ToolCallId('jev-call'),
-    name: JEV_TOOL,
-    arguments: {},
-    agent,
-  })
-  const runDirectJev = () => ctx.tools.execute({
-    signal: new AbortController().signal,
-    callId: ToolCallId('direct-jev-call'),
-    name: DIRECT_JEV_TOOL,
-    arguments: {},
-    agent,
-  })
+  const runMcp = () => ctx.tools.execute({ calls: [{ type: 'tool-call', id: ToolCallId('mcp-call'), name: MCP_TOOL, arguments: JSON.stringify({}) }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
+  const runJev = () => ctx.tools.execute({ calls: [{ type: 'tool-call', id: ToolCallId('jev-call'), name: JEV_TOOL, arguments: JSON.stringify({}) }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
+  const runDirectJev = () => ctx.tools.execute({ calls: [{ type: 'tool-call', id: ToolCallId('direct-jev-call'), name: DIRECT_JEV_TOOL, arguments: JSON.stringify({}) }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
   tui.start()
   const input = (data: string): void => { startInput.mock.calls[0]?.[0](data) }
   try {

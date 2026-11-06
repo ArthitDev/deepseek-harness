@@ -78,7 +78,7 @@ it('/skills disables discovery and invocation, then restores them', async () => 
     columns: 100, rows: 40, kittyProtocolActive: false,
     start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
     moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(),
+    clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
   }
   const tui = new TuiAltScreen(terminal)
   const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
@@ -87,20 +87,14 @@ it('/skills disables discovery and invocation, then restores them', async () => 
   const sourceMessages = async (subject = agent) => {
     const decision = await agentEvents(ctx, subject).waterfall(
       'agent/pre-step',
-      { messages: [], turn: 1, step: 1, signal: new AbortController().signal },
+      { messages: [], turn: 1, step: 1, signal: new AbortController().signal, modelSelection: { provider: 'fixture', model: 'fixture' } },
       async () => ({ kind: 'enter' as const, messages: [] }),
     )
     return decision.kind === 'enter' ? decision.messages : []
   }
   const sourceKinds = async (subject = agent) =>
     (await sourceMessages(subject)).map(message => message.source.kind)
-  const runSkill = (name: string = SKILL.name) => ctx.tools.execute({
-    signal: new AbortController().signal,
-    callId: ToolCallId(`skill-call-${name}`),
-    name: 'skill',
-    arguments: { name },
-    agent,
-  })
+  const runSkill = (name: string = SKILL.name) => ctx.tools.execute({ calls: [{ type: 'tool-call', id: ToolCallId(`skill-call-${name}`), name: 'skill', arguments: JSON.stringify({ name }) }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
   tui.start()
   const input = (data: string): void => { startInput.mock.calls[0]?.[0](data) }
   try {

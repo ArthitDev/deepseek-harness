@@ -31,7 +31,7 @@ function fixture(pane: ToolActivityPane, width = 46, rows = 100) {
     get columns() { return dimensions.columns }, rows, kittyProtocolActive: false,
     start, stop: () => {}, drainInput: async () => {}, write: () => {},
     moveBy: () => {}, hideCursor: () => {}, showCursor: () => {}, clearLine: () => {},
-    clearFromCursor: () => {}, clearScreen: () => {}, setTitle: () => {}, setProgress: () => {},
+    clearFromCursor: () => {}, clearScreen: () => {}, setTitle: () => {}, setProgress: () => {}, setProgramStatus: () => {},
   }
   const tui = new TuiAltScreen(terminal)
   tui.setLayoutRoot(pane)
