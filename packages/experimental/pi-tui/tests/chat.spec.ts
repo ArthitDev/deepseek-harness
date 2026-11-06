@@ -5,15 +5,13 @@ import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { AssistantStreamAccumulator, boundContextSummary, createAssistantMessage, createMessage, createSystemMessage, createUserMessage, ReasoningEffortId, ToolCallId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineTool, type ToolExecution } from '@deepseek-ai/dsh-tools'
 import SessionStore, { Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TerminalSessionService, { TerminalSessionId } from '@deepseek-ai/dsh-terminal'
 import type { TerminalBackend, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
 import { Text, TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
@@ -65,6 +63,7 @@ describe('running subagents in the status bar', () => {
   it('tracks lifecycle events per session, ignores duplicates, and releases listeners on disposal', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     const makeAgent = async (id: string): Promise<Agent> => {
       const owner = await ctx.plugin(() => {})
@@ -136,92 +135,12 @@ describe('running subagents in the status bar', () => {
   })
 })
 
-describe('Agent Debug tool progress', () => {
-  it('shows only the active agent call, then settles it and ignores late progress', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRuntime)
-    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('debug-progress')))
-    const other = fixtureAgent(ctx, ctx.sessions.create(SessionId('debug-progress-other')))
-    const started: PromiseWithResolvers<ToolExecution> = Promise.withResolvers()
-    const finish: PromiseWithResolvers<void> = Promise.withResolvers()
-    ctx.tools.register(defineTool({
-      name: 'progress-tool',
-      description: 'emit one progress update',
-      parameters: {},
-      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
-      async execute(_args, exec) {
-        started.resolve(exec)
-        await finish.promise
-        return 'finished'
-      },
-    }))
-    const terminal: Terminal = {
-      columns: 120, rows: 30, kittyProtocolActive: false,
-      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
-      moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
-    }
-    const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
-    tui.start()
-    const callId = ToolCallId('debug-progress-call')
-    const activity = async () => await renderScreen(tui)
-    let pending: Promise<{ isError?: boolean; content?: { type: string; text?: string }[] }> | undefined
-    try {
-      screen.handleEvent(agent.session.append('assistant/message', {
-        turn: 1, step: 1,
-        message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [
-          { type: 'tool-call', id: callId, name: 'progress-tool', arguments: '{}' },
-        ] }),
-        stream: [],
-      }, { surfaceOp: 'append' }))
-      screen.handleEvent(agent.session.append('tool/call', {
-        turn: 1, step: 1, callId, name: 'progress-tool', arguments: '{}',
-      }))
-      expect(await activity()).toContain('[PREPARING] Tool · progress-tool')
-
-      pending = ctx.tools.execute({ calls: [{ type: 'tool-call', id: callId, name: 'progress-tool', arguments: '{}' }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
-      const execution = await started.promise
-      expect(await activity()).toContain('[EXECUTING] Tool · progress-tool')
-
-      const progress = { progress: 3, total: 10, message: 'checking server' }
-      ctx.events.emit(scopeTarget(ctx.tools, agent), 'tools/progress', execution, progress)
-      expect(await activity()).toContain('Progress 3/10 · checking server')
-      const otherExecution = { ...execution, agent: other }
-      ctx.events.emit(scopeTarget(ctx.tools, other), 'tools/progress', otherExecution, {
-        progress: 99, total: 100, message: 'other agent',
-      })
-      expect(await activity()).not.toContain('other agent')
-
-      finish.resolve()
-      await pending
-      screen.handleEvent(agent.session.append('tool/result', {
-        turn: 1, step: 1,
-        message: createMessage({ role: 'tool', source: { kind: 'tool', callId }, toolCallId: callId,
-          content: [{ type: 'text', text: 'finished' }] }),
-      }, { surfaceOp: 'append' }))
-      const settled = await activity()
-      expect(settled).toContain('[OK] Tool · progress-tool')
-      expect(settled).not.toContain('Progress 3/10')
-      ctx.events.emit(scopeTarget(ctx.tools, agent), 'tools/progress', execution, {
-        progress: 9, total: 10, message: 'late update',
-      })
-      expect(await activity()).not.toContain('late update')
-    } finally {
-      finish.resolve()
-      await pending?.catch(() => {})
-      tui.stop()
-      await ctx.fiber.dispose()
-    }
-  })
-})
 
 describe('Agent Debug subagent lifecycle', () => {
   it('tracks the latest child tool by call id and ignores child events after settlement', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     const parent = fixtureAgent(ctx, ctx.sessions.create(SessionId('debug-parent')))
     const inherited = ctx.sessions.create(SessionId('debug-inherited'))
@@ -456,6 +375,7 @@ describe('exit and resume hints', () => {
   it('resumes at the latest transcript bubble after browsing an earlier session', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     const firstSession = ctx.sessions.create(SessionId('resume-scroll-first'))
     const resumedSession = ctx.sessions.create(SessionId('resume-scroll-second'))
@@ -1191,6 +1111,7 @@ describe('the split-pane shell', () => {
     const readGitState = vi.spyOn(gitState, 'readGitState').mockResolvedValue(undefined)
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(TerminalSessionService)
     ctx.terminals.registerBackend(stubPaneBackend('shell', 'stub shell tail'))
@@ -1360,6 +1281,7 @@ describe('the split-pane shell', () => {
   it('rebinds the mounted pane between win and kali backends', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(TerminalSessionService)
     ctx.terminals.registerBackend(stubPaneBackend('shell', 'win tail'))

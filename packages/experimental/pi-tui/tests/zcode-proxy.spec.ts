@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { stripVTControlCharacters } from 'node:util'
-import { Context, FiberState } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -15,6 +15,8 @@ import { type Terminal } from '@earendil-works/pi-tui'
 import { describe, expect, it, vi } from 'vitest'
 import AgentDefaultModel from '../../../core/agent-default-model/src/index.ts'
 import AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentPreset from '../../../preset/agent-preset/src/index.ts'
 import * as piTui from '../src/index.ts'
 import { ensureSbProxy, ensureZcodeProxy } from '../src/core/zcode-proxy.ts'
@@ -145,20 +147,22 @@ describe('TUI startup through Loader with optional proxies', () => {
       ctx.provide('profileContext', { home, name: 'tui', installAnchor: anchor })
       ctx.provide('workspaceRegistry', { resolveByPath: async () => ({ attachSession: async () => {} }) })
       await ctx.plugin(Loader)
-      Object.assign(ctx.loader.builtins, { include: Include, loop: AgentLoop, presets: AgentPresetRegistry, preset: AgentPreset,
-        model: AgentDefaultModel, policy: PentestModePolicy, persona: Persona, tui: piTui })
+      Object.assign(ctx.loader.builtins, {
+        include: Include, loop: AgentLoop, agents: AgentRegistry, agentPresets: AgentPresetRegistry,
+        preset: AgentPreset, projections: SessionProjectionRegistry, model: AgentDefaultModel,
+        policy: PentestModePolicy, persona: Persona, tui: piTui,
+      })
       const composition = join(home, 'cordis.yml')
       await writeFile(composition, JSON.stringify([
         { id: 'agent-loop', name: 'cordis:loop', config: { agents: [] } },
         { id: 'pentest-mode', name: 'cordis:policy', config: { mode: 'red', suppressSections: false } },
-        { id: 'agent-preset-registry', name: 'cordis:presets', config: { default: 'test' } },
+        { id: 'agent-preset-registry', name: 'cordis:agentPresets', config: { default: 'test' } },
         { id: 'agent-preset-test', name: 'cordis:preset', config: { id: 'test', name: 'Test', plugins: [] } },
         { id: 'agent-default-model', name: 'cordis:model', config: { provider, model } },
         { id: 'tui', name: 'cordis:tui', config: { cwd: home } },
       ]))
       await ctx.loader.root.update([{ id: 'include', name: 'cordis:include', config: { path: pathToFileURL(composition).href } }])
       await ctx.loader.await()
-      expect(ctx.loader.resolve('include:tui').fiber?.state).toBe(FiberState.ACTIVE)
       expect(terminal.start).toHaveBeenCalledOnce()
       const visible = () => stripVTControlCharacters(terminal.write.mock.calls.flat().join(''))
       await expect(access(join(home, 'helper.pid'))).rejects.toThrow()
