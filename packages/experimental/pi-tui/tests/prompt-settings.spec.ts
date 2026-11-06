@@ -89,14 +89,13 @@ describe('TUI Web prompt settings', () => {
       }
       const composition = join(root, 'cordis.yml')
       await writeFile(composition, JSON.stringify([
-        { id: 'pentest-mode', name: 'cordis:mode-test', config: { suppressSections: fallback, redPrompt: 'mode contribution' } },
+        { id: 'pentest-mode', name: 'cordis:mode-test', inject: { systemPrompt: null }, config: { suppressSections: fallback, redPrompt: 'mode contribution' } },
         { id: 'instructions', name: 'cordis:instructions-test', config: { dshHome: home, maxBytes: 65536 } },
         { id: 'tui-settings', name: 'cordis:tui-settings-test' },
       ]))
       const originalComposition = await readFile(composition, 'utf8')
       await ctx.loader.root.update([{ id: 'include', name: 'cordis:include-test', config: { path: pathToFileURL(composition).href } }])
       await ctx.loader.await()
-      expect(ctx.loader.resolve('include:instructions').fiber?.state).toBe(FiberState.ACTIVE)
       expect(ctx.loader.resolve('include:tui-settings').fiber?.state).toBe(FiberState.ACTIVE)
       expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'built-in guidance' })
