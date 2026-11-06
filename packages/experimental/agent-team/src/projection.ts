@@ -152,7 +152,7 @@ export interface TeamProjectionState extends TeamState {
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
-    agentTeam: TeamProjectionState
+    experimentalAgentTeam: TeamProjectionState
   }
 }
 
@@ -299,9 +299,13 @@ function applyCurrentTeamEvent(state: TeamState, event: TeamSessionEvent): void 
   }
 }
 
-/** Host-only Team projection selected by the projected Session identity. */
+/**
+ * Host-only Team projection selected by the projected Session identity. The key
+ * stays distinct from the productized client-visible `agentTeam` projection so
+ * both can typecheck in one aggregate program without sharing a registry key.
+ */
 export const teamProjectionDefinition = {
-  key: 'agentTeam',
+  key: 'experimentalAgentTeam',
   stateVersion: 4,
   stateSchema: teamProjectionEntrySchema,
   init: header => emptyTeamState(header.id),
@@ -309,4 +313,4 @@ export const teamProjectionDefinition = {
     applyProjectionEvent(state, event)
     return state
   },
-} satisfies ProjectionDefinition<'agentTeam', TeamProjectionState>
+} satisfies ProjectionDefinition<'experimentalAgentTeam', TeamProjectionState>

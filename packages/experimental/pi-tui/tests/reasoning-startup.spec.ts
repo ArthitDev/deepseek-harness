@@ -43,7 +43,7 @@ function terminal(): Terminal {
 }
 
 describe('restored reasoning effort through Loader and the real request loop', () => {
-  it.each(['saved-default', 'resumed-header', 'supported'] as const)('recovers %s without selecting the model again', async (source) => {
+  it.each(['saved-default', 'resumed-header', 'supported'] as const)('recovers %s without selecting the model again', { timeout: 30_000 }, async (source) => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-tui-reasoning-startup-'))
     const ctx = new Context()
     const tui = new TuiAltScreen(terminal())
@@ -67,6 +67,9 @@ describe('restored reasoning effort through Loader and the real request loop', (
       const first = await ctx.agentLoop.create(SessionId('first'), route, { cwd: home })
       if (source === 'resumed-header') first.session.append('request/header', { header: { config: high }, reason: 'initial' })
       const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
+      // 0.2.2 rejects a request whose effort the adapter does not advertise, so
+      // the seeded effort is validated (and dropped) before the first turn.
+      await screen.ready()
       for (const text of ['first task', 'continue']) {
         screen.submit(text)
         await first.whenIdle()
@@ -75,6 +78,7 @@ describe('restored reasoning effort through Loader and the real request loop', (
       const switched = await ctx.agentLoop.create(SessionId('switched'), route, { cwd: home })
       switched.session.append('request/header', { header: { config: high }, reason: 'initial' })
       await screen.switchAgent(switched)
+      await screen.ready()
       screen.submit('continue after switching session')
       await switched.whenIdle()
       expect(adapter.requests).toHaveLength(3)

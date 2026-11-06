@@ -23,7 +23,7 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
     const [session, event] = args as [Session, SessionEvent]
     /* v8 ignore next -- non-Team Session events have no Agent Teams invariant. */
     if (!isTeamEvent(event)) return
-    const state = ctx.sessionProjections.stateOf(session, 'agentTeam') as TeamProjectionState
+    const state = ctx.sessionProjections.stateOf(session, 'experimentalAgentTeam') as TeamProjectionState
     const candidate = teamProjectionDefinition.apply(structuredClone(state), event)
     if (candidate.failure !== undefined) {
       fail(`session event ${event.seq} violates the Agent Teams stream: ${candidate.failure}`)

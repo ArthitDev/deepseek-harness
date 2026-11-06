@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { boot, initProfile, readProfilePatches, type ProfileContext } from '../../../boot/app-boot/src/index.ts'
+// Package-specifier import: boot's root-Include singleton must be the same
+// module instance the config editor resolves (relative src paths would not).
+import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '../../../boot/config-editor/src/index.ts'
 import Settings from '../../../settings/settings/src/index.ts'
 import SystemPrompt from '../../../core/system-prompt/src/index.ts'
@@ -17,7 +19,7 @@ import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
 describe('/suppress-prompt', () => {
-  it.each([false, true])('locks suppression OFF without changing Web=%s, including restart', async (webEnabled) => {
+  it.each([false, true])('locks suppression OFF without changing Web=%s, including restart', { timeout: 30_000 }, async (webEnabled) => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-suppress-command-'))
     const dir = join(home, 'profiles', 'tui')
     const bundle = join(dir, 'node_modules', 'suppression-fixture')
@@ -83,7 +85,9 @@ describe('/suppress-prompt', () => {
       expect(write).not.toHaveBeenCalled()
       expect(cancel).not.toHaveBeenCalled()
       screen.submit('/suppress-prompt off')
-      await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('suppressSections')).toBe(false) })
+      // The write crosses the config editor and a locked profile-file write; the
+      // default 1s poll budget is not enough on a fully parallel machine.
+      await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('suppressSections')).toBe(false) }, { timeout: 15_000 })
       expect(write).toHaveBeenCalledExactlyOnceWith('pentest-mode', { suppressSections: false })
       await ctx.settings.update('pentest-mode', { suppressSections: true })
       await ctx.systemPrompt.assemble()

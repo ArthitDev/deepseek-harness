@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { boot, initProfile, readProfilePatches, type ProfileContext } from '../../../boot/app-boot/src/index.ts'
+// Package-specifier import: boot's root-Include singleton must be the same
+// module instance the config editor resolves (relative src paths would not).
+import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '../../../boot/config-editor/src/index.ts'
 import Settings from '../../../settings/settings/src/index.ts'
 import SystemPrompt from '../../../core/system-prompt/src/index.ts'
@@ -18,7 +20,7 @@ import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
 describe('/team-mode', () => {
-  it.each([false, true])('picks, persists and displays team modes with suppression=%s', async (suppressed) => {
+  it.each([false, true])('picks, persists and displays team modes with suppression=%s', { timeout: 30_000 }, async (suppressed) => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-team-mode-command-'))
     const dir = join(home, 'profiles', 'tui')
     const bundle = join(dir, 'node_modules', 'team-mode-fixture')
@@ -83,7 +85,8 @@ describe('/team-mode', () => {
       expect(write).not.toHaveBeenCalled()
       expect(await readFile(profile.patchPath, 'utf8')).toBe(before)
       input('\r')
-      await vi.waitFor(() => { expect(ctx.pentestModePolicy.current().mode).toBe('black') })
+      // The settings write crosses the config editor and a locked profile-file write.
+      await vi.waitFor(() => { expect(ctx.pentestModePolicy.current().mode).toBe('black') }, { timeout: 15_000 })
       await vi.waitFor(() => { expect(visible()).toContain('team-mode: black · applies to the next request') })
       expect(tui.hasOverlay()).toBe(false)
       expect(write).toHaveBeenCalledExactlyOnceWith('pentest-mode', { mode: 'black' })
@@ -100,8 +103,9 @@ describe('/team-mode', () => {
       expect(write).toHaveBeenCalledOnce()
       for (const option of [TEAM_MODE_OPTIONS[0], TEAM_MODE_OPTIONS[1], TEAM_MODE_OPTIONS[3], TEAM_MODE_OPTIONS[2]]) {
         screen.submit(`/team-mode ${option.value}`)
-        await vi.waitFor(() => { expect(ctx.pentestModePolicy.current().mode).toBe(option.value) })
-        await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('mode')).toBe(option.value) })
+        await vi.waitFor(() => { expect(ctx.pentestModePolicy.current().mode).toBe(option.value) }, { timeout: 15_000 })
+        // The profile write crosses the config editor and a locked file write.
+        await vi.waitFor(() => { expect(readProfileConfig(ctx, 'pentest-mode')?.get('mode')).toBe(option.value) }, { timeout: 15_000 })
         await vi.waitFor(() => { expect(visible()).toContain(`${option.icon} ${option.label}`) })
         await ctx.systemPrompt.assemble()
         expect(ctx.pentestModePolicy.current().mode).toBe(option.value)

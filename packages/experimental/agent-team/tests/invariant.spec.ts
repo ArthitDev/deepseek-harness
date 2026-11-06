@@ -11,7 +11,7 @@ async function setup(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
-  ctx.sessionProjections.register(teamProjectionDefinition)
+  await ctx.sessionProjections.register(teamProjectionDefinition)
   await ctx.plugin(InvariantService, { enabled: true })
   await ctx.plugin(TeamInvariant)
   return ctx

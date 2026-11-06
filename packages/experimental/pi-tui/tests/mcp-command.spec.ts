@@ -44,19 +44,21 @@ it('/mcp and /jev hide schemas, deny stale calls, and restore both', async () =>
   const harness = await mountAgentLoopTestHarness(ctx)
   const agent = await harness.create(SessionId('mcp-command'))
   const second = await harness.create(SessionId('mcp-command-second'))
+  // The TUI policy hides tools through the 0.2.2 restriction seam, which only
+  // masks globally registered tools, so the fixtures register on the shared registry.
+  for (const name of [MCP_TOOL, JEV_TOOL, DIRECT_JEV_TOOL, 'ordinary']) {
+    ctx.tools.register({
+      name,
+      description: name,
+      parameters: { type: 'object', properties: {} },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value as string }],
+      },
+      execute: async () => `ran:${name}`,
+    })
+  }
   for (const subject of [agent, second]) {
-    for (const name of [MCP_TOOL, JEV_TOOL, DIRECT_JEV_TOOL, 'ordinary']) {
-      subject.ctx.tools.register({
-        name,
-        description: name,
-        parameters: { type: 'object', properties: {} },
-        output: {
-          schema: { type: 'string' },
-          render: (_args, value) => [{ type: 'text', text: value as string }],
-        },
-        execute: async () => `ran:${name}`,
-      })
-    }
     subject.ctx.on('agent/pre-step', async (_payload, next) => {
       const decision = await next()
       if (decision.kind === 'reject') return decision

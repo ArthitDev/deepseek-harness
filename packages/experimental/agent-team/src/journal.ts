@@ -29,7 +29,7 @@ export class TeamJournal {
   state(root: Agent): TeamState {
     // The deprecated keyed stateOf stays the only cross-package read path; the
     // owning registration lives in the host package's runtime lifecycle.
-    const projection = this.ctx.sessionProjections.stateOf(root.session, 'agentTeam') as
+    const projection = this.ctx.sessionProjections.stateOf(root.session, 'experimentalAgentTeam') as
       | TeamState
       | { failure: string }
       | undefined

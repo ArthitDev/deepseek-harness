@@ -83,7 +83,8 @@ describe('/wiki local menu', () => {
         const args = process.platform === 'win32'
           ? ['-NoProfile', '-Command', `Start-Process -FilePath '${uri.replace(/'/g, "''")}'`]
           : [uri]
-        await vi.waitFor(() => { expect(runNativeCommand).toHaveBeenCalledWith(command, args, expect.any(AbortSignal)) })
+        // 0.2.2 native commands carry a window-visibility argument; GUI launchers run hidden.
+        await vi.waitFor(() => { expect(runNativeCommand).toHaveBeenCalledWith(command, args, expect.any(AbortSignal), 'hidden') })
         expect(openNativePath).not.toHaveBeenCalled()
       }
       expect(f.followup).not.toHaveBeenCalled()

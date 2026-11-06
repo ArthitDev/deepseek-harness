@@ -8,11 +8,13 @@ import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentService, { snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import { mountWorkingDirectoryFixture } from '../../../subagent/subagent/tests/working-directory-fixture.ts'
 import TeamService, { TeamId, TeamMessageId } from '../src/index.ts'
 import type { TeamMailbox } from '../src/mailbox.ts'
 import { teamProjectionDefinition } from '../src/projection.ts'
@@ -23,6 +25,20 @@ const SIGNAL = new AbortController().signal
 const PERSISTENCE_TEST_TIMEOUT_MS = 15_000
 const roots: string[] = []
 const contexts = new Set<Context>()
+
+/**
+ * Read one received message's framed Team delivery identity. Runtime relay
+ * deliveries attribute senders through the subagent runtime, so the durable
+ * Team identity arrives inside the framed leading content block.
+ */
+function framedMessageId(message: UserMessage): TeamMessageId | undefined {
+  for (const block of message.content) {
+    if (block.type !== 'text') continue
+    const id = /^Team message (\S+) from .+:$/u.exec(block.text)?.[1]
+    if (id !== undefined) return TeamMessageId(id)
+  }
+  return undefined
+}
 
 /** Detached durable Team read through the same projection definition as the service. */
 function durable(agent: Agent): {
@@ -53,7 +69,7 @@ async function storedEvents(ctx: Context, id: SessionId): Promise<readonly Sessi
 
 /** Await mailbox acknowledgements through their flush and dispatch completion. */
 async function settleMailbox(ctx: Context): Promise<void> {
-  const { mailbox } = ctx.agentTeams as unknown as { readonly mailbox: TeamMailbox }
+  const { mailbox } = teams(ctx) as unknown as { readonly mailbox: TeamMailbox }
   await Promise.all(mailbox.pendingDispatches())
 }
 
@@ -110,6 +126,7 @@ async function stack(
   await backend.mount(ctx, root)
   await ctx.plugin(TestSessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
+  await mountWorkingDirectoryFixture(ctx)
   await ctx.plugin(SubagentService)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(TeamService)
@@ -120,6 +137,15 @@ async function stack(
     adapter,
     dispose: async () => { await disposeContext(ctx) },
   }
+}
+
+/**
+ * Typed runtime handle for the experimental Team service. The host aggregate
+ * program types `ctx.agentTeams` as the productized task-board service, so the
+ * tests read the mounted instance through the untyped service-store lookup.
+ */
+function teams(ctx: Context): TeamService {
+  return ctx.reflect.get('agentTeams')
 }
 
 function provisioning(childId: SessionId, name: string): TeamMemberSnapshot {
@@ -195,14 +221,13 @@ for (const backend of backends) {
         first.ctx.sessions.flush(activeRoot.session),
         first.ctx.sessions.flush(failedRoot.session),
       ])
-      await first.ctx.subagents.startContinuable({
+      await first.ctx.subagents.startActivation({
         childId,
         provider: 'spawn',
         label: 'recoverable recovery',
-        request: {
-          prompt: [{ type: 'text', text: 'persist before active edge' }],
-          parent: activeRoot,
-        },
+        prompt: [{ type: 'text', text: 'persist before active edge' }],
+        parent: activeRoot,
+        delivery: 'parent',
         signal: SIGNAL,
       })
       await vi.waitFor(() => { expect(first.ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
@@ -226,7 +251,7 @@ for (const backend of backends) {
         expect(failedMember?.error).toContain('child Session recovery failed')
       }, { timeout: 5_000 })
 
-      const receipt = await second.ctx.agentTeams.sendMessage(activeHandle.agent, {
+      const receipt = await teams(second.ctx).sendMessage(activeHandle.agent, {
         target: 'recoverable',
         content: [{ type: 'text', text: 'resume after reconciliation' }],
         signal: SIGNAL,
@@ -290,7 +315,7 @@ for (const backend of backends) {
 
       const first = await stack(backend, storageRoot, [textResponse('initial teammate answer')])
       const firstLead = await first.ctx.agentLoop.create(rootId, { provider: 'mock', model: 'mock' })
-      const started = await first.ctx.agentTeams.spawnTeammate(firstLead, {
+      const started = await teams(first.ctx).spawnTeammate(firstLead, {
         name: 'mail-worker',
         description: 'mail recovery worker',
         prompt: [{ type: 'text', text: 'finish before restart' }],
@@ -301,7 +326,7 @@ for (const backend of backends) {
       await vi.waitFor(() => { expect(first.ctx.agents.get(started.member.id)).toBeUndefined() }, { timeout: 5_000 })
       vi.spyOn(first.ctx.sessionPersistence, 'open')
         .mockRejectedValueOnce(new Error('temporary target read failure'))
-      const queued = await first.ctx.agentTeams.sendMessage(firstLead, {
+      const queued = await teams(first.ctx).sendMessage(firstLead, {
         target: 'mail-worker',
         content: [{ type: 'text', text: 'durable retry context' }],
         signal: SIGNAL,
@@ -319,10 +344,13 @@ for (const backend of backends) {
       await vi.waitFor(() => { expect(durable(rootHandle.agent).pendingMessages).toEqual([]) })
 
       const child = await storedEvents(second.ctx, started.member.id)
-      const peerIds = child.flatMap(event => event.type === 'user/message'
-        && event.data.source.kind === 'team-message'
-        ? [event.data.source.messageId]
-        : [])
+      // Relay delivery frames the durable Team identity into the leading text
+      // block; the subagent runtime owns the source attribution.
+      const peerIds = child.flatMap((event) => {
+        if (event.type !== 'user/message') return []
+        const id = framedMessageId(event.data)
+        return id === undefined ? [] : [id]
+      })
       expect(peerIds).toEqual([queued.messageId])
 
       await rootHandle.dispose()
@@ -339,7 +367,7 @@ for (const backend of backends) {
 
       const first = await stack(backend, storageRoot, [textResponse('initial teammate answer')])
       const firstLead = await first.ctx.agentLoop.create(rootId, { provider: 'mock', model: 'mock' })
-      const started = await first.ctx.agentTeams.spawnTeammate(firstLead, {
+      const started = await teams(first.ctx).spawnTeammate(firstLead, {
         name: 'dedup-worker',
         description: 'mail deduplication worker',
         prompt: [{ type: 'text', text: 'finish before the crash window' }],
@@ -388,7 +416,7 @@ for (const backend of backends) {
       await first.dispose()
 
       const second = await stack(backend, storageRoot, [])
-      const { mailbox } = second.ctx.agentTeams as unknown as { readonly mailbox: TeamMailbox }
+      const { mailbox } = teams(second.ctx) as unknown as { readonly mailbox: TeamMailbox }
       const flush = second.ctx.sessions.flush.bind(second.ctx.sessions)
       const checkpointEntered = Promise.withResolvers<undefined>()
       const releaseCheckpoint = Promise.withResolvers<undefined>()

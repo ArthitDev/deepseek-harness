@@ -1,4 +1,7 @@
 import { type Context, FiberState } from '@deepseek-ai/cordis'
+// Type-only: pulls the loader's `loader/volatile-update` event augmentation
+// into this program for the re-lock listener below.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { readProfileConfig, readWebProfileConfig } from './web-settings.js'
 import { TEAM_MODE_OPTIONS } from './team-mode.js'
@@ -29,7 +32,7 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
   const entry = [...loader.entries()].find(entry => entry.options.id === 'pentest-mode' && entry.fiber?.state === FiberState.ACTIVE)
   if (entry === undefined) throw new Error('pi-tui: active pentest-mode entry not found')
   const fallback = { ...entry.options.config }
-  const syncCompute = (): boolean => {
+  const syncCompute = (persist = true): boolean => {
     const local = readProfileConfig(ctx, 'pentest-mode')
     const web = readWebProfileConfig(ctx, 'pentest-mode')
     const suppressSections = local?.get('suppressSections') ?? web?.get('suppressSections') ?? fallback.suppressSections ?? false
@@ -52,6 +55,7 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
     // prompt assembly, before any async config restart settles. Apply the
     // values on the live policy now; persist through the config restart after.
     if (typeof policy.apply === 'function') policy.apply(updates)
+    if (!persist) return true
     void entry.update({ config: { ...entry.options.config, ...updates } }).catch((error: unknown) => {
       ctx.logger.error(error)
     })
@@ -76,6 +80,14 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
     return decision
   }, { prepend: true })
   ctx.on('system-prompt/change', async () => { await sync() })
+  // Volatile config commits restart no fiber, so a raw settings write that
+  // flips a locked field would otherwise hold until the next turn. Re-lock in
+  // memory immediately; the next turn sync persists it. The global flag beats
+  // the per-fiber event filter, and unrelated entries' commits only rerun the
+  // file reads and no-op on the comparison.
+  ctx.on('loader/volatile-update', () => {
+    try { syncCompute(false) } catch (error: unknown) { ctx.logger.error(error) }
+  }, { global: true })
   ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
     const sections = structuredClone(assembly.sections)
     const result = await next()

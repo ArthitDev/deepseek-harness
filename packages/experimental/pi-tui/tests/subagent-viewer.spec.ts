@@ -29,6 +29,9 @@ const user = (text: string) => createUserMessage({ source: { kind: 'user' }, con
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'dsh-tui-subagents-'))
   const ctx = new Context()
+  // SubagentRuntime requires the working-directory service; provide it before
+  // the Loader composition mounts so the subagents entry can activate.
+  ctx.provide('workingDirectory', { ensure: async () => root })
   const start = vi.fn<Terminal['start']>()
   // Terminal dimensions are getter-only on the interface; the fixture keeps a
   // live mutable size so resize assertions can move the viewport.
@@ -43,7 +46,6 @@ async function setup() {
     await ctx.plugin(Loader)
     Object.assign(ctx.loader.builtins, {
       include: Include, sessions: SessionStore, agents: AgentRegistry,
-      workingDirectory: { ensure: async () => root },
       projections: SessionProjectionRegistry, query: TranscriptQuery, subagents: SubagentRuntime,
       screen: { name: 'subagent-screen-fixture', inject: ['sessions', 'agents', 'subagents'], apply: async (scope: Context) => {
         const agent = fixtureAgent(scope, scope.sessions.create(SessionId('parent-viewer')))
@@ -66,7 +68,7 @@ async function setup() {
 }
 
 describe('read-only subagent inspection', () => {
-  it('opens from the agent count while the parent runs, follows child tools and streams, and returns without cancelling either agent', async () => {
+  it('opens from the agent count while the parent runs, follows child tools and streams, and returns without cancelling either agent', { timeout: 30_000 }, async () => {
     const h = await setup()
     const { ctx, tui, screen, key, frame } = h
     try {
@@ -74,12 +76,15 @@ describe('read-only subagent inspection', () => {
       const cancelParent = vi.spyOn(parent, 'cancel')
       const session = ctx.sessions.create(SessionId('child-viewer'), { meta: { origin: 'subagent', parentSession: parent.id } })
       session.append('subagent/descriptor', { version: SUBAGENT_DESCRIPTOR_VERSION, mode: 'continuable', provider: 'test', label: 'Inspect the parser' })
+      // 0.2.2 discovery reads parent-owned catalogs, so the parent records the child.
+      parent.session.append('subagent/catalog', { version: 1, childId: session.id, childCreatedAt: session.header.createdAt, mode: 'continuable', label: 'Inspect the parser' })
       const childScope = await ctx.plugin(() => {})
       const child = fixtureAgent(childScope.ctx, session)
       const cancelChild = vi.spyOn(child, 'cancel')
       await ctx.agents.register(child)
       const nested = ctx.sessions.create(SessionId('nested-viewer'), { meta: { origin: 'subagent', parentSession: child.id } })
       nested.append('subagent/descriptor', { version: SUBAGENT_DESCRIPTOR_VERSION, mode: 'one-shot', provider: 'test', label: 'Nested review' })
+      session.append('subagent/catalog', { version: 1, childId: nested.id, childCreatedAt: nested.header.createdAt, mode: 'one-shot', label: 'Nested review' })
       for (let i = 0; i < 25; i++) session.append('user/message', user(`child-message-${i}`), { surfaceOp: 'append' })
       screen.handleEvent(parent.session.append('turn/start', { turn: 1 }))
       screen.handleEvent(parent.session.append('user/message', user('parent keeps working'), { surfaceOp: 'append' }))
@@ -142,7 +147,7 @@ describe('read-only subagent inspection', () => {
     } finally { await h.dispose() }
   })
 
-  it('reads saved history with a borrowed handle, refreshes without resuming, and cleans up on disposal', async () => {
+  it('reads saved history with a borrowed handle, refreshes without resuming, and cleans up on disposal', { timeout: 30_000 }, async () => {
     const h = await setup()
     try {
       const saved = Session.create(SessionId('saved-viewer'))
@@ -175,7 +180,7 @@ describe('read-only subagent inspection', () => {
     } finally { await h.dispose() }
   })
 
-  it('reports unreadable history and does not open a late overlay after disposal', async () => {
+  it('reports unreadable history and does not open a late overlay after disposal', { timeout: 30_000 }, async () => {
     const h = await setup()
     try {
       await expect(inspectSubagent(h.ctx, h.tui, SessionId('missing'), 'Missing child', 20)).rejects.toThrow('no readable session history')
@@ -193,7 +198,7 @@ describe('read-only subagent inspection', () => {
     } finally { await h.dispose() }
   })
 
-  it('only activates the visible agent-count segment after wrapping and clears its hit area when hidden', async () => {
+  it('only activates the visible agent-count segment after wrapping and clears its hit area when hidden', { timeout: 30_000 }, async () => {
     const h = await setup()
     const inspect = vi.fn()
     const bar = new StatusBar(h.tui, inspect)

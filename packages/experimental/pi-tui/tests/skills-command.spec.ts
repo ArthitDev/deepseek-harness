@@ -38,17 +38,19 @@ it('/skills disables discovery and invocation, then restores them', async () => 
   const harness = await mountAgentLoopTestHarness(ctx)
   const agent = await harness.create(SessionId('skills-command'))
   const second = await harness.create(SessionId('skills-command-second'))
+  // The TUI policy hides the skill tool through the 0.2.2 restriction seam,
+  // which only masks globally registered tools.
+  ctx.tools.register({
+    name: 'skill',
+    description: 'Load a skill',
+    parameters: { type: 'object', properties: {} },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => [{ type: 'text', text: value as string }],
+    },
+    execute: async () => 'loaded',
+  })
   for (const subject of [agent, second]) {
-    subject.ctx.tools.register({
-      name: 'skill',
-      description: 'Load a skill',
-      parameters: { type: 'object', properties: {} },
-      output: {
-        schema: { type: 'string' },
-        render: (_args, value) => [{ type: 'text', text: value as string }],
-      },
-      execute: async () => 'loaded',
-    })
     subject.ctx.on('agent/pre-step', async (_payload, next) => {
       const decision = await next()
       if (decision.kind === 'reject') return decision

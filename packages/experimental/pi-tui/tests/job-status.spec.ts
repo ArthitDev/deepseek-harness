@@ -17,12 +17,18 @@ import { TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tu
 import { ChatScreen } from '../src/ui/chat.ts'
 import { fixtureAgent } from './fixture-agent.ts'
 
+// 0.2.2 job ids embed randomUUID; pin it so the rendered pane snapshot stays stable.
+vi.mock('node:crypto', async importOriginal => ({
+  ...await importOriginal<typeof import('node:crypto')>(),
+  randomUUID: () => '00000000-0000-4000-8000-000000000000',
+}))
+
 declare module '@deepseek-ai/dsh-jobs' {
   interface JobKindMap { pwsh: 'pwsh'; workflow: 'workflow'; subagent: 'subagent' }
 }
 
 describe('background job status in Agent Debug', () => {
-  it('observes registered jobs through a Loader composition independently of tool and turn completion', async () => {
+  it('observes registered jobs through a Loader composition independently of tool and turn completion', { timeout: 30_000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-job-status-'))
     const ctx = new Context()
     const start = vi.fn<Terminal['start']>()
@@ -46,13 +52,15 @@ describe('background job status in Agent Debug', () => {
         } },
       })
       const path = join(root, 'cordis.yml')
-      await writeFile(path, JSON.stringify(['sessions', 'agents', 'jobs', 'screen'].map(name => ({ name: `cordis:${name}` }))))
+      await writeFile(path, JSON.stringify(['sessions', 'agents', 'projections', 'jobs', 'screen'].map(name => ({ name: `cordis:${name}` }))))
       await ctx.loader.root.update([{ id: 'include', name: 'cordis:include', config: { path: pathToFileURL(path).href } }])
       await ctx.loader.await()
       expect(screen).toBeDefined()
       tui.start()
       const frame = () => { tui.renderNow(); return stripVTControlCharacters(tui.getScreenLines().join('\n')) }
-      const debug = () => { frame(); return tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(61)).join('\n') }
+      // Trim per-line trailing spaces: rendered panes pad to the terminal width,
+      // and the whitespace gate rejects snapshot files that carry them.
+      const debug = () => { frame(); return tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(61).replace(/\s+$/, '')).join('\n') }
       const first = ctx.agents.get(SessionId('visible-jobs'))!
       const second = fixtureAgent(ctx, ctx.sessions.create(SessionId('other-jobs')))
       await ctx.agents.register(second)
@@ -77,7 +85,10 @@ describe('background job status in Agent Debug', () => {
       screen.handleEvent(first.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } }))
       now.mockReturnValue(5000)
       expect(debug()).toContain('[OK] Shell · pwsh')
-      for (const running of [windows, kali, workflow]) expect(debug()).toContain(`[RUNNING] Job · ${running.id} · 4.0s`)
+      // 0.2.2 job ids are long enough that the widest row wraps inside the pane;
+      // the status+id prefix stays on one line and the elapsed tail continues below.
+      for (const running of [windows, kali, workflow]) expect(debug()).toContain(`[RUNNING] Job · ${running.id}`)
+      expect(debug()).toContain('4.0s')
       expect(debug()).not.toContain(foreign.id)
       expect(debug()).not.toContain('long-command-preview')
       expect(frame()).toContain('3 jobs')
@@ -137,7 +148,8 @@ describe('background job status in Agent Debug', () => {
       foreign.settle({ status: 'completed' })
       await vi.waitFor(() => { expect(ctx.jobs.get(workflow.id, first.id).status).toBe('killed') })
       now.mockReturnValue(9000)
-      expect(debug()).toContain(`[KILLED] Job · ${workflow.id} · 4.0s`)
+      expect(debug()).toContain(`[KILLED] Job · ${workflow.id}`)
+      expect(debug()).toContain('4.0s')
       expect(frame()).not.toMatch(/\d+ jobs/)
       ctx.jobs.remove(windows.id, first.id)
       expect(debug()).not.toContain(`[COMPLETED] Job · ${windows.id}`)

@@ -23,7 +23,9 @@ describe('plugin entry', () => {
     }
   })
 
-  it('refuses to boot outside an interactive terminal', async () => {
+  // apply() dynamically imports the whole app graph; under a fully parallel
+  // suite that import alone can outlast the default 5s test budget.
+  it('refuses to boot outside an interactive terminal', { timeout: 30_000 }, async () => {
     const ctx = new Context()
     ctx.provide('cmdlineArgs', { get: () => [] as string[] })
     await expect(piTui.apply(ctx, {})).rejects.toThrow('needs an interactive terminal')

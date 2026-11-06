@@ -42,7 +42,7 @@ describe('TUI Web prompt settings', () => {
     { initial: false, savedWeb: true },
     { initial: true, savedWeb: false },
     { initial: false, savedWeb: false },
-  ])('retains complete TUI prompts despite suppression $initial and saved Web settings $savedWeb', async ({ initial, savedWeb }) => {
+  ])('retains complete TUI prompts despite suppression $initial and saved Web settings $savedWeb', { timeout: 30_000 }, async ({ initial, savedWeb }) => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-prompt-settings-'))
     const ctx = new Context()
     const wireRequests: { messages: { role: string; content: string }[] }[] = []

@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { errorMessage, TeamError } from './error.ts'
@@ -21,6 +21,48 @@ import type {
   SendTeamMessageResult,
   TeamMessageSnapshot,
 } from './types.ts'
+
+/** Identity fields one delivered receipt must frame to acknowledge a queued message. */
+const TEAM_FRAMING = /^Team message (\S+) from .+:$/u
+
+/**
+ * Test whether one received message records one queued Team delivery. Lead
+ * steer deliveries carry the durable `team-message` source; deliveries through
+ * the subagent relay carry the framing line as a leading content block.
+ * @param candidate - received target-side message.
+ * @param messageId - queued message identity.
+ * @returns whether the target durably recorded this exact delivery.
+ */
+function isTeamDelivery(candidate: UserMessage, messageId: TeamMessageId): boolean {
+  if (candidate.source.kind === 'team-message') return candidate.source.messageId === messageId
+  return candidate.content.some((block) => {
+    if (block.type !== 'text') return false
+    return TEAM_FRAMING.exec(block.text)?.[1] === messageId
+  })
+}
+
+/**
+ * Frame one queued message's durable identity line for the receiving model.
+ * @param message - queued message to frame.
+ * @returns the stable framing text placed before the payload.
+ */
+function deliveryFraming(message: TeamMessageSnapshot): string {
+  return `Team message ${message.id} from ${message.senderName}:`
+}
+
+/**
+ * Read the framed Team message identity out of one received message's content.
+ * @param content - received message content blocks.
+ * @returns the framed queued-message identity, or undefined for non-Team mail.
+ */
+function framedTeamMessageId(content: readonly ContentBlock[]): TeamMessageId | undefined {
+  for (const block of content) {
+    if (block.type !== 'text') continue
+    const id = TEAM_FRAMING.exec(block.text)?.[1]
+    if (id !== undefined) return TeamMessageId(id)
+  }
+  return undefined
+}
 
 /** Owns every process-local state transition for the durable Team mailbox. */
 export class TeamMailbox {
@@ -66,15 +108,33 @@ export class TeamMailbox {
    * @param event - newly appended Session event.
    */
   observeSessionEvent(session: Session, event: SessionEvent): void {
-    if (this.lifecycle.disposed || event.type !== 'user/message' || event.data.source.kind !== 'team-message') return
+    if (this.lifecycle.disposed || event.type !== 'user/message') return
     const source = event.data.source
+    const messageId = source.kind === 'team-message'
+      ? source.messageId
+      : source.kind === 'agent-message' && source.form === 'relay'
+        ? framedTeamMessageId(event.data.content)
+        /* v8 ignore next 2 -- other merge-extensible source kinds carry no Team identity. */
+        : undefined
+    if (messageId === undefined) return
+    const root = source.kind === 'team-message'
+      ? this.ctx.agents.get(brandString<SessionId>(source.teamId))
+      : source.kind === 'agent-message' && source.form === 'relay'
+        ? this.resolveRelayRoot(source.senderSessionId)
+        : undefined
+    if (root === undefined) return
     const acknowledgement = Promise.resolve().then(async () => {
-      const root = this.ctx.agents.get(brandString<SessionId>(source.teamId))
-      if (root !== undefined) await this.checkpointDelivered(root, session, source.messageId)
+      await this.checkpointDelivered(root, session, messageId)
     }).catch((error: unknown) => {
-      this.ctx.logger.warn(`Team message "${source.messageId}" acknowledgement failed: ${errorMessage(error)}`)
+      this.ctx.logger.warn(`Team message "${messageId}" acknowledgement failed: ${errorMessage(error)}`)
     })
     void this.trackDispatch(acknowledgement)
+  }
+
+  /** Resolve the Team Lead for one relay-delivered receipt through its sender. */
+  private resolveRelayRoot(senderId: SessionId): Agent | undefined {
+    const sender = this.ctx.agents.get(senderId)
+    return sender === undefined ? undefined : this.roster.tryMembership(sender)?.root
   }
 
   /**
@@ -300,14 +360,13 @@ export class TeamMailbox {
   private targetRecorded(session: Session, messageId: TeamMessageId): boolean {
     // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     const suffix = session.snapshotEvents(session.inheritedEventCount)
-    return messageAccepted(suffix, message => message.source.kind === 'team-message'
-      && message.source.messageId === messageId)
+    return messageAccepted(suffix, candidate => isTeamDelivery(candidate, messageId))
   }
 
   /** Frame peer content with stable sender and message identity for the receiving model. */
   private deliveryContent(message: TeamMessageSnapshot): ContentBlock[] {
     return [
-      { type: 'text', text: `Team message ${message.id} from ${message.senderName}:` },
+      { type: 'text', text: deliveryFraming(message) },
       ...structuredClone(message.content),
     ]
   }
@@ -321,8 +380,7 @@ export class TeamMailbox {
     try {
       const stored = await readPersistedSession(this.ctx.sessionPersistence, targetId, signal)
       const suffix = stored.events.slice(stored.inheritedEventCount)
-      return messageAccepted(suffix, message => message.source.kind === 'team-message'
-        && message.source.messageId === messageId)
+      return messageAccepted(suffix, candidate => isTeamDelivery(candidate, messageId))
     } catch (error: unknown) {
       this.ctx.logger.warn(`cannot read Team message target "${targetId}": ${errorMessage(error)}`)
       return undefined

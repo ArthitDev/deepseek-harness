@@ -28,7 +28,7 @@ import { basename, relative } from 'node:path'
 import chalk from 'chalk'
 import { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { JobId, JobOutputRead, JobView } from '@deepseek-ai/dsh-jobs'
 import { foldSubagentDescriptor, type SubagentRunEndInfo, type SubagentRunInfo } from '@deepseek-ai/dsh-subagent'
 import type { ActivityEntry } from '../core/activity.js'
@@ -151,6 +151,8 @@ interface LlmRuntime extends LlmRuntimeLike {
 interface ToolPolicyRuntime {
   guard?(guard: (execution: { readonly name: string; readonly arguments: unknown }) => string | undefined): () => void
   schemas?(scope?: Agent): readonly { name: string }[]
+  get?(name: string): unknown
+  restrict?(filter: { deny?: readonly string[] }): () => void
 }
 
 const MCP_TOOL_PREFIX = 'mcp__'
@@ -166,6 +168,10 @@ const mcpServerName = (name: string): string => {
   const separator = rest.indexOf('__')
   return separator < 0 ? rest : rest.slice(0, separator)
 }
+
+/** Compare complete selections, treating absent effort as its own value. */
+const sameRouteSelection = (left: ModelSelection, right: ModelSelection): boolean =>
+  left.provider === right.provider && left.model === right.model && left.reasoningEffort === right.reasoningEffort
 
 interface SkillCatalogEntry {
   readonly name: string
@@ -283,6 +289,9 @@ export class ChatScreen {
   private disposeSelection: (() => void) | undefined
   private disposeMcpPolicy: (() => void) | undefined
   private disposeSkillsPolicy: (() => void) | undefined
+  private disposeToolRestriction: (() => void) | undefined
+  /** Settles once the seeded reasoning effort has been validated against its adapter. */
+  private seedValidation: Promise<void> | undefined
   private disposeJobs: (() => void) | undefined
   private agentsOverlayOpen = false
   private contextOverlayOpen = false
@@ -399,6 +408,7 @@ export class ChatScreen {
 
     this.seedSelection()
     this.disposeSelection = this.installSelection()
+    this.seedValidation = this.validateSeededEffort()
     this.disposeMcpPolicy = this.installMcpPolicy()
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
@@ -686,6 +696,12 @@ export class ChatScreen {
       ...(defaults !== undefined ? { defaults } : {}),
       ...(prior !== undefined ? { prior } : {}),
     })
+    // 0.2.2 fixes each step's config from the agent's durable selection, so the
+    // seeded route must be recorded (a no-op when it already matches).
+    const current = this.agent.model.current()
+    if (current === undefined || !sameRouteSelection(current, this.selection.current)) {
+      this.agent.model.select(this.selection.current)
+    }
   }
 
   /** The harness's shared default-model selection (same source as app.ts). */
@@ -694,43 +710,38 @@ export class ChatScreen {
     return defaultModelSelection(this.ctx)
   }
 
-  /** Repair saved or resumed efforts before the runtime validates each request. */
+  /** Route model switches through the agent's durable selection, with switch notices. */
   private installSelection(): () => void {
+    return installModelSelection(this.agent.ctx)
+  }
+
+  /** Settles once the visible agent's seeded reasoning effort has been validated. */
+  async ready(): Promise<void> {
+    await this.seedValidation
+  }
+
+  /**
+   * 0.2.2 rejects a request whose effort the adapter does not advertise, so the
+   * seeded effort is checked against the model and dropped before a turn uses it.
+   */
+  private async validateSeededEffort(): Promise<void> {
     const agent = this.agent
-    const disposeRouting = installModelSelection(agent.ctx)
-    const disposeEffort = agent.ctx.on('agent/request', async ({ signal }, next) => {
-      const proposed = await next()
-      const effort = proposed.reasoningEffort
-      const llm = this.llm()
-      if (effort === undefined || llm === undefined) return proposed
-      const info = await llm.resolveModelInfo(proposed.provider, proposed.model, signal)
-      signal.throwIfAborted()
-      if (info.reasoning?.efforts.some(level => level.id === effort)) return proposed
-      const { reasoningEffort: _unsupported, ...withoutEffort } = proposed
-      const selected = this.selection.current
-      if (selected?.provider === proposed.provider && selected.model === proposed.model && selected.reasoningEffort === effort) {
-        this.selection.current = { provider: selected.provider, model: selected.model }
-      }
-      if (this.agent === agent) {
-        delete this.model.effort
-        this.pushNotice(`Reasoning effort ${effort} is not advertised for ${proposed.model}; using provider default`, 'info')
-      }
-      return withoutEffort
-    }, { prepend: true })
-    return () => { disposeEffort(); disposeRouting() }
+    const selected = this.selection.current
+    if (selected?.reasoningEffort === undefined) return
+    const llm = this.llm()
+    if (llm === undefined) return
+    const info = await llm.resolveModelInfo(selected.provider, selected.model)
+    if (info.reasoning?.efforts.some(level => level.id === selected.reasoningEffort)) return
+    const bare = { provider: selected.provider, model: selected.model }
+    this.selection.current = bare
+    if (this.agent !== agent) return
+    this.agent.model.select(bare)
+    delete this.model.effort
+    this.pushNotice(`Reasoning effort ${selected.reasoningEffort} is not advertised for ${selected.model}; using provider default`, 'info')
   }
 
   /** Hide MCP/JEV schemas and policy context, and deny stale calls while their switches are off. */
   private installMcpPolicy(): () => void {
-    const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly: import('@deepseek-ai/dsh-system-prompt').PromptAssembly, _context, next) => {
-      const assembly = await next() as import('@deepseek-ai/dsh-system-prompt').PromptAssembly
-      return this.mcpEnabled && this.jevEnabled && this.disabledMcpServers.size === 0
-        ? assembly
-        : { ...assembly, tools: assembly.tools.filter(tool =>
-          (!tool.name.startsWith(MCP_TOOL_PREFIX)
-            || (this.mcpEnabled && !this.disabledMcpServers.has(mcpServerName(tool.name))))
-          && (this.jevEnabled || !isJevTool(tool.name))) }
-    })
     const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
       const decision = await next()
       if (this.jevEnabled || decision.kind === 'reject') return decision
@@ -754,17 +765,37 @@ export class ChatScreen {
       }
       return undefined
     })
-    return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
+    this.applyToolRestrictions()
+    return () => {
+      this.disposeToolRestriction?.()
+      this.disposeToolRestriction = undefined
+      disposeGuard?.()
+      disposePreStep()
+    }
+  }
+
+  /** Re-apply the schema restrictions behind the MCP, JEV, and skills toggles. */
+  private applyToolRestrictions(): void {
+    this.disposeToolRestriction?.()
+    this.disposeToolRestriction = undefined
+    const tools = this.agent.ctx.get('tools') as ToolPolicyRuntime | undefined
+    const deny = (tools?.schemas?.(this.agent) ?? [])
+      .map(tool => tool.name)
+      .filter(name =>
+        (name.startsWith(MCP_TOOL_PREFIX)
+          && (!this.mcpEnabled || this.disabledMcpServers.has(mcpServerName(name))))
+        || (isJevTool(name) && !this.jevEnabled)
+        || (name === SKILL_TOOL_NAME && !this.skillsEnabled))
+    // 0.2.2 keeps tool schemas provider-owned through the assemble waterfall, so
+    // hiding them goes through the registry restriction seam, which masks only
+    // globally registered tools; agent-scope registrations stay model-visible.
+    const global = deny.filter(name => tools?.get?.(name) !== undefined)
+    if (global.length === 0) return
+    this.disposeToolRestriction = tools?.restrict?.({ deny: global })
   }
 
   /** Hide disabled skill discovery and deny both model and user invocation. */
   private installSkillsPolicy(): () => void {
-    const disposeAssembly = this.agent.ctx.on('system-prompt/assemble', async (_assembly: import('@deepseek-ai/dsh-system-prompt').PromptAssembly, _context, next) => {
-      const assembly = await next() as import('@deepseek-ai/dsh-system-prompt').PromptAssembly
-      return this.skillsEnabled
-        ? assembly
-        : { ...assembly, tools: assembly.tools.filter(tool => tool.name !== SKILL_TOOL_NAME) }
-    })
     const disposePreStep = this.agent.ctx.on('agent/pre-step', async (_payload, next) => {
       const decision = await next()
       if (decision.kind === 'reject') return decision
@@ -792,7 +823,13 @@ export class ChatScreen {
       }
       return undefined
     })
-    return () => { disposeGuard?.(); disposePreStep(); disposeAssembly() }
+    this.applyToolRestrictions()
+    return () => {
+      this.disposeToolRestriction?.()
+      this.disposeToolRestriction = undefined
+      disposeGuard?.()
+      disposePreStep()
+    }
   }
 
   /**
@@ -866,6 +903,7 @@ export class ChatScreen {
     }
     this.seedSelection()
     this.disposeSelection = this.installSelection()
+    this.seedValidation = this.validateSeededEffort()
     this.disposeMcpPolicy = this.installMcpPolicy()
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
@@ -1502,7 +1540,8 @@ export class ChatScreen {
       return
     }
     const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
-    const mcpTools = tools?.schemas?.(this.agent)
+    // Count against the restriction-free global view so status stays stable while tools are hidden.
+    const mcpTools = tools?.schemas?.()
       .filter(tool => tool.name.startsWith(MCP_TOOL_PREFIX)) ?? []
     const servers = [...new Set(mcpTools.map(tool => mcpServerName(tool.name)))].sort()
     const enabledServers = servers.filter(server => !this.disabledMcpServers.has(server)).length
@@ -1539,11 +1578,13 @@ export class ChatScreen {
       const enabled = this.disabledMcpServers.has(picked)
       if (enabled) this.disabledMcpServers.delete(picked)
       else this.disabledMcpServers.add(picked)
+      this.applyToolRestrictions()
       const count = mcpTools.filter(tool => mcpServerName(tool.name) === picked).length
       this.pushNotice(`mcp: ${picked} ${enabled ? 'ON' : 'OFF'} · ${count} tool(s) ${enabled && this.mcpEnabled ? 'available' : 'hidden'} · applies to the next request`)
       return
     }
     this.mcpEnabled = action === 'on' ? true : action === 'off' ? false : !this.mcpEnabled
+    this.applyToolRestrictions()
     this.pushNotice(`mcp: ${this.mcpEnabled ? 'ON' : 'OFF'} · ${this.mcpEnabled ? enabledServers : 0}/${servers.length} server(s) enabled · ${this.mcpEnabled ? enabledTools : 0}/${mcpTools.length} tool(s) available · applies to the next request`)
   }
 
@@ -1555,7 +1596,7 @@ export class ChatScreen {
       return
     }
     const tools = this.ctx.get('tools') as ToolPolicyRuntime | undefined
-    const jevTools = tools?.schemas?.(this.agent).filter(tool => isJevTool(tool.name)) ?? []
+    const jevTools = tools?.schemas?.().filter(tool => isJevTool(tool.name)) ?? []
     const count = jevTools.length
     const available = jevTools.filter(tool => !this.disabledMcpServers.has(mcpServerName(tool.name))).length
     if (action === 'status') {
@@ -1567,6 +1608,7 @@ export class ChatScreen {
       return
     }
     this.jevEnabled = action === 'on' ? true : action === 'off' ? false : !this.jevEnabled
+    this.applyToolRestrictions()
     this.pushNotice(`jev: ${this.jevEnabled ? 'ON' : 'OFF'} · policy context ${this.jevEnabled ? 'enabled' : 'hidden'} · ${available}/${count} tool(s) ${this.jevEnabled && this.mcpEnabled ? 'available' : 'hidden'}${this.jevEnabled && !this.mcpEnabled ? ' · MCP is OFF' : ''} · applies to the next request`)
   }
 
@@ -1718,6 +1760,7 @@ export class ChatScreen {
       }
       await this.commitSwitch(resolved)
       this.selection.current = selection
+      if (selection !== undefined) this.agent.model.select(selection)
       this.pushNotice(`preset → ${preset} · new session ${this.currentSessionId.slice(0, 8)} · conversation kept`, 'info')
       this.sync()
     } finally {
@@ -2174,6 +2217,7 @@ export class ChatScreen {
         model: route.model,
         reasoningEffort: ReasoningEffortId(effort),
       }
+      this.agent.model.select(this.selection.current)
       // Persist like /model does, so the effort survives restarts and resumes.
       try {
         const defaults = this.ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
@@ -2237,6 +2281,7 @@ export class ChatScreen {
           ? { reasoningEffort: resolved.reasoningEffort }
           : {}),
       }
+      this.agent.model.select(this.selection.current)
       // Write the shared default too (grok rationale: the web host's outer
       // waterfall fallback chain reads it, so a stale selection can't
       // overwrite this one).
@@ -2581,6 +2626,7 @@ export class ChatScreen {
         return
       }
       this.skillsEnabled = action === 'on' ? true : action === 'off' ? false : !this.skillsEnabled
+      this.applyToolRestrictions()
       this.rebuildAutocomplete()
       this.pushNotice(`skills: ${this.skillsEnabled ? 'ON' : 'OFF'} · ${this.skillsEnabled ? enabledCount : 0}/${skills.length} skill(s) available · applies to the next request`)
       return
@@ -4047,7 +4093,8 @@ export class ChatScreen {
     const preset = this.currentPresetId()
     const teamPolicy = this.ctx.get('pentestModePolicy') as { current(): { mode: string } } | undefined
     const teamMode = TEAM_MODE_OPTIONS.find(option => option.value === teamPolicy?.current().mode)?.value
-    const jevAvailable = (this.ctx.get('tools') as ToolPolicyRuntime | undefined)?.schemas?.(this.agent)
+    // Availability reads the restriction-free global view: hidden-by-policy is 'off', not 'unavailable'.
+    const jevAvailable = (this.ctx.get('tools') as ToolPolicyRuntime | undefined)?.schemas?.()
       .some(tool => isJevTool(tool.name)) ?? false
     const jevCost = this.cachedJevCost
     this.updateQueueBanner()

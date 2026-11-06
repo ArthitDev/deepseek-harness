@@ -276,8 +276,6 @@
   "exclude": [
     "apps/desktop/tests/keyboard.spec.ts",
     "packages/client/*/src/**",
-    "packages/experimental/agent-team/tests/**",
-    "packages/experimental/tool-agent-team/tests/**",
     "packages/*/*/tests/**/*.client.ts",
     "packages/*/*/tests/**/*.client.tsx",
     "packages/*/*/tests/**/*.client.spec.ts",

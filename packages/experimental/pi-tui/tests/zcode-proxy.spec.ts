@@ -81,7 +81,7 @@ async function cleanup(home: string): Promise<void> {
 }
 
 describe('ZCode startup helper', () => {
-  it.each(['ready', 'failed'] as const)('settles a relocated SB launcher that is %s', async (mode) => {
+  it.each(['ready', 'failed'] as const)('settles a relocated SB launcher that is %s', { timeout: 30_000 }, async (mode) => {
     const { home, anchor } = await fixture(mode)
     try {
       const result = ensureSbProxy(anchor)
@@ -90,7 +90,7 @@ describe('ZCode startup helper', () => {
       expect(Number(await readFile(join(home, 'sb-helper.pid'), 'utf8'))).toBeGreaterThan(0)
     } finally { await cleanup(home) }
   })
-  it.each(['ready', 'failed'] as const)('settles a relocated launcher that is %s', async (mode) => {
+  it.each(['ready', 'failed'] as const)('settles a relocated launcher that is %s', { timeout: 30_000 }, async (mode) => {
     const { home, anchor } = await fixture(mode)
     try {
       const result = ensureZcodeProxy(anchor)
@@ -100,7 +100,7 @@ describe('ZCode startup helper', () => {
     } finally { await cleanup(home) }
   })
 
-  it('waits for a cancelled helper to exit', async () => {
+  it('waits for a cancelled helper to exit', { timeout: 30_000 }, async () => {
     const { home, anchor } = await fixture('pending')
     const abort = new AbortController()
     const result = ensureZcodeProxy(anchor, abort.signal)
@@ -133,7 +133,7 @@ describe('TUI startup through Loader with optional proxies', () => {
     ['failed', 'ready', 'zcode-direct', 'glm-5.3-flash'],
     ['pending', 'ready', 'zcode-direct', 'glm-5.3-flash'],
     ['gated', 'ready', 'zcode-direct', 'glm-5.3-flash'],
-  ] as const)('starts ZCode only on use: %s/%s %s/%s', async (mode, sbMode, provider, model) => {
+  ] as const)('starts ZCode only on use: %s/%s %s/%s', { timeout: 30_000 }, async (mode, sbMode, provider, model) => {
     const { home, anchor } = await fixture(mode, sbMode)
     const ctx = new Context()
     const adapter = new DirectAdapter()

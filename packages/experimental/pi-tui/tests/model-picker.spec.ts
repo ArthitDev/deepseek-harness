@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { agentEvents } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
@@ -92,11 +91,16 @@ describe('reasoning effort across model switches', () => {
     const prior = { provider: 'old', model: 'old-model', reasoningEffort: ReasoningEffortId('high') }
     const saveSelection = vi.fn()
     ctx.provide('agentDefaultModel', { currentSelection: () => prior, saveSelection })
-    const resolveModelInfo = vi.fn(async () => ({
-      provider: 'gateway', id: 'openai/test-model', name: 'Friendly Model',
-      ...efforts.length === 0 ? {} : { reasoning: {
+    // Route-aware: the screen validates the seeded header effort against the
+    // CURRENT route's adapter info before a switch, so the old route must
+    // advertise the effort its recorded header used.
+    const resolveModelInfo = vi.fn(async (provider: string, model: string) => ({
+      provider, id: model, name: 'Friendly Model',
+      ...(provider === 'old' ? { reasoning: {
+        efforts: [{ id: ReasoningEffortId('high'), name: 'high' }],
+      } } : efforts.length === 0 ? {} : { reasoning: {
         efforts: efforts.map(id => ({ id: ReasoningEffortId(id), name: id })),
-      } },
+      } }),
     }))
     const resolveCallConfig = vi.fn(async (config: LlmCallConfig) => {
       if (config.reasoningEffort !== undefined && !efforts.includes(config.reasoningEffort)) {
@@ -121,12 +125,12 @@ describe('reasoning effort across model switches', () => {
         provider: 'gateway', model: 'openai/test-model',
         ...efforts.includes('high') ? { reasoningEffort: 'high' } : {},
       })
-      const assembly = { sections: [], contexts: [], tools: [], variables: {} }
-      await agent.ctx.waterfall('system-prompt/assemble', assembly, {}, async () => assembly)
-      const selected = await agentEvents(agent.ctx, agent).waterfall('agent/request', {
-        turn: 1, step: 1, signal: new AbortController().signal,
-      }, async () => ({ ...prior }))
-      expect(selected.reasoningEffort).toBe(expected)
+      // 0.2.2 records the validated pick on the agent's durable selection;
+      // agent/request can no longer adjust the effort after step preparation.
+      expect(agent.model.select).toHaveBeenCalledWith({
+        provider: 'gateway', model: 'openai/test-model',
+        ...expected === undefined ? {} : { reasoningEffort: ReasoningEffortId(expected) },
+      })
     } finally { tui.stop(); await ctx.fiber.dispose() }
   })
 })
