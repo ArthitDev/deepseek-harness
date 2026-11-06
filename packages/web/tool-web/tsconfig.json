@@ -25,6 +25,12 @@
       "path": "../../core/system-prompt"
     },
     {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../boot/app-boot"
+    },
+    {
       "path": "../../guard/timeout-policy"
     },
     {

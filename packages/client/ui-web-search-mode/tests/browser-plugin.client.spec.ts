@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import { WebSearchModeControl } from '../src/client/WebSearchModeControl.tsx'
 import type { WebSearchModeInjected } from '../src/client/index.ts'
@@ -17,17 +17,17 @@ async function bench() {
     name: 'root',
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
   } as never, () => null)
-  const settings = stubSettingsScope<WebSearchPolicySettings>()
-  const bind = vi.fn(() => settings.scope)
-  ctx.provide('settingsScope', { bind })
+  const settings = stubConfigForm<WebSearchPolicySettings>()
+  const get = vi.fn(() => settings.scope)
+  ctx.provide('configForms', { get })
   ctx.provide('remote', {})
   ctx.provide('locale', new LocaleRuntime(ctx))
-  return { ctx, slots, settings, bind }
+  return { ctx, slots, settings, get }
 }
 
 describe('ui-web-search-mode browser apply', () => {
   it('declares services and keeps the node half empty', () => {
-    expect(inject).toEqual(['slots', 'locale', 'remote', 'settingsScope'])
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'configForms'])
     expect(() => { nodeApply() }).not.toThrow()
   })
 
@@ -36,8 +36,7 @@ describe('ui-web-search-mode browser apply', () => {
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
 
-    expect(b.bind).toHaveBeenCalledWith({ namespace: 'web-search-policy' })
-    expect(b.slots.entries('conversation.input.webSearch')).toHaveLength(0)
+    expect(b.get).toHaveBeenCalledWith('web-search-policy')
     const entry = b.slots.entries('settings.general.item')[0]!
     expect(entry.component).toBe(WebSearchModeControl)
     const injected = (entry.inject as unknown as () => WebSearchModeInjected)()

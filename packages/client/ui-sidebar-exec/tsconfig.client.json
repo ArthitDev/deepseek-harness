@@ -11,6 +11,21 @@
   "references": [
     {
       "path": "./../locale/tsconfig.client.json"
+    },
+    {
+      "path": "./../../api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
+    },
+    {
+      "path": "../ui-sidebar-right"
+    },
+    {
+      "path": "./../ui-slots"
     }
   ]
 }

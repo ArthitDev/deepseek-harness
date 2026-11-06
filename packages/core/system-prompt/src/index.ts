@@ -397,11 +397,34 @@ type ToolProvider = (context: AssembleContext) => ToolProviderResult
 /** One prompt-variable provider stored in a prompt layer. */
 type VariableProvider = (context: AssembleContext) => string | undefined
 
+/**
+ * One section suppressor's per-assembly decision: the section-name allowlist
+ * that stays visible, or `undefined` to withhold nothing this assembly.
+ */
+type SectionSuppressor = (
+  scopedNames: readonly string[],
+  context: AssembleContext,
+  sectionNames: readonly string[],
+) => readonly string[] | undefined
+
+/** One stored suppressor with the layer its allowlist applies to. */
+interface SectionSuppressorEntry {
+  /** Sections that remain visible when this suppressor is active. */
+  readonly allow: SectionSuppressor
+  /**
+   * When true, sections whose effective definition a scoped layer supplies are
+   * exempt — including a scoped section that shadows a global name — and the
+   * allowlist gates only the remaining global sections.
+   */
+  readonly globalOnly: boolean
+}
+
 /** All prompt registrations owned by one global or scoped layer. */
 class PromptLayer implements ScopeLayer {
   readonly sections: NamedEntries<PromptSection>
   readonly contexts: NamedEntries<PromptContext>
   readonly runtimeContextSuppressors = new AnonymousEntries<true>()
+  readonly sectionSuppressors = new AnonymousEntries<SectionSuppressorEntry>()
   readonly toolProviders = new AnonymousEntries<ToolProvider>()
   readonly variables: NamedEntries<VariableProvider>
 
@@ -426,6 +449,7 @@ class PromptLayer implements ScopeLayer {
     return this.sections.isEmpty()
       && this.contexts.isEmpty()
       && this.runtimeContextSuppressors.isEmpty()
+      && this.sectionSuppressors.isEmpty()
       && this.toolProviders.isEmpty()
       && this.variables.isEmpty()
   }
@@ -542,6 +566,39 @@ export class SystemPrompt extends Service {
   }
 
   /**
+   * Suppress registered prompt sections in the calling context's scope: every
+   * assembly keeps only the allowlisted sections, while the services that own
+   * or enforce those sections stay mounted. Multiple suppressors remain
+   * independently disposable; a section stays visible unless every suppressor
+   * allows it.
+   * @param options - `except` names the sections that remain visible, as a
+   *   static list or a provider re-evaluated at every assembly for live toggles.
+   *   The provider receives effective scoped names, the per-assembly context,
+   *   and all effective section names, in that order.
+   *   An undefined provider result disables suppression; an empty list permits no gated sections.
+   * @returns the exact Cordis effect disposer.
+   */
+  suppressSections(options?: {
+    except?: readonly string[] | ((
+      scopedNames: readonly string[],
+      context: AssembleContext,
+      sectionNames: readonly string[],
+    ) => readonly string[] | undefined)
+    globalOnly?: boolean
+  }): () => void {
+    const authored = options?.except
+    const suppress: SectionSuppressor = typeof authored === 'function'
+      ? authored
+      : () => authored
+    const globalOnly = options?.globalOnly === true
+    return this.layers.effect(
+      this.ctx,
+      layer => layer.sectionSuppressors.append({ allow: suppress, globalOnly }),
+      { label: 'systemPrompt.suppressSections()' },
+    )
+  }
+
+  /**
    * Register a tool-schema provider in the calling context's scope. Global and
    * matching scoped providers both contribute; returning the reserved
    * {@link TOOL_ORDER_REST} name makes assembly fail.
@@ -633,9 +690,19 @@ export class SystemPrompt extends Service {
         variables[name] = provider(context)
       }
     }
-    // Scoped sections shadow globals before the deterministic order sort.
+    // Scoped sections shadow globals before suppressors decide which effective names remain.
+    const scopedSectionNames = new Set(scopeLayers.flatMap(layer => [...layer.sections.keys()]))
     const sectionByName = this.layers.merge(scope, layer => layer.sections)
     const contextByName = this.layers.merge(scope, layer => layer.contexts)
+    const effectiveSectionNames = [...sectionByName.keys()]
+    const sectionSuppressors = [
+      ...this.layers.global.sectionSuppressors.values(),
+      ...scopeLayers.flatMap(layer => [...layer.sectionSuppressors.values()]),
+    ]
+      .flatMap((entry) => {
+        const allow = entry.allow([...scopedSectionNames], context, [...effectiveSectionNames])
+        return allow === undefined ? [] : [{ allow: new Set(allow), globalOnly: entry.globalOnly }]
+      })
     // Validate order against pre-restriction names while collecting visible schemas.
     const providers = [
       ...this.layers.global.toolProviders.values(),
@@ -655,7 +722,12 @@ export class SystemPrompt extends Service {
       collected.push(...schemas)
       for (const name of acceptedKnownNames) knownNames.add(name)
     }
-    const sectionDefinitions = [...sectionByName.values()].sort(comparePromptSections)
+    const sectionDefinitions = [...sectionByName.values()]
+      .filter(section => sectionSuppressors.every((suppress) => {
+        if (suppress.globalOnly && scopedSectionNames.has(section.name)) return true
+        return suppress.allow.has(section.name)
+      }))
+      .sort(comparePromptSections)
     const completeSections = sectionDefinitions.filter(section => section.complete === true)
     if (completeSections.length > 1) {
       throw new Error(`multiple complete prompt sections are active: ${completeSections.map(section => JSON.stringify(section.name)).join(', ')}`)

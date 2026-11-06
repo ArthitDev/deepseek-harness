@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   TeamMemberView as TeamRosterMember,
@@ -9,7 +8,7 @@ import type {
 import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCloseOutlineRegular, IconRefreshOutlineRegular, IconUserOutlineRegular, StateDot,
-  useAnchoredPosition, useDismissOnOutsidePointer, type StateDotState,
+  useAnchoredMaxHeight, useDismissOnOutsidePointer, type StateDotState,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -82,10 +81,7 @@ export function TeamAction({
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const position = useAnchoredPosition({
-    open, anchorRef: triggerRef, panelRef, gap: 5, margin: 16,
-  })
-  const positioned = position !== null
+  const maxHeight = useAnchoredMaxHeight(panelRef, 680, open)
   useDismissOnOutsidePointer(rootRef, open, setOpen, panelRef)
   const sessionRef = useRef(sessionId)
   const refreshGeneration = useRef(0)
@@ -100,8 +96,8 @@ export function TeamAction({
   }, [sessionId])
 
   useLayoutEffect(() => {
-    if (open && positioned) panelRef.current?.focus()
-  }, [open, positioned])
+    if (open) panelRef.current?.focus()
+  }, [open])
 
   const close = (): void => {
     setOpen(false)
@@ -152,11 +148,11 @@ export function TeamAction({
         <span>{t('trigger')}</span>
         {teammates.length > 0 && <span className={css.count}>{teammates.length}</span>}
       </button>
-      {open && createPortal(
+      {open && (
         <div
           ref={panelRef}
           className={css.panel}
-          style={position ?? { visibility: 'hidden', left: 0, top: 0 }}
+          style={{ maxHeight }}
           role="dialog"
           tabIndex={-1}
           aria-label={t('trigger')}
@@ -239,8 +235,7 @@ export function TeamAction({
               </section>
             </>
           )}
-        </div>,
-        document.body,
+        </div>
       )}
     </div>
   )

@@ -84,8 +84,8 @@
     # row the TUI's --preset picker lists nothing and sessions mount no preset
     # at all. Mirrors the web profile's row so both surfaces resolve the same
     # roster and default.
-    - id: agent-presets
-      name: '@deepseek-ai/dsh-agent-presets'
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
         default: standard
 

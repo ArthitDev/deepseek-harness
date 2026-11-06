@@ -51,7 +51,8 @@
     "chalk": "^5.5.0",
     "diff": "^9.0.0",
     "highlight.js": "11.12.0",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@deepseek-ai/dsh-agent-preset-registry": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~"

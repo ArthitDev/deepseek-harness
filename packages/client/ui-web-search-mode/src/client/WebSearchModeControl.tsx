@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import type { WebSearchModeInjected } from './index.ts'
 import css from './WebSearchModeControl.module.css'
 
 export interface WebSearchModeHooks {
-  webSearchMode: ObservableSnapshot<SettingsScopeSnapshot<WebSearchPolicySettings>>
+  webSearchMode: ObservableSnapshot<ConfigFormSnapshot<WebSearchPolicySettings>>
 }
 
 export type WebSearchModeControlProps =

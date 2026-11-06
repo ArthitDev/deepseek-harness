@@ -2,7 +2,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import { WebSearchModeControl } from './WebSearchModeControl.tsx'
@@ -23,17 +23,17 @@ const SETTINGS_NAMESPACE = 'web-search-policy'
 /** Values injected into the General Settings row. */
 export interface WebSearchModeInjected {
   hooks: {
-    webSearchMode: ObservableSnapshot<SettingsScopeSnapshot<WebSearchPolicySettings>>
+    webSearchMode: ObservableSnapshot<ConfigFormSnapshot<WebSearchPolicySettings>>
   }
   /** Persist the global always-search preference. */
   setAlways: (always: boolean) => Promise<void>
 }
 
-export const inject = ['slots', 'locale', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'configForms']
 
 /** Register the global always-search toggle in General Settings. */
 export function apply(ctx: ClientContext): void {
-  const settings = ctx.settingsScope.bind<WebSearchPolicySettings>({ namespace: SETTINGS_NAMESPACE })
+  const settings = ctx.configForms.get<WebSearchPolicySettings>(SETTINGS_NAMESPACE)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-web-search-mode: dictionaries')
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -42,7 +42,7 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (): WebSearchModeInjected => ({
       hooks: { webSearchMode: settings },
-      setAlways: always => settings.set('always', always),
+      setAlways: async (always) => { await settings.set('always', always) },
     }),
   }, WebSearchModeControl))
 }

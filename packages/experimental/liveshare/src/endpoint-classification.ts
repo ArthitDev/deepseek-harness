@@ -219,6 +219,34 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'agentPresets/read': 'owner-only', // owner agent presets
   'agentPresets/select': 'owner-only', // owner agent presets
   'agentTeams/setEnabled': 'owner-only', // owner Team mode
+  'pentestLoop/create': 'owner-only', // owner pentest loop control
+  'pentestLoop/running': 'reader-session-read', // run status readback
+  'pentestLoop/start': 'owner-only', // owner pentest loop control
+  'pentestLoop/stop': 'owner-only', // owner pentest loop control
+  'pentestRuns/control': 'owner-only', // owner run control
+  'pentestRuns/controlTask': 'owner-only', // owner run control
+  'pentestRuns/list': 'reader-session-read', // run roster readback
+  'pentestRuns/loadArtifact': 'reader-session-read', // operator artifact readback
+  'pentestRuns/replaceScope': 'owner-only', // owner run control
+  'pentestRuns/snapshot': 'reader-session-read', // run projection readback
+  'reconRuns/cancel': 'owner-only', // owner recon control
+  'reconRuns/clearQueue': 'owner-only', // owner recon control
+  'reconRuns/discard': 'owner-only', // owner recon control
+  'reconRuns/dynamic': 'owner-only', // owner recon control
+  'reconRuns/enqueue': 'owner-only', // owner recon control
+  'reconRuns/enqueueDynamic': 'owner-only', // owner recon control
+  'reconRuns/evidence': 'reader-session-read', // recon evidence readback
+  'reconRuns/list': 'reader-session-read', // recon roster readback
+  'reconRuns/load': 'reader-session-read', // recon report readback
+  'reconRuns/loadDynamic': 'reader-session-read', // recon dynamic report readback
+  'reconRuns/queue': 'reader-session-read', // recon queue readback
+  'reconRuns/scan': 'owner-only', // owner recon control
+  'reconRuns/status': 'reader-session-read', // recon status readback
+  'remoteMachines/list': 'owner-only', // owner machine inventory
+  'remoteMachines/probe': 'owner-only', // owner machine inventory
+  'remoteMachines/remove': 'owner-only', // owner machine inventory
+  'remoteMachines/save': 'owner-only', // owner machine inventory
+  'remoteMachines/trust': 'owner-only', // owner machine inventory
   'schedule/catalog': 'owner-only', // owner schedules
   'schedule/create': 'owner-only', // owner schedules
   'schedule/deliveryLimits': 'owner-only', // owner schedules

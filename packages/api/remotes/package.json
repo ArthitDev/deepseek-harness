@@ -102,6 +102,10 @@
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*",
     "@deepseek-ai/dsh-agent-team": "workspace:*",
     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:*",
-    "@deepseek-ai/dsh-web": "workspace:*"
+    "@deepseek-ai/dsh-web": "workspace:*",
+    "@deepseek-ai/dsh-pentest-run": "workspace:*",
+    "@deepseek-ai/dsh-pentest-executor": "workspace:*",
+    "@deepseek-ai/dsh-recon-engine": "workspace:*",
+    "@deepseek-ai/dsh-remote-machines": "workspace:*"
   }
 }

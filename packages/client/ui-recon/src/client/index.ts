@@ -82,14 +82,13 @@ export function apply(ctx: Context): void {
       ...(aiSelection === undefined ? {} : { aiSelection }),
     })
     if (!result.ok) throw new Error(result.error.message)
-    ctx.uiConversation.markActivity(sessionId, 'recon')
     return result.value
   }
   const sendToChat = async (sessionId: SessionId, report: ReconReport, dynamic?: DynamicReconResult): Promise<void> => {
     const conversation = ctx.sessions.scope(sessionId)?.get('conversation')
     if (conversation === undefined) throw new Error('ui-recon: conversation service unavailable')
     await conversation.send(reconChatPrompt(report, dynamic))
-    ctx.uiConversation.openView(sessionId, 'chat')
+    ctx.uiConversation.binding(sessionId).activate('chat')
   }
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
     name: 'conversation.input.left',
@@ -99,8 +98,7 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId): ReconTargetInjected => ({
       enqueue: (target, aiAssisted) => enqueueForSession(sessionId, target, aiAssisted),
       openRecon: () => {
-        ctx.uiConversation.markActivity(sessionId, 'recon')
-        ctx.uiConversation.openView(sessionId, 'recon')
+        ctx.uiConversation.binding(sessionId).activate('recon')
       },
     }),
   }, ReconTargetControl))

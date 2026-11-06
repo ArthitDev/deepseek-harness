@@ -21,7 +21,7 @@
     { "path": "../../llm/token-meter" },
     { "path": "../../terminal/terminal" },
     { "path": "../../terminal/terminal-bash" },
-    { "path": "../../terminal/tool-terminal" },
+    { "path": "../tool-terminal" },
     { "path": "../../util/native-command" },
     { "path": "../../fs/tool-fs-search" },
     { "path": "../../skill/skill" },

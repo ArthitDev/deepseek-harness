@@ -7,251 +7,266 @@
     "noEmit": true,
     "rewriteRelativeImportExtensions": false
   },
-  "include": [      "apps/web/tests/home-whale.e2e.ts"
-      "apps/web/tests/sidebar-drawer.e2e.ts"
-      "apps/web/tests/creation-recommendations.e2e.ts"
-      "apps/web/tests/plugin-recommendations.e2e.ts"
-      "apps/web/tests/japanese-plugin-metadata.e2e.ts"
-      "apps/web/tests/additional-locales.e2e.ts"
-      "apps/web/tests/rich-text-quotes.e2e.ts"
-      "apps/web/tests/hover-input.e2e.ts"
-      "apps/web/tests/collapse-timing.e2e.ts"
-      "apps/web/tests/notice-wake-tail.e2e.ts"
-      "apps/web/tests/fold-blank-matrix.e2e.ts"
-      "apps/web/tests/chat-fold-opened-group.e2e.ts"
-      "apps/web/tests/chat-flow-layout.e2e.ts"
-      "apps/web/product-isolation.ts"
-      "apps/web/katex-fonts.ts"
-      "apps/web/tests/connection-recovery.e2e.ts"
-      "apps/web/tests/server-restart.e2e.ts"
-      "apps/web/tests/shortcuts.e2e.ts"
-      "apps/web/tests/shortcuts-desktop.e2e.ts"
-      "apps/web/tests/shortcuts-workspace.e2e.ts"
-      "apps/web/tests/shortcuts-panels.e2e.ts"
-      "apps/web/tests/shortcuts-fixed.e2e.ts"
-      "apps/web/tests/default-product-isolation.e2e.ts"
-      "apps/web/tests/diff-context.e2e.ts"
-      "apps/web/tests/search-empty-include.e2e.ts"
-      "apps/web/tests/code-card-layout.e2e.ts"
-      "apps/web/tests/code-language.snapshot.ts"
-      "apps/web/tests/scaffold.ts"
-      "apps/web/tests/clock.e2e.ts"
-      "apps/web/tests/voice-input.e2e.ts"
-      "apps/web/tests/cot-translation.e2e.ts"
-      "apps/web/tests/cot-translation-paid.e2e.ts"
-      "apps/web/tests/forge-panel.e2e.ts"
-      "apps/web/tests/voice-setup.e2e.ts"
-      "apps/web/tests/voice-download.e2e.ts"
-      "apps/web/tests/prefix-proxy.ts"
-      "apps/web/tests/developer-tools-settings.e2e.ts"
-      "apps/web/tests/auto-review-fixture.ts"
-      "apps/web/tests/auto-review-approval.e2e.ts"
-      "apps/web/tests/auto-review-denial.e2e.ts"
-      "apps/web/tests/scaffold-generation.spec.ts"
-      "apps/web/tests/default-model.e2e.ts"
-      "apps/web/tests/model-menu-observer.e2e.ts"
-      "apps/web/tests/github-ready-review.e2e.ts"
-      "apps/web/tests/streaming-fence-highlight.e2e.ts"
-      "apps/web/tests/declared-reasoning.e2e.ts"
-      "apps/web/tests/support.ts"
-      "apps/web/tests/model-input-layout.ts"
-      "apps/web/tests/scaffold-hermetic.e2e.ts"
-      "apps/web/tests/startup-rpc-budget.e2e.ts"
-      "apps/web/tests/minimal-preset.snapshot.ts"
-      "apps/web/tests/message-feedback-protocol.snapshot.ts"
-      "apps/web/tests/preset-migration.snapshot.ts"
-      "apps/web/tests/subagent-fork-schedule.snapshot.ts"
-      "apps/web/tests/live-interactions.e2e.ts"
-      "apps/web/tests/question-composer.e2e.ts"
-      "apps/web/tests/question-composer-recommended.e2e.ts"
-      "apps/web/tests/question-ptc.e2e.ts"
-      "apps/web/tests/approval-composer.e2e.ts"
-      "apps/web/tests/plan-control-row.e2e.ts"
-      "apps/web/tests/plan-review.e2e.ts"
-      "apps/web/tests/steering.e2e.ts"
-      "apps/web/tests/navigation-panes.e2e.ts"
-      "apps/web/tests/shell-command-details.e2e.ts"
-      "apps/web/tests/terminal-command-browser.ts"
-      "apps/web/tests/focus-rings.e2e.ts"
-      "apps/web/tests/chat-scroll-fixture.ts"
-      "apps/web/tests/trajectory-virtualization.e2e.ts"
-      "apps/web/tests/lifecycle-chrome.e2e.ts"
-      "apps/web/tests/reasoning-preview.e2e.ts"
-      "apps/web/tests/details-session-lifecycle.e2e.ts"
-      "apps/web/tests/sessionless-header.e2e.ts"
-      "apps/web/tests/document-preview.e2e.ts"
-      "apps/web/tests/file-browser.e2e.ts"
-      "apps/web/tests/file-browser-composition.e2e.ts"
-      "apps/web/tests/excel-opc.e2e.ts"
-      "apps/web/tests/office-fixture.ts"
-      "apps/web/tests/sidebar-browser.e2e.ts"
-      "apps/web/tests/plugin-config.e2e.ts"
-      "apps/web/tests/input-plugin-extensions.e2e.ts"
-      "apps/web/tests/plugin-manager.e2e.ts"
-      "apps/web/tests/plugin-market-toolbar.e2e.ts"
-      "apps/web/tests/plugin-sticky-motion.e2e.ts"
-      "apps/web/tests/entry-customization.e2e.ts"
-      "apps/web/tests/cua-optin.e2e.ts"
-      "apps/web/tests/bundle-platform.e2e.ts"
-      "apps/web/tests/cua-permissions.e2e.ts"
-      "apps/web/tests/schedule-header.e2e.ts"
-      "apps/web/tests/schedule-phone.e2e.ts"
-      "apps/web/tests/schedule-pickers.e2e.ts"
-      "apps/web/tests/worktree-opt-in.e2e.ts"
-      "apps/web/tests/session-inspector.e2e.ts"
-      "apps/web/tests/shared-inspector.e2e.ts"
-      "apps/web/tests/inspector-late-enable.e2e.ts"
-      "apps/web/tests/layout-bottom.e2e.ts"
-      "apps/web/tests/devtools-frontend.e2e.ts"
-      "apps/web/tests/inspector-panels.e2e.ts"
-      "apps/web/tests/inspector-source-build.e2e.ts"
-      "apps/web/tests/plugin-install-cancel.e2e.ts"
-      "apps/web/tests/plugin-install-approve.e2e.ts"
-      "apps/web/tests/plugin-hmr-lifecycle.e2e.ts"
-      "apps/web/tests/plugin-install-registry.e2e.ts"
-      "apps/web/tests/plugin-install-github.e2e.ts"
-      "apps/web/tests/plugin-install-silent-failure.e2e.ts"
-      "apps/web/tests/client-plugin-live.e2e.ts"
-      "apps/web/tests/icon-skin.e2e.ts"
-      "apps/web/tests/draft-initialization.e2e.ts"
-      "apps/web/tests/settings-chrome.e2e.ts"
-      "apps/web/tests/session-log-upload.e2e.ts"
-      "apps/web/tests/caption-overlays.e2e.ts"
-      "apps/web/tests/settings-appearance.e2e.ts"
-      "apps/web/tests/menu-material.e2e.ts"
-      "apps/web/tests/desktop-locale.e2e.ts"
-      "apps/web/tests/window-controls.e2e.ts"
-      "apps/web/tests/settings-import.e2e.ts"
-      "apps/web/tests/models-settings.e2e.ts"
-      "apps/web/tests/deepseek-messages-settings.e2e.ts"
-      "apps/web/tests/model-badge.e2e.ts"
-      "apps/web/tests/deepseek-messages-chat.e2e.ts"
-      "apps/web/tests/models-settings-recovery.e2e.ts"
-      "apps/web/tests/onboarding-deepseek-config.e2e.ts"
-      "apps/web/tests/onboarding-native.e2e.ts"
-      "apps/web/tests/desktop-onboarding.e2e.ts"
-      "apps/web/tests/bonus-notice.e2e.ts"
-      "apps/web/tests/account-login.e2e.ts"
-      "apps/web/tests/onboarding-usable-provider.e2e.ts"
-      "apps/web/tests/remote-settings.e2e.ts"
-      "apps/web/tests/public-mount.e2e.ts"
-      "apps/web/tests/workspace-new-session-folding.e2e.ts"
-      "apps/web/tests/workspace-management.e2e.ts"
-      "apps/web/tests/default-workspace.e2e.ts"
-      "apps/web/tests/new-session-refused.e2e.ts"
-      "apps/web/tests/workspace-recency.e2e.ts"
-      "apps/web/tests/session-unarchive.e2e.ts"
-      "apps/web/tests/session-archive-active.e2e.ts"
-      "apps/web/tests/replay-round-trip.e2e.ts"
-      "apps/web/tests/session-replay-reload.e2e.ts"
-      "apps/web/tests/hmr-live.e2e.ts"
-      "apps/web/tests/preview-boot.e2e.ts"
-      "apps/web/tests/seeded-history.e2e.ts"
-      "apps/web/tests/cold-blank-session.e2e.ts"
-      "apps/web/tests/blank-writer-reuse.e2e.ts"
-      "apps/web/tests/blank-preset-reuse.e2e.ts"
-      "apps/web/tests/stats-paged-history.e2e.ts"
-      "apps/web/tests/stats-truncated-tooltip.e2e.ts"
-      "apps/web/tests/sidebar-scrollbar.e2e.ts"
-      "apps/web/tests/sidebar-alignment.e2e.ts"
-      "apps/web/tests/sidebar-title-hover-scroll.e2e.ts"
-      "apps/web/tests/rail-search-expand.e2e.ts"
-      "apps/web/tests/conversation-column-overflow.e2e.ts"
-      "apps/web/tests/ptc-round.e2e.ts"
-      "apps/web/tests/ptc-escalation.e2e.ts"
-      "apps/web/tests/standalone-string-editor.e2e.ts"
-      "apps/web/tests/official-subagent-bundle.e2e.ts"
-      "apps/web/tests/present.e2e.ts"
-      "apps/web/tests/present-svg.e2e.ts"
-      "apps/web/tests/present-after-closing-reply.e2e.ts"
-      "apps/web/tests/autolink-cjk-punctuation.e2e.ts"
-      "apps/web/tests/composer-draft-scroll.e2e.ts"
-      "apps/web/tests/composer-focus.e2e.ts"
-      "apps/web/tests/composer-placeholder.e2e.ts"
-      "apps/web/tests/context-meter.e2e.ts"
-      "apps/web/tests/cordis-tool-round.e2e.ts"
-      "apps/web/tests/web-search-round.e2e.ts"
-      "apps/web/tests/file-upload-round.e2e.ts"
-      "apps/web/tests/message-actions.e2e.ts"
-      "apps/web/tests/open-in-app-ssh.e2e.ts"
-      "apps/web/tests/open-in-app-menus.e2e.ts"
-      "apps/web/tests/fork-mid-turn.e2e.ts"
-      "apps/web/tests/message-feedback.e2e.ts"
-      "apps/web/tests/markdown-images.e2e.ts"
-      "apps/web/tests/markdown-image-refresh.e2e.ts"
-      "apps/web/tests/markdown-file-links.e2e.ts"
-      "apps/web/tests/user-text-secret-mask.e2e.ts"
-      "apps/web/tests/reference-composer.e2e.ts"
-      "apps/web/tests/markdown-wide-table.e2e.ts"
-      "apps/web/tests/thinking-markdown.e2e.ts"
-      "apps/web/tests/math-rendering.e2e.ts"
-      "apps/web/tests/markdown-cjk-strong.e2e.ts"
-      "apps/web/tests/markdown-inline-code-links.e2e.ts"
-      "apps/web/tests/clickable-links-gallery.e2e.ts"
-      "apps/web/tests/queue-actions.e2e.ts"
-      "apps/web/tests/prompt-admission.e2e.ts"
-      "apps/web/tests/idle-submission-handoff.e2e.ts"
-      "apps/web/tests/queue-image.e2e.ts"
-      "apps/web/tests/skill-invocation-policy.e2e.ts"
-      "apps/web/tests/skill-user-invoke.e2e.ts"
-      "apps/web/tests/skill-menu-plugin-change.e2e.ts"
-      "apps/web/tests/permission-policy-context.e2e.ts"
-      "apps/web/tests/access-confirmation.e2e.ts"
-      "apps/web/tests/agent-preset-selection.e2e.ts"
-      "apps/web/tests/agent-preset-authoring.e2e.ts"
-      "apps/web/tests/shipped-composition.e2e.ts"
-      "apps/web/tests/goal-bar.e2e.ts"
-      "apps/web/tests/schedule-after.e2e.ts"
-      "apps/web/tests/schedule-manual.e2e.ts"
-      "apps/web/tests/feedback-command.e2e.ts"
-      "apps/web/tests/feedback-release.e2e.ts"
-      "apps/web/tests/goal-command-presentation.e2e.ts"
-      "apps/web/tests/startup-auto-selection.e2e.ts"
-      "apps/web/tests/changed-files-turn.e2e.ts"
-      "apps/web/tests/produced-file-mentions.e2e.ts"
-      "apps/web/tests/context-menus.e2e.ts"
-      "apps/web/tests/subagent-conversation.e2e.ts"
-      "apps/web/tests/subagent-summary.e2e.ts"
-      "apps/web/tests/subagent-result-notice.e2e.ts"
-      "apps/web/tests/subagent-interrupt.e2e.ts"
-      "apps/web/tests/subagent-interrupt-ui.e2e.ts"
-      "apps/web/tests/sidebar-subagent-activity.e2e.ts"
-      "apps/web/tests/background-job-list.e2e.ts"
-      "apps/web/tests/jobs-menu-layering.e2e.ts"
-      "apps/web/tests/live-job-stream.e2e.ts"
-      "apps/web/tests/bash-abort-row.e2e.ts"
-      "apps/web/tests/skill-tool-row.e2e.ts"
-      "apps/web/tests/tool-details.e2e.ts"
-      "apps/web/tests/turn-tail-actions.e2e.ts"
-      "apps/web/tests/goal-multi-turn-actions.e2e.ts"
-      "apps/web/tests/agent-team-panel.e2e.ts"
-      "apps/web/tests/client-ui-stats-panel.e2e.ts"
-      "apps/web/tests/sidebar-right.e2e.ts"
-      "apps/web/tests/sidebar-terminal.e2e.ts"
-      "apps/web/tests/chat-scroll-fixture.ts"
-      "apps/web/tests/chat-scroll-contract.e2e.ts"
-      "apps/web/tests/chat-long-interactions.e2e.ts"
-      "apps/web/tests/chat-continuous-conversation.e2e.ts"
-      "apps/web/tests/composer-tab-geometry.e2e.ts"
-      "apps/web/tests/conversation-view-tabs.e2e.ts"
-      "apps/web/tests/composer-shortcuts.e2e.ts"
-      "apps/web/tests/window-drag-coverage.e2e.ts"
-      "apps/web/tests/complex-history.perf.ts"
-      "apps/web/tests/pwsh-terminal.e2e.ts"
-      "apps/web/tests/workflow-run.e2e.ts"
-      "apps/web/stress-tests/reasoning-chunks.stress.ts"
-      "apps/cli/tests/**/*.ts"
-      "apps/plugin-market-generator/tests/**/*.ts"
-      "apps/desktop/scripts/**/*.ts"
-      "apps/desktop/tests/**/*.ts"
-      "apps/desktop-host/tests/**/*.ts"
-      "benchmarks/**/*.ts"
-      "packages/experimental/cua-macos/native/generate-protocol.ts"
-      "packages/experimental/claude-code-mods/examples/*/index.ts"
-      "packages/experimental/inspector/scripts/**/*.ts"
-      "packages/llm/llm-pi-ai/scripts/**/*.ts"
-      "scripts/**/*.ts"
-      "website/**/*.ts"
+  "include": [
+    "packages/*/*/tests/**/*.ts",    "packages/client/ui-sidebar-documentpreview/tests/excel-drawing-fixture.ts",
+    "packages/client/ui-sidebar-documentpreview/tests/excel-fixture.ts",
+    "packages/client/ui-sidebar-documentpreview/tests/excel-opc-fixture.ts",
+    "packages/client/ui-sidebar-documentpreview/tests/excel-opening-fixture.ts",
+    "packages/client/ui-sidebar-documentpreview/tests/excel-xml-fixture.ts",
+    "packages/client/ui-sidebar-documentpreview/tests/pdf-fixture.ts",
+    "packages/client/ui-sidebar-documentpreview/tests/xls-fixture.ts",
+    "packages/core/agent-loop/tests/mock-adapter.ts",
+    "packages/experimental/cua-macos/tests/native-fixture.ts",
+    "packages/experimental/webworker-runtime/tests/vfs-example-fixture.ts",
+    "packages/host/webserver/tests/tls-fixture.ts",
+    "packages/mcp/mcp-client/tests/http-fixture.ts",
+    "packages/ptc-runtime/ptc-runtime-node/tests/setup.ts",
+    "packages/sandbox/sandbox-local/tests/packed-workspace-closure.ts",
+      "apps/web/tests/home-whale.e2e.ts",
+      "apps/web/tests/sidebar-drawer.e2e.ts",
+      "apps/web/tests/creation-recommendations.e2e.ts",
+      "apps/web/tests/plugin-recommendations.e2e.ts",
+      "apps/web/tests/japanese-plugin-metadata.e2e.ts",
+      "apps/web/tests/additional-locales.e2e.ts",
+      "apps/web/tests/rich-text-quotes.e2e.ts",
+      "apps/web/tests/hover-input.e2e.ts",
+      "apps/web/tests/collapse-timing.e2e.ts",
+      "apps/web/tests/notice-wake-tail.e2e.ts",
+      "apps/web/tests/fold-blank-matrix.e2e.ts",
+      "apps/web/tests/chat-fold-opened-group.e2e.ts",
+      "apps/web/tests/chat-flow-layout.e2e.ts",
+      "apps/web/product-isolation.ts",
+      "apps/web/katex-fonts.ts",
+      "apps/web/tests/connection-recovery.e2e.ts",
+      "apps/web/tests/server-restart.e2e.ts",
+      "apps/web/tests/shortcuts.e2e.ts",
+      "apps/web/tests/shortcuts-desktop.e2e.ts",
+      "apps/web/tests/shortcuts-workspace.e2e.ts",
+      "apps/web/tests/shortcuts-panels.e2e.ts",
+      "apps/web/tests/shortcuts-fixed.e2e.ts",
+      "apps/web/tests/default-product-isolation.e2e.ts",
+      "apps/web/tests/diff-context.e2e.ts",
+      "apps/web/tests/search-empty-include.e2e.ts",
+      "apps/web/tests/code-card-layout.e2e.ts",
+      "apps/web/tests/code-language.snapshot.ts",
+      "apps/web/tests/scaffold.ts",
+      "apps/web/tests/clock.e2e.ts",
+      "apps/web/tests/voice-input.e2e.ts",
+      "apps/web/tests/cot-translation.e2e.ts",
+      "apps/web/tests/cot-translation-paid.e2e.ts",
+      "apps/web/tests/forge-panel.e2e.ts",
+      "apps/web/tests/voice-setup.e2e.ts",
+      "apps/web/tests/voice-download.e2e.ts",
+      "apps/web/tests/prefix-proxy.ts",
+      "apps/web/tests/developer-tools-settings.e2e.ts",
+      "apps/web/tests/auto-review-fixture.ts",
+      "apps/web/tests/auto-review-approval.e2e.ts",
+      "apps/web/tests/auto-review-denial.e2e.ts",
+      "apps/web/tests/scaffold-generation.spec.ts",
+      "apps/web/tests/default-model.e2e.ts",
+      "apps/web/tests/model-menu-observer.e2e.ts",
+      "apps/web/tests/github-ready-review.e2e.ts",
+      "apps/web/tests/streaming-fence-highlight.e2e.ts",
+      "apps/web/tests/declared-reasoning.e2e.ts",
+      "apps/web/tests/support.ts",
+      "apps/web/tests/model-input-layout.ts",
+      "apps/web/tests/scaffold-hermetic.e2e.ts",
+      "apps/web/tests/startup-rpc-budget.e2e.ts",
+      "apps/web/tests/minimal-preset.snapshot.ts",
+      "apps/web/tests/message-feedback-protocol.snapshot.ts",
+      "apps/web/tests/preset-migration.snapshot.ts",
+      "apps/web/tests/subagent-fork-schedule.snapshot.ts",
+      "apps/web/tests/live-interactions.e2e.ts",
+      "apps/web/tests/question-composer.e2e.ts",
+      "apps/web/tests/question-composer-recommended.e2e.ts",
+      "apps/web/tests/question-ptc.e2e.ts",
+      "apps/web/tests/approval-composer.e2e.ts",
+      "apps/web/tests/plan-control-row.e2e.ts",
+      "apps/web/tests/plan-review.e2e.ts",
+      "apps/web/tests/steering.e2e.ts",
+      "apps/web/tests/navigation-panes.e2e.ts",
+      "apps/web/tests/shell-command-details.e2e.ts",
+      "apps/web/tests/terminal-command-browser.ts",
+      "apps/web/tests/focus-rings.e2e.ts",
+      "apps/web/tests/chat-scroll-fixture.ts",
+      "apps/web/tests/trajectory-virtualization.e2e.ts",
+      "apps/web/tests/lifecycle-chrome.e2e.ts",
+      "apps/web/tests/reasoning-preview.e2e.ts",
+      "apps/web/tests/details-session-lifecycle.e2e.ts",
+      "apps/web/tests/sessionless-header.e2e.ts",
+      "apps/web/tests/document-preview.e2e.ts",
+      "apps/web/tests/file-browser.e2e.ts",
+      "apps/web/tests/file-browser-composition.e2e.ts",
+      "apps/web/tests/excel-opc.e2e.ts",
+      "apps/web/tests/office-fixture.ts",
+      "apps/web/tests/sidebar-browser.e2e.ts",
+      "apps/web/tests/plugin-config.e2e.ts",
+      "apps/web/tests/input-plugin-extensions.e2e.ts",
+      "apps/web/tests/plugin-manager.e2e.ts",
+      "apps/web/tests/plugin-market-toolbar.e2e.ts",
+      "apps/web/tests/plugin-sticky-motion.e2e.ts",
+      "apps/web/tests/entry-customization.e2e.ts",
+      "apps/web/tests/cua-optin.e2e.ts",
+      "apps/web/tests/bundle-platform.e2e.ts",
+      "apps/web/tests/cua-permissions.e2e.ts",
+      "apps/web/tests/schedule-header.e2e.ts",
+      "apps/web/tests/schedule-phone.e2e.ts",
+      "apps/web/tests/schedule-pickers.e2e.ts",
+      "apps/web/tests/worktree-opt-in.e2e.ts",
+      "apps/web/tests/session-inspector.e2e.ts",
+      "apps/web/tests/shared-inspector.e2e.ts",
+      "apps/web/tests/inspector-late-enable.e2e.ts",
+      "apps/web/tests/layout-bottom.e2e.ts",
+      "apps/web/tests/devtools-frontend.e2e.ts",
+      "apps/web/tests/inspector-panels.e2e.ts",
+      "apps/web/tests/inspector-source-build.e2e.ts",
+      "apps/web/tests/plugin-install-cancel.e2e.ts",
+      "apps/web/tests/plugin-install-approve.e2e.ts",
+      "apps/web/tests/plugin-hmr-lifecycle.e2e.ts",
+      "apps/web/tests/plugin-install-registry.e2e.ts",
+      "apps/web/tests/plugin-install-github.e2e.ts",
+      "apps/web/tests/plugin-install-silent-failure.e2e.ts",
+      "apps/web/tests/client-plugin-live.e2e.ts",
+      "apps/web/tests/icon-skin.e2e.ts",
+      "apps/web/tests/draft-initialization.e2e.ts",
+      "apps/web/tests/settings-chrome.e2e.ts",
+      "apps/web/tests/session-log-upload.e2e.ts",
+      "apps/web/tests/caption-overlays.e2e.ts",
+      "apps/web/tests/settings-appearance.e2e.ts",
+      "apps/web/tests/menu-material.e2e.ts",
+      "apps/web/tests/desktop-locale.e2e.ts",
+      "apps/web/tests/window-controls.e2e.ts",
+      "apps/web/tests/settings-import.e2e.ts",
+      "apps/web/tests/models-settings.e2e.ts",
+      "apps/web/tests/deepseek-messages-settings.e2e.ts",
+      "apps/web/tests/model-badge.e2e.ts",
+      "apps/web/tests/deepseek-messages-chat.e2e.ts",
+      "apps/web/tests/models-settings-recovery.e2e.ts",
+      "apps/web/tests/onboarding-deepseek-config.e2e.ts",
+      "apps/web/tests/onboarding-native.e2e.ts",
+      "apps/web/tests/desktop-onboarding.e2e.ts",
+      "apps/web/tests/bonus-notice.e2e.ts",
+      "apps/web/tests/account-login.e2e.ts",
+      "apps/web/tests/onboarding-usable-provider.e2e.ts",
+      "apps/web/tests/remote-settings.e2e.ts",
+      "apps/web/tests/public-mount.e2e.ts",
+      "apps/web/tests/workspace-new-session-folding.e2e.ts",
+      "apps/web/tests/workspace-management.e2e.ts",
+      "apps/web/tests/default-workspace.e2e.ts",
+      "apps/web/tests/new-session-refused.e2e.ts",
+      "apps/web/tests/workspace-recency.e2e.ts",
+      "apps/web/tests/session-unarchive.e2e.ts",
+      "apps/web/tests/session-archive-active.e2e.ts",
+      "apps/web/tests/replay-round-trip.e2e.ts",
+      "apps/web/tests/session-replay-reload.e2e.ts",
+      "apps/web/tests/hmr-live.e2e.ts",
+      "apps/web/tests/preview-boot.e2e.ts",
+      "apps/web/tests/seeded-history.e2e.ts",
+      "apps/web/tests/cold-blank-session.e2e.ts",
+      "apps/web/tests/blank-writer-reuse.e2e.ts",
+      "apps/web/tests/blank-preset-reuse.e2e.ts",
+      "apps/web/tests/stats-paged-history.e2e.ts",
+      "apps/web/tests/stats-truncated-tooltip.e2e.ts",
+      "apps/web/tests/sidebar-scrollbar.e2e.ts",
+      "apps/web/tests/sidebar-alignment.e2e.ts",
+      "apps/web/tests/sidebar-title-hover-scroll.e2e.ts",
+      "apps/web/tests/rail-search-expand.e2e.ts",
+      "apps/web/tests/conversation-column-overflow.e2e.ts",
+      "apps/web/tests/ptc-round.e2e.ts",
+      "apps/web/tests/ptc-escalation.e2e.ts",
+      "apps/web/tests/standalone-string-editor.e2e.ts",
+      "apps/web/tests/official-subagent-bundle.e2e.ts",
+      "apps/web/tests/present.e2e.ts",
+      "apps/web/tests/present-svg.e2e.ts",
+      "apps/web/tests/present-after-closing-reply.e2e.ts",
+      "apps/web/tests/autolink-cjk-punctuation.e2e.ts",
+      "apps/web/tests/composer-draft-scroll.e2e.ts",
+      "apps/web/tests/composer-focus.e2e.ts",
+      "apps/web/tests/composer-placeholder.e2e.ts",
+      "apps/web/tests/context-meter.e2e.ts",
+      "apps/web/tests/cordis-tool-round.e2e.ts",
+      "apps/web/tests/web-search-round.e2e.ts",
+      "apps/web/tests/file-upload-round.e2e.ts",
+      "apps/web/tests/message-actions.e2e.ts",
+      "apps/web/tests/open-in-app-ssh.e2e.ts",
+      "apps/web/tests/open-in-app-menus.e2e.ts",
+      "apps/web/tests/fork-mid-turn.e2e.ts",
+      "apps/web/tests/message-feedback.e2e.ts",
+      "apps/web/tests/markdown-images.e2e.ts",
+      "apps/web/tests/markdown-image-refresh.e2e.ts",
+      "apps/web/tests/markdown-file-links.e2e.ts",
+      "apps/web/tests/user-text-secret-mask.e2e.ts",
+      "apps/web/tests/reference-composer.e2e.ts",
+      "apps/web/tests/markdown-wide-table.e2e.ts",
+      "apps/web/tests/thinking-markdown.e2e.ts",
+      "apps/web/tests/math-rendering.e2e.ts",
+      "apps/web/tests/markdown-cjk-strong.e2e.ts",
+      "apps/web/tests/markdown-inline-code-links.e2e.ts",
+      "apps/web/tests/clickable-links-gallery.e2e.ts",
+      "apps/web/tests/queue-actions.e2e.ts",
+      "apps/web/tests/prompt-admission.e2e.ts",
+      "apps/web/tests/idle-submission-handoff.e2e.ts",
+      "apps/web/tests/queue-image.e2e.ts",
+      "apps/web/tests/skill-invocation-policy.e2e.ts",
+      "apps/web/tests/skill-user-invoke.e2e.ts",
+      "apps/web/tests/skill-menu-plugin-change.e2e.ts",
+      "apps/web/tests/permission-policy-context.e2e.ts",
+      "apps/web/tests/access-confirmation.e2e.ts",
+      "apps/web/tests/agent-preset-selection.e2e.ts",
+      "apps/web/tests/agent-preset-authoring.e2e.ts",
+      "apps/web/tests/shipped-composition.e2e.ts",
+      "apps/web/tests/goal-bar.e2e.ts",
+      "apps/web/tests/schedule-after.e2e.ts",
+      "apps/web/tests/schedule-manual.e2e.ts",
+      "apps/web/tests/feedback-command.e2e.ts",
+      "apps/web/tests/feedback-release.e2e.ts",
+      "apps/web/tests/goal-command-presentation.e2e.ts",
+      "apps/web/tests/startup-auto-selection.e2e.ts",
+      "apps/web/tests/changed-files-turn.e2e.ts",
+      "apps/web/tests/produced-file-mentions.e2e.ts",
+      "apps/web/tests/context-menus.e2e.ts",
+      "apps/web/tests/subagent-conversation.e2e.ts",
+      "apps/web/tests/subagent-summary.e2e.ts",
+      "apps/web/tests/subagent-result-notice.e2e.ts",
+      "apps/web/tests/subagent-interrupt.e2e.ts",
+      "apps/web/tests/subagent-interrupt-ui.e2e.ts",
+      "apps/web/tests/sidebar-subagent-activity.e2e.ts",
+      "apps/web/tests/background-job-list.e2e.ts",
+      "apps/web/tests/jobs-menu-layering.e2e.ts",
+      "apps/web/tests/live-job-stream.e2e.ts",
+      "apps/web/tests/bash-abort-row.e2e.ts",
+      "apps/web/tests/skill-tool-row.e2e.ts",
+      "apps/web/tests/tool-details.e2e.ts",
+      "apps/web/tests/turn-tail-actions.e2e.ts",
+      "apps/web/tests/goal-multi-turn-actions.e2e.ts",
+      "apps/web/tests/agent-team-panel.e2e.ts",
+      "apps/web/tests/client-ui-stats-panel.e2e.ts",
+      "apps/web/tests/sidebar-right.e2e.ts",
+      "apps/web/tests/sidebar-terminal.e2e.ts",
+      "apps/web/tests/chat-scroll-fixture.ts",
+      "apps/web/tests/chat-scroll-contract.e2e.ts",
+      "apps/web/tests/chat-long-interactions.e2e.ts",
+      "apps/web/tests/chat-continuous-conversation.e2e.ts",
+      "apps/web/tests/composer-tab-geometry.e2e.ts",
+      "apps/web/tests/conversation-view-tabs.e2e.ts",
+      "apps/web/tests/composer-shortcuts.e2e.ts",
+      "apps/web/tests/window-drag-coverage.e2e.ts",
+      "apps/web/tests/complex-history.perf.ts",
+      "apps/web/tests/pwsh-terminal.e2e.ts",
+      "apps/web/tests/workflow-run.e2e.ts",
+      "apps/web/stress-tests/reasoning-chunks.stress.ts",
+      "apps/cli/tests/**/*.ts",
+      "apps/plugin-market-generator/tests/**/*.ts",
+      "apps/desktop/scripts/**/*.ts",
+      "apps/desktop/tests/**/*.ts",
+      "apps/desktop-host/tests/**/*.ts",
+      "benchmarks/**/*.ts",
+      "packages/experimental/cua-macos/native/generate-protocol.ts",
+      "packages/experimental/claude-code-mods/examples/*/index.ts",
+      "packages/experimental/inspector/scripts/**/*.ts",
+      "packages/llm/llm-pi-ai/scripts/**/*.ts",
+      "scripts/**/*.ts",
+      "website/**/*.ts",
       "website/.vitepress/**/*.ts"
   ],
   // Under packages/client and benchmarks, a test file names the face it covers:
@@ -261,6 +276,19 @@
   "exclude": [
     "apps/desktop/tests/keyboard.spec.ts",
     "packages/client/*/src/**",
+    "packages/experimental/agent-team/tests/**",
+    "packages/experimental/tool-agent-team/tests/**",
+    "packages/experimental/pi-tui/tests/**",
+    "packages/pentest/pentest-executor/tests/**",
+    "packages/pentest/pentest-run/tests/**",
+    "packages/guard/run-budget/tests/**",
+    "packages/guard/scope-policy/tests/**",
+    "packages/guard/scope-proxy/tests/**",
+    "packages/runtime-diagnostics/invariants/tests/**",
+    "packages/*/*/tests/**/*.client.ts",
+    "packages/*/*/tests/**/*.client.tsx",
+    "packages/*/*/tests/**/*.client.spec.ts",
+    "packages/*/*/tests/**/*.client.spec.tsx",
     "benchmarks/**/*.client.ts",
     "benchmarks/**/*.client.tsx",
     "packages/client/tsdown.client.ts",
@@ -274,7 +302,6 @@
     { "path": "./packages/experimental/creation-recommendations" },
     { "path": "./packages/experimental/plugin-recommendations" },
     { "path": "./packages/experimental/personalized-recommendations" },
-
     { "path": "./packages/experimental/client-ui-cot-translation/tsconfig.host.json" },
     { "path": "./packages/experimental/cot-translation-bundle" },
     { "path": "./packages/experimental/session-search" },
@@ -290,14 +317,12 @@
     { "path": "./packages/experimental/api-speech-to-text" },
     { "path": "./packages/experimental/voice-input-bundle" },
     { "path": "./packages/experimental/plugin-market-bundle" },
-    { "path": "./packages/experimental/pi-tui" },
     { "path": "./packages/client/locale/tsconfig.host.json" },
     { "path": "./packages/client/ui-theme/tsconfig.host.json" },
     { "path": "./packages/client/ui-chat/tsconfig.host.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.host.json" },
-
     { "path": "./packages/host/product-telemetry-otel" },
     { "path": "./packages/boot/config-editor" },
     { "path": "./packages/client/connection/tsconfig.host.json" },
@@ -319,7 +344,6 @@
     { "path": "./packages/client/ui-sidebar-browser/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.host.json" },
     { "path": "./packages/document/office-to-pdf" },
-
     { "path": "./packages/api/account-controller" },
     { "path": "./packages/credentials/deepseek-account-platform" },
     { "path": "./packages/credentials/deepseek-account" },
@@ -395,6 +419,7 @@
     { "path": "./packages/credentials/credentials" },
     { "path": "./packages/credentials/credentials-local" },
     { "path": "./packages/credentials/authorization" },
+    { "path": "./packages/experimental/tool-session-query" },
     { "path": "./packages/storage/storage" },
     { "path": "./packages/storage/storage-json" },
     { "path": "./packages/storage/storage-sqlite" },
@@ -413,6 +438,7 @@
     { "path": "./packages/session/tool-working-directory" },
     { "path": "./packages/session/session-title-llm" },
     { "path": "./packages/session/session-title-first-prompt-llm" },
+    { "path": "./packages/experimental/session-title-all-prompts-llm" },
     { "path": "./packages/session/session-turn-outline" },
     { "path": "./packages/session/session-telemetry" },
     { "path": "./packages/identity/anonymous-user-id" },
@@ -444,6 +470,7 @@
     { "path": "./packages/core/tool-executor-ptc" },
     { "path": "./packages/core/agent-tool-presentation" },
     { "path": "./packages/skill/skill" },
+    { "path": "./packages/experimental/skill-badge" },
     { "path": "./packages/skill/skill-filesystem" },
     { "path": "./packages/skill/tool-skill" },
     { "path": "./packages/interaction/tool-ask-user" },
@@ -463,6 +490,7 @@
     { "path": "./packages/terminal/terminal-bash" },
     { "path": "./packages/shell/tool-bash-persistent" },
     { "path": "./packages/shell/tool-pwsh-persistent" },
+    { "path": "./packages/experimental/tool-terminal" },
     { "path": "./packages/ptc-runtime/ptc-runtime" },
     { "path": "./packages/experimental/ptc-runtime-python" },
     { "path": "./packages/ptc-runtime/ptc-runtime-node" },
@@ -549,6 +577,9 @@
     { "path": "./packages/workflow/workflow" },
     { "path": "./packages/workflow/workflow-ptc" },
     { "path": "./packages/workflow/tool-workflow" },
+    { "path": "./packages/experimental/tool-ralph" },
+    { "path": "./packages/experimental/webhook" },
+    { "path": "./packages/experimental/webhook-github" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-preset-registry" },
@@ -557,6 +588,9 @@
     { "path": "./packages/guard/repeat-tool-reminder" },
     { "path": "./packages/extensions/cordis-host-runner" },
     { "path": "./packages/extensions/tool-cordis" },
+    { "path": "./packages/experimental/hook-protocol" },
+    { "path": "./packages/experimental/hooks-claude-code" },
+    { "path": "./packages/experimental/hooks-codex" },
     { "path": "./packages/mcp/mcp-client" },
     { "path": "./packages/mcp/mcp-manager" },
     { "path": "./packages/mcp/mcp-resources" },
@@ -579,6 +613,21 @@
     { "path": "./apps/cli" },
     { "path": "./apps/plugin-market-generator" },
     { "path": "./apps/desktop-host" },
-    { "path": "./apps/desktop/tsconfig.host.json" }
+    { "path": "./apps/desktop/tsconfig.host.json" },
+    { "path": "./packages/experimental/pi-tui" },
+    { "path": "./packages/experimental/agent-team" },
+    { "path": "./packages/experimental/agent-team-profile" },
+    { "path": "./packages/experimental/tool-agent-team" },
+    { "path": "./packages/guard/run-budget" },
+    { "path": "./packages/guard/scope-policy" },
+    { "path": "./packages/guard/scope-proxy" },
+    { "path": "./packages/pentest/pentest-executor" },
+    { "path": "./packages/pentest/pentest-run" },
+    { "path": "./packages/pentest/recon-engine" },
+    { "path": "./packages/remote/remote-machines" },
+    { "path": "./packages/runtime-diagnostics/invariants" },
+    { "path": "./packages/session/session-format-v4-to-v5" },
+    { "path": "./packages/web/web-search-exa" },
+    { "path": "./packages/web/web-search-perplexity" }
   ]
 }

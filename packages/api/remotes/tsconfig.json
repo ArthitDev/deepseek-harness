@@ -6,6 +6,18 @@
     },
     {
       "path": "./tsconfig.client.json"
+    },
+    {
+      "path": "../../pentest/pentest-run"
+    },
+    {
+      "path": "../../pentest/pentest-executor"
+    },
+    {
+      "path": "../../pentest/recon-engine"
+    },
+    {
+      "path": "../../remote/remote-machines"
     }
   ]
 }

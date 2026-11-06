@@ -7,7 +7,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { MessageId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
-import type { ContinuableStart } from '@deepseek-ai/dsh-subagent'
+import type { SubagentActivation } from '@deepseek-ai/dsh-subagent'
 import { errorMessage, TeamError } from './error.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamRuntimeLifecycle } from './lifecycle.ts'
@@ -238,8 +238,8 @@ export class TeamRoster {
    * @param root - exact live Team Lead authorizing release.
    * @param childIds - selected roster child ids.
    */
-  async stopTeammates(root: Agent, childIds: readonly SessionId[]): Promise<void> {
-    await this.lifecycle.withTimeout(this.ctx.subagents.drainContinuableChildren(root, childIds))
+  async stopTeammates(root: Agent, _childIds: readonly SessionId[]): Promise<void> {
+    await this.lifecycle.withTimeout(this.ctx.subagents.drainDescendants([root]))
   }
 
   /** Perform one creation admitted before the Team runtime disposal cutoff. */
@@ -277,19 +277,18 @@ export class TeamRoster {
       await this.journal.appendAndFlush(root, 'team/member', { version: 2, teamId: TeamId(root.id), member })
     })
 
-    let started: ContinuableStart
+    let started: SubagentActivation
     try {
-      started = await this.ctx.subagents.startContinuable({
+      started = await this.ctx.subagents.startActivation({
         childId,
         provider: request.provider,
         label: description,
-        request: {
-          prompt: request.prompt,
-          parent: root,
-        },
+        prompt: request.prompt,
+        parent: root,
+        delivery: 'parent',
         signal,
       })
-      await this.checkpointInitialPrompt(childId, started.messageId, signal)
+      if (started.messageId !== undefined) await this.checkpointInitialPrompt(childId, started.messageId, signal)
     } catch (error: unknown) {
       const failed: TeamMemberSnapshot = {
         ...member,

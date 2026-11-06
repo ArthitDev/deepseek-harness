@@ -17,6 +17,33 @@
     },
     {
       "path": "./../ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../store"
+    },
+    {
+      "path": "../../test-support/client-runtime"
+    },
+    {
+      "path": "../ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../ui-model-selection"
+    },
+    {
+      "path": "../ui-primitives"
+    },
+    {
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../ui-slots"
+    },
+    {
+      "path": "../../pentest/recon-engine"
     }
   ]
 }

@@ -37,11 +37,12 @@
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 
-  position: fixed;
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
   z-index: 110;
   box-sizing: border-box;
   width: min(560px, calc(100vw - 32px));
-  max-height: min(680px, calc(100vh - 32px));
   padding: 10px;
   overflow: auto;
   border: 0;

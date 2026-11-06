@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -14,18 +14,18 @@ afterEach(cleanup)
 const t: WebSearchModeControlProps['t'] = makeTranslate(zh, commonZh)
 
 const snapshot = (
-  overrides: Partial<SettingsScopeSnapshot<WebSearchPolicySettings>> = {},
-): SettingsScopeSnapshot<WebSearchPolicySettings> => ({
+  overrides: Partial<ConfigFormSnapshot<WebSearchPolicySettings>> = {},
+): ConfigFormSnapshot<WebSearchPolicySettings> => ({
   status: 'ready', value: { always: false }, base: { always: false }, user: undefined,
-  revision: 0, writable: true, mode: 'host', ...overrides,
+  revision: 0, writable: true, ...overrides,
 })
 
 function setup(
-  initial: SettingsScopeSnapshot<WebSearchPolicySettings>,
+  initial: ConfigFormSnapshot<WebSearchPolicySettings>,
   setAlways = vi.fn(() => Promise.resolve()),
 ) {
   const store = createSnapshotStore(initial)
-  const useWebSearchMode = <S,>(selector: (value: SettingsScopeSnapshot<WebSearchPolicySettings>) => S) =>
+  const useWebSearchMode = <S,>(selector: (value: ConfigFormSnapshot<WebSearchPolicySettings>) => S) =>
     bindSnapshotSelector(store)(selector)
   const props = { useWebSearchMode, setAlways, t } as unknown as WebSearchModeControlProps
   return { setAlways, view: render(<WebSearchModeControl {...props} />) }
