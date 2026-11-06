@@ -7,6 +7,13 @@ import { TEAM_MODE_OPTIONS } from './team-mode.js'
  * Apply saved team settings and require intact system prompts for TUI model requests.
  * @param ctx - TUI context with its Loader and pentest mode policy.
  */
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Synchronous re-read of the saved web-profile rows into the live policy. */
+    promptSettingsSync?: () => void
+  }
+}
+
 export async function installWebPromptSettings(ctx: Context): Promise<void> {
   const loader = ctx.get('loader') as {
     entries(): IterableIterator<{
@@ -20,7 +27,7 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
   const entry = [...loader.entries()].find(entry => entry.options.id === 'pentest-mode' && entry.fiber?.state === FiberState.ACTIVE)
   if (entry === undefined) throw new Error('pi-tui: active pentest-mode entry not found')
   const fallback = { ...entry.options.config }
-  const sync = async (): Promise<boolean> => {
+  const syncCompute = (): boolean => {
     const local = readProfileConfig(ctx, 'pentest-mode')
     const web = readWebProfileConfig(ctx, 'pentest-mode')
     const suppressSections = local?.get('suppressSections') ?? web?.get('suppressSections') ?? fallback.suppressSections ?? false
@@ -39,9 +46,20 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
     }
     const current = policy.current()
     if (Object.entries(updates).every(([key, value]) => current[key] === value)) return false
-    await entry.update({ config: { ...entry.options.config, ...updates } })
+    // Same-turn visibility: the section text evaluates synchronously during
+    // prompt assembly, before any async config restart settles. Apply the
+    // values on the live policy now; persist through the config restart after.
+    if (typeof (policy as { apply?: (updates: Record<string, unknown>) => void }).apply === 'function') {
+      ;(policy as { apply: (updates: Record<string, unknown>) => void }).apply(updates)
+    }
+    void entry.update({ config: { ...entry.options.config, ...updates } }).catch((error: unknown) => {
+      ctx.logger.error(error)
+    })
     return true
   }
+  const sync = async (): Promise<boolean> => syncCompute()
+  // Sibling scopes (the policy plugin) resolve this from the shared root.
+  ctx.root.provide('promptSettingsSync', () => { syncCompute() })
   await sync()
   ctx.on('agent/pre-step', async ({ agent }, next) => {
     // Saved web-profile edits land between turns; 0.2.2 has no system-prompt
