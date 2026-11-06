@@ -1,0 +1,35 @@
+# Dead Mode composition fragment: scope policy + run budget + pinning proxy.
+# Merge the `insert` block into the deployment's own cordis composition, then
+# fill the scope and ceilings from the operator's target statement (spec line
+# 7). An empty `authorizedTargets` list means only exclusions bind. Never ship
+# this in the default bundle — scope and budget authority belong to the
+# operator, not the product. The token ceiling requires the token-meter
+# service (`@deepseek-ai/dsh-token-meter`) in the same composition.
+#
+# Pointing the run's HTTP_PROXY/HTTPS_PROXY at $DSH_SCOPE_PROXY (contributed
+# by scope-proxy) routes shell connections through scope enforcement AND
+# address pinning — the no-sandbox closure of the DNS rebinding race.
+- insert:
+    - id: token-meter
+      name: '@deepseek-ai/dsh-token-meter'
+    - id: shell-env
+      name: '@deepseek-ai/dsh-shell-env'
+    - id: scope-proxy
+      name: '@deepseek-ai/dsh-scope-proxy'
+      config:
+        authorizedTargets: []       # e.g. ['lab.example.test', '10.50.0.8', '10.50.0.8:8080']
+        excludedTargets: []         # e.g. ['10.50.0.1:22', 'backup.lab.example.test']
+        allowedSchemes: ['http', 'https', 'ws', 'wss']
+        resolveAddresses: true
+    - id: scope-policy
+      name: '@deepseek-ai/dsh-scope-policy'
+      config:
+        authorizedTargets: []       # keep in sync with scope-proxy above
+        excludedTargets: []
+        allowedSchemes: ['http', 'https', 'ws', 'wss']
+        resolveAddresses: false     # the proxy now pins; the guard stays as second opinion
+    - id: run-budget
+      name: '@deepseek-ai/dsh-run-budget'
+      config:
+        maxTotalTokens: 0           # e.g. 4000000; 0 disables the token ceiling
+        maxWallMs: 0                # e.g. 7200000 (2h); 0 disables the wall clock

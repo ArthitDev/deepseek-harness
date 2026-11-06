@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-09-12-remote-ssh-machines.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-12-remote-ssh-machines.md
+/agent-note-workspaces-can-run-on-saved-ssh-machines:
+  en: 8a85119ed5266dd8
+  zh: 6b30a6d69c883340
+/agent-note-workspaces-can-run-on-saved-ssh-machines/problem:
+  en: 5d26bcae6ee5846d
+  zh: c34de00843fc1069
+/agent-note-workspaces-can-run-on-saved-ssh-machines/decision:
+  en: dcf917fbb6b72eaf
+  zh: 3907ec7600e52707
+/agent-note-workspaces-can-run-on-saved-ssh-machines/alternatives-considered:
+  en: 2995a0e9b96522be
+  zh: a6ecf633a1ed581f
+/agent-note-workspaces-can-run-on-saved-ssh-machines/consequences:
+  en: 3add4692adffc3c3
+  zh: 2cccdd39de16c4a3

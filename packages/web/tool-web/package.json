@@ -20,12 +20,18 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./settings": {
+      "types": "./lib/types/settings.d.ts",
+      "default": "./lib/types/settings.js"
+    }
   },
   "files": [
     "locale/*.json",
     "lib/index.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "lib/settings.js",
+    "lib/types/settings.d.ts"
   ],
   "license": "MIT",
   "peerDependencies": {

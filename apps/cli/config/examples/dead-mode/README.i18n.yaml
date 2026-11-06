@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write apps/cli/config/examples/dead-mode/README.md
+/dead-mode-autonomous-pentest-run-profile:
+  en: 499343d6663c0a9c
+  zh: 7a8cb9b64181f5f8
+/dead-mode-autonomous-pentest-run-profile/the-shipped-autonomy-bundle:
+  en: 8998aeeee317be2a
+  zh: ccdc17b78e8a24dc
+/dead-mode-autonomous-pentest-run-profile/the-shipped-autonomy-bundle/activating-in-every-mode:
+  en: c39232ed0f32b534
+  zh: d99363582167c1ea
+/dead-mode-autonomous-pentest-run-profile/the-control-loop-goal-goal-round-driver:
+  en: b7229aebd816cecf
+  zh: 1eebde11606a27c0
+/dead-mode-autonomous-pentest-run-profile/what-stays-enforced-per-the-spec-s-own-criteria:
+  en: 8030ab7d9ace165e
+  zh: 822086e98622748a
+/dead-mode-autonomous-pentest-run-profile/run-checklist:
+  en: 47498709befd5ace
+  zh: 9867859d0aefb317
+/dead-mode-autonomous-pentest-run-profile/known-gaps-to-100-do-not-fake-these:
+  en: e2e2ae7262609e16
+  zh: 7d53a3c807de29dd

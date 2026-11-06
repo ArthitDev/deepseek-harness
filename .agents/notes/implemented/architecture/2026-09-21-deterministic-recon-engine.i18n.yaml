@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-09-21-deterministic-recon-engine.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-21-deterministic-recon-engine.md
+/agent-note-deterministic-recon-engine:
+  en: 385b14be442ad08a
+  zh: ab8a9ea9b23ede49
+/agent-note-deterministic-recon-engine/problem:
+  en: fde94f8c283a220c
+  zh: 9eea7015f5424e24
+/agent-note-deterministic-recon-engine/decision:
+  en: f1250dc727db6ce6
+  zh: f1ad46243946cf11
+/agent-note-deterministic-recon-engine/alternatives-considered:
+  en: 210c51e41dc3b492
+  zh: dddc94cb3e8a5fcd
+/agent-note-deterministic-recon-engine/consequences:
+  en: 15fb0f9c9e5866e0
+  zh: 9243501111e9b93c
+/agent-note-deterministic-recon-engine/verification:
+  en: d0fd4fa9d1dd529b
+  zh: 8b21a4a4afa91a88
+/agent-note-deterministic-recon-engine/deferred:
+  en: 047d9aaeb892ec92
+  zh: 7643f136857b5c13

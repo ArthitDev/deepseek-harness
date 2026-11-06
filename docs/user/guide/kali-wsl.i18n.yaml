@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for kali-wsl.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/kali-wsl.md
+/run-the-offensive-toolchain-in-kali-wsl:
+  en: 6757a2f0b90d5e5a
+  zh: 8d399a431c7aff71
+/run-the-offensive-toolchain-in-kali-wsl/what-dsh-does:
+  en: 83e1e8a2faf6033f
+  zh: dd8717f2a6a72523
+/run-the-offensive-toolchain-in-kali-wsl/prerequisites:
+  en: 3f178a386518973c
+  zh: 0b4c3cf78558d485
+/run-the-offensive-toolchain-in-kali-wsl/enable:
+  en: 8e31fc1109980bec
+  zh: 323b010c1635f813
+/run-the-offensive-toolchain-in-kali-wsl/route-model-commands-through-kali:
+  en: ec3493c58d0e3279
+  zh: 5560aaa19d51b2a3
+/run-the-offensive-toolchain-in-kali-wsl/verify:
+  en: b1afe050e185b62d
+  zh: 9bf41f9b70c9a21e
+/run-the-offensive-toolchain-in-kali-wsl/reverse-engineering-mcp-bridges:
+  en: 17f779dc33a40555
+  zh: 5188b0a2a2025fbc

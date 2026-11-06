@@ -1,0 +1,35 @@
+# Test-only direct GLM route; fork continuation is opt-in here, not a base default.
+- id: agent-default-model
+  config:
+    provider: zai
+    model: glm-5.3-flash
+- id: compaction-basic
+  config:
+    auto: false
+- id: session-title-llm
+  disabled: true
+- id: agent-instructions
+  config:
+    maxBytes: 0
+    projectRootMarkers: []
+    instructionFileCandidates: []
+    localInstructionFileCandidates: []
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: []
+- id: tool-fs-search
+  config:
+    knowledgeRoots: []
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+- id: subagent-fork-in-process
+  disabled: false
+- id: tool-subagent-fork
+  disabled: false
+  config:
+    provider: fork
+    toolName: subagent_fork
+    backgroundMode: continuable

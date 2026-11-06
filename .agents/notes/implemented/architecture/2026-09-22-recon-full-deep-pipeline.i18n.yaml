@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-09-22-recon-full-deep-pipeline.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-22-recon-full-deep-pipeline.md
+/agent-note-recon-full-deep-pipeline-budgets-and-coverage:
+  en: bf1280b892804bc3
+  zh: b49fc2c4c39eb71f
+/agent-note-recon-full-deep-pipeline-budgets-and-coverage/problem:
+  en: 3772727eccedaeb2
+  zh: bfa603fafee92e4c
+/agent-note-recon-full-deep-pipeline-budgets-and-coverage/decision:
+  en: d78607904ace3827
+  zh: 2dc93b28456435fd
+/agent-note-recon-full-deep-pipeline-budgets-and-coverage/alternatives-considered:
+  en: d9c679b92ca71c13
+  zh: cd43c3800da54c46
+/agent-note-recon-full-deep-pipeline-budgets-and-coverage/consequences:
+  en: e6f84b25fff4f76b
+  zh: 735cfe5a6aa68d86
+/agent-note-recon-full-deep-pipeline-budgets-and-coverage/verification:
+  en: ad4e0f94881de4dd
+  zh: 63a9079f6698a9c4
