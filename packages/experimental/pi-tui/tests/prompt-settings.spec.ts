@@ -75,10 +75,11 @@ describe('TUI Web prompt settings', () => {
       const fallback = savedWeb ? false : initial
       await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(LocalFileSystem, { cwd: root })
-      ctx.provide('profileContext', { name: 'tui', home: root })
+      ctx.provide('profileContext', { name: 'tui', home: root, dir: root })
       await ctx.plugin(Loader)
       ctx.loader.builtins['include-test'] = Include
       ctx.loader.builtins['mode-test'] = PentestModePolicy
+      ctx.provide('workingDirectory', { ensure: async () => root })
       ctx.loader.builtins['instructions-test'] = AgentInstructions
       ctx.loader.builtins['tui-settings-test'] = {
         name: 'tui-settings-test', inject: ['pentestModePolicy', 'systemPrompt'], apply: async (context: Context) => {
@@ -95,6 +96,7 @@ describe('TUI Web prompt settings', () => {
       const originalComposition = await readFile(composition, 'utf8')
       await ctx.loader.root.update([{ id: 'include', name: 'cordis:include-test', config: { path: pathToFileURL(composition).href } }])
       await ctx.loader.await()
+      expect(ctx.loader.resolve('include:instructions').fiber?.state).toBe(FiberState.ACTIVE)
       expect(ctx.loader.resolve('include:tui-settings').fiber?.state).toBe(FiberState.ACTIVE)
       expect(ctx.pentestModePolicy.current().suppressSections).toBe(false)
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'built-in guidance' })
@@ -366,7 +368,7 @@ describe('TUI Web prompt settings', () => {
       await mountAgentLoopTestDependencies(ctx)
       ctx.systemPrompt.section({ name: 'builtin:test', order: 1, text: 'other built-in guidance' })
       const patchPath = join(root, 'profile.patch.yml')
-      ctx.provide('profileContext', { name: surface, home: root, patchPath })
+      ctx.provide('profileContext', { name: surface, home: root, dir: root, patchPath })
       await ctx.plugin(Loader)
       Object.assign(ctx.loader.builtins, {
         'include-test': Include, 'mode-test': PentestModePolicy,

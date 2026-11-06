@@ -637,7 +637,7 @@ describe('preset switches with conversation history', () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-tui-preset-command-'))
     const ctx = new Context()
     await ctx.plugin(SessionStore)
-    ctx.provide('profileContext', { home })
+    ctx.provide('profileContext', { home, dir: home })
     const oldRoute = { provider: 'mock', model: 'old-model' }
     const newRoute = command === 'model' ? { provider: 'mock', model: 'new-model' } : oldRoute
     let saved = oldRoute
@@ -916,7 +916,16 @@ describe('/clear transcript', () => {
             ]
           `)
         expect(screen.currentSessionId).toBe(session.id)
-        expect(session.deriveMessages()).toEqual(history === 'empty' ? [] : [system])
+        // 0.2.2 /clear appends a session-edit developer marker shadowing the
+        // earlier surface; hidden- and wiki-context histories surface it next
+        // to the system preamble.
+        const clearedModelHistory = history === 'empty' ? [] : [
+          system,
+          ...(history === 'hidden-context' || history === 'wiki-context'
+            ? [expect.objectContaining({ role: 'developer', source: { kind: 'session-edit' } })]
+            : []),
+        ]
+        expect(session.deriveMessages()).toEqual(clearedModelHistory)
         if (history !== 'hidden-context' && history !== 'wiki-context') expect(session.snapshotEvents()).toEqual(before)
         screen.submit('/clear')
         expect((await renderScreen(tui)).match(/session cleared/g)).toHaveLength(1)
@@ -986,7 +995,10 @@ describe('/clear transcript', () => {
         expect(cleared.match(/session cleared/g)).toHaveLength(1)
         expect(screen.currentSessionId).toBe(session.id)
         expect(session.snapshotEvents()).toContainEqual(answer)
-        expect(session.deriveMessages()).toEqual([system])
+        expect(session.deriveMessages()).toEqual([
+          system,
+          expect.objectContaining({ role: 'developer', source: { kind: 'session-edit' } }),
+        ])
 
         // One cleared notice becomes one replacement notice, leaving the item count unchanged.
         screen.submit('/clear')

@@ -53,7 +53,7 @@ describe('restored reasoning effort through Loader and the real request loop', (
       await mountAgentLoopTestDependencies(ctx)
       ctx.llm.registerAdapter([route.provider], adapter)
       ctx.on('agent/error', ({ error }) => { errors.push(error) })
-      ctx.provide('profileContext', { home, name: 'tui' })
+      ctx.provide('profileContext', { home, dir: home, name: 'tui' })
       await ctx.plugin(Loader)
       Object.assign(ctx.loader.builtins, { include: Include, loop: AgentLoop, model: AgentDefaultModel })
       const path = join(home, 'cordis.yml')
