@@ -44,6 +44,9 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
   }
   await sync()
   ctx.on('agent/pre-step', async ({ agent }, next) => {
+    // Saved web-profile edits land between turns; 0.2.2 has no system-prompt
+    // change to key on, so each turn re-reads the profile before assembling.
+    await sync()
     let decision = await next()
     if (decision.kind === 'reject') return decision
     // In-history updates must not retain a prior preset or team policy, including after resume.
