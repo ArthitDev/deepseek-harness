@@ -22,7 +22,9 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
       update(options: { config: Record<string, unknown> }): Promise<void>
     }>
   } | undefined
-  const policy = ctx.get('pentestModePolicy') as { current(): Record<string, unknown> & { suppressSections: boolean } } | undefined
+  const policy = ctx.get('pentestModePolicy') as
+    | { current(): Record<string, unknown> & { suppressSections: boolean }; apply?(updates: Record<string, unknown>): void }
+    | undefined
   if (loader === undefined || policy === undefined) throw new Error('pi-tui: prompt integrity requires loader and pentestModePolicy')
   const entry = [...loader.entries()].find(entry => entry.options.id === 'pentest-mode' && entry.fiber?.state === FiberState.ACTIVE)
   if (entry === undefined) throw new Error('pi-tui: active pentest-mode entry not found')
@@ -49,9 +51,7 @@ export async function installWebPromptSettings(ctx: Context): Promise<void> {
     // Same-turn visibility: the section text evaluates synchronously during
     // prompt assembly, before any async config restart settles. Apply the
     // values on the live policy now; persist through the config restart after.
-    if (typeof (policy as { apply?: (updates: Record<string, unknown>) => void }).apply === 'function') {
-      ;(policy as { apply: (updates: Record<string, unknown>) => void }).apply(updates)
-    }
+    if (typeof policy.apply === 'function') policy.apply(updates)
     void entry.update({ config: { ...entry.options.config, ...updates } }).catch((error: unknown) => {
       ctx.logger.error(error)
     })
