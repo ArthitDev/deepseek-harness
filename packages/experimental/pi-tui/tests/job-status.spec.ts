@@ -10,6 +10,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { JobHandle, JobKind, JobOutcome } from '@deepseek-ai/dsh-jobs'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { createMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { TuiAltScreen, visibleWidth, type Terminal } from '@earendil-works/pi-tui'
@@ -34,7 +35,9 @@ describe('background job status in Agent Debug', () => {
     let screen!: ChatScreen
     try {
       await ctx.plugin(Loader)
-      Object.assign(ctx.loader.builtins, { include: Include, sessions: SessionStore, agents: AgentRegistry, jobs: LocalJobRegistry,
+      Object.assign(ctx.loader.builtins, {
+        include: Include, sessions: SessionStore, agents: AgentRegistry,
+        projections: SessionProjectionRegistry, jobs: LocalJobRegistry,
         screen: { name: 'job-screen-fixture', inject: ['sessions', 'agents', 'jobs'], apply: async (screenCtx: Context) => {
           screenCtx.jobs.attachController('job-screen-test')
           const agent = fixtureAgent(screenCtx, screenCtx.sessions.create(SessionId('visible-jobs')))

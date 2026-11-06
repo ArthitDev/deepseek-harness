@@ -41,7 +41,9 @@ async function setup() {
   const onAgentSwitch = vi.fn()
   try {
     await ctx.plugin(Loader)
-    Object.assign(ctx.loader.builtins, { include: Include, sessions: SessionStore, agents: AgentRegistry,
+    Object.assign(ctx.loader.builtins, {
+      include: Include, sessions: SessionStore, agents: AgentRegistry,
+      workingDirectory: { ensure: async () => root },
       projections: SessionProjectionRegistry, query: TranscriptQuery, subagents: SubagentRuntime,
       screen: { name: 'subagent-screen-fixture', inject: ['sessions', 'agents', 'subagents'], apply: async (scope: Context) => {
         const agent = fixtureAgent(scope, scope.sessions.create(SessionId('parent-viewer')))
