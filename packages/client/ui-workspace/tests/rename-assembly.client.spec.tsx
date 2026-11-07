@@ -41,6 +41,14 @@ async function createRuntime(): Promise<SlotTestRuntime> {
   const runtime = await SlotTestRuntime.create()
   runtime.ctx.provide('shortcuts', { register: () => () => {}, catalog: createSnapshotStore([]) })
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
+  runtime.ctx.provide('remote.remoteMachines', {
+    list: vi.fn(async () => ({ ok: true as const, value: { machines: [] } })),
+    save: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
+    deleteMachine: vi.fn(async () => ({ ok: true as const, value: { removed: true } })),
+    probe: vi.fn(async () => ({ ok: true as const, value: { fingerprint: 'sha256:test', trusted: true, platform: 'linux' } })),
+    trust: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
+  } as never)
+  runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}), setTheme: vi.fn() } as never)
   runtime.releaseWorkspaceSource()
   // The rename flow never picks a directory; the namespace only has to be there
   // for ui-workspace's inject to settle.
@@ -123,14 +131,17 @@ describe('session rename through the assembled browser', () => {
     fireEvent.click(trigger)
     await view.findByRole('menuitem', { name: '置顶会话' })
     expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '置顶会话', '重命名', '分叉会话', '复制 Session ID', 'Export action', 'Last action', '归档会话',
+      '置顶会话', '重命名', '分叉会话', '复制 Session ID', 'Export action', 'Last action', '归档会话', '删除会话',
     ])
-    expect(view.getAllByRole('separator')).toHaveLength(3)
+    expect(view.getAllByRole('separator')).toHaveLength(4)
     const last = view.getByRole('menuitem', { name: 'Last action' })
     const exportRow = view.getByRole('menuitem', { name: 'Export action' })
     trigger.focus()
     fireEvent.keyDown(trigger, { key: 'End' })
     const archive = view.getByRole('menuitem', { name: '归档会话' })
+    const deleteRow = view.getByRole('menuitem', { name: '删除会话' })
+    expect(document.activeElement).toBe(deleteRow)
+    fireEvent.keyDown(deleteRow, { key: 'ArrowUp' })
     expect(document.activeElement).toBe(archive)
     fireEvent.keyDown(archive, { key: 'ArrowUp' })
     expect(document.activeElement).toBe(last)

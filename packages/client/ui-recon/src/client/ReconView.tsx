@@ -156,7 +156,7 @@ export function ReconLoading({ message }: { readonly message: string }) {
 /** Render one stored run's compact report for the operator. */
 export function ReconView({
   loadRuns, loadQueue, clearQueue, loadRun, deleteRun, loadEvidence, loadDynamic,
-  enqueueDynamic, sendToChat, enqueue, t,
+  enqueueDynamic, sendToChat, enqueue, openView, completeViewRequest, t,
 }: ReconViewProps) {
   const [runs, setRuns] = useState<readonly ReconRunListItem[] | null>(null)
   const [queue, setQueue] = useState<readonly ReconQueueEntry[] | null>(null)
@@ -329,7 +329,12 @@ export function ReconView({
     setSending(true)
     setError(null)
     const action = dynamicResult === null ? sendToChat(selected) : sendToChat(selected, dynamicResult)
-    void action.catch((reason: unknown) => {
+    void action.then(() => {
+      // The report is now a Chat turn; return the operator to the Chat view.
+      // Chat owns no focus identity, so the switch request is acknowledged here.
+      openView('chat', '')
+      completeViewRequest()
+    }).catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : String(reason))
       setSending(false)
     })

@@ -311,7 +311,7 @@ export class TestSessions implements ISessions {
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'create' | 'refreshProjections' | 'refresh' | 'search' | 'fork'
+    method: 'create' | 'refreshProjections' | 'refresh' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -623,6 +623,12 @@ export class TestSessions implements ISessions {
     const id = await this.createStub(opts)
     this.require(id)
     return id
+  }
+
+  /** Record one permanent deletion; fixture callers drop the row explicitly. */
+  delete(id: SessionId): Promise<void> {
+    this.calls.push({ method: 'delete', args: [id] })
+    return Promise.resolve()
   }
 
   /** Resolve a retained or catalog-derived address independently of a view. */

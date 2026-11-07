@@ -18,6 +18,7 @@ const contexts: Context[] = []
 class TestPersistence extends SessionPersistence {
   create(): Promise<SessionHandle> { return Promise.reject(new Error('not used')) }
   open(): Promise<SessionHandle> { return Promise.reject(new Error('not used')) }
+  delete(): Promise<boolean> { return Promise.resolve(false) }
   flush(): Promise<void> { return Promise.resolve() }
   stat(): Promise<SessionPersistenceSnapshot | undefined> { return Promise.resolve(undefined) }
   list(): Promise<readonly SessionPersistenceSnapshot[]> { return Promise.resolve([]) }

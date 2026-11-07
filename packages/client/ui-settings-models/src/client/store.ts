@@ -83,7 +83,7 @@ export interface ProviderRow {
   entry: ProviderDirectoryEntry
   /** Whether any layer configures this provider (its profile resolves). */
   configured: boolean
-  /** Whether the user layer alone carries the profile (removal restores the base). */
+  /** Whether the owning user layer carries a deletable provider entry. */
   removable: boolean
   /** The credential reference the resolved profile names, when one does. */
   apiKeyEnv: string | undefined
@@ -252,10 +252,12 @@ export class ModelsSettingsStore {
       const namespace = namespaces.get(entry.settingsNs)
       const configured = namespace !== undefined
         && (entry.settingsPath.length === 0 || this.schema.getPath(namespace.value, entry.settingsPath) !== undefined)
+      // The user layer's own entry is deletable even when a base layer also
+      // carries the same key: deleting removes the override, so a profile
+      // entry beneath it disappears from this document's composition.
       const removable = namespace !== undefined
         && entry.settingsPath.length > 0
         && this.schema.hasPath(namespace.user, entry.settingsPath)
-        && !this.schema.hasPath(namespace.base, entry.settingsPath)
       return {
         entry,
         configured,

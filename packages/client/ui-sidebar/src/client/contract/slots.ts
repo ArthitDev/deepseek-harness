@@ -197,7 +197,8 @@ export type SidebarRootInjected = {
   /**
    * Start a New Session: with a workspace, reuse-or-create its blank session
    * and open it; without one, inherit the current Session Workspace, then the
-   * recent Workspace, or clear into the New Session pure view when none exist.
+   * just-deleted Session's Workspace, then the recent Workspace, or clear into
+   * the New Session pure view when none exist.
    */
   startSession: (workspaceId?: WorkspaceId) => void
   /** Toggle the sidebar column through the layout service. */

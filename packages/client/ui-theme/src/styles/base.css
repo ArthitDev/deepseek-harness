@@ -4,7 +4,7 @@
  * font stack deliberately omits a bare `monospace` tail (Windows CJK falls
  * back to SimSun otherwise). */
 :root {
-  --dsh-font-family-text-default: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+  --dsh-font-family-text-default: 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --dsw-font-family: var(--dsh-font-family-text-default);
   --dsw-font-family-brand: 'Montserrat', var(--dsh-font-family-text-default);

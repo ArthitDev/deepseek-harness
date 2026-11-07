@@ -36,7 +36,7 @@ export const ja = {
   'subtitle.expand': '{name} の説明を展開',
   'subtitle.collapse': '{name} の説明を折りたたむ',
   'back': '戻る',
-  'brand.localBuild': 'DSHローカルビルド',
+  'brand.localBuild': 'Shield Break Agent',
   'workspace.defaultName': 'デフォルトワークスペース',
   'unknown': '不明',
   'none': 'なし',

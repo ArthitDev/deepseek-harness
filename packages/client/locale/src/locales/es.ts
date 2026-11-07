@@ -36,7 +36,7 @@ export const es = {
   'subtitle.expand': 'Expandir la descripción de {name}',
   'subtitle.collapse': 'Contraer la descripción de {name}',
   'back': 'Atrás',
-  'brand.localBuild': 'Compilación local de DSH',
+  'brand.localBuild': 'Shield Break Agent',
   'workspace.defaultName': 'Espacio de trabajo predeterminado',
   'unknown': 'Desconocido',
   'none': 'Ninguno',

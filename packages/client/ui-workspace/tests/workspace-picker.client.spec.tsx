@@ -8,10 +8,12 @@ import type {
   WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import { remoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from '../src/client/contract/slots.ts'
+import type { RemoteMachineSnapshot } from '../src/client/remote-machine-store.ts'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { zh } from '../src/client/locales.ts'
 
@@ -31,6 +33,9 @@ function workspace(id: string, title = id): WorkspaceView {
     workspaceId: wid(id), path: `/projects/${id}`, title, sessionIds: [],
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   }
+}
+function remoteWorkspace(id: string, machineId: string, title = id): WorkspaceView {
+  return { ...workspace(id, title), path: remoteExecutionPath(machineId, `/projects/${id}`) }
 }
 function hook<T>(snapshot: T) {
   return function select<S>(selector: (state: T) => S): S { return selector(snapshot) }
@@ -89,6 +94,7 @@ function mount(
   items: readonly WorkspaceView[] = [workspace('alpha', 'Alpha')],
   createWorkspace = vi.fn(),
   occupancy = occupancySource(),
+  remoteMachines: RemoteMachineSnapshot = { status: 'ready', machines: [], error: null },
 ) {
   const onPick = vi.fn()
   const onClose = vi.fn()
@@ -108,6 +114,7 @@ function mount(
       onClose={onClose}
       createWorkspace={createWorkspace}
       useDirectoryFlow={occupancy.useDirectoryFlow}
+      useRemoteMachines={hook(remoteMachines)}
       renderSlot={renderSlot}
       t={t}
     />
@@ -121,7 +128,12 @@ function mount(
   }
 }
 
+function openLocalMachine(): void {
+  fireEvent.click(screen.getByRole('menuitem', { name: '本机' }))
+}
+
 function chooseAdd(): void {
+  openLocalMachine()
   fireEvent.click(screen.getByRole('menuitem', { name: '添加工作区…' }))
 }
 
@@ -132,13 +144,32 @@ describe('WorkspacePicker', () => {
       { ...workspace('beta', 'Shared'), path: '/two/a/Shared' },
       workspace('gamma', 'Alone'),
     ])
+    expect(screen.getAllByRole('menuitem').map(entry => entry.textContent)).toEqual(['本机'])
+    openLocalMachine()
     expect(screen.getAllByRole('menuitem').map(entry => entry.textContent))
-      .toEqual(['Shared one/a/Shared', 'Shared two/a/Shared', 'Alone', '添加工作区…'])
+      .toEqual(['本机', 'Shared one/a/Shared', 'Shared two/a/Shared', 'Alone', '添加工作区…'])
     // The full path stays reachable when a narrow menu truncates the row.
     expect(screen.getByText('two/a/Shared').parentElement?.title).toBe('/two/a/Shared')
     expect(screen.getByRole('menuitem', { name: 'Alone' }).querySelector('[title]')).toBeNull()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Shared two/a/Shared' }))
     expect(b.onPick).toHaveBeenCalledWith(wid('beta'))
+  })
+
+  it('requires a machine choice before showing a remote Workspace', () => {
+    const machine = {
+      id: 'lab', name: 'Kali Lab', host: '192.0.2.2', port: 22, username: 'tester', auth: 'agent' as const,
+      hasPassword: false, hasPrivateKey: false, hasPassphrase: false,
+    }
+    const b = mount(
+      [workspace('local', 'Local project'), remoteWorkspace('remote', machine.id, 'Remote project')],
+      vi.fn(),
+      occupancySource(),
+      { status: 'ready', machines: [machine], error: null },
+    )
+    expect(screen.queryByRole('menuitem', { name: 'Remote project' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Kali Lab' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remote project' }))
+    expect(b.onPick).toHaveBeenCalledWith(wid('remote'))
   })
 
   it('opens the composed directory flow, adopts its picked path, and selects the returned Workspace', async () => {
@@ -156,12 +187,15 @@ describe('WorkspacePicker', () => {
     expect(screen.queryByTestId('directory-flow')).toBeNull()
   })
 
-  it('raises the flow straight from the anchor gesture when adding is the only entry', () => {
-    // Nothing to list and one action left: a one-row menu would offer no
-    // choice, so the owner's open request lands in the flow itself.
+  it('requires the local machine choice before opening the only add action', () => {
+    // Nothing to list and one action left: the machine choice is the one
+    // decision the menu still offers, so the owner's open request stops there.
     const b = mount([])
-    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '本机' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+    openLocalMachine()
+    fireEvent.click(screen.getByRole('menuitem', { name: '添加工作区…' }))
     expect(b.onClose).toHaveBeenCalled()
     expect(screen.getByTestId('directory-flow')).toBeTruthy()
   })
@@ -261,6 +295,9 @@ describe('WorkspacePicker', () => {
     // would pre-empt the workspaces about to arrive.
     expect(screen.getByRole('status').textContent).toBe('正在加载工作区…')
     expect(screen.queryByTestId('directory-flow')).toBeNull()
+    // The pending list still leaves the machine choice: the local machine
+    // carries the add action, so the baseline cannot be pre-empted.
+    fireEvent.click(screen.getByRole('menuitem', { name: '本机' }))
     expect(screen.getByRole('menuitem', { name: '添加工作区…' })).toBeTruthy()
   })
 
@@ -294,12 +331,14 @@ describe('WorkspacePicker', () => {
 
   it('hides the add entry while the directory-flow hole is empty', () => {
     mount([workspace('alpha', 'Alpha')], vi.fn(), occupancySource(false))
+    openLocalMachine()
     expect(screen.getByRole('menuitem', { name: 'Alpha' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
   })
 
   it('shows the add entry when a flow package activates after the first paint', () => {
     const b = mount([workspace('alpha', 'Alpha')], vi.fn(), occupancySource(false))
+    openLocalMachine()
     expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
     // Registration changes flow through the subscription, no re-render needed.
     act(() => { b.occupancy.flip(true) })

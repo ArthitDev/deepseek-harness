@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import { workspaceDisplayTitle } from '@deepseek-ai/dsh-api-workspace-controller/default-workspace'
@@ -23,11 +23,17 @@ export function ConversationContent(props: ConversationContentProps) {
   const {
     sessionId, phase, hero, useSession, useSessions, useSessionStatus,
     useWorkspaces, useInput, useComposerBlock, renderSlot, renderSlotChain,
-    selectWorkspace, t, useFactorySlot,
+    selectWorkspace, viewSelection, t, useFactorySlot,
   } = props
   const session = useSession(snapshot => snapshot)
   const Views = useFactorySlot('views', ConversationSessionView)
   const WidthControls = useFactorySlot('widthControls', NoConversationWidthControls)
+  // Raw selected view: the width controls are chat-only chrome and would float
+  // over a full-bleed view's own surface.
+  const activeView = useSyncExternalStore(
+    viewSelection.subscribe.bind(viewSelection),
+    viewSelection.getSnapshot.bind(viewSelection),
+  )
   const [body, setBody] = useState<HTMLDivElement | null>(null)
   const pendingInteraction = useSessionStatus(snapshot =>
     sessionId === undefined ? undefined : snapshot.get(sessionId)?.pendingInteraction)
@@ -204,7 +210,7 @@ export function ConversationContent(props: ConversationContentProps) {
           </div>
         ),
       })}
-      <WidthControls container={body} phase={phase} />
+      {(activeView === null || activeView === 'chat') && <WidthControls container={body} phase={phase} />}
     </div>
   )
 }

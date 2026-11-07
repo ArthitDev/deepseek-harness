@@ -4,6 +4,8 @@
    edge. */
 .root {
   --dsh-trajectory-toolbar-height: 32px;
+  /* The ledger reads as part of the page base, not a raised card. */
+  --dsw-alias-bg-layer-1: var(--dsw-alias-bg-base);
 
   isolation: isolate;
   display: flex;
@@ -14,7 +16,7 @@
   width: 100%;
   box-sizing: border-box;
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-base);
 }
 
 .ledger {

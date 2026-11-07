@@ -25,6 +25,9 @@ import type {
   IWorkspaces, SessionActivity, WorkspaceArchiveError, WorkspaceId, WorkspaceSnapshot,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { RemoteEndpoint } from '@deepseek-ai/dsh-api-remote-access/client'
+// Runtime import: merges the generated `remoteMachines` namespace into
+// `ctx.remote`, so the machine roster store reaches its Host service.
+import '@deepseek-ai/dsh-remote-machines/remote'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
@@ -40,9 +43,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import {
-  type ArchiveSessionInjected, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
+  type ArchiveSessionInjected, type DeleteSessionInjected, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
   type RenameSessionInjected, type RowToast, type RowToastInjected, type RowToastState, type SessionRenameDialogInjected,
+  type SessionDeleteDialogInjected, type SessionDeleteTarget,
   type WorkspaceActionRequest, type SessionIdInjected, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
 } from './contract/slots.ts'
 import { createWorkspaceShortcutControls, installWorkspaceShortcuts } from './shortcuts.ts'
@@ -51,22 +55,29 @@ import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionRowButton, SessionArchiveConfirmDialog } from './session-actions/ArchiveSession.tsx'
 import { derive } from './session-actions/derived.ts'
+import { SessionDeleteDialog } from './session-actions/DeleteSession.tsx'
 import { registerSessionMenus } from './session-actions/context-menus.tsx'
 import { PinSessionRowButton } from './session-actions/PinSession.tsx'
 import { SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { registerToasts } from './toast/register.ts'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { RemoteMachinesSection, type RemoteMachineInjected } from './RemoteMachines.tsx'
+import { RemoteMachineController } from './remote-machine-store.ts'
+import { AgentModeController } from './agent-mode.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  MenuOpenState, RowToast, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
+  MenuOpenState, RowToast, SessionRenameTarget, SessionDeleteTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
   SessionRowScheduleOwnerProps,
   WorkspaceBrowserProps,
   WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
+export type { RemoteMachineInjected } from './RemoteMachines.tsx'
+export type { RemoteMachineSnapshot } from './remote-machine-store.ts'
+export type { AgentMode, AgentModeController } from './agent-mode.ts'
 export type { WorkspaceKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -101,7 +112,7 @@ const NS = 'workspace'
  * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = ['contextMenus',
-  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
+  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'layout', 'shortcuts', 'remoteAccess', 'theme',
 ]
 
 /**
@@ -122,9 +133,12 @@ export function apply(ctx: Context): void {
   const rowToast = createSnapshotStore<RowToastState | null>(null)
   let toastSeq = 0
   const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
+  const agentMode = new AgentModeController(ctx.theme)
+  ctx.effect(() => () => { agentMode.dispose() }, 'ui-workspace: agent mode theme')
   const uiWorkspace = new UiWorkspaceService(
     ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
   )
+  const remoteMachines = new RemoteMachineController(ctx)
   ctx.slots.provideRoot({
     hooks: { workspaces: workspaces.list },
     keyedHooks: {
@@ -166,6 +180,7 @@ export function apply(ctx: Context): void {
   // its bound hook.
   const renameRequest = derive(shortcutControls.state, state => state.renameTarget)
   const archiveRequest = createSnapshotStore<SessionArchiveConfirmRequest | null>(null)
+  const deleteRequest = createSnapshotStore<SessionDeleteTarget | null>(null)
   const requestSessionRename = shortcutControls.rename
   const unarchiveSession = (sessionId: SessionId): void => {
     uiWorkspace.unarchiveSession(sessionId).catch((reason: unknown) => {
@@ -246,6 +261,14 @@ export function apply(ctx: Context): void {
     settleSessionRename: shortcutControls.closeRename,
     renameSession,
   })
+  const deleteInjected = (): DeleteSessionInjected => ({
+    requestSessionDelete: (sessionId, displayTitle) => { deleteRequest.set({ sessionId, displayTitle }) },
+  })
+  const deleteDialogInjected = (): SessionDeleteDialogInjected => ({
+    hooks: { deleteRequest },
+    settleSessionDelete: () => { deleteRequest.set(null) },
+    deleteSession: async (sessionId) => { await sessions.delete(sessionId) },
+  })
   const toastActions = {
     undoArchive: unarchiveSession,
     showArchived: () => { viewInstance.actions.setArchivedFilter('show') },
@@ -313,7 +336,7 @@ export function apply(ctx: Context): void {
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource },
+    hooks: { directoryFlow: pickerFlowSource, remoteMachines: remoteMachines.store },
   })
   // Each registration declares its owned children in the same call; slot
   // injection follows both the owner and declaration HMR lifetimes.
@@ -341,6 +364,7 @@ export function apply(ctx: Context): void {
   }, SessionMenu))
   registerSessionMenus(ctx, {
     ...pinInjected(), ...archiveInjected(), ...renameInjected(), ...forkInjected(), ...sessionIdInjected(),
+    ...deleteInjected(),
   })
   ctx.slots.inject('sidebar.workspaces.session.row.action', function* () {
     yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'archive', order: 100, locale: NS, inject: archiveInjected }, ArchiveSessionRowButton)
@@ -356,6 +380,9 @@ export function apply(ctx: Context): void {
       name: 'shell.overlay', id: 'workspace.session-archive', locale: NS, inject: archiveConfirmInjected,
     }, SessionArchiveConfirmDialog)
     yield ctx.slots.register({
+      name: 'shell.overlay', id: 'workspace.session-delete', locale: NS, inject: deleteDialogInjected,
+    }, SessionDeleteDialog)
+    yield ctx.slots.register({
       name: 'shell.overlay', id: 'workspace.row-toast', inject: rowToastInjected,
       children: { 'workspace.toast': { kind: 'keyed', scope: 'root' } },
     }, RowActionToast)
@@ -369,6 +396,28 @@ export function apply(ctx: Context): void {
     },
     WorkspacePicker,
   ))
+  const remoteMachineInjected = (): RemoteMachineInjected => ({
+    controller: remoteMachines,
+    agentMode,
+    hooks: { remoteMachines: remoteMachines.store },
+    createWorkspace: async path => await workspaces.create({ path }),
+  })
+  ctx.effect(() => {
+    const refresh = (): void => { void remoteMachines.load() }
+    const disposers = [
+      ctx.remote.$on('settings/document-updated', (ns: string) => { if (ns === 'remote-machines') refresh() }),
+      ctx.on('connection/reset', refresh),
+    ]
+    return () => { for (const dispose of disposers) dispose() }
+  }, 'ui-workspace: remote machine roster refresh')
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'remote-machines',
+    order: 25,
+    label: () => ctx.locale.bind(NS)('remote.section.title'),
+    locale: NS,
+    inject: remoteMachineInjected,
+  }, RemoteMachinesSection))
 }
 
 /**

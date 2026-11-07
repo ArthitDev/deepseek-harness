@@ -502,6 +502,21 @@ export class ClientSessions implements ISessions {
   }
 
   /**
+   * Permanently delete one Host Session: workspace accounting is forgotten and
+   * the stored history is removed; the working directory is kept. A Session
+   * with a live Agent refuses.
+   * @param id - Session identity to delete.
+   * @returns resolution after the Host confirmed durable deletion.
+   * @throws {Error} when the Host refuses the deletion.
+   */
+  async delete(id: SessionId): Promise<void> {
+    const result = await this.manager.delete(id)
+    if (!result.ok) throw new Error(`session delete failed: ${result.error.code}: ${result.error.message}`)
+    this.manager.handleSessionRemoved(id)
+    this.projectList()
+  }
+
+  /**
    * Borrow an already-retained Agent-scoped Context.
    * @param id - session id (the agent identity — 1:1 same axis).
    * @returns the scoped Context, or undefined without a retained generation.

@@ -241,6 +241,10 @@ describe('ReconView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
     await waitFor(() => { expect(sendToChat).toHaveBeenCalledWith(report, dynamicResult) })
+    await waitFor(() => {
+      expect(sessionStandardProps.openView).toHaveBeenCalledWith('chat', '')
+      expect(sessionStandardProps.completeViewRequest).toHaveBeenCalled()
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'View http/headers' }))
     await waitFor(() => { expect(loadEvidence).toHaveBeenCalledWith('recon_abc123', 'http/headers') })

@@ -306,6 +306,16 @@ export interface SessionRenameValue {
   readonly seq: number
 }
 
+/** Permanent session deletion request. */
+export interface SessionDeleteRequest {
+  readonly sessionId: SessionId
+}
+
+/** Confirmation that the stored session was deleted. */
+export interface SessionDeleteValue {
+  readonly deleted: true
+}
+
 /** Session fork request. */
 export interface SessionForkRequest {
   readonly sessionId: SessionId

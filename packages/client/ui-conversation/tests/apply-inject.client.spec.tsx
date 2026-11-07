@@ -438,6 +438,10 @@ describe('Conversation inject API', () => {
     expect(activate).toHaveBeenLastCalledWith('chat')
     expect(header.instance.store.getSnapshot().view).toBe('chat')
 
+    b.runtime.ctx.uiConversation.openView(ROOT, 'chat')
+    expect(activate).toHaveBeenLastCalledWith('chat')
+    expect(body.instance.store.getSnapshot().view).toBe('chat')
+
     removeTrajectory()
     await b.runtime.flush()
     activate.mockClear()

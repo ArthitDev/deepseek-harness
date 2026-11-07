@@ -134,6 +134,17 @@ describe('MenuView', () => {
     expect(screen.getAllByText('添加')).toHaveLength(1)
   })
 
+  it('can hide a technical name without changing the display label', () => {
+    mount(openState({
+      groups: [{
+        source: 'command',
+        status: 'ready',
+        items: [{ name: 'web-search', label: 'Web Search', hideNameAlias: true }],
+      }],
+    }))
+    expect(screen.getByRole('option').textContent).toBe('Web Search')
+  })
+
   it('keeps an opted-out source title hidden while its candidates are pending', () => {
     mount(openState({
       groups: [{ source: 'reference', showGroupTitle: false, status: 'pending', items: [] }],

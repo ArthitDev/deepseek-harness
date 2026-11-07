@@ -24,7 +24,7 @@ it('indexes Node, Turn, Step, and their Data identities, including hidden and re
   const snapshot = createSnapshotStore<ConversationSnapshot>({ views, activeTargets: new Set(['chat']) })
   const binding: ConversationBinding = {
     snapshot, openTurn: createSnapshotStore<number | undefined>(turn.turn),
-    activate: vi.fn(), target: () => { throw new Error('unused') },
+    activate: vi.fn(), markActivity: vi.fn(), target: () => { throw new Error('unused') },
   }
   const model = new ChatNodeModel(binding)
   const objects = model.objects('object-session' as SessionId)
@@ -76,7 +76,7 @@ it('navigates Group snapshots, Group Data, and named member parts through their 
   const views = { get: () => chat, grouped: () => groups } as ConversationSnapshot['views']
   const snapshot = createSnapshotStore<ConversationSnapshot>({ views, activeTargets: new Set(['chat']) })
   const model = new ChatNodeModel({ snapshot, openTurn: createSnapshotStore<number | undefined>(1),
-    activate: vi.fn(), target: () => { throw new Error('unused') } })
+    activate: vi.fn(), markActivity: vi.fn(), target: () => { throw new Error('unused') } })
   const objects = model.objects('group-object-session' as SessionId)
   const groupReference = objects.reference(group)!
   const dataReference = objects.reference(group.data)!
@@ -136,7 +136,7 @@ it('retains Location references without rows and rejects stale unindexed values 
   const views = { get: () => chat, grouped: () => undefined } as ConversationSnapshot['views']
   const snapshot = createSnapshotStore<ConversationSnapshot>({ views, activeTargets: new Set(['chat']) })
   const model = new ChatNodeModel({ snapshot, openTurn: createSnapshotStore<number | undefined>(1),
-    activate: vi.fn(), target: () => { throw new Error('unused') } })
+    activate: vi.fn(), markActivity: vi.fn(), target: () => { throw new Error('unused') } })
   const objects = model.objects('inactive-object-session' as SessionId)
   const location = objects.reference(first.location.turn)!
   expect(location.target).toEqual({ turn: 1 })

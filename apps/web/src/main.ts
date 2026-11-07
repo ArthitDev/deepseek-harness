@@ -1,4 +1,8 @@
 /** Browser entry for the Web client. */
+import '@fontsource/ibm-plex-sans-thai/400.css'
+import '@fontsource/ibm-plex-sans-thai/500.css'
+import '@fontsource/ibm-plex-sans-thai/600.css'
+import '@fontsource/ibm-plex-sans-thai/700.css'
 import '@deepseek-ai/dsh-client-ui-theme/brand-font.css'
 import { AppWebEntry, applyIndexInjections } from '@deepseek-ai/dsh-client-web'
 

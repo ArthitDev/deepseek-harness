@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-brand-official",
-  "description": "Official DeepSeek Harness brand artwork and click-triggered home background",
+  "description": "Official Shield Break brand mark for the Web client's sidebar slot",
   "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
@@ -24,15 +24,13 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json",
-    "./assets/*": "./lib/assets/*"
+    "./locale/*.json": "./locale/*.json"
   },
   "dsh": {
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-ui-sidebar",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-sidebar"
       ],
       "platform": "web"
     }
@@ -53,14 +51,12 @@
     "@testing-library/react": "^16.3.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "@deepseek-ai/dsh-client-ui-conversation": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*"
   },
   "files": [
     "locale/*.json",
     "lib/index.js",
     "lib/client.js",
-    "lib/assets",
     "lib/types/**/*.d.ts"
   ]
 }

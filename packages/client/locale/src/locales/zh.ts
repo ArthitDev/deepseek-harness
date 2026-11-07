@@ -33,7 +33,7 @@ export const zh = {
   'subtitle.expand': '展开{name}的描述',
   'subtitle.collapse': '收起{name}的描述',
   'back': '返回',
-  'brand.localBuild': 'DSH 本地构建',
+  'brand.localBuild': 'Shield Break Agent',
   'workspace.defaultName': '默认工作区',
   'unknown': '未知',
   'none': '无',

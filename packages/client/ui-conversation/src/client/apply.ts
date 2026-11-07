@@ -13,6 +13,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: pulls the theme service merge (ctx.theme) and its events.
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { ShortcutCommandId, ShortcutFixedCommand } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { UiConversation } from './conversation/assembly.ts'
 import { UserText, PlainUserText, SessionReference } from './user-text/UserText.tsx'
@@ -42,6 +44,7 @@ import { ConversationContent } from './skeleton/ConversationContent.tsx'
 import { ConversationPanel } from './skeleton/ConversationPanel.tsx'
 import { ConversationHeader } from './skeleton/ConversationHeader.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
+import { ThemeToggle, type ThemeMode, type ThemeToggleInjected } from './skeleton/ThemeToggle.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { installStopShortcut } from './stop-shortcut.ts'
@@ -195,6 +198,26 @@ export function apply(ctx: Context, config: Config = Config({})): void {
 
   ctx.effect(() => () => { submissionPolicy.dispose() })
 
+  // Optional light/dark flip in the session header; mounted only when the
+  // theme runtime is loaded, so a theme-less composition shows nothing.
+  const theme = ctx.get('theme')
+  if (theme !== undefined) {
+    const themeMode = createSnapshotStore<ThemeMode>(theme.getTheme().active.colorScheme)
+    ctx.on('theme/change', (snapshot) => { themeMode.set(snapshot.active.colorScheme) })
+    ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+      name: 'conversation.session.header.utilities',
+      id: 'theme-toggle',
+      order: 100,
+      locale: NS,
+      inject: (): ThemeToggleInjected => ({
+        hooks: { themeMode },
+        toggleTheme: () => {
+          theme.setTheme(theme.getTheme().active.colorScheme === 'dark' ? 'light' : 'dark')
+        },
+      }),
+    }, ThemeToggle))
+  }
+
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'composer-enter',
@@ -219,9 +242,14 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     }
     return tabs
   }
+  // Raw selected-view id of the current session; the resident ConversationRoot
+  // reads it to scope chat-only chrome (the transcript width controls).
+  const viewSelection = createSnapshotStore<string | null>(null)
   const activateView = (sessionId: SessionId, preferred: string | null): void => {
     const active = resolveActiveView(viewTabs(), preferred)
-    if (active !== undefined) uiConversation.binding(sessionId).activate(active.id)
+    if (active === undefined) return
+    uiConversation.binding(sessionId).activate(active.id)
+    viewSelection.set(active.id)
   }
   const restoreView = (sessionId: SessionId): void => {
     activateView(sessionId, readConversationViewPreference(sessionId))
@@ -363,6 +391,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
       },
+      viewSelection,
       selectWorkspace: workspaceId => workspaceNavigation.openWorkspace(workspaceId, (nextId) => {
         if (sessionId !== undefined && nextId !== sessionId) {
           const from = inputHub.shell(sessionId)
@@ -399,11 +428,13 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     },
     store: conversationStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => {
-      const openView = (view: string, focus: string): void => {
+      const openView = (view: string, focus?: string): void => {
         if (!viewTabs().some(tab => tab.id === view)) return
         activateView(sessionId, view)
-        actions.openView(view, focus)
+        if (focus === undefined) actions.setView(view)
+        else actions.openView(view, focus)
       }
+      uiConversation.setViewOpener(sessionId, openView)
       const inspectionTarget = () => uiConversation.views.entries().find(definition =>
         definition.toolCallFocus !== undefined
         && conversationViews.getSnapshot().some(view => view.id === definition.target),

@@ -142,6 +142,15 @@ export interface ISessions {
     allowMigration?: boolean
   }): Promise<SessionId>
   /**
+   * Permanently delete one Host Session: workspace accounting is forgotten and
+   * the stored history is removed; the working directory is kept. A Session
+   * with a live Agent refuses.
+   * @param id - Session identity to delete.
+   * @returns resolution after the Host confirmed durable deletion.
+   * @throws when the Host refuses (not found, or a live Agent owns the Session).
+   */
+  delete(id: SessionId): Promise<void>
+  /**
    * Borrow an already-retained Agent-scoped Context without extending its lifetime.
    * @param id - session id.
    * @returns the live scoped Context, or undefined without a retained generation.

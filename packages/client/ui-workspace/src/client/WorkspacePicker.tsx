@@ -17,12 +17,16 @@ import type {
   WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { workspaceDisplayTitle } from '@deepseek-ai/dsh-api-workspace-controller/default-workspace'
+import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
+import { ComputerIcon } from './RemoteMachines.tsx'
 import { distinguishingPathSuffixes } from './path-suffix.ts'
 import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
+const LOCAL_MACHINE = '::machine-local'
+const REMOTE_MACHINE_PREFIX = '::machine-remote:'
 
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
@@ -52,6 +56,12 @@ export interface WorkspacePickFlowProps {
   side?: 'bottom' | 'top' | 'right'
   /** Currently active workspace (trailing check in the picker list). */
   selectedId?: WorkspaceId | undefined
+  /** Redacted saved-machine names used for remote group headings. */
+  machines?: readonly { readonly id: string; readonly name: string }[] | undefined
+  /** Hostname shown for the local machine. */
+  localMachineLabel?: string | undefined
+  /** Require a machine choice before showing that machine's Workspaces. */
+  machineFirst?: boolean
 }
 
 /**
@@ -73,6 +83,9 @@ export function WorkspacePickFlow({
   onBusyChange,
   side = 'bottom',
   selectedId,
+  machines = [],
+  localMachineLabel,
+  machineFirst = false,
 }: WorkspacePickFlowProps) {
   // Without an owner-provided anchor, the menu remains hidden.
   const absentAnchor = useRef<HTMLElement>(null)
@@ -139,10 +152,69 @@ export function WorkspacePickFlow({
       disabled: flowBusy,
     }))
     : addEntries
+  // Machine-first groups the menu by execution machine: the local Host nests
+  // its Workspaces and the add action under one entry, and each saved remote
+  // machine nests the Workspaces registered on it. A machine with nothing to
+  // choose stays disabled instead of claiming a choice it cannot offer.
+  const machineNames = new Map(machines.map(machine => [machine.id, machine.name]))
+  const remoteMachineIds = [...new Set([
+    ...machines.map(machine => machine.id),
+    ...workspaces.flatMap((workspace) => {
+      const remote = parseRemoteExecutionPath(workspace.path)
+      return remote === undefined ? [] : [remote.machineId]
+    }),
+  ])]
+  const listedEntry = ({ id, title, path, suffix }: (typeof listed)[number]): MenuEntry => ({
+    id,
+    label: suffix === undefined
+      ? title
+      : (
+        <span className={css.disambiguated} title={path}>
+          <span className={css.title}>{title}</span>
+          {' '}
+          <span className={css.pathSuffix}>{suffix}</span>
+        </span>
+      ),
+    disabled: flowBusy,
+  })
+  const machineItems: MenuEntry[] = machineFirst && !addOnly
+    ? [
+      {
+        id: LOCAL_MACHINE,
+        label: localMachineLabel ?? t('remote.local'),
+        icon: <ComputerIcon />,
+        submenu: [
+          ...listed
+            .filter(row => parseRemoteExecutionPath(row.path) === undefined)
+            .map(listedEntry),
+          ...addEntries.filter((entry): entry is Extract<MenuEntry, { label: unknown }> => 'label' in entry),
+        ],
+        disabled: workspaces.filter(workspace => parseRemoteExecutionPath(workspace.path) === undefined).length === 0
+          && !flowAvailable,
+      },
+      ...remoteMachineIds.map((machineId): MenuEntry => {
+        const submenu = listed.flatMap((row) => {
+          const remote = parseRemoteExecutionPath(row.path)
+          return remote?.machineId === machineId ? [listedEntry(row)] : []
+        })
+        return {
+          id: `${REMOTE_MACHINE_PREFIX}${machineId}`,
+          label: machineNames.get(machineId) ?? machineId,
+          icon: <ComputerIcon remote />,
+          submenu,
+          disabled: submenu.length === 0,
+        }
+      }),
+    ]
+    : []
+  const resolvedItems = machineFirst ? machineItems : items
   // Nothing listed and nothing to add with (a composition that mounts this
   // package without any directory-picker): an empty popover would claim a
   // choice that does not exist, so the anchor gesture shows nothing at all.
-  const menuIsEmpty = items.length === 0
+  // Machine-first adds its own degenerate case: every machine disabled offers
+  // no choice either.
+  const menuIsEmpty = resolvedItems.length === 0
+    || (machineFirst && resolvedItems.every(entry => 'disabled' in entry && entry.disabled))
 
   const closeModal = (): void => {
     setErrorOpen(false)
@@ -176,7 +248,7 @@ export function WorkspacePickFlow({
   // loading status instead of jumping into a flow the arriving list would have
   // made unnecessary; the add-only surface lists nothing and never waits.
   const listSettled = addOnly || workspaceSnapshot.phase === 'ready'
-  const addIsTheOnlyEntry = !pinAdd && listSettled && addEntries.length === 1
+  const addIsTheOnlyEntry = !machineFirst && !pinAdd && listSettled && addEntries.length === 1
   // `flowBusy` gates this exactly as it disables the equivalent menu entry: a
   // pick still being adopted owns the surface until it settles.
   useEffect(() => {
@@ -212,8 +284,8 @@ export function WorkspacePickFlow({
       <Menu
         open={open && !addIsTheOnlyEntry && !menuIsEmpty}
         anchor={null}
-        items={items}
-        {...pinAdd ? { footer: addEntries } : {}}
+        items={resolvedItems}
+        {...pinAdd && !machineFirst ? { footer: addEntries } : {}}
         selectedId={selectedId}
         onSelect={handleSelect}
         onClose={onClose}
@@ -258,9 +330,11 @@ export function WorkspacePicker({
   onClose,
   createWorkspace,
   useDirectoryFlow,
+  useRemoteMachines,
   renderSlot,
   t,
 }: WorkspacePickerProps) {
+  const machines = useRemoteMachines?.(state => state.machines) ?? []
   return (
     <WorkspacePickFlow
       t={t}
@@ -273,6 +347,9 @@ export function WorkspacePicker({
       selectedId={selectedId}
       onPick={onPick}
       onClose={onClose}
+      machines={machines}
+      localMachineLabel={t('remote.local')}
+      machineFirst
     />
   )
 }

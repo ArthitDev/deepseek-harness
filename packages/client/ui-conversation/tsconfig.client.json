@@ -10,6 +10,9 @@
   ],
   "references": [
     {
+      "path": "../../fs/tool-fs-search"
+    },
+    {
       "path": "../../../vendor/schemastery"
     },
     {
@@ -83,6 +86,9 @@
     },
     {
       "path": "../ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../ui-theme/tsconfig.client.json"
     },
     {
       "path": "../../util/crypto"

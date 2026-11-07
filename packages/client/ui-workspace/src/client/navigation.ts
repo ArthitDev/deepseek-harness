@@ -82,9 +82,10 @@ export interface UiWorkspace {
   connectWorkspace(workspaceId: WorkspaceId, options?: Pick<StartSessionOptions, 'agentPreset'>): Promise<SessionId>
   /**
    * Open the Workspace blank `connectWorkspace` resolves, so New Session returns to that blank's
-   * unsent draft. A creation the Host refuses is shown through the Workspace notice and leaves the
-   * selection as it was.
-   * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
+   * unsent draft. A creation the Host refuses is shown through the Workspace notice and leaves
+   * the selection as it was.
+   * @param workspaceId - explicit target; absent inherits the current Session's Workspace, then
+   * the just-deleted Session's Workspace, then the most recent Workspace.
    * @param options - initial content, the blank's preset, and `whenDraftExists`, which decides
    * whether existing text or attachments are kept, replaced, or followed by the prompt.
    */
@@ -174,6 +175,9 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     {}, { persist: { name: 'dsh.sessions.current' } },
   )
   private mainReference: SessionReference | undefined
+  /** The last main Session that still had a Workspace, for the just-deleted fallback. */
+  private lastSessionId: SessionId | undefined
+  private lastWorkspaceId: WorkspaceId | undefined
   private restorationNavigation: AbortSignal | undefined
 
   /**
@@ -345,10 +349,22 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const currentWorkspaceId = current === undefined
       ? undefined
       : workspace.items.find(item => item.sessionIds.includes(current))?.workspaceId
+    if (current !== undefined && currentWorkspaceId !== undefined) {
+      this.lastSessionId = current
+      this.lastWorkspaceId = currentWorkspaceId
+    }
+    // The just-deleted fallback: the previous main Session is gone from the
+    // catalog while its Workspace remains, so New Session reopens there rather
+    // than jumping to the recency winner.
+    const remembered = this.lastSessionId !== undefined
+      && sessions.byId[this.lastSessionId] === undefined
+      && workspace.items.some(item => item.workspaceId === this.lastWorkspaceId)
+      ? this.lastWorkspaceId
+      : undefined
     const recent = workspace.phase === 'ready' && sessions.phase === 'ready'
       ? recentWorkspace(workspace.items, sessions.byId)
       : undefined
-    const target = workspaceId ?? currentWorkspaceId ?? recent
+    const target = workspaceId ?? currentWorkspaceId ?? remembered ?? recent
     if (target === undefined) {
       if (initializeDraft) {
         this.notify({ kind: 'createFailed', message: this.ctx.locale.bind('workspace')('draft.workspaceRequired') })

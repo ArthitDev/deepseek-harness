@@ -9,6 +9,8 @@ const PLAN_NEXT_ACTION_EN = 'describe your task to generate plan'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'wiki.label': 'Wiki',
+  'wiki.available': '可用知识库：{libraries}',
   'quote.remove': '移除引用',
   'shortcut.newline': '换行',
   'shortcut.complementary': '使用互补的 Queue／Steer 方式',
@@ -76,8 +78,9 @@ export const zh = {
   'settings.enter.description': '智能体运行时 Enter 键和发送按钮的行为；Cmd/Ctrl+Enter 使用另一行为',
   'settings.enter.queue': '排队发送',
   'settings.enter.steer': '插话发送',
-  'hero.headline': '探索未至之境',
-  'hero.preview': '预览版',
+  'theme.toLight': '切换到浅色模式',
+  'theme.toDark': '切换到深色模式',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': '选择工作区',
   'header.more': '更多操作',
   'session.hierarchy': '会话层级',
@@ -405,6 +408,8 @@ export type ConversationKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'wiki.label': 'Wiki',
+  'wiki.available': 'Available knowledge libraries: {libraries}',
   'quote.remove': 'Remove quote',
   'shortcut.newline': 'New line',
   'shortcut.complementary': 'Use the complementary Queue / Steer action',
@@ -472,8 +477,9 @@ export const en = {
   'settings.enter.description': 'What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior',
   'settings.enter.queue': 'Queue',
   'settings.enter.steer': 'Steer',
-  'hero.headline': 'Into the Unknown',
-  'hero.preview': 'Preview',
+  'theme.toLight': 'Switch to light mode',
+  'theme.toDark': 'Switch to dark mode',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'Choose workspace',
   'header.more': 'More actions',
   'session.hierarchy': 'Session hierarchy',
@@ -800,6 +806,8 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'wiki.label': 'Wiki',
+  'wiki.available': '利用可能なナレッジライブラリ：{libraries}',
   'quote.remove': '引用を削除',
   'shortcut.newline': '改行',
   'shortcut.complementary': '補助のキュー / 実行中の指示変更を使用',
@@ -867,8 +875,9 @@ export const ja = {
   'settings.enter.description': 'エージェントの実行中にEnterキーと送信ボタンが行う動作。Cmd/Ctrl+Enterではもう一方の動作になります',
   'settings.enter.queue': 'キュー',
   'settings.enter.steer': '指示を変更',
-  'hero.headline': '未知への挑戦',
-  'hero.preview': 'プレビュー',
+  'theme.toLight': 'ライトモードに切り替え',
+  'theme.toDark': 'ダークモードに切り替え',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'ワークスペースを選択',
   'header.more': 'その他の操作',
   'session.hierarchy': 'セッション階層',
@@ -1193,6 +1202,8 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'wiki.label': 'Wiki',
+  'wiki.available': 'Bibliotecas de conocimiento disponibles: {libraries}',
   'quote.remove': 'Eliminar cotización',
   'shortcut.newline': 'Nueva linea',
   'shortcut.complementary': 'Usar la acción alternativa de poner en cola o redirigir',
@@ -1260,8 +1271,9 @@ export const es = {
   'settings.enter.description': 'Qué hacen los botones Intro y Enviar mientras el agente se está ejecutando; Cmd/Ctrl+Enter usa el otro comportamiento',
   'settings.enter.queue': 'cola',
   'settings.enter.steer': 'Redirigir',
-  'hero.headline': 'Hacia lo desconocido',
-  'hero.preview': 'Vista previa',
+  'theme.toLight': 'Cambiar al modo claro',
+  'theme.toDark': 'Cambiar al modo oscuro',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'Elige espacio de trabajo',
   'header.more': 'Más acciones',
   'session.hierarchy': 'Jerarquía de sesiones',
@@ -1588,6 +1600,8 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'wiki.label': 'Wiki',
+  'wiki.available': 'Bibliothèques de connaissances disponibles : {libraries}',
   'quote.remove': 'Supprimer le devis',
   'shortcut.newline': 'Nouvelle ligne',
   'shortcut.complementary': 'Utiliser l’action alternative de mise en attente ou de guidage',
@@ -1655,8 +1669,9 @@ export const fr = {
   'settings.enter.description': "Ce que font Entrée et le bouton Envoyer pendant l'exécution de l'agent ; Cmd/Ctrl+Entrée utilise l'autre comportement",
   'settings.enter.queue': "File d'attente",
   'settings.enter.steer': 'Guider',
-  'hero.headline': "Dans l'inconnu",
-  'hero.preview': 'Aperçu',
+  'theme.toLight': 'Passer en mode clair',
+  'theme.toDark': 'Passer en mode sombre',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'Choisir un espace de travail',
   'header.more': 'Autres actions',
   'session.hierarchy': 'Hiérarchie des sessions',
@@ -1983,6 +1998,8 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'wiki.label': 'Wiki',
+  'wiki.available': 'Verfügbare Wissensbibliotheken: {libraries}',
   'quote.remove': 'Zitat entfernen',
   'shortcut.newline': 'Neue Zeile',
   'shortcut.complementary': 'Die alternative Aktion zum Vormerken oder Lenken verwenden',
@@ -2050,8 +2067,9 @@ export const de = {
   'settings.enter.description': 'Was die Eingabetaste und die Schaltfläche „Senden“ bewirken, während der Agent ausgeführt wird; Cmd/Strg+Enter verwendet das andere Verhalten',
   'settings.enter.queue': 'Warteschlange',
   'settings.enter.steer': 'Lenken',
-  'hero.headline': 'Ins Unbekannte',
-  'hero.preview': 'Vorschau',
+  'theme.toLight': 'Zum hellen Modus wechseln',
+  'theme.toDark': 'Zum dunklen Modus wechseln',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'Wählen Sie einen Arbeitsbereich',
   'header.more': 'Weitere Aktionen',
   'session.hierarchy': 'Sitzungshierarchie',
@@ -2378,6 +2396,8 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'wiki.label': 'Wiki',
+  'wiki.available': 'Доступные базы знаний: {libraries}',
   'quote.remove': 'Удалить цитату',
   'shortcut.newline': 'Новая линия',
   'shortcut.complementary': 'Использовать альтернативное действие: поставить в очередь или направить',
@@ -2445,8 +2465,9 @@ export const ru = {
   'settings.enter.description': 'Что делают кнопки «Ввод» и «Отправить» во время работы агента; Cmd/Ctrl+Enter использует другое поведение.',
   'settings.enter.queue': 'Очередь',
   'settings.enter.steer': 'Направить',
-  'hero.headline': 'В неизвестность',
-  'hero.preview': 'Предварительный просмотр',
+  'theme.toLight': 'Переключить на светлую тему',
+  'theme.toDark': 'Переключить на тёмную тему',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'Выберите рабочее пространство',
   'header.more': 'Другие действия',
   'session.hierarchy': 'Иерархия сеансов',
@@ -2773,6 +2794,8 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'wiki.label': 'Wiki',
+  'wiki.available': 'Bibliotecas de conhecimento disponíveis: {libraries}',
   'quote.remove': 'Remover cotação',
   'shortcut.newline': 'Nova linha',
   'shortcut.complementary': 'Usar a ação alternativa de enfileirar ou orientar',
@@ -2840,8 +2863,9 @@ export const pt = {
   'settings.enter.description': 'O que o botão Enter e o botão Enviar fazem enquanto o agente está em execução; Cmd/Ctrl+Enter usa o outro comportamento',
   'settings.enter.queue': 'Fila',
   'settings.enter.steer': 'Orientar',
-  'hero.headline': 'Para o desconhecido',
-  'hero.preview': 'Visualização',
+  'theme.toLight': 'Mudar para o modo claro',
+  'theme.toDark': 'Mudar para o modo escuro',
+  'hero.headline': 'Shield Break Agent',
   'hero.chooseWorkspace': 'Escolha o espaço de trabalho',
   'header.more': 'Mais ações',
   'session.hierarchy': 'Hierarquia de sessão',

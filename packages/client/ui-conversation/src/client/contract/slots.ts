@@ -472,6 +472,8 @@ export interface ConversationInjected {
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /** Session-addressed composer block source, or the stable absent source. */
   hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  /** Raw selected conversation-view id of the current session (null = default chat). */
+  viewSelection: ObservableSnapshot<string | null>
 }
 
 /** Business callbacks injected into the strict Session body. */
@@ -483,8 +485,8 @@ export interface ConversationSessionInjected {
   }
   /** Bind input draft persistence to the Session-owned store instance. */
   bindDraftPersistence: (write: (draft: DraftSnapshot) => void) => () => void
-  /** Select and activate one View while addressing an opaque focus request to it. */
-  openView: (view: string, focus: string) => void
+  /** Select and activate one View; the optional focus addresses an opaque focus request to it. */
+  openView: (view: string, focus?: string) => void
 }
 
 /** One customizable View tab listed in the More menu. */

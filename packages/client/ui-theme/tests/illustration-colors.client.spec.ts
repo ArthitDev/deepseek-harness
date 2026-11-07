@@ -87,12 +87,12 @@ it.each([false, true])('defines the approved light static steps in the dark=%s p
 
 it('resolves the dark artwork colors through the actual static palette', () => {
   expect(illustrationColors(definitions(true))).toEqual({
-    background: [44, 44, 46],
-    backing: [67, 69, 74],
-    detail: [129, 133, 140],
-    inset: [67, 69, 74],
-    shadow: [67, 69, 74],
-    surface: [97, 102, 107],
+    background: [27, 21, 24],
+    backing: [52, 44, 48],
+    detail: [93, 93, 102],
+    inset: [52, 44, 48],
+    shadow: [52, 44, 48],
+    surface: [68, 65, 73],
   })
 })
 

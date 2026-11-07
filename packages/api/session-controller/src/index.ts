@@ -42,6 +42,8 @@ import type {
   SessionControlFrame,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionDeleteRequest,
+  SessionDeleteValue,
   SessionFollowFrame,
   SessionFollowRequest,
   SessionForkRequest,
@@ -436,6 +438,40 @@ export class SessionController extends TypertRemoteService {
   @Remote('rename')
   rename(request: SessionRenameRequest): Promise<SessionRenameValue> {
     return this.commands.rename(request)
+  }
+
+  /**
+   * Permanently delete one stored Session: workspace accounting is forgotten,
+   * the stored history is removed, and the Session working directory is kept.
+   * A Session with a live Agent refuses; stop it (or archive it with stop)
+   * first. Unknown ids refuse as not-found.
+   * @param request - Session identity to delete.
+   * @param signal - cancellation observed before the storage commit.
+   * @returns confirmation after durable deletion and list removal.
+   */
+  @Remote('delete')
+  async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue> {
+    signal.throwIfAborted()
+    const sessionId = request.sessionId
+    const hadLiveAgent = this.ctx.agents.get(sessionId) !== undefined
+    const known = await this.ctx.get('sessionPersistence')?.stat(sessionId, { signal })
+    if (known === undefined && !hadLiveAgent) {
+      throw new RemoteError('session/not-found', `session "${sessionId}" not found`, { sessionId })
+    }
+    if (hadLiveAgent) {
+      throw new RemoteError('session/agent-busy', `session "${sessionId}" is running; stop it before deleting`, {
+        reason: 'stop the Session before deleting it',
+      })
+    }
+    signal.throwIfAborted()
+    await this.ctx.workspaceRegistry.forgetSession(sessionId)
+    signal.throwIfAborted()
+    const deleted = await this.ctx.get('sessionPersistence')?.delete(sessionId, { signal })
+    if (deleted !== true) {
+      throw new RemoteError('session/not-found', `session "${sessionId}" not found`, { sessionId })
+    }
+    this.ctx.emit('api-session/removed', sessionId)
+    return { deleted: true }
   }
 
   /**

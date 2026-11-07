@@ -73,6 +73,10 @@ class TraceHandle implements SessionHandle {
     return Promise.reject(new SessionReadOnlyError(this.id, 'flush'))
   }
 
+  delete(): Promise<boolean> {
+    return Promise.reject(new SessionReadOnlyError(this.id, 'delete'))
+  }
+
   close(): Promise<void> {
     return Promise.resolve()
   }
@@ -83,6 +87,10 @@ class TraceHandle implements SessionHandle {
 }
 
 class TracePersistence extends SessionPersistence {
+
+  delete(): Promise<boolean> {
+    return Promise.resolve(false)
+  }
   static entries = new Map<SessionIdType, { meta: SessionHeader; events: SessionEvent[] }>()
   static listCalls = 0
   static readCalls = 0

@@ -23,15 +23,10 @@
   overflow: visible;
 }
 
-/* figma 34:10411: fish + title, gap 10, centered; 26/32 wt500. The preview
-   badge is a product addition outside that source: a mono superscript pill
-   riding the title's top-right. */
+/* Brand mark + title, gap 10, centered; 26/32 wt500. */
 .headline {
-  display: flex;
-  /* Overflow-driven: the fish and the title group are two wrap units sharing
-     one centered line while they fit; squeezed, the fish takes its own line
-     above the group. No breakpoint. */
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 48px auto;
   column-gap: 10px;
   /* Wrapped, the fish sits on its own line; more air than the 10px side gap
      keeps it reading as a mark above the title, not a squeezed inline glyph. */
@@ -44,79 +39,80 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* Title text + badge as one wrap unit so the title never breaks mid-text with
-   the badge stranded beside a fragment. When the badge no longer fits beside
-   the title it wraps to its own centered line below; while both fit, the group
-   is content-sized and centering is a no-op, keeping the superscript snug. */
-.titleGroup {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  /* Superscript sits 7 from the title. */
-  column-gap: 7px;
-  row-gap: 4px;
-  min-width: 0;
-}
-
-.previewBadge {
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 1px 7px 0;
-  border: 0.5px solid var(--dsw-alias-interactive-bg-hover);
-  border-radius: 999px;
-  corner-shape: round;
-  background: var(--dsw-alias-state-business-tertiary);
-  color: var(--dsw-alias-label-primary-bluish);
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 500;
+/* The visible text is transparent; the ::before copy carries the ink and the
+   typing animation, so the caret (its border) survives the reveal. */
+.headlineText {
+  grid-row: 1;
+  grid-column: 2;
+  position: relative;
+  color: transparent;
   white-space: nowrap;
 }
 
-/* Keep hover detection on a stationary box while the mark moves within it;
-   hover rules target the hitbox so a slot-occupant mark swims too. */
+.headlineText::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0 auto auto 0;
+  box-sizing: content-box;
+  width: 0;
+  overflow: hidden;
+  border-right: 4px solid var(--dsh-agent-accent, #ff5263);
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+  filter: drop-shadow(
+    0 0 5px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
+  );
+  animation:
+    hero-title-type 6s steps(24, end) 300ms forwards,
+    hero-title-caret 650ms step-end 300ms infinite;
+}
+
+/* The agent-mode headline overrides the cycled text when the mode seat sets it. */
+.headlineText[data-agent-mode-headline]::before {
+  content: var(--dsh-agent-headline, 'Red Team Agent');
+}
+
+@keyframes hero-title-type {
+  0%, 5%, 100% { width: 0; }
+  20%, 88% { width: 100%; }
+}
+
+@keyframes hero-title-caret {
+  50% { border-color: transparent; }
+}
+
+/* Keep the brand mark centered in its fixed grid column. */
 .fishHitbox {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
+  animation: hero-logo-pulse 4s ease-in-out infinite;
 }
 
-/* The swim morph's curves poke slightly past the viewBox edges, so clipping
-   would slice the tail mid-wag. The hero mark stays in the same primary ink
-   as its headline. */
+@keyframes hero-logo-pulse {
+  0%, 100% {
+    filter: drop-shadow(
+      0 0 7px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 35%, transparent)
+    );
+  }
+
+  50% {
+    filter: drop-shadow(
+      0 0 14px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 72%, transparent)
+    );
+  }
+}
+
+/* The class also passes through the brand-mark slot for custom occupants. */
 .fish {
   display: block;
-  overflow: visible;
-  transform-origin: 50% 60%;
-  color: var(--dsw-alias-label-primary);
 }
 
-/* Hover swim: a slow continuous sway about the body center — the head
-   (left) lifts as the whale rises, then settles back with a small
-   counter-tilt, like treading water. Negative rotation = head up (the head
-   is the left half; origin 50% 60%). */
-@keyframes hero-fish-swim {
-  0%,
-  100% {
-    transform: none;
-  }
-
-  35% {
-    transform: rotate(-4deg) translate(-0.4px, -0.9px);
-  }
-
-  70% {
-    transform: rotate(1.6deg) translate(0.3px, 0.2px);
-  }
-}
-
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .fishHitbox:hover .fish {
-    animation: hero-fish-swim 1.6s ease-in-out infinite;
-  }
+.localLogo {
+  width: 48px;
+  height: 48px;
+  background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
 }
 
 /* Workspace row sits 12px above the input card (figma y80 → y112). */
@@ -234,4 +230,21 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-state-error-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fishHitbox {
+    animation: none;
+    filter: drop-shadow(
+      0 0 10px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
+    );
+  }
+
+  .headlineText {
+    color: inherit;
+  }
+
+  .headlineText::before {
+    content: none;
+  }
 }

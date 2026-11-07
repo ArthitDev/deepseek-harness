@@ -24,7 +24,7 @@
  *
  * WorkspaceBrowser declares the Session hover-button list. Its built-in
  * pin and archive entries share callbacks with the structured ctx.contextMenus
- * contributions. The Session menu adapter owns the legacy
+ * contributions (rename, fork, delete among them). The Session menu adapter owns the legacy
  * `sidebar.workspaces.session.menu.item` Slot for external React entries;
  * they receive the captured row identity and render together before Archive.
  *
@@ -52,6 +52,7 @@ import type { WorkspaceShortcutState } from '../shortcuts.ts'
 import type { StartSessionOptions } from '../navigation.ts'
 import type {} from './toast.ts'
 import type { createWorkspaceViewStore } from '../stores.ts'
+import type { RemoteMachineSnapshot } from '../remote-machine-store.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-context-menu/client' {
   interface ContextMenuTargetMap {
@@ -450,6 +451,36 @@ export interface SessionRenameDialogInjected {
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
 }
 
+/** Delete action share: the row raises a request; the confirmation dialog owns the destructive call. */
+export interface DeleteSessionInjected {
+  /** Ask for confirmation before permanently deleting a Session. */
+  requestSessionDelete: (sessionId: SessionId, displayTitle: string) => void
+}
+
+/** A Session deletion awaiting operator confirmation. */
+export interface SessionDeleteTarget {
+  /** Session to delete. */
+  sessionId: SessionId
+  /** The row's display title, named in the dialog. */
+  displayTitle: string
+}
+
+/** Delete confirmation share: pending request, settlement, and Host mutation. */
+export interface SessionDeleteDialogInjected {
+  hooks: {
+    /** The deletion asked for, until the dialog consumes or cancels it. */
+    deleteRequest: HostObservable<SessionDeleteTarget | null>
+  }
+  /** Consume or cancel the pending request. */
+  settleSessionDelete: () => void
+  /**
+   * Permanently delete the Session: the stored history is removed and
+   * workspace accounting forgets the id; the working directory is kept.
+   * A Session with a live Agent refuses.
+   */
+  deleteSession: (sessionId: SessionId) => Promise<void>
+}
+
 /** Existing overlay share: the current notice and its dismissal. */
 export interface RowToastInjected {
   hooks: {
@@ -484,6 +515,13 @@ export type SessionArchiveConfirmProps =
   & Omit<SessionArchiveConfirmInjected, 'hooks'>
   & PropsHooks<SessionArchiveConfirmInjected['hooks']>
 
+/** Props of the delete confirmation entry in `shell.overlay`. */
+export type SessionDeleteDialogProps =
+  PropsRuntime<'shell.overlay'>
+  & PropsLocale<'workspace'>
+  & Omit<SessionDeleteDialogInjected, 'hooks'>
+  & PropsHooks<SessionDeleteDialogInjected['hooks']>
+
 /** Props of the existing overlay's keyed notice dispatcher. */
 export type RowToastProps =
   PropsRuntime<'shell.overlay'>
@@ -515,6 +553,10 @@ export type WorkspaceBrowserProps =
 export type WorkspacePickerInjected = DirectoryPickingInjected & {
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  hooks: DirectoryPickingInjected['hooks'] & {
+    /** Redacted saved-machine names used to group the picker by machine. */
+    remoteMachines: HostObservable<RemoteMachineSnapshot>
+  }
 }
 
 /**
@@ -526,5 +568,6 @@ export type WorkspacePickerProps =
   PropsRuntime<'conversation.hero.workspace'>
   & PropsRenderSlots<'conversation.hero.workspace.directoryFlow'>
   & Omit<WorkspacePickerInjected, 'hooks'>
-  & PropsHooks<WorkspacePickerInjected['hooks']>
+  & PropsHooks<DirectoryPickingInjected['hooks']>
+  & Partial<PropsHooks<Pick<WorkspacePickerInjected['hooks'], 'remoteMachines'>>>
   & PropsLocale<'workspace'>

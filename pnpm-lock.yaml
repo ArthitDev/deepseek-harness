@@ -1067,6 +1067,9 @@ importers:
       '@deepseek-ai/dsh-workspace-changes':
         specifier: workspace:*
         version: link:../../packages/deliverables/workspace-changes
+      '@fontsource/ibm-plex-sans-thai':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1
@@ -3951,9 +3954,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-client-ui-conversation':
-        specifier: workspace:*
-        version: link:../ui-conversation
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
@@ -4283,6 +4283,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
+      '@deepseek-ai/dsh-client-ui-theme':
+        specifier: workspace:*
+        version: link:../ui-theme
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: workspace:*
         version: link:../ui-workspace
@@ -4319,6 +4322,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: workspace:*
         version: link:../../llm/token-meter
+      '@deepseek-ai/dsh-tool-fs-search':
+        specifier: workspace:*
+        version: link:../../fs/tool-fs-search
       '@deepseek-ai/dsh-tool-todo':
         specifier: workspace:*
         version: link:../../todo/tool-todo
@@ -7355,9 +7361,15 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
+      '@deepseek-ai/dsh-client-ui-theme':
+        specifier: workspace:*
+        version: link:../ui-theme
       '@deepseek-ai/dsh-jobs':
         specifier: workspace:*
         version: link:../../jobs/jobs
+      '@deepseek-ai/dsh-remote-machines':
+        specifier: workspace:*
+        version: link:../../remote/remote-machines
       '@deepseek-ai/dsh-schedule':
         specifier: workspace:*
         version: link:../../schedule/schedule
@@ -20750,6 +20762,9 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
+  '@fontsource/ibm-plex-sans-thai@5.3.0':
+    resolution: {integrity: sha512-olXzgcA/CTk0PibqGMJrheml3/z8N9VzNLcHkzv9tCoBqnaMoxYYwZp4PZrDkPuOCUe1gW942e9f5fGOOlr3zg==}
+
   '@formulajs/formulajs@2.9.3':
     resolution: {integrity: sha512-WpgiuJaBl/Hcda9Ti8a7mlnw/vUZkJrtjABvojz6P6mo6d8EscudyA7iAt/kTLsgi0c8zfmzQd/Yjb4ASFkw+g==}
     hasBin: true
@@ -28519,6 +28534,8 @@ snapshots:
       lodash.isnil: 4.0.0
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
+
+  '@fontsource/ibm-plex-sans-thai@5.3.0': {}
 
   '@formulajs/formulajs@2.9.3':
     dependencies:

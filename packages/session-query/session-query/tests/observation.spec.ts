@@ -479,6 +479,10 @@ describe('SessionObservationReader cold path', () => {
         return Promise.reject(new SessionReadOnlyError(this.id, 'flush'))
       }
 
+      delete(): Promise<boolean> {
+        return Promise.reject(new SessionReadOnlyError(this.id, 'delete'))
+      }
+
       close(): Promise<void> {
         return Promise.resolve()
       }
@@ -493,6 +497,10 @@ describe('SessionObservationReader cold path', () => {
 
       create(): Promise<SessionHandle> {
         return Promise.reject(new Error('not used'))
+      }
+
+      delete(): Promise<boolean> {
+        return Promise.resolve(false)
       }
 
       // Appends are durable on resolution here; nothing buffers, so the service-wide flush is a no-op.

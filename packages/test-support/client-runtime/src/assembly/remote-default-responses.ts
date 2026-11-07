@@ -26,6 +26,8 @@ export const remoteDefaultResponses: RemoteTable = {
     }),
     // ui-agent-preset hero chip and header label on first mount.
     'agentPresets/list': ok({ presets: [] }),
+    // ui-workspace remote-machine roster refresh at apply and on `connection/reset`.
+    'remoteMachines/list': ok({ machines: [] }),
     // cordis-client-runner `ClientCordisInspectRegistry.sync` at apply and on `connection/reset`.
     'dynamicCordisRunner/syncInspectManifest': ok(null),
     // ui-cordis inventory at apply and on `connection/reset`.

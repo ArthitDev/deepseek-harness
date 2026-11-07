@@ -96,6 +96,7 @@ const NAMESPACES = [
     ns: 'llm-pi-ai',
     schema: {},
     value: { providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } },
+    base: { providers: { openai: { apiKeyEnv: 'INHERITED_API_KEY' } } },
     user: { providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } },
     autoGenerate: true, applies: 'live' as const,
     secrets: [],
@@ -174,6 +175,22 @@ describe('ModelsSettingsStore', () => {
     expect(seenRefs.flat()).toContain('NATIVE_64')
     expect(store.store.getSnapshot().rows[64]!.credentialChecks)
       .toEqual({ NATIVE_64: { configured: false, writable: true } })
+  })
+
+  it('keeps deletion available when the provider also exists below the owning user layer', async () => {
+    const namespaces = NAMESPACES
+    const { ctx, mirror } = api({ describeSettings: () => Promise.resolve(remoteOk<{
+      writable: boolean
+      hasDocument: boolean
+      namespaces: typeof NAMESPACES
+    }>({
+      writable: true, hasDocument: true, namespaces,
+    })) })
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    await store.load()
+    expect(store.store.getSnapshot().rows.find(row => row.entry.provider === 'openai')).toMatchObject({
+      configured: true, removable: true,
+    })
   })
 
   it('joins rows with configured, removable, and credential state', async () => {

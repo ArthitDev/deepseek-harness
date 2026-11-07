@@ -56,6 +56,8 @@ export interface InputTriggerCandidate {
    * findable by its command name).
    */
   readonly label?: string
+  /** Hide the technical name beside a display label while retaining it for matching and picks. */
+  readonly hideNameAlias?: boolean
   readonly description?: string
   /** Reference glyph token, or an icon component from the shared icon set. */
   readonly icon?: InputTriggerCandidateIcon | ComponentType<IconProps>

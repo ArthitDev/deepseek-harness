@@ -103,6 +103,12 @@ export interface SessionPersistenceOpenOptions {
   readonly signal?: AbortSignal
 }
 
+/** Options for {@link SessionPersistence.delete}. */
+export interface SessionPersistenceDeleteOptions {
+  /** Optional cancellation observed before the deletion commits. */
+  readonly signal?: AbortSignal
+}
+
 /** Options for {@link SessionPersistence.stat}. */
 export interface SessionPersistenceStatOptions {
   /** Optional cancellation for backend metadata reads. */
@@ -172,6 +178,17 @@ export abstract class SessionPersistence extends Service {
    * @throws {SessionAlreadyOwnedError} for `write` when ownership is taken.
    */
   abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle>
+
+  /**
+   * Permanently delete one stored session and its session-owned artifacts.
+   * Active write ownership rejects; read handles may fail their next read.
+   * The session working directory is never part of this operation.
+   * @param id - the stored session to delete.
+   * @param options - optional cancellation observed before commit.
+   * @returns `true` when a session was deleted, or `false` when absent.
+   * @throws {SessionAlreadyOwnedError} while a write handle owns the session.
+   */
+  abstract delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<boolean>
 
   /**
    * Flush every active write handle owned by this service instance in one

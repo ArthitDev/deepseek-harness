@@ -288,6 +288,7 @@ async function bench(snapshot = historySnapshot(NODES)) {
   const binding: ConversationBinding = {
     snapshot: conversationStore,
     openTurn: createSnapshotStore<number | undefined>(undefined),
+    markActivity: () => {},
     activate: () => {},
     target: (target) => {
       const source = targetSources[target]

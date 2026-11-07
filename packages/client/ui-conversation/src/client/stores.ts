@@ -11,7 +11,7 @@ const CONVERSATION_STORE_KEY = 'dsh.conversation'
 type ConversationActions = {
   setDraft: (draft: ConversationStoreState, text: DraftInput) => void
   setView: (draft: ConversationStoreState, view: string) => void
-  openView: (draft: ConversationStoreState, view: string, focus: string) => void
+  openView: (draft: ConversationStoreState, view: string, focus?: string) => void
   completeViewRequest: (draft: ConversationStoreState) => void
 }
 
@@ -26,9 +26,9 @@ export function createConversationStore(): EngineStoreHandle<ConversationStoreSt
     actions: {
       setDraft: (d, text: DraftInput) => { d.draft = text },
       setView: (d, view: string) => { d.view = view },
-      openView: (d, view: string, focus: string) => {
+      openView: (d, view: string, focus?: string) => {
         d.view = view
-        d.viewRequest = { view, focus }
+        d.viewRequest = { view, focus: focus ?? '' }
       },
       completeViewRequest: (d) => { d.viewRequest = null },
     },

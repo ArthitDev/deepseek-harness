@@ -184,6 +184,7 @@ function mount(
   )
   const store = createConversationStore().create()
   store.actions.setDraft('ordinary draft')
+  const viewSelection = createSnapshotStore<string | null>('chat')
   const { wiring, sink } = fakeWiring()
   wiring.setDraft(store.store.getSnapshot().draft)
   const useInput = bindSnapshotSelector(wiring.state)
@@ -255,7 +256,7 @@ function mount(
           renderSlot={renderSlot as never}
           renderFactorySlot={headerFactory}
           open={open}
-          selectView={(view) => { store.actions.setView(view) }}
+          selectView={(view) => { viewSelection.set(view); store.actions.setView(view) }}
           t={t}
         />
       )
@@ -376,6 +377,7 @@ function mount(
       renderSlotChain,
       renderFactorySlot,
       selectWorkspace: retargetWorkspace,
+      viewSelection,
       t,
     }
     const useFactorySlot = ((name: string, fallback: (props: never) => ReactNode) => (
@@ -420,20 +422,40 @@ function mount(
 }
 
 describe('Hero chrome', () => {
-  it('renders the English preview badge through the hero locale seat', () => {
-    const renderSlot = vi.fn<(key: string, owner: object, opts?: { fallback?: ReactNode }) => ReactNode>(() => null)
+  it('renders the branded English hero', () => {
+    const renderSlot = vi.fn<(key: string, owner: object, opts?: { fallback?: ReactNode }) => ReactNode>(
+      (_key, _owner, options) => options?.fallback ?? null,
+    )
     const view = render(<HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot as never} />)
-    expect(view.getByText('Into the Unknown')).toBeTruthy()
-    expect(view.getByText('Preview')).toBeTruthy()
+    expect(view.getByText('Shield Break Agent').getAttribute('data-text')).toBe('Shield Break Agent')
+    expect(view.queryByText('Preview')).toBeNull()
     expect(renderSlot).toHaveBeenCalledOnce()
     expect(renderSlot.mock.calls[0]?.[0]).toBe('conversation.hero.brand.mark')
     const brandMarkOwner = renderSlot.mock.calls[0]?.[1]
     if (brandMarkOwner === undefined || !('size' in brandMarkOwner) || !('className' in brandMarkOwner)) {
       throw new Error('hero brand-mark owner must provide size and className')
     }
-    expect(brandMarkOwner.size).toBe(34)
+    expect(brandMarkOwner.size).toBe(48)
     expect(brandMarkOwner.className).toBeTypeOf('string')
     expect(renderSlot.mock.calls[0]?.[2]?.fallback).toBeTruthy()
+    expect(view.container.querySelector('[data-dsh-agent-logo]')).not.toBeNull()
+  })
+
+  it('cycles the hero headline', () => {
+    vi.useFakeTimers()
+    const renderSlot = vi.fn<(key: string, owner: object, opts?: { fallback?: ReactNode }) => ReactNode>(
+      (_key, _owner, options) => options?.fallback ?? null,
+    )
+    const view = render(<HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot as never} />)
+    try {
+      act(() => { vi.advanceTimersByTime(6_300) })
+      expect(view.getByText('Break All Shield').getAttribute('data-text')).toBe('Break All Shield')
+      act(() => { vi.advanceTimersByTime(6_300) })
+      expect(view.getByText('Security Team Agent').hasAttribute('data-agent-mode-headline')).toBe(true)
+    } finally {
+      view.unmount()
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -593,8 +615,8 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).not.toContain('conversation.session.header.utilities')
     expect(b.headerFactory).not.toHaveBeenCalled()
     expect(b.slotCalls).not.toContain('conversation.session.header.actions')
-    expect(b.view.getByText('探索未至之境')).toBeTruthy()
-    expect(b.view.getByText('预览版')).toBeTruthy()
+    expect(b.view.getByText('Shield Break Agent')).toBeTruthy()
+    expect(b.view.queryByText('Preview')).toBeNull()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
     // The same machine-backed textarea is live in the hero, and the
     // persistence mirror stays bound (ConversationSession mounts chrome-hidden
@@ -627,7 +649,7 @@ describe('ConversationRoot resident composer', () => {
     expect(conversationPhase(failed, EMPTY_CONVERSATION_SNAPSHOT)).toBe('engaging')
     const b = mount(failed, undefined, undefined, { summaryBlank: true })
     expect(b.view.container.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('active')
-    expect(b.view.queryByText('探索未至之境')).toBeNull()
+    expect(b.view.queryByText('Shield Break Agent')).toBeNull()
   })
 
   it('settling phase: a summary that does not prove the session blank hides the composer while it opens', () => {
@@ -659,7 +681,7 @@ describe('ConversationRoot resident composer', () => {
     // blank the column for the history round-trip.
     const root = b.view.container.querySelector('[data-phase]')
     expect(root?.getAttribute('data-phase')).toBe('hero')
-    expect(b.view.getByText('探索未至之境')).toBeTruthy()
+    expect(b.view.getByText('Shield Break Agent')).toBeTruthy()
     expect(b.view.getByRole('textbox')).toBeTruthy()
   })
 

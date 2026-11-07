@@ -7,6 +7,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type {
   SessionControlBaseline,
   SessionControlFrame,
+  SessionDeleteValue,
   SessionProjectionHints,
   SessionRenameValue,
   SessionSummary,
@@ -568,6 +569,15 @@ export class SessionManager {
       this.projectionStore(sessionId).apply('title', result.value.title, SessionSeq(result.value.seq))
     }
     return result
+  }
+
+  /**
+   * Permanently delete one Host Session.
+   * @param sessionId - Session identity to delete.
+   * @returns the Host deletion result.
+   */
+  delete(sessionId: SessionId): Promise<RemoteResult<SessionDeleteValue>> {
+    return this.remote.session.delete({ sessionId })
   }
 
   /**

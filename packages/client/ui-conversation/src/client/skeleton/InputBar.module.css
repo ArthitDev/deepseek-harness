@@ -12,6 +12,7 @@
 
 .dock {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
@@ -308,6 +309,13 @@
   gap: 12px;
 }
 
+/* A held-down control (active tool or open popover) reads as engaged. */
+.tools button[data-active='true'],
+.tools button[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .modes {
   gap: 12px;
 }
@@ -405,9 +413,7 @@
   border-radius: 999px;
   corner-shape: round;
   background: var(--dsw-alias-button-info-fill);
-  /* Static white, not the foreground token: the arrow stays white on the blue
-     fill in both themes (design 34:10465). */
-  color: #fff;
+  color: var(--dsw-alias-label-primary-foreground);
   cursor: pointer;
   transition: background-color 100ms ease;
   /* Opts out of the row's 2px downward shift (.row top pad): the send circle

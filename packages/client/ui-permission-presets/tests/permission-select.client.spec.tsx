@@ -11,6 +11,7 @@ import {
 } from '../src/client/PermissionSelect.tsx'
 import type { PermissionCatalogState } from '../src/client/catalog.ts'
 import { accessZh } from '../src/client/locales.ts'
+import css from '../src/client/PermissionSelect.module.css'
 
 afterEach(cleanup)
 
@@ -67,6 +68,19 @@ describe('PermissionSelect', () => {
     cleanup()
     const missingCatalog = setup({ catalog: null })
     expect(missingCatalog.view.container.innerHTML).toBe('')
+  })
+
+  it('colors permission glyphs and exposes the open state', () => {
+    setup({ selection: { currentValue: 'read-only' } })
+    expect(trigger().querySelector(`.${css.readOnlyIcon}`)).not.toBeNull()
+
+    fireEvent.click(trigger())
+
+    expect(trigger().getAttribute('aria-expanded')).toBe('true')
+    const items = screen.getAllByRole('menuitem')
+    expect(items[0]?.querySelector(`.${css.readOnlyIcon}`)).not.toBeNull()
+    expect(items[1]?.querySelector(`.${css.workspaceWriteIcon}`)).not.toBeNull()
+    expect(items[2]?.querySelector(`.${css.fullAccessIcon}`)).not.toBeNull()
   })
 
   it('renders process options and submits an ordinary choice optimistically', async () => {

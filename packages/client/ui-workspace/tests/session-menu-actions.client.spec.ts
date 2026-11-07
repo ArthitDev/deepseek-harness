@@ -29,7 +29,8 @@ function bench() {
   }
   ctx.provide('remoteAccess', { source: (_kind: string, _id: string, action: string) => access(action) } as never)
   const actions = { pinSession: vi.fn(), unpinSession: vi.fn(), archiveSession: vi.fn(), unarchiveSession: vi.fn(),
-    forkSession: vi.fn(), requestSessionRename: vi.fn(), copySessionId: vi.fn(async () => {}) }
+    forkSession: vi.fn(), requestSessionRename: vi.fn(), copySessionId: vi.fn(async () => {}),
+    requestSessionDelete: vi.fn() }
   const fiber = ctx.plugin({ apply: (plugin: Context) => { registerSessionMenus(plugin, actions) } })
   const target = { kind: 'session' as const, value: { sessionId: SessionId('background'), displayTitle: 'Background' } }
   const open = () => registry.resolve(target)
@@ -41,13 +42,14 @@ it('preserves built-in order, groups, icons, command identities, and captured ac
   await b.fiber.await()
   const menu = b.open()
   const views = menu.source.getSnapshot()
-  expect(views.map(({ id, label, icon, commandId, separatorBefore, afterContent }) =>
-    [id, label, icon !== undefined, commandId, separatorBefore, afterContent])).toEqual([
-    ['session.pin/pin', 'Pin session', true, undefined, undefined, undefined],
-    ['session.rename/rename', 'Rename', true, 'session.rename', undefined, undefined],
-    ['session.fork/fork', 'Fork session', true, 'session.fork', undefined, undefined],
-    ['session.id/copy', 'Copy Session ID', true, undefined, true, undefined],
-    ['session.archive/archive', 'Archive session', true, 'session.archive', true, true],
+  expect(views.map(({ id, label, icon, commandId, separatorBefore, afterContent, danger }) =>
+    [id, label, icon !== undefined, commandId, separatorBefore, afterContent, danger])).toEqual([
+    ['session.pin/pin', 'Pin session', true, undefined, undefined, undefined, undefined],
+    ['session.rename/rename', 'Rename', true, 'session.rename', undefined, undefined, undefined],
+    ['session.fork/fork', 'Fork session', true, 'session.fork', undefined, undefined, undefined],
+    ['session.id/copy', 'Copy Session ID', true, undefined, true, undefined, undefined],
+    ['session.archive/archive', 'Archive session', true, 'session.archive', true, true, undefined],
+    ['session.delete/delete', 'Delete session', true, undefined, true, true, true],
   ])
   menu.dispose()
   for (const id of views.map(item => item.id)) b.open().select(id)
@@ -56,6 +58,7 @@ it('preserves built-in order, groups, icons, command identities, and captured ac
   expect(b.actions.forkSession).toHaveBeenCalledWith('background')
   expect(b.actions.copySessionId).toHaveBeenCalledWith('background')
   expect(b.actions.archiveSession).toHaveBeenCalledWith('background')
+  expect(b.actions.requestSessionDelete).toHaveBeenCalledWith('background', 'Background')
   const unpin = b.open()
   b.list.set({ ...b.list.getSnapshot(), pinnedSessionIds: [b.target.value.sessionId] })
   expect(unpin.source.getSnapshot()[0]).toMatchObject({ label: 'Unpin session' })
@@ -64,9 +67,12 @@ it('preserves built-in order, groups, icons, command identities, and captured ac
   const restore = b.open()
   b.list.set({ ...b.list.getSnapshot(), archivedSessionIds: [b.target.value.sessionId] })
   expect(restore.source.getSnapshot().some(item => item.id === 'session.pin/pin')).toBe(false)
-  const archive = restore.source.getSnapshot().at(-1)!
+  const archive = restore.source.getSnapshot().find(item => item.id === 'session.archive/archive')!
   expect(archive).toMatchObject({ label: 'Unarchive session' })
   expect(archive.commandId).toBeUndefined()
+  // The destructive delete stays available on an archived row: it is the only
+  // permanent way out once a Session no longer needs restoring.
+  expect(restore.source.getSnapshot().at(-1)).toMatchObject({ id: 'session.delete/delete' })
   restore.select(archive.id)
   expect(b.actions.unarchiveSession).toHaveBeenCalledWith('background')
 })
@@ -77,6 +83,7 @@ it('reacts to permission and locale updates, prevents withdrawn actions, and dis
   const menu = b.open()
   b.access('session/rename').set(false)
   b.access('session/fork').set(false)
+  b.access('session/delete').set(false)
   b.access('workspace/archiveSession').set(false)
   b.access('workspace/pinSession').set(false)
   expect(menu.source.getSnapshot().map(item => item.id)).toEqual(['session.id/copy'])

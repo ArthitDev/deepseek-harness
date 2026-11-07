@@ -73,6 +73,8 @@
     "@deepseek-ai/dsh-client-ui-session": "workspace:*",
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-theme": "workspace:*",
+    "@deepseek-ai/dsh-remote-machines": "workspace:*",
     "@deepseek-ai/dsh-jobs": "workspace:*",
     "@deepseek-ai/dsh-schedule": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",

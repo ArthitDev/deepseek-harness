@@ -55,6 +55,14 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
   runtime.ctx.provide('shortcuts', { register: () => () => {}, catalog: createSnapshotStore([]) })
   runtime.ctx.provide('uiConversation', {})
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
+  runtime.ctx.provide('remote.remoteMachines', {
+    list: vi.fn(async () => ({ ok: true as const, value: { machines: [] } })),
+    save: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
+    deleteMachine: vi.fn(async () => ({ ok: true as const, value: { removed: true } })),
+    probe: vi.fn(async () => ({ ok: true as const, value: { fingerprint: 'sha256:test', trusted: true, platform: 'linux' } })),
+    trust: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
+  } as never)
+  runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}), setTheme: vi.fn() } as never)
   runtime.releaseWorkspaceSource()
   runtime.remote.provideNamespaces({ directoryPicker: {} })
   const locale = new LocaleRuntime(runtime.ctx)

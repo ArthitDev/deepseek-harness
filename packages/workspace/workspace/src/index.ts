@@ -410,6 +410,29 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
+   * Remove one deleted session from workspace accounting and the registry-global
+   * archive set. Unknown ids are an idempotent no-op.
+   * @param sessionId - permanently deleted session identity.
+   * @returns resolution after durability.
+   */
+  forgetSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      for (const entity of this.entities.values()) await entity.detachSession(sessionId)
+      const state = this.requireState()
+      if (state.archivedSessionIds.includes(sessionId) || state.pinnedSessionIds.includes(sessionId)) {
+        await this.setState({
+          ...state,
+          archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+          pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
+        })
+      }
+      this.headers.delete(sessionId)
+      this.sessionPaths.delete(sessionId)
+      this.invalidSessionPaths.delete(sessionId)
+    })
+  }
+
+  /**
    * The registry-global pin set: sessions surfaced ahead of every unpinned
    * session on grouping surfaces. Pinning never touches workspace accounting.
    * @returns Session ids in pin order (most recently pinned first).

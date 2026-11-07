@@ -11,7 +11,7 @@ import type {
   ISessions, SessionBinding, SessionEventLike, SessionFace, SessionListState, SessionSnapshot,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
-  ConversationEventRegistry, ConversationNodeAssembler, ConversationViewRegistry, UiConversation,
+  conversationPhase, ConversationEventRegistry, ConversationNodeAssembler, ConversationViewRegistry, UiConversation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   ConversationNodeDefinition, ConversationViewDefinition, ConversationViewNode,
@@ -98,6 +98,7 @@ function fakeSessions(ctx: Context): { sessions: ISessions; binding: SessionBind
     subagentAddress: () => undefined,
     refreshProjections: () => Promise.reject(new Error('unused fake Sessions operation')),
     refresh: () => Promise.reject(new Error('unused fake Sessions operation')),
+    delete: () => Promise.reject(new Error('unused fake Sessions operation')),
     search: () => Promise.reject(new Error('unused fake Sessions operation')),
     fork: () => Promise.reject(new Error('unused fake Sessions operation')),
     scope: id => id === SESSION_ID ? binding.ctx : undefined,
@@ -151,6 +152,22 @@ async function bootRegistries(): Promise<{
 }
 
 describe('Conversation registries', () => {
+  it('records external feature activity once for the Session binding lifetime', async () => {
+    const { uiConversation, binding } = await bootRegistries()
+    const conversation = uiConversation.binding(binding)
+    const listener = vi.fn()
+    conversation.snapshot.subscribe(listener)
+
+    expect([...conversation.snapshot.getSnapshot().activeTargets]).toEqual([])
+    uiConversation.markActivity(SESSION_ID, 'recon')
+    expect([...conversation.snapshot.getSnapshot().activeTargets]).toEqual(['recon'])
+    expect(conversationPhase(binding.session.getSnapshot(), conversation.snapshot.getSnapshot())).toBe('active')
+    expect(listener).toHaveBeenCalledOnce()
+
+    uiConversation.markActivity(SESSION_ID, 'recon')
+    expect(listener).toHaveBeenCalledOnce()
+  })
+
   it('publishes open turns without an active view and detaches when the Session scope ends', async () => {
     const { uiConversation, binding } = await bootRegistries()
     const conversation = uiConversation.binding(binding)
