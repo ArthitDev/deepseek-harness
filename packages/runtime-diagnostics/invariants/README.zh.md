@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-invariants` 在 Shield Break Harness 组合中运行包自有的运行时检查——不变量：任何包都可以发布一个 `./invariant` 配套入口，在组合运行期间验证其自身的持久关系（权威事件流与可变快照）。检查自动运行，失败的检查会报告归因到拥有被违反关系的包的 `InvariantError`。需要带全局开关与包名过滤器的自检诊断时选择它；标准 agent（智能体）组合已挂载它及四个核心配套入口，而单独加载服务不会安装任何检查。
+`dsh-invariants` 在 Shield Break Harness 组合中运行包自有的运行时检查——不变量：任何包都可以发布一个 `./invariant` 配套入口，在组合运行期间验证其自身的持久关系（权威事件流与可变快照）。检查自动运行，失败的检查会报告归因到拥有被违反关系的包的 `InvariantError`。需要带全局开关与包名过滤器的自检诊断时选择它；组合按需显式挂载它及所需配套入口，而单独加载服务不会安装任何检查。
 
 ## 目录
 
@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 何时使用
 
-需要实时诊断的组合请使用注册表。[`dsh-sdk-minimal`](../../bundle/sdk-minimal/README.zh.md) 挂载它及四个核心有状态配套入口——`dsh-session`、`dsh-agent`、`dsh-scope` 与 `dsh-agent-loop`；`dsh-base` 刻意省略运行时诊断。自定义组合挂载注册表，并为任何其他已加载、且希望检查其约定的包添加配套入口。单独加载注册表不会安装任何检查：它自身不携带任何产品检查，因此从不挂载配套入口的组合不会观察到任何诊断行为。
+需要实时诊断的组合请使用注册表。本分支随附一个可执行配套入口——`@deepseek-ai/dsh-experimental-agent-team`，其不变量逐条核对 Agent Teams 事件与投影后的已提交流；`dsh-base` 刻意省略运行时诊断。自定义组合挂载注册表，并为任何其他已加载、且希望检查其约定的包添加配套入口。单独加载注册表不会安装任何检查：它自身不携带任何产品检查，因此从不挂载配套入口的组合不会观察到任何诊断行为。
 
 ### 启用检查与选择包
 
@@ -57,16 +57,7 @@ kind: "package-reference"
 
 | 配套入口 | 检查 |
 |---|---|
-| `dsh-session`、`dsh-agent`、`dsh-scope`、`dsh-agent-loop` | 会话日志包含关系与调用/结果跟踪、agent 状态转换、经过作用域过滤的分发主体、loop 所构建请求的重建 |
-| `dsh-llm`、`dsh-llm-retry`、`dsh-tools`、`dsh-system-prompt` | LLM（大语言模型）流语法、重试失败形状、工具流水线阶段配对与冻结结果、提示词组装章节名 |
-| `dsh-compaction`、`dsh-hook-protocol`、`dsh-sandbox-policy` | 压缩（compaction）流配对、钩子调用/结果配对、沙箱 mode 值 |
-| `dsh-fs`、`dsh-subagent`、`dsh-workflow`、`dsh-tool-workflow` | 文件系统事件身份、subagent 提供方与开始/结束配对、工作流生命周期身份、工作流记录形状 |
-| `dsh-goal`、`dsh-goal-round-driver` | 持久 goal 流折叠与重建的继续提示词 |
-| `dsh-permission-presets`、`dsh-user-approval`、`dsh-commands` | preset 引用指向活动 preset、审批询问/决定配对、命令运行/完成配对 |
-| `dsh-jobs`、`dsh-tool-todo`、`dsh-time-context` | 任务快照字段关系、整表 todo 形状、持久时钟读数 |
-| `dsh-credentials`、`dsh-settings`、`dsh-storage-domain`、`dsh-workspace` | 提交事件对照活动服务或内存状态、实体缓存镜像 |
-| `dsh-agent-preset-registry`、`dsh-session-title`、`dsh-plan-mode`、`dsh-schedule` | preset 挂载位置、标题来源引用、plan-mode 载荷、schedule 流 |
-| `dsh-client-hmr`、`dsh-client-modules`、`dsh-client-runtime` | 浏览器/node 侧 stat-watcher 生命周期、启动入口图、slot 变更版本化 |
+| `@deepseek-ai/dsh-experimental-agent-team` | 每条 `experimental-team/*` 会话事件都能干净地应用到投影后的已提交团队状态（名册、邮箱回执、任务生命周期） |
 
 其余工作区包省略配套入口，并在各自 README 中说明包级原因。
 
@@ -104,7 +95,7 @@ ctx.plugin(TeamInvariant)
 - **与产品无关的注册表。** 服务不导入任何 session、agent、scope 或 agent-loop 包，也不包含它们的检查；配套入口把检查放在其归属者旁边。
 - **真实关系，而非人为断言。** 配套入口只检查其包拥有的事件流或可变数据关系；确认方法、插件名、注入或固定纯函数结果是类型、加载或单元测试关注点，绝不是运行时不变量。
 - **注册保留归属。** 即使过滤器让 installer 保持非活动，包名也会被保留，因此两个插件永远不会静默认领同一个名字。
-- **配套入口接线由机械规则强制。** `pnpm run verify-package-invariants` 拒绝空 installer、省略或忽略 reporter 的 installer、错误注册名、不完整的发布接线，以及省略配套入口后残留的接线（[省略配套入口笔记](../../../.agents/notes/implemented/simplification/2026-08-28-omit-unneeded-invariant-companions.zh.md)）。
+- **配套入口接线规则。**配套入口以其包 npm 名注册检查、通过 reporter 参数安装、并在关系被违反时立刻失败；配套入口的省略决策记录在[省略配套入口笔记](../../../.agents/notes/implemented/simplification/2026-08-28-omit-unneeded-invariant-companions.zh.md)。
 
 ### 源码地图
 
