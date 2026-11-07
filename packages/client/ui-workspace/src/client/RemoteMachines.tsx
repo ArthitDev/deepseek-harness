@@ -8,10 +8,23 @@ import {
   Menu, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import type { RemoteMachineController, RemoteMachineSnapshot } from './remote-machine-store.ts'
 import type { AgentMode, AgentModeController } from './agent-mode.ts'
 import css from './RemoteMachines.module.css'
+/**
+ * Parse a `__dsh_ssh__/<machine>/<path>` execution path client-side.
+ * Mirrors the host helper without crossing the client bundle purity boundary.
+ * @param value - Candidate path.
+ * @returns the machine id and path, or undefined for a local path.
+ */
+function parseRemoteExecutionPath(value: string): { machineId: string; path: string } | undefined {
+  const ROOT = '/__dsh_ssh__/'
+  if (!value.startsWith(ROOT)) return undefined
+  const rest = value.slice(ROOT.length)
+  const slash = rest.indexOf('/')
+  if (slash <= 0) return undefined
+  return { machineId: rest.slice(0, slash), path: rest.slice(slash) }
+}
 
 /** Share the settings section consumes: the machine controller, the mode controller, and roster facts. */
 export interface RemoteMachineInjected {

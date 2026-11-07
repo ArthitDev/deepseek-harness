@@ -17,12 +17,25 @@ import type {
   WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { workspaceDisplayTitle } from '@deepseek-ai/dsh-api-workspace-controller/default-workspace'
-import { parseRemoteExecutionPath } from '@deepseek-ai/dsh-remote-machines/path'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
 import { ComputerIcon } from './RemoteMachines.tsx'
 import { distinguishingPathSuffixes } from './path-suffix.ts'
 import css from './WorkspacePicker.module.css'
+/**
+ * Parse a `__dsh_ssh__/<machine>/<path>` execution path client-side.
+ * Mirrors the host helper without crossing the client bundle purity boundary.
+ * @param value - Candidate path.
+ * @returns the machine id and path, or undefined for a local path.
+ */
+function parseRemoteExecutionPath(value: string): { machineId: string; path: string } | undefined {
+  const ROOT = '/__dsh_ssh__/'
+  if (!value.startsWith(ROOT)) return undefined
+  const rest = value.slice(ROOT.length)
+  const slash = rest.indexOf('/')
+  if (slash <= 0) return undefined
+  return { machineId: rest.slice(0, slash), path: rest.slice(slash) }
+}
 
 const ADD_WORKSPACE = '::add-workspace'
 const LOCAL_MACHINE = '::machine-local'
