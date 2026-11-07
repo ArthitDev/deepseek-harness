@@ -1,0 +1,12 @@
+version: 1
+scenario: office-render-adjacent
+profile: headless
+composition: office-render-tools
+recording: authored
+sessionFormat:
+  version: 4
+  coverage: [adjacent-migration]
+header:
+  class: office-render-adjacent
+workspace:
+  setup: office-skills

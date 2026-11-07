@@ -1,0 +1,9 @@
+# Keep shell schemas platform-independent; this scenario exercises filesystem tools.
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+
+# This fixture tests instructions independently of machine-local skill roots.
+- id: tool-skill
+  disabled: true

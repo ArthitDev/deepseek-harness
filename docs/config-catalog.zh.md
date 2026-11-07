@@ -90,7 +90,7 @@ export interface Config {
    * chains is at most twice this size; non-positive or non-finite disables loading.
    */
   maxBytes: number
-  /** Maximum UTF-8 bytes read from one instruction file; larger files are ignored. */
+  /** Maximum UTF-8 source bytes per candidate including its imports; larger candidates are ignored and excess imports are omitted. */
   maxSourceBytes?: number
   /**
    * Ordered same-directory project candidates; every existing file loads, with

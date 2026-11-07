@@ -7631,6 +7631,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      mdast-util-from-markdown:
+        specifier: ^2.0.3
+        version: 2.0.3(supports-color@9.4.0)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -7689,6 +7692,9 @@ importers:
       '@deepseek-ai/dsh-working-directory':
         specifier: workspace:*
         version: link:../../session/working-directory
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
 
   packages/context/file-reference:
     devDependencies:

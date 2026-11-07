@@ -3331,7 +3331,7 @@ Array of [`AgentInstructionChange`](#persistence-type-sha256-83da72c6857601c75da
 
 SHA-256: `6f22a9d02b9a1f1157f3b0e7bdccd7e7b12b085c4efdb709dfc74a465cd4e590`
 
-Sources: [`packages/context/agent-instructions/src/state.ts:40`](../packages/context/agent-instructions/src/state.ts)
+Sources: [`packages/context/agent-instructions/src/state.ts:42`](../packages/context/agent-instructions/src/state.ts)
 
 | Property | Presence | Type |
 |---|---|---|

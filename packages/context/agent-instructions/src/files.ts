@@ -7,11 +7,13 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import type { FileSystem, FsInfo, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
+import { homedir } from 'node:os'
+import type { FileSystem, FsInfo, FsTarget, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
 import { agentsHomeDisplay, dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { resolveConfig, resolveDiscoveryConfig, type ResolvedConfig, type ResolvedDiscoveryConfig } from './config.ts'
 import { trimmedInstructionDigest } from './digest.ts'
+import { instructionImports } from './imports.ts'
 import {
   AGENTS_GLOBAL_DIRECTORY,
   decodeScopeKey,
@@ -35,6 +37,15 @@ export interface InstructionFile {
 export interface LoadedInstructionFile extends InstructionFile {
   content: string
   /** Provider freshness token when the file was loaded through `ctx.fs`. */
+  version?: FsVersion
+  /** Imported-path observations; absent paths have no version. Not persisted. */
+  imports?: InstructionImportVersion[]
+}
+
+/** Metadata needed to refresh an importing file without retaining imported prose. */
+export interface InstructionImportVersion {
+  absolutePath: string
+  targetKey?: FsTargetKey
   version?: FsVersion
 }
 
@@ -183,9 +194,9 @@ async function fsStatFile(
       kind: 'present',
       info: { target, version: info.version, ...info.size === undefined ? {} : { size: info.size } },
     }
-  } catch {
+  } catch (error: unknown) {
     signal?.throwIfAborted()
-    return { kind: 'unavailable' }
+    return isMissingProviderPathError(error) ? { kind: 'absent' } : { kind: 'unavailable' }
   }
 }
 
@@ -389,22 +400,25 @@ async function readBounded(
   maxSourceBytes: number,
   fileSystem?: FileSystem,
   signal?: AbortSignal,
-): Promise<string | undefined> {
+): Promise<string | { kind: 'oversized' } | undefined> {
   // TODO(total-instruction-read-bound): enforce an aggregate source budget
   // across a complete baseline or reconciliation batch; the render budget is
   // applied only after every accepted file has been read under this per-file cap.
   signal?.throwIfAborted()
-  if (file.size !== undefined && file.size > maxSourceBytes) return undefined
+  if (file.size !== undefined && file.size > maxSourceBytes) return { kind: 'oversized' }
   try {
-    const chunks = fileSystem === undefined || file.target === undefined
-      ? nodeTextChunks(file.absolutePath, signal)
-      : await fileSystem.streamText(file.target, signal)
+    let chunks: AsyncIterable<string>
+    if (fileSystem === undefined) chunks = nodeTextChunks(file.absolutePath, signal)
+    else {
+      if (file.target === undefined) return undefined
+      chunks = await fileSystem.streamText(file.target, signal)
+    }
     const parts: string[] = []
     let bytes = 0
     for await (const chunk of chunks) {
       signal?.throwIfAborted()
       bytes += Buffer.byteLength(chunk, 'utf8')
-      if (bytes > maxSourceBytes) return undefined
+      if (bytes > maxSourceBytes) return { kind: 'oversized' }
       parts.push(chunk)
     }
     signal?.throwIfAborted()
@@ -414,6 +428,113 @@ async function readBounded(
     // A file may disappear or become unreadable after its metadata probe.
     return undefined
   }
+}
+
+// Claude-compatible import depth: the instruction candidate itself is hop zero.
+const MAX_IMPORT_DEPTH = 4
+
+async function readWithImports(
+  file: DiscoveredInstructionFile,
+  maxSourceBytes: number,
+  fileSystem?: FileSystem,
+  signal?: AbortSignal,
+): Promise<LoadedInstructionFile | undefined> {
+  const content = await readBounded(file, maxSourceBytes, fileSystem, signal)
+  if (typeof content !== 'string') return undefined
+  const parts = [content]
+  const imports: InstructionImportVersion[] = []
+  const seen = new Set([file.absolutePath])
+  const seenTargets = new Set(file.target === undefined ? [] : [file.target.targetKey])
+  let remaining = maxSourceBytes - Buffer.byteLength(content, 'utf8')
+  let exhausted = false
+  const exhaust = (): void => {
+    if (!exhausted) parts.push('\n\nInstruction import source budget exhausted; remaining imports were omitted.')
+    exhausted = true
+  }
+  const append = (text: string): void => {
+    const bytes = Buffer.byteLength(text, 'utf8')
+    if (bytes > remaining) {
+      exhaust()
+      return
+    }
+    remaining -= bytes
+    parts.push(text)
+  }
+  const expand = async (parent: InstructionFile, source: string, depth: number): Promise<boolean> => {
+    for (const reference of instructionImports(source)) {
+      signal?.throwIfAborted()
+      if (exhausted) break
+      if (depth === MAX_IMPORT_DEPTH) {
+        append(`\n\nInstruction import skipped (maximum depth ${MAX_IMPORT_DEPTH}): ${reference}`)
+        continue
+      }
+      const homePath = /^~[\\/]/.test(reference)
+      const absolutePath = homePath
+        ? resolve(homedir(), reference.slice(2))
+        : resolve(dirname(parent.absolutePath), reference)
+      const displayPath = homePath || isAbsolute(reference)
+        ? reference
+        : join(dirname(parent.displayPath), reference)
+      if (seen.has(absolutePath)) continue
+      seen.add(absolutePath)
+      const probe = await statFile(absolutePath, fileSystem, signal)
+      if (probe.kind === 'unavailable') return false
+      if (probe.kind === 'absent') {
+        imports.push({ absolutePath })
+        append(`\n\nInstruction import not found: ${displayPath}`)
+        continue
+      }
+      const { info } = probe
+      imports.push({ absolutePath, ...info.target === undefined ? {} : { targetKey: info.target.targetKey },
+        ...info.version === undefined ? {} : { version: info.version } })
+      if (info.target !== undefined && seenTargets.has(info.target.targetKey)) {
+        append(`\n\nInstruction import skipped (already included): ${displayPath}`)
+        continue
+      }
+      if (info.target !== undefined) seenTargets.add(info.target.targetKey)
+      const header = `\n\nImported instructions from: ${displayPath}\n\n`
+      const available = remaining - Buffer.byteLength(header, 'utf8')
+      if (available < 0 || (info.size !== undefined && info.size > available)) {
+        exhaust()
+        break
+      }
+      const imported = await readBounded({ absolutePath, ...info }, available, fileSystem, signal)
+      if (imported === undefined) return false
+      if (typeof imported !== 'string') {
+        exhaust()
+        break
+      }
+      append(header + imported)
+      if (!await expand({ absolutePath, displayPath }, imported, depth + 1)) return false
+    }
+    return true
+  }
+  if (!await expand(file, content, 0)) return undefined
+  return { absolutePath: file.absolutePath, displayPath: file.displayPath, content: parts.join(''),
+    ...file.version === undefined ? {} : { version: file.version },
+    ...imports.length === 0 ? {} : { imports } }
+}
+
+/**
+ * Check imported-path metadata, including creation of formerly absent files.
+ * @param imports - observations captured when the expanded instructions were loaded; absent means no imports.
+ * @param fileSystem - provider used for every metadata probe.
+ * @param signal - cancellation for provider probes.
+ * @returns whether every imported path still has its observed identity and version.
+ */
+export async function instructionImportsUnchanged(
+  imports: readonly InstructionImportVersion[] | undefined,
+  fileSystem: FileSystem,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  for (const imported of imports ?? []) {
+    const probe = await statFile(imported.absolutePath, fileSystem, signal)
+    if (probe.kind === 'unavailable') return false
+    if (probe.kind === 'absent') {
+      if (imported.version !== undefined) return false
+    } else if (probe.info.version !== imported.version || probe.info.target?.targetKey !== imported.targetKey) return false
+  }
+  return true
 }
 
 /**
@@ -476,15 +597,8 @@ export async function loadBaselineInstructionSet(
   const discovered = await discoverInstructionFiles(options, fileSystem)
   const loaded: LoadedInstructionFile[] = []
   for (const file of discovered) {
-    const content = await readBounded(file, config.maxSourceBytes, fileSystem, options.signal)
-    if (content !== undefined) {
-      loaded.push({
-        absolutePath: file.absolutePath,
-        displayPath: file.displayPath,
-        content,
-        ...file.version === undefined ? {} : { version: file.version },
-      })
-    }
+    const loadedFile = await readWithImports(file, config.maxSourceBytes, fileSystem, options.signal)
+    if (loadedFile !== undefined) loaded.push(loadedFile)
   }
   const kept = dedupInstructionFilesByCandidateGroup(loaded)
   if (kept.length === 0) {
@@ -578,12 +692,12 @@ export async function probeScopeInstruction(
 }
 
 /**
- * Read one already-probed scope candidate under the configured source cap.
+ * Read one already-probed scope candidate and expand Markdown imports under the shared source cap.
  * @param file - winning provider candidate and its metadata snapshot.
- * @param maxSourceBytes - maximum UTF-8 bytes accepted from the source.
+ * @param maxSourceBytes - maximum UTF-8 source bytes for the candidate and its imports.
  * @param fileSystem - provider used for the streaming read.
  * @param signal - cancellation for provider streaming.
- * @returns loaded content with the probed version, or undefined when unavailable.
+ * @returns expanded content and dependency metadata, or undefined when the candidate or an import is unavailable.
  */
 export async function readScopeInstruction(
   file: ProbedInstructionFile,
@@ -591,12 +705,5 @@ export async function readScopeInstruction(
   fileSystem: FileSystem,
   signal?: AbortSignal,
 ): Promise<LoadedInstructionFile | undefined> {
-  const content = await readBounded(file, maxSourceBytes, fileSystem, signal)
-  if (content === undefined) return undefined
-  return {
-    absolutePath: file.absolutePath,
-    displayPath: file.displayPath,
-    content,
-    version: file.version,
-  }
+  return readWithImports(file, maxSourceBytes, fileSystem, signal)
 }

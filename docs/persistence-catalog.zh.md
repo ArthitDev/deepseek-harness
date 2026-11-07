@@ -3333,7 +3333,7 @@ SHA-256: `2ab12a0e345658f9342816d773fe610f049982bcad82631f43b9205abe43e5ee`
 
 SHA-256: `6f22a9d02b9a1f1157f3b0e7bdccd7e7b12b085c4efdb709dfc74a465cd4e590`
 
-来源：[`packages/context/agent-instructions/src/state.ts:40`](../packages/context/agent-instructions/src/state.ts)
+来源：[`packages/context/agent-instructions/src/state.ts:42`](../packages/context/agent-instructions/src/state.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|

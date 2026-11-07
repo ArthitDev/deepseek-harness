@@ -35,6 +35,10 @@ kind: "package-reference"
 
 ### 配置
 
+指令正文可用 `@./rules.md`、`@../shared.md`、绝对路径或 `@~/personal.md` 导入文件；空格写作 `@Design\ Docs/style.md`。相对路径以导入方文件为基准。带引号的引用、Markdown 代码、HTML 节点和链接目标不触发导入。每个候选在自身内容后追加导入内容，以 `Imported instructions from: <path>` 标题标注，并保留候选的 scope 和优先级。展开最多经过四次导入，每个路径或提供方目标只纳入一次。
+
+`maxSourceBytes` 限制候选及导入展开的大小，包括导入标题；耗尽后在该源内容上限之外添加一条省略提示。最终消息仍遵守 `maxBytes`。缺失文件添加 `Instruction import not found: <path>`，并在以后检查其是否创建。导入暂不可读时，所属候选延后刷新，保留该组上次成功状态。依赖的身份和版本探测可发现导入文件的编辑或删除，即使候选本身不变；导入内容通过常规压缩和恢复路径重新进入上下文。导入读取始终使用已挂载的文件系统提供方，不回退到宿主文件读取。当提供方允许读取时，绝对路径、主目录路径、相对路径及符号链接导入可能向模型公开项目外的内容：指令文件必须可信；仅限制写入的沙箱无法阻止此类泄露。
+
 默认设置适合典型检出：`.git` 标记项目根目录，`AGENTS.md` 与 `CLAUDE.md` 是基础候选，`AGENTS.local.md` 与 `CLAUDE.local.md` 是叠加的本地 overlay。只有 `maxBytes` 必填——它在每条渲染消息内分别限制用户全局指令链与项目指令链，让每个部署显式选择自己的提示词预算；同时包含两条链的消息最多为 `maxBytes` 的两倍。
 
 存放用户全局 `AGENTS.md` 的 harness home 属于进程策略，而不是配置行：该插件通过 `@deepseek-ai/dsh-home-paths` 解析 `$DSH_HOME` 或 `~/.dsh`，因此指令加载始终读取进程 home。共享 agents 根目录同样如此解析：`$DSH_AGENTS_HOME` 或 `~/.agents`。残留的 `dshHome` 与 `agentsHome` 配置行字段会被忽略。
@@ -62,7 +66,7 @@ export interface Config {
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `maxBytes` | 必填 | 一条渲染消息中每条指令链（用户全局、项目）的上限，单位为字节；同时包含两条链的消息最多为该值的两倍 |
-| `maxSourceBytes` | `1048576` | 渲染前单个源指令文件的上限 |
+| `maxSourceBytes` | `1048576` | 每个候选及其导入的源内容上限，包括导入标题 |
 | `projectRootMarkers` | `['.git']` | 标记项目根目录的目录名 |
 | `instructionFileCandidates` | `['AGENTS.md', 'CLAUDE.md']` | 每个项目目录中加载的基础文件名 |
 | `localInstructionFileCandidates` | `['AGENTS.local.md', 'CLAUDE.local.md']` | 在基础文件之后加载的本地 overlay 文件名 |
@@ -96,6 +100,7 @@ export interface Config {
 | [`src/index.ts`](src/index.ts) | 插件入口：pre-step 监听器、`tools/result` touch 跟踪、inbox 组合 |
 | [`src/config.ts`](src/config.ts) | `Config` schema、预算解析、基线标识 |
 | [`src/files.ts`](src/files.ts) | 候选发现、项目根搜索、有界流式读取 |
+| [`src/imports.ts`](src/imports.ts) | Markdown 正文中的导入引用 |
 | [`src/render.ts`](src/render.ts) | 指令渲染、按指令链的预算截断、变更记录 |
 | [`src/state.ts`](src/state.ts) | 持久消息来源、版本／digest 缓存、对账 |
 | [`src/digest.ts`](src/digest.ts) | SHA-1 内容标识与每候选组重复键 |
@@ -220,7 +225,7 @@ The previously loaded instructions from this file no longer apply.
 
 - **发现跟随结构化 fs 工具，而非 shell 导航**：更改目录的 `bash` 命令不会触发嵌套指令发现，因为 shell 语法与每次调用的 shell 状态不是可靠的文件系统 seam。
 - **刷新由 touch 驱动**：没有 watcher；外部编辑会在下一次成功的第一方 `read`、`write` 或 `edit` 时、恢复对账可见基线时，或进入步骤的 pre-step 恢复被遮蔽基线时可见。
-- **候选语义有意保持简单**：不解释小写名称、`.claude/rules/` 与 `@path` import；项目 scope 默认加载 `AGENTS.local.md`／`CLAUDE.local.md` overlay，但两个用户全局根目录都没有本地 overlay，其他自定义名称需要显式候选配置。与用户全局 scope 目录同名的项目目录会渲染为 `./<name>/...`，从而保留自己的 scope，而不会解析到全局根目录。
+- **候选语义有意保持简单**：不解释小写名称与 `.claude/rules/`；项目 scope 默认加载 `AGENTS.local.md`／`CLAUDE.local.md` overlay，但两个用户全局根目录都没有本地 overlay，其他自定义名称需要显式候选配置。与用户全局 scope 目录同名的项目目录会渲染为 `./<name>/...`，从而保留自己的 scope，而不会解析到全局根目录。
 - **去重在同一候选组内基于内容**：候选只有在去除首尾空白后字节完全一致时才折叠。两个用户全局根目录共享同一个组，因此共享根文件会折叠在内容一致的 harness home 文件之后；同级项目候选同样折叠，而从 `AGENTS.md` 漂移的独立副本则会与它一起完整加载。预算保留内容的重复候选仍参与对账：保留的候选一旦改变或消失，它就会重新可见。未改变的隐藏重复项（包括因重复而从可见状态移除的文件）使用缓存元数据，不重新读取内容。
 - **同一候选组共享失败命运**：组内任一候选（包括隐藏的重复项）的元数据或内容无法读取时，整个组在该轮保留最后一次成功状态。因此共享 agents 根目录不可读时，harness home 的变更通知也会推迟到之后某一轮同时观测到两个根目录时。
 - **字节预算省略的候选不重新进入对账**：所在指令链的预算从基线中丢弃的候选及其内容重复项在可见基线存续期间不再被探测，只有基线重建后才会重新可见。

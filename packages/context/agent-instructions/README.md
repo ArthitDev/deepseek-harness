@@ -35,6 +35,10 @@ The first request includes one durable baseline message with the user-global cha
 
 ### Configuration
 
+Instruction prose can import files with `@./rules.md`, `@../shared.md`, an absolute path, or `@~/personal.md`; escape spaces as `@Design\ Docs/style.md`. Relative paths resolve from the importing file. Quoted references, Markdown code, HTML nodes, and link destinations do not import. Each candidate appends imported content with `Imported instructions from: <path>` headings, retaining the candidate's scope and precedence. Expansion follows at most four import hops and includes each path or provider target once.
+
+`maxSourceBytes` bounds the candidate and its import expansion, including import headings; exhaustion adds one omission notice outside that source cap. The final message still obeys `maxBytes`. Missing imports add `Instruction import not found: <path>` and are checked for later creation. An unavailable import postpones the owning candidate's refresh and preserves its last-good group. Dependency identity/version probes detect imported edits or removals even when the candidate itself is unchanged; imports re-enter through the normal compact/resume path. Import reads use the mounted filesystem provider without a host fallback. Absolute, home, relative, and symlink imports can expose off-tree content to the model when that provider permits reads: instruction files must be trusted; a write-only sandbox does not prevent disclosure.
+
 The defaults suit a typical checkout: `.git` marks the project root, `AGENTS.md` and `CLAUDE.md` are the base candidates, and `AGENTS.local.md` and `CLAUDE.local.md` are additive local overlays. Only `maxBytes` is required — it caps the user-global chain and the project chain separately within each rendered message, so each deployment chooses its prompt budget explicitly; a message that holds both chains is at most twice `maxBytes`.
 
 The harness home holding the user-global `AGENTS.md` is process policy rather than row configuration: the plugin resolves `$DSH_HOME`, or `~/.dsh`, through `@deepseek-ai/dsh-home-paths`, so instruction loading always reads the process home. The shared agents root resolves the same way, from `$DSH_AGENTS_HOME` or `~/.agents`. Stray `dshHome` and `agentsHome` row keys are ignored.
@@ -62,7 +66,7 @@ export interface Config {
 | Field | Default | Meaning |
 |---|---|---|
 | `maxBytes` | required | Cap on each instruction chain (user-global, project) in one rendered message, in bytes; a message holding both chains is at most twice this size |
-| `maxSourceBytes` | `1048576` | Cap on one source instruction file before rendering |
+| `maxSourceBytes` | `1048576` | Source cap per candidate and its imports, including import headings |
 | `projectRootMarkers` | `['.git']` | Directory names that mark the project root |
 | `instructionFileCandidates` | `['AGENTS.md', 'CLAUDE.md']` | Base file names loaded in each project directory |
 | `localInstructionFileCandidates` | `['AGENTS.local.md', 'CLAUDE.local.md']` | Local overlay file names loaded after the base files |
@@ -96,6 +100,7 @@ The plugin is built on one principle: workspace instructions are durable convers
 | [`src/index.ts`](src/index.ts) | Plugin entry: pre-step listener, `tools/result` touch tracking, inbox composition |
 | [`src/config.ts`](src/config.ts) | `Config` schema, budget resolution, baseline identity |
 | [`src/files.ts`](src/files.ts) | Candidate discovery, project-root search, bounded streaming reads |
+| [`src/imports.ts`](src/imports.ts) | Markdown prose import references |
 | [`src/render.ts`](src/render.ts) | Instruction rendering, per-chain budget truncation, change records |
 | [`src/state.ts`](src/state.ts) | Durable message sources, version/digest cache, reconciliation |
 | [`src/digest.ts`](src/digest.ts) | SHA-1 content identity and per-candidate-group duplicate keys |
@@ -220,7 +225,7 @@ These limits define when instruction loading is a poor fit or needs operational 
 
 - **Discovery follows structured fs tools, not shell navigation** — a `bash` command that changes directories does not trigger nested instruction discovery because shell syntax and per-call shell state are not a reliable filesystem seam.
 - **Refresh is touch-driven** — there is no watcher; external edits become visible on the next successful first-party `read`, `write`, or `edit`, when resume reconciles a visible baseline, or when an entering pre-step restores a shadowed baseline.
-- **Candidate semantics stay intentionally small** — lowercase names, `.claude/rules/`, and `@path` imports are not interpreted; project scopes load `AGENTS.local.md`/`CLAUDE.local.md` overlays by default, but neither user-global root has a local overlay and other custom names require explicit candidate configuration. A project directory named like a user-global scope directory renders as `./<name>/...`, so it keeps its own scope instead of resolving to the global root.
+- **Candidate semantics stay intentionally small** — lowercase names and `.claude/rules/` are not interpreted; project scopes load `AGENTS.local.md`/`CLAUDE.local.md` overlays by default, but neither user-global root has a local overlay and other custom names require explicit candidate configuration. A project directory named like a user-global scope directory renders as `./<name>/...`, so it keeps its own scope instead of resolving to the global root.
 - **Deduplication is content-based within one candidate group** — candidates collapse only when byte-identical after trimming leading and trailing whitespace. The two user-global roots share one group, so the shared-root file collapses behind a matching harness-home file; sibling project candidates collapse the same way, while a distinct real copy that has drifted from `AGENTS.md` loads in full alongside it. A duplicate of budget-retained content stays reconciled: when the retained candidate changes or disappears, the duplicate becomes visible again. Unchanged hidden duplicates, including files removed from visible state as duplicates, use cached metadata instead of content reads.
 - **One candidate group shares failure fate** — when metadata or content cannot be read for any candidate, including a hidden duplicate, the group keeps its last-good state for that pass. An unreadable shared agents root therefore also postpones a harness-home change notice until a later pass observes both roots.
 - **A byte-budget omission does not re-enter reconciliation** — a candidate that its chain's budget dropped from the baseline, including any content duplicate of that candidate, is not probed again while that visible baseline holds; it becomes visible only after the baseline is rebuilt.

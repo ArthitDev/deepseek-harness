@@ -4,7 +4,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { access, chmod, mkdtemp, mkdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -442,6 +442,211 @@ function expectNoDerivedMessages(agent: Agent): void {
 }
 
 describe('workspace context instruction discovery', () => {
+  it('expands relative, absolute, home and nested imports with cycle and depth notices', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    try {
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: `root\n@rules/one.md\n@${join(home, 'absolute.md')}\n@~/dsh-test-import.md\n@missing.md` })
+      fs.entries.set(join(home, 'absolute.md'), { type: 'file', content: 'absolute rule' })
+      fs.entries.set(join(homedir(), 'dsh-test-import.md'), { type: 'file', content: 'personal rule' })
+      fs.entries.set(join(root, 'rules/one.md'), { type: 'file', content: 'one\n@../AGENTS.md\n@two.md' })
+      for (const [current, next] of [['two', 'three'], ['three', 'four'], ['four', 'five']]) {
+        fs.entries.set(join(root, `rules/${current}.md`), { type: 'file', content: `${current}\n@${next}.md` })
+      }
+      fs.entries.set(join(root, 'rules/five.md'), { type: 'file', content: 'must not load' })
+      const result = await loadBaselineInstructions({ cwd: root, dshHome: home, maxBytes: 65536 }, fs)
+      expect(result?.text).toContain('absolute rule')
+      expect(result?.text).toContain('personal rule')
+      expect(result?.text).toContain(`Imported instructions from: ${join('rules', 'one.md')}`)
+      expect(fs.readTargets.filter(path => path === join(root, 'AGENTS.md'))).toHaveLength(1)
+      expect(result?.text).toContain('Instruction import skipped (maximum depth 4): five.md')
+      expect(result?.text).toContain('Instruction import not found: missing.md')
+      expect(result?.text).not.toContain('must not load')
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('refreshes imported content and missing imports without rereading unchanged dependencies', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    try {
+      pinHarnessHome(home)
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: '@rule.md\n@later.md', version: FsVersion('root-fixed') })
+      fs.missingOnResolve.add(join(root, 'later.md'))
+      fs.entries.set(join(root, 'rule.md'), { type: 'file', content: 'rule v1' })
+      await mountAgentInstructionsPlugin(ctx, { maxBytes: 65536 })
+      const agent = await stubAgent(root)
+      await composeBaselinePrefix(ctx, agent)
+      const reads = fs.readTargets.length
+      await syncAgentInstructions(ctx, agent)
+      expect(fs.readTargets).toHaveLength(reads)
+      expect(agent.inbox.nextStep).toHaveLength(0)
+
+      fs.entries.set(join(root, 'rule.md'), { type: 'file', content: 'rule v2' })
+      fs.entries.set(join(root, 'later.md'), { type: 'file', content: 'new rule' })
+      fs.missingOnResolve.delete(join(root, 'later.md'))
+      const updated = await syncedAgentInstructions(ctx, agent)
+      expect(blocksText(updated.content)).toContain('rule v2')
+      expect(blocksText(updated.content)).toContain('new rule')
+      expect(updated.source).toMatchObject({ changes: [{ action: 'replace', path: 'AGENTS.md' }] })
+      await appendAdditionalContexts(ctx, agent)
+
+      fs.throwOnRead.add(join(root, 'rule.md'))
+      fs.entries.set(join(root, 'rule.md'), { type: 'file', content: 'unavailable rule' })
+      await syncAgentInstructions(ctx, agent)
+      expect(agent.inbox.nextStep).toHaveLength(0)
+      fs.throwOnRead.clear()
+      fs.entries.delete(join(root, 'rule.md'))
+      expect(blocksText((await syncedAgentInstructions(ctx, agent)).content)).toContain('Instruction import not found: rule.md')
+    } finally {
+      vi.unstubAllEnvs()
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('never reads host imports when a mounted provider denies them and preserves the last-good context', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    try {
+      pinHarnessHome(home)
+      await write(join(root, 'private.md'), 'host-only secret must not enter context')
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: '@private.md' })
+      fs.entries.set(join(root, 'private.md'), { type: 'file', content: 'provider rule' })
+      await mountAgentInstructionsPlugin(ctx, { maxBytes: 65536 })
+      const agent = await stubAgent(root)
+      await composeBaselinePrefix(ctx, agent)
+      expect(derivedText(agent)).toContain('provider rule')
+      fs.throwOnStat.add(join(root, 'private.md'))
+      await syncAgentInstructions(ctx, agent)
+      expect(agent.inbox.nextStep).toHaveLength(0)
+      expect(blocksText(agent.session.deriveMessages().flatMap(message => message.content))).not.toContain('host-only secret')
+    } finally {
+      vi.unstubAllEnvs()
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('bounds import source reads and final multibyte rendering', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      await write(join(root, '.git/marker'), '')
+      await write(join(root, 'AGENTS.md'), '@large.md\n@small.md')
+      await write(join(root, 'large.md'), 'ก'.repeat(500))
+      await write(join(root, 'small.md'), 'must not read after exhaustion')
+      const result = await loadBaselineInstructions({ cwd: root, dshHome: home, maxBytes: 200, maxSourceBytes: 100 })
+      expect(Buffer.byteLength(result!.text, 'utf8')).toBeLessThanOrEqual(200)
+      expect(result!.text).not.toContain('\ufffd')
+      const full = await loadBaselineInstructions({ cwd: root, dshHome: home, maxBytes: 65536, maxSourceBytes: 100 })
+      expect(full?.text).toContain('Instruction import source budget exhausted')
+      expect(full?.text).not.toContain('must not read after exhaustion')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('probes duplicate imports once and detects target aliases without rereading their content', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    try {
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      const parent = join(root, 'AGENTS.md')
+      const missing = join(root, 'missing.md')
+      const alias = join(root, 'alias.md')
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(parent, { type: 'file', content: '@missing.md\n@missing.md\n@alias.md' })
+      const originalResolve = fs.resolve.bind(fs)
+      const probe = vi.spyOn(fs, 'resolve').mockImplementation((path, options) =>
+        originalResolve(path === alias ? parent : path, options))
+      const loaded = await loadBaselineInstructions({ cwd: root, dshHome: home, maxBytes: 65536 }, fs)
+      expect(probe.mock.calls.filter(([path]) => path === missing)).toHaveLength(1)
+      expect(fs.readTargets.filter(path => path === parent)).toHaveLength(1)
+      expect(loaded?.text).toContain('Instruction import skipped (already included): alias.md')
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('omits an oversized streaming import when provider sizes are unavailable', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    try {
+      await ctx.plugin(RecordingFileSystem)
+      const fs = ctx.fs as RecordingFileSystem
+      fs.entries.set(join(root, '.git'), { type: 'directory' })
+      fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: 'keep parent\n@large.md' })
+      fs.entries.set(join(root, 'large.md'), { type: 'file', content: 'ก'.repeat(100) })
+      fs.omitSizes.add(join(root, 'large.md'))
+      const loaded = await loadBaselineInstructions({ cwd: root, dshHome: home, maxBytes: 65536, maxSourceBytes: 100 }, fs)
+      expect(loaded?.text).toContain('keep parent')
+      expect(loaded?.text).toContain('Instruction import source budget exhausted')
+      expect(loaded?.text).not.toContain('ก')
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('reloads imported instructions after resume and compaction', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    try {
+      pinHarnessHome(home)
+      await write(join(root, '.git/marker'), '')
+      await write(join(root, 'AGENTS.md'), '@rules.md')
+      await write(join(root, 'rules.md'), 'import before resume')
+      await mountAgentInstructions(ctx, { maxBytes: 65536 })
+      const original = await stubAgent(root)
+      await composeBaselinePrefix(ctx, original)
+      await write(join(root, 'rules.md'), 'import after resume')
+      const resumed = await stubAgent(root, original.session.snapshotEvents())
+      await composeBaselinePrefix(ctx, resumed)
+      expect(blocksText(resumed.session.deriveMessages().flatMap(message => message.content))).toContain('import after resume')
+      const baseline = baselineEvents(resumed)[0]!
+      resumed.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'checkpoint' }], source: checkpointSource('import-compact'),
+      }), { surfaceOp: { op: 'replace', startSeq: baseline.seq, endSeq: resumed.session.surface.nodes.at(-1)! }, sourceEventSeqs: [...resumed.session.surface.nodes] })
+      await write(join(root, 'rules.md'), 'import after compact')
+      const rearmed = await syncedAgentInstructions(ctx, resumed)
+      expect(blocksText(rearmed.content)).toContain('import after compact')
+    } finally {
+      vi.unstubAllEnvs()
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('treats ENOTDIR while probing a host candidate as confirmed absence', async () => {
     const root = await tempRepo()
     const homeFile = join(root, 'not-a-directory')

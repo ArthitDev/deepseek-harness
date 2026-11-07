@@ -1,0 +1,13 @@
+version: 1
+scenario: agent-instruction-imports
+profile: headless
+composition: agent-instructions
+recording: authored
+# Runtime-context cwd escaping is not normalized by the Windows snapshot harness.
+platform: posix
+header:
+  class: agent-instruction-imports
+  pin: true
+  changes: 1
+replay:
+  override: true

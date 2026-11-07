@@ -15,11 +15,13 @@ import {
   ancestorChain,
   descendantDirsBetween,
   findProjectRoot,
+  instructionImportsUnchanged,
   probeScopeInstruction,
   readScopeInstruction,
   relativeDisplay,
   scopeInstructionFile,
   type LoadedInstructionFile,
+  type InstructionImportVersion,
 } from './files.ts'
 import {
   candidateScopeKey,
@@ -64,6 +66,8 @@ export interface InstructionVersionState {
    * candidate-group duplicates on the metadata fast path without re-reading a sibling.
    */
   trimmedDigest: string
+  /** Freshness of the files folded into this candidate's content. */
+  imports?: InstructionImportVersion[]
 }
 
 /** Session-isolated fast-path state keyed by logical instruction scope. */
@@ -186,6 +190,7 @@ export function baselineInstructionState(files: LoadedInstructionFile[]): {
         version: file.version,
         digest,
         trimmedDigest: trimmedInstructionDigest(file.content),
+        ...file.imports === undefined ? {} : { imports: file.imports },
       })
     }
   }
@@ -387,6 +392,7 @@ export async function reconcileInstructionContext(
       const metadataUnchanged = cached !== undefined
         && cached.path === probedFile.displayPath
         && cached.version === probedFile.version
+        && await instructionImportsUnchanged(cached.imports, fileSystem, options.signal)
       if (metadataUnchanged) {
         const rendered = previous !== undefined
           && previous.action !== 'remove'
@@ -416,6 +422,7 @@ export async function reconcileInstructionContext(
         version: probedFile.version,
         digest: currentDigest,
         trimmedDigest,
+        ...file.imports === undefined ? {} : { imports: file.imports },
       }
       if (registerKeptTrimmed(group, trimmedDigest)) {
         // A distinct file whose trimmed content already appeared earlier in this
