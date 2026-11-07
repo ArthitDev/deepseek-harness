@@ -24,6 +24,8 @@ const CHILD_TIMEOUT_MS = 60_000
 
 let temporaryRoot: string | undefined
 let configPath = ''
+/** Budget the last runFixture call passed; undefined restores the child defaults. */
+let lastBudget: string | undefined
 
 // The root config with every project's inventory narrowed to the fixture, so
 // the fixture never joins the ordinary inventory and still runs once per
@@ -34,6 +36,15 @@ beforeAll(() => {
   temporaryRoot = mkdtempSync(join(tmpdir(), 'dsh-lane-test-budget-'))
   configPath = join(temporaryRoot, 'vitest.config.ts')
   writeFileSync(join(temporaryRoot, 'package.json'), '{ "type": "module" }\n', 'utf8')
+  writeFixtureConfig()
+})
+
+/** Write the child config for the current budget; the unset case must observe Vitest's own defaults. */
+function writeFixtureConfig(): void {
+  // The parent's local lane budget raises per-test, hook, and poll defaults
+  // outside CI; the unset case measures Vitest's own defaults, so the child
+  // config drops those three fields then. An explicit lane budget keeps them:
+  // the env makes it authoritative regardless.
   writeFileSync(configPath, [
     `import base from ${JSON.stringify(resolve(root, 'vitest.config.ts').split('\\').join('/'))}`,
     'export default {',
@@ -42,13 +53,13 @@ beforeAll(() => {
     '    ...base.test,',
     '    projects: (base.test.projects ?? []).map(project => ({',
     '      ...project,',
-    `      test: { ...project.test, include: [${JSON.stringify(fixture)}] },`,
+    `      test: { ...project.test, ${lastBudget === undefined ? 'testTimeout: undefined, hookTimeout: undefined, expect: { ...project.test.expect, poll: { timeout: undefined } },' : ''} include: [${JSON.stringify(fixture)}] },`,
     '    })),',
     '  },',
     '}',
     '',
   ].join('\n'), 'utf8')
-})
+}
 afterAll(() => {
   if (temporaryRoot !== undefined) rmSync(temporaryRoot, { recursive: true, force: true })
 })
@@ -61,6 +72,8 @@ function runFixture(budget: string | undefined): { status: number | null; output
     // would otherwise annotate the parent job with the fixture's failures.
     if (name.startsWith('VITEST') || name.startsWith('DSH_COVERAGE_') || name === 'GITHUB_ACTIONS') Reflect.deleteProperty(env, name)
   }
+  lastBudget = budget
+  writeFixtureConfig()
   if (budget !== undefined) env[COVERAGE_TEST_TIMEOUT_ENV] = budget
   const child = spawnSync(process.execPath, [vitestCli, 'run', '--config', configPath], {
     cwd: root,

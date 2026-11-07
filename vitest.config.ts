@@ -166,6 +166,15 @@ const laneTestBudget = coverageTestTimeoutOptions(process.env[COVERAGE_TEST_TIME
 // Outside CI, forks follow the local worker budget; CI keeps Vitest's own default for its runner.
 const localWorkerBudget = process.env.CI === 'true' ? {} : { maxWorkers: defaultParallelism(process.env, undefined, LOCAL_TEST_PARALLELISM_CAP) }
 
+// Outside CI, shared-host contention under the 48-fork cap leaves boot-heavy
+// tests without their 5s default on slower machines; raise the per-test, hook,
+// and expect.poll budgets instead of weakening any assertion. An explicit
+// DSH_COVERAGE_TEST_TIMEOUT_MS stays authoritative (the coverage lanes own the
+// budget then), and CI keeps Vitest's defaults (fast Linux runners).
+const localLaneBudget = process.env.CI === 'true' || process.env[COVERAGE_TEST_TIMEOUT_ENV] !== undefined
+  ? {}
+  : { testTimeout: 20_000, hookTimeout: 60_000, expect: { poll: { timeout: 20_000 } } }
+
 // These suites exercise process-global state, process APIs, or timing-sensitive process I/O
 // that worker threads cannot isolate reliably under aggregate gate contention.
 // Keep the narrow exception in forks while the rest of the inventory avoids per-file processes.
@@ -221,6 +230,7 @@ export default defineConfig({
           // Linux, and Windows. Forked workers avoid that shared thread path.
           pool: 'forks',
           ...laneTestBudget,
+          ...localLaneBudget,
           setupFiles: [
             './scripts/test-proxy-environment.ts', './scripts/test-dom-environment.ts', './scripts/test-official-listing-guard.ts',
           ],
@@ -241,6 +251,7 @@ export default defineConfig({
           execArgv: [...vitestExecArgv, '--experimental-vm-modules'],
           pool: 'forks',
           ...laneTestBudget,
+          ...localLaneBudget,
           setupFiles: [
             './scripts/test-proxy-environment.ts', './scripts/test-dom-environment.ts', './scripts/test-official-listing-guard.ts',
           ],

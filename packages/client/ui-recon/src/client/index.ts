@@ -16,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { DynamicReconResult, ReconAiSelection, ReconQueueEntry, ReconReport } from '@deepseek-ai/dsh-recon-engine/types'
-import { en, NS, zh } from './locales.ts'
+import { de, en, es, fr, ja, NS, pt, ru, zh } from './locales.ts'
 import { ReconView, reconChatPrompt } from './ReconView.tsx'
 import { ReconTargetControl } from './ReconTargetControl.tsx'
 import { ReconSettingsCard } from './ReconSettingsCard.tsx'
@@ -41,7 +41,7 @@ export const inject = [
 
 /** Client plugin body: register the recon view tab. */
 export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-recon: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-recon: dictionaries')
   const t = ctx.locale.bind(NS)
   const settings = new ReconSettingsCardController(ctx.configForms.get(RECON_SETTINGS_NS))
   ctx.effect(() => () => { settings.dispose() }, 'ui-recon: settings form')

@@ -6,7 +6,7 @@ import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/cli
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { WebSearchPolicySettings } from '@deepseek-ai/dsh-tool-web/settings'
 import { WebSearchModeControl } from './WebSearchModeControl.tsx'
-import { en, zh, type WebSearchModeKey } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh, type WebSearchModeKey } from './locales.ts'
 
 export type { WebSearchModeKey } from './locales.ts'
 
@@ -34,7 +34,7 @@ export const inject = ['slots', 'locale', 'remote', 'configForms']
 /** Register the global always-search toggle in General Settings. */
 export function apply(ctx: ClientContext): void {
   const settings = ctx.configForms.get<WebSearchPolicySettings>(SETTINGS_NAMESPACE)
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-web-search-mode: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-web-search-mode: dictionaries')
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'web-search-mode',

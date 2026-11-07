@@ -235,8 +235,12 @@ export function createNpmResolutionEnvironment(
   const userConfig = join(temporary, '.npmrc-user')
   const globalConfig = join(temporary, '.npmrc-global')
   writeFileSync(userConfig, '')
-  writeFileSync(globalConfig, '')
-  writeFileSync(join(temporary, '.npmrc'), `registry=${REGISTRY}\n@deepseek-ai:registry=${REGISTRY}\ninstall-strategy=hoisted\n`)
+  // npm 11 reads a cwd `.npmrc` only inside a project (a directory with a
+  // package.json); `config list` probes run without one, so the scoped
+  // registry travels through the globalconfig the environment already points
+  // at instead of the per-project npmrc.
+  writeFileSync(globalConfig, `@deepseek-ai:registry=${REGISTRY}\n`)
+  writeFileSync(join(temporary, '.npmrc'), `registry=${REGISTRY}\ninstall-strategy=hoisted\n`)
   return {
     ...Object.fromEntries(Object.entries(inherited).filter(([name]) => !name.toLowerCase().startsWith('npm_config_'))),
     npm_config_userconfig: userConfig,

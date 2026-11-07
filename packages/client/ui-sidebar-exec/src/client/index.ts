@@ -12,7 +12,7 @@ import { EXEC_ID, execDefinition } from './definition.tsx'
 import { ExecBody } from './ExecBody.tsx'
 import { ExecTitle } from './ExecTitle.tsx'
 import type { ExecInjected } from './face.ts'
-import { en, zh } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 
 /** Services needed by the exec panel's two sidebar seats. */
 export const inject = ['slots', 'locale', 'sidebarRightTabs', 'sessions']
@@ -31,7 +31,7 @@ export function apply(ctx: Context): void {
   const namespace = 'sidebarExec'
   const id = EXEC_ID
   const t = ctx.locale.bind(namespace)
-  ctx.effect(() => ctx.locale.register(namespace, { zh, en }), 'ui-sidebar-exec.copy')
+  ctx.effect(() => ctx.locale.register(namespace, { zh, en, ja, es, fr, de, ru, pt }), 'ui-sidebar-exec.copy')
   ctx.effect(() => ctx.sidebarRightTabs.register(execDefinition(t)), 'ui-sidebar-exec.type')
   const inject = (sessionId: SessionId): ExecInjected => ({
     hooks: { events: ctx.sessions.binding(sessionId)?.eventSource ?? NO_EVENTS },

@@ -13,7 +13,7 @@ import { apply as hostApply } from '../src/index.ts'
 import { ExecBody } from '../src/client/ExecBody.tsx'
 import { ExecTitle } from '../src/client/ExecTitle.tsx'
 import type { ExecInjected } from '../src/client/face.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup() })
 
@@ -67,7 +67,7 @@ it('registers the exec page type without guide-time opens, then releases contrib
     expect(definition.title('sidebar://exec')).toBe('type')
     expect(definition.multiple).toBe(false)
     expect(definition.priority).toBe('builtin')
-    expect(h.dictionaries.get('sidebarExec')).toEqual({ en, zh })
+    expect(h.dictionaries.get('sidebarExec')).toEqual({ en, zh, ja, es, fr, de, ru, pt })
     expect(h.entries.map(entry => [entry.name, entry.key, entry.component, entry.locale])).toEqual([
       ['sidebar.right.pane.tab', definition.id, ExecBody, 'sidebarExec'],
       ['sidebar.right.pane.tab.title', definition.id, ExecTitle, 'sidebarExec'],
