@@ -95,7 +95,7 @@ ctx.plugin(TeamInvariant)
 - **与产品无关的注册表。** 服务不导入任何 session、agent、scope 或 agent-loop 包，也不包含它们的检查；配套入口把检查放在其归属者旁边。
 - **真实关系，而非人为断言。** 配套入口只检查其包拥有的事件流或可变数据关系；确认方法、插件名、注入或固定纯函数结果是类型、加载或单元测试关注点，绝不是运行时不变量。
 - **注册保留归属。** 即使过滤器让 installer 保持非活动，包名也会被保留，因此两个插件永远不会静默认领同一个名字。
-- **配套入口接线规则。**配套入口以其包 npm 名注册检查、通过 reporter 参数安装、并在关系被违反时立刻失败；配套入口的省略决策记录在[省略配套入口笔记](../../../.agents/notes/implemented/simplification/2026-08-28-omit-unneeded-invariant-companions.zh.md)。
+- **配套入口接线由门禁机械校验。**`pnpm run verify-package-invariants` 会拒绝 `./invariant` 导出目标错误、缺少 `lib/invariant.js` 发布、或注册表依赖不符合包依赖策略的配套入口（[省略配套入口笔记](../../../.agents/notes/implemented/simplification/2026-08-28-omit-unneeded-invariant-companions.zh.md)）。
 
 ### 源码地图
 

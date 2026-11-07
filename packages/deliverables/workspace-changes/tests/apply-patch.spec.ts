@@ -1,7 +1,7 @@
 /** Real file tools preserve Review baselines without depending on git or model observations. */
 import { readFile, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { FsError } from '@deepseek-ai/dsh-fs'
@@ -17,7 +17,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as captures from '../src/capture.ts'
 import * as WorkspaceChanges from '../src/index.ts'
-import { changes, endTurn, scratchDir, settle, startTurn } from './support.ts'
+import { ceilingGitDiscovery, changes, endTurn, scratchDir, settle, startTurn } from './support.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => {
@@ -105,6 +105,10 @@ async function expectDiff(t: Awaited<ReturnType<typeof boot>>, index: number, be
 }
 
 describe.each(['non-git', 'git-unavailable'])('apply_patch Review in %s', (environment) => {
+  beforeEach(() => {
+    ceilingGitDiscovery(cleanups)
+  })
+
   it('captures add, update, delete and move as four net changed paths', async () => {
     const t = await boot(environment)
     await t.seed('source')

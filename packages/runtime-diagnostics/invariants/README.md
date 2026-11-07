@@ -95,7 +95,7 @@ This section explains the design behind the registry; the observable behavior is
 - **Product-independent registry.** The service imports no session, agent, scope, or agent-loop package and contains none of their checks; companions carry checks next to their owners.
 - **Real relationships, not synthetic assertions.** A companion checks an event-stream or mutable-data relationship its package owns; confirming a method, plugin name, injection, or fixed pure result is a type, load, or unit-test concern, never a runtime invariant.
 - **Registration reserves ownership.** A package name is reserved even when filters keep its installer inactive, so two plugins can never silently claim the same name.
-- **Companion wiring rules.** Companions register checks under their package npm name, install through the reporter argument, and fail loud on violated relationships; the companion-omission decisions are recorded in the [companion-omission note](../../../.agents/notes/implemented/simplification/2026-08-28-omit-unneeded-invariant-companions.md).
+- **Companion wiring is mechanically enforced.** `pnpm run verify-package-invariants` rejects companions with the wrong `./invariant` export targets, missing `lib/invariant.js` publication, or a registry dependency that does not follow the package dependency policy ([companion-omission note](../../../.agents/notes/implemented/simplification/2026-08-28-omit-unneeded-invariant-companions.md)).
 
 ### Source map
 

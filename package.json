@@ -113,6 +113,7 @@
     "verify-no-unknown-casts": "tsx scripts/verify-no-unknown-casts.ts",
     "verify-doc-refs": "tsx scripts/verify-doc-refs.ts",
     "verify-subsystem-pages": "tsx scripts/verify-subsystem-pages.ts",
+    "verify-package-invariants": "tsx scripts/verify-package-invariants.ts",
     "verify-package-paths": "tsx scripts/verify-package-paths.ts",
     "verify-dsh-package-licenses": "tsx scripts/verify-dsh-package-licenses.ts",
     "verify-config-source-ownership": "tsx scripts/verify-config-source-ownership.ts",

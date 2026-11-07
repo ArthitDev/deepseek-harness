@@ -190,8 +190,9 @@ describe('package manifest invalidation', { concurrent: false }, () => {
     f.manifests.invalidate(f.manifest)
     expect(formats.defaultGetFormatWithoutErrors(pathToFileURL(source))).toBe('module')
     expect(reader.getNearestParentPackageJSON(source)?.data.type).toBe('module')
+    // Node's getPackageScopeConfig reports the plain manifest path on Windows, unlike getNearestParentPackageJSON's namespaced one.
     expect(reader.getPackageScopeConfig(pathToFileURL(source).href)).toMatchObject({
-      exists: true, type: 'module', pjsonPath: toNamespacedPath(f.manifest),
+      exists: true, type: 'module', pjsonPath: f.manifest,
     })
   })
 
@@ -377,8 +378,9 @@ describe('package manifest reader parity', { concurrent: false }, () => {
     expect(reader.getPackageScopeConfig(pathToFileURL(source).href).type).toBe('module')
     rmSync(f.manifest)
     f.manifests.invalidate(f.manifest)
+    // Node's getPackageScopeConfig reports the plain manifest path on Windows, unlike getNearestParentPackageJSON's namespaced one.
     expect(reader.getPackageScopeConfig(pathToFileURL(source).href)).toMatchObject({
-      exists: true, type: 'commonjs', pjsonPath: toNamespacedPath(enclosing),
+      exists: true, type: 'commonjs', pjsonPath: enclosing,
     })
     expect(formats.defaultGetFormatWithoutErrors(pathToFileURL(join(f.dir, 'bin', 'tool')))).toBe(
       formats.defaultGetFormatWithoutErrors(pathToFileURL(join(f.root, 'packages', 'tool'))),

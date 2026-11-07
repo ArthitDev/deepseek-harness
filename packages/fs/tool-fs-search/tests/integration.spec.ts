@@ -264,6 +264,10 @@ describe('search tools over the real subprocess service + the packaged rg', () =
     it('resolves the search in the SESSION workspace, not the process cwd', async () => {
       const sessionDir = await mkdtemp(join(tmpdir(), 'dsh-search-session-'))
       try {
+        // A repo boundary here (same as the main fixture's `.git`) stops rg
+        // from inheriting ignore files through ancestor work trees, which on
+        // hosts whose profile is a git work tree ignores every fixture file.
+        await mkdir(join(sessionDir, '.git'), { recursive: true })
         await writeFile(join(sessionDir, 'only-here.ts'), 'const sessionFile = true\n')
         const agentObj = { session: { header: { id: 'session-int', cwd: sessionDir } } }
         const globbed = await call('glob', { pattern: '*.ts' }, agentObj)

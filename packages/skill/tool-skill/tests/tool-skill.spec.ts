@@ -3,8 +3,8 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { afterEach, describe, expect, it } from 'vitest'
 import { unsupportedModel, provideWorkingDirectoryFixture, unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { access, mkdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, parse } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, ToolCallId, type Message } from '@deepseek-ai/dsh-llm'
@@ -43,8 +43,24 @@ afterEach(async () => {
   for (const dir of tempDirs.splice(0)) await rm(dir, { recursive: true, force: true })
 })
 
+/**
+ * Base directory for fixture workspaces whose ancestor chain owns no `.git`,
+ * so project-root walks started from a fixture cwd terminate at the fixture
+ * itself. `tmpdir()` sits under the user profile on Windows, and the profile
+ * may itself be a git work tree.
+ */
+const repoFreeBase = await (async () => {
+  let dir = tmpdir()
+  while (true) {
+    const parent = dirname(dir)
+    if (parent === dir) return dir
+    if (await access(join(parent, '.git')).then(() => true, () => false)) return parse(dir).root
+    dir = parent
+  }
+})()
+
 async function tempDir(name: string): Promise<string> {
-  const dir = await import('node:fs/promises').then(fs => fs.mkdtemp(join(tmpdir(), `dsh-${name}-`)))
+  const dir = await import('node:fs/promises').then(fs => fs.mkdtemp(join(repoFreeBase, `dsh-${name}-`)))
   tempDirs.push(dir)
   return dir
 }

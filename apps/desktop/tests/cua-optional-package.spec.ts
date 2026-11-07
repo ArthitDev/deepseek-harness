@@ -69,7 +69,8 @@ it('fetches the macOS optional tarball only for Darwin, with an empty cache for 
     const bytes = await readFile(join(directory, 'package.tgz'))
     packages.set(name, { manifest, bytes })
     if (name === providerName) {
-      const result = await execa('tar', ['-tzf', join(directory, 'package.tgz')])
+      // List through the directory so GNU tar never reads a Windows drive letter as a remote host name.
+      const result = await execa('tar', ['-tzf', 'package.tgz'], { cwd: directory })
       expect(result.stdout).toContain('package/native/bin/darwin-arm64/current.json')
       expect(result.stdout).toContain(`package/${nativePayload}`)
     }

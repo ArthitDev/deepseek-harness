@@ -242,14 +242,22 @@ describe('client build environment', () => {
     roots.push(fixtureRoot)
     write(join(fixtureRoot, 'package.json'), '{"version":"2.0.0"}\n')
 
-    expect(repositoryGitDirty(fixtureRoot)).toBeUndefined()
-    expect(repositoryClientBuildEnvironment(fixtureRoot, {
-      DSH_CLIENT_COMMIT_HASH: COMMIT_HASH,
-      DSH_CLIENT_GIT_DIRTY: 'true',
-    })).toEqual({
-      DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_VERSION: '2.0.0',
-    })
+    // The platform temp area lies under the real home on some hosts; keep git discovery from leaving it.
+    const ceiling = process.env.GIT_CEILING_DIRECTORIES
+    process.env.GIT_CEILING_DIRECTORIES = tmpdir()
+    try {
+      expect(repositoryGitDirty(fixtureRoot)).toBeUndefined()
+      expect(repositoryClientBuildEnvironment(fixtureRoot, {
+        DSH_CLIENT_COMMIT_HASH: COMMIT_HASH,
+        DSH_CLIENT_GIT_DIRTY: 'true',
+      })).toEqual({
+        DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
+        DSH_CLIENT_VERSION: '2.0.0',
+      })
+    } finally {
+      if (ceiling === undefined) Reflect.deleteProperty(process.env, 'GIT_CEILING_DIRECTORIES')
+      else process.env.GIT_CEILING_DIRECTORIES = ceiling
+    }
   })
 
   it('defines only public client values over a non-enumerable fallback', () => {

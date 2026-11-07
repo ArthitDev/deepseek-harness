@@ -7,7 +7,7 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { GitRunner, blobText, diffTrees, ignoredPaths, locateGitWorkspace, snapshotTree, treeBlob } from '../src/git.ts'
 import { TurnRecorder } from '../src/recorder.ts'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import { git, scratchDir, startTurn, toolCall } from './support.ts'
+import { ceilingGitDiscovery, git, scratchDir, startTurn, toolCall } from './support.ts'
 
 /** An object directory factory under a scratch root. */
 const objectsIn = (root: string) => () => Promise.resolve(join(root, 'objects'))
@@ -82,6 +82,7 @@ describe('snapshots and diffs', () => {
   })
 
   it('fails loudly when the addressed repository cannot be written or diffed', async () => {
+    ceilingGitDiscovery(cleanups)
     const cwd = await scratchDir('dsh-git-broken-', cleanups)
     const { git: runnerGit } = await runner()
     const store = objectsIn(await scratchDir('dsh-git-store-', cleanups))

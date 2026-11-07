@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { copyFile, cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -18,6 +18,9 @@ it.each(['awaited', 'unawaited', 'unawaited script'] as const)('boots an unbuilt
   for (const name of ['evaluators', 'imports']) {
     await cp(new URL(`../src/${name}/`, import.meta.url), join(directory, name), { recursive: true })
   }
+  // The closure is pure ESM: own its module type instead of letting Node walk
+  // up to an ancestor package.json, whose `type` depends on the host.
+  await writeFile(join(directory, 'package.json'), JSON.stringify({ type: 'module' }))
   await mkdir(join(directory, 'node_modules'))
   for (const name of ['acorn', 'acorn-walk']) {
     await cp(dirname(fileURLToPath(import.meta.resolve(`${name}/package.json`))), join(directory, 'node_modules', name), { recursive: true })

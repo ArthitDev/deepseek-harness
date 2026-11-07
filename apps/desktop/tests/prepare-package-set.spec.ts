@@ -153,7 +153,8 @@ it('copies no macOS tarball into the Windows package set', () => {
         writeFileSync(join(folder, file), '')
       }
     }
-    execFileSync('tar', ['-czf', join(inputs, `${stem}.tgz`), '-C', join(folder, '..'), 'package'])
+    // Write through the directory so GNU tar never reads a Windows drive letter as a remote host name.
+    execFileSync('tar', ['-czf', `${stem}.tgz`, '-C', join(folder, '..'), 'package'], { cwd: inputs })
   }
   const output = join(root, 'output')
   prepareDesktopPackageSet([inputs], output, { platform: 'win32', arch: 'x64' })

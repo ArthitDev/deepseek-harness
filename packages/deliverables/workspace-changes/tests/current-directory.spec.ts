@@ -12,6 +12,7 @@ import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as StrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as WorkspaceChanges from '../src/index.ts'
+import { ceilingGitDiscovery } from './support.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => {
@@ -20,6 +21,7 @@ afterEach(async () => {
 })
 
 it.each(['write', 'edit', 'str_replace_editor'] as const)('captures the resolved %s target before mutation, without a repository', async (name) => {
+  ceilingGitDiscovery(cleanups)
   const origin = await realpath(await mkdtemp(join(tmpdir(), 'dsh-workspace-directory-')))
   cleanups.push(() => rm(origin, { recursive: true, force: true }))
   const current = join(origin, 'current')

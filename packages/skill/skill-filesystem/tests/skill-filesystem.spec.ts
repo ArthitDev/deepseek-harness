@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { dirname, join, parse } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
@@ -13,8 +13,24 @@ afterEach(async () => {
   for (const dir of tempDirs.splice(0)) await rm(dir, { recursive: true, force: true })
 })
 
+/**
+ * Base directory for fixture workspaces whose ancestor chain owns no `.git`,
+ * so project-root walks started from a fixture cwd terminate at the fixture
+ * itself. `tmpdir()` sits under the user profile on Windows, and the profile
+ * may itself be a git work tree.
+ */
+const repoFreeBase = await (async () => {
+  let dir = tmpdir()
+  while (true) {
+    const parent = dirname(dir)
+    if (parent === dir) return dir
+    if (await access(join(parent, '.git')).then(() => true, () => false)) return parse(dir).root
+    dir = parent
+  }
+})()
+
 async function tempDir(name: string): Promise<string> {
-  const dir = await import('node:fs/promises').then(fs => fs.mkdtemp(join(tmpdir(), `dsh-${name}-`)))
+  const dir = await import('node:fs/promises').then(fs => fs.mkdtemp(join(repoFreeBase, `dsh-${name}-`)))
   tempDirs.push(dir)
   return await realpath(dir)
 }

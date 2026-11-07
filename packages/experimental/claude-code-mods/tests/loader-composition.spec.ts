@@ -1,30 +1,21 @@
 /** Real Loader composition: the bridge mounted from a cordis.yml row beside the shipped core plugins. */
 
-import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import Include from '@deepseek-ai/cordis-plugin-include'
-import AgentRegistry from '@deepseek-ai/dsh-agent'
-import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import CommandRuntime from '@deepseek-ai/dsh-commands'
-import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
-import LlmRuntime, { createUserMessage } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
-import * as ClaudeCodeMods from '../src/index.ts'
+// Loader and Include are imported from their source paths directly: the
+// package-name forms can resolve to built `lib/` bundles or compiled
+// intermediates, which would load a second module-singleton copy and move
+// entry imports outside Vitest's graph.
+import Loader from '../../../../vendor/loader/src/index.ts'
+import Include from '../../../../vendor/include/src/index.ts'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
-
-// Keep workspace imports in Vitest's source graph even when the config has a package scope.
-vi.mock('@deepseek-ai/cordis-plugin-loader/src/resolve.ts', () => ({ createResolve: () => undefined }))
 
 const FIXTURES = resolve(import.meta.dirname, 'fixtures')
 
@@ -40,27 +31,35 @@ afterEach(async () => {
 
 it('loads from cordis.yml, counts the model\'s tool calls, and answers /tally through the composed command registry', async () => {
   root = await mkdtemp(join(tmpdir(), 'dsh-cc-mods-composition-'))
+  // A package scope here keeps the loader's resolver helpers inside the
+  // fixture instead of walking up to an ancestor scope on hosts whose
+  // directory chain owns a package.json.
   await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module' }))
   const configPath = join(root, 'cordis.yml')
-  const modules = new Map<string, unknown>([
-    ['@deepseek-ai/dsh-llm', LlmRuntime],
-    ['@deepseek-ai/dsh-session', SessionStore],
-    ['@deepseek-ai/dsh-session-projection', SessionProjectionRegistry],
-
-    ['@deepseek-ai/dsh-system-prompt', SystemPrompt],
-    ['@deepseek-ai/dsh-fs-local', LocalFileSystem],
-    ['@deepseek-ai/dsh-working-directory', WorkingDirectory],
-    ['@deepseek-ai/dsh-tools', ToolRuntime],
-    ['@deepseek-ai/dsh-tool-executor-native', NativeToolExecutor],
-    ['@deepseek-ai/dsh-agent', AgentRegistry],
-    ['@deepseek-ai/dsh-agent-loop', AgentLoop],
-    ['@deepseek-ai/dsh-commands', CommandRuntime],
-    ['@deepseek-ai/dsh-experimental-claude-code-mods', ClaudeCodeMods],
+  // Every row mounts its plugin by source file URL. Dynamic imports inside
+  // the loader resolve through node_modules, whose links depend on the host
+  // install; a file URL loads the exact source-graph module the static
+  // imports above already hold, on every platform.
+  const workspaceEntry = (srcPath: string): string =>
+    pathToFileURL(resolve(import.meta.dirname, '../../../..', srcPath)).href
+  const modules = new Map<string, string>([
+    ['@deepseek-ai/dsh-llm', 'packages/llm/llm/src/index.ts'],
+    ['@deepseek-ai/dsh-session', 'packages/core/session/src/index.ts'],
+    ['@deepseek-ai/dsh-session-projection', 'packages/session/session-projection/src/index.ts'],
+    ['@deepseek-ai/dsh-system-prompt', 'packages/core/system-prompt/src/index.ts'],
+    ['@deepseek-ai/dsh-fs-local', 'packages/fs/fs-local/src/index.ts'],
+    ['@deepseek-ai/dsh-working-directory', 'packages/session/working-directory/src/index.ts'],
+    ['@deepseek-ai/dsh-tools', 'packages/core/tools/src/index.ts'],
+    ['@deepseek-ai/dsh-tool-executor-native', 'packages/core/tool-executor-native/src/index.ts'],
+    ['@deepseek-ai/dsh-agent', 'packages/core/agent/src/index.ts'],
+    ['@deepseek-ai/dsh-agent-loop', 'packages/core/agent-loop/src/index.ts'],
+    ['@deepseek-ai/dsh-commands', 'packages/interaction/commands/src/index.ts'],
+    ['@deepseek-ai/dsh-experimental-claude-code-mods', 'packages/experimental/claude-code-mods/src/index.ts'],
   ])
   // A mod is a plugin like any other: here the tutorial mod's `defineMod` wrapper, mounted by file URL after the bridge.
   const firstMod = pathToFileURL(resolve(FIXTURES, 'first-mod.ts')).href
   await writeFile(configPath, [
-    ...[...modules.keys()].map(name => `- name: '${name}'`),
+    ...[...modules.entries()].map(([, srcPath]) => `- name: '${workspaceEntry(srcPath)}'`),
     `- name: '${firstMod}'`,
     '  config:',
     '    greeting: The model made',

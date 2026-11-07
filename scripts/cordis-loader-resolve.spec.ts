@@ -87,7 +87,9 @@ describe('Loader project resolution', () => {
   it('retains native import when helper creation is denied', async () => {
     const { root, baseUrl } = await fixture()
     const tree = await treeFor(baseUrl)
-    const denied = vi.mocked(fs.mkdir).mockRejectedValueOnce(Object.assign(new Error('read-only project'), { code: 'EACCES' }))
+    // The denial holds for the whole test: the spec's resolver module and the Loader's own copy each
+    // attempt helper creation, and every attempt must observe the read-only project.
+    const denied = vi.mocked(fs.mkdir).mockRejectedValue(Object.assign(new Error('read-only project'), { code: 'EACCES' }))
     onTestFinished(() => { denied.mockReset() })
     expect(await createResolve(baseUrl)).toBeUndefined()
     expect(await tree.import('node:path')).toMatchObject({ join })

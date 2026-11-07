@@ -26,6 +26,23 @@ export async function scratchDir(prefix: string, cleanups: Array<() => Promise<u
   return dir
 }
 
+/**
+ * Keep git repository discovery from leaving the platform temporary area: on
+ * hosts whose temp directory lies inside the real home, a working directory
+ * without a repository would otherwise resolve the home worktree. Restored
+ * through `cleanups`.
+ * @param cleanups - test cleanup queue.
+ */
+export function ceilingGitDiscovery(cleanups: Array<() => Promise<unknown>>): void {
+  const name = 'GIT_CEILING_DIRECTORIES'
+  const previous = process.env[name]
+  process.env[name] = tmpdir()
+  cleanups.push(async () => {
+    if (previous === undefined) Reflect.deleteProperty(process.env, name)
+    else process.env[name] = previous
+  })
+}
+
 /** Open a turn with its first step. */
 export function startTurn(session: Session, turn: number): void {
   session.append('turn/start', { turn })

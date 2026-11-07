@@ -291,9 +291,29 @@ function manifest(path: string, content: Record<string, unknown>): void {
   put(join(path, 'package.json'), JSON.stringify(content) + '\n')
 }
 
+let mappedStaging: string | undefined
+
+/**
+ * Base directory of every fixture tree. On Windows the platform temp area lies
+ * inside the user profile, whose ancestor chain may hold real packages (a home
+ * `node_modules`) that native lookups would find once they leave the fixture;
+ * a base at the system drive root gives the fixture tree the clean ancestor
+ * chain a CI temp area has. POSIX temp areas sit outside any package scope.
+ */
+const fixtureBase = ((): string => {
+  if (process.platform !== 'win32') return tmpdir()
+  const base = mkdtempSync(join(`${process.env.SystemDrive ?? 'C:'}\\`, 'dsh-linked-matrix-base-'))
+  mappedStaging = base
+  return base
+})()
+
+afterAll(() => {
+  if (mappedStaging !== undefined) rmSync(mappedStaging, { recursive: true, force: true })
+})
+
 class MatrixFixture {
   // Node keeps resolved paths and modules after cleanup; no fixture may reuse an earlier fixture's path.
-  readonly root = realpathSync.native(mkdtempSync(join(tmpdir(), `dsh-linked-matrix-${++fixtureSequence}-`)))
+  readonly root = realpathSync.native(mkdtempSync(join(fixtureBase, `dsh-linked-matrix-${++fixtureSequence}-`)))
   readonly home = join(this.root, 'home')
   readonly profileDir = join(this.home, 'profiles', 'web')
   readonly workspace = join(this.root, 'work', 'workspace')

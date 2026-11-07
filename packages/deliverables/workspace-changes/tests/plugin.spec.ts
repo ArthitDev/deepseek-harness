@@ -2,14 +2,14 @@
 import { mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as WorkspaceChanges from '../src/index.ts'
-import { changes, endTurn, git, mutate, scratchDir, settle, startTurn, toolCall } from './support.ts'
+import { ceilingGitDiscovery, changes, endTurn, git, mutate, scratchDir, settle, startTurn, toolCall } from './support.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => {
@@ -112,7 +112,8 @@ describe('workspace-changes in a repository', () => {
     expect(ctx.workspaceChanges.summary(session.id, seq)).toBeUndefined()
   })
 
-  it('serves each listed file’s comparison from the snapshots or the captured copies', async () => {
+  // Each comparison spawns git; the spawn cost on Windows pushes this heaviest serving test past the shared budget.
+  it('serves each listed file’s comparison from the snapshots or the captured copies', { timeout: 20_000 }, async () => {
     const cwd = await repository()
     await writeFile(join(cwd, 'long.txt'), `${'0123456789'.repeat(10)}\n`)
     git(cwd, 'add', '-A'); git(cwd, 'commit', '-q', '-m', 'long')
@@ -331,6 +332,10 @@ describe('workspace-changes in a repository', () => {
 })
 
 describe('workspace-changes without a repository', () => {
+  beforeEach(() => {
+    ceilingGitDiscovery(cleanups)
+  })
+
   it('summarizes file-tool edits only for a working directory outside any git repository', async () => {
     const cwd = await scratchDir('dsh-workspace-changes-plain-', cleanups)
     await writeFile(join(cwd, 'existing.txt'), 'before\n')

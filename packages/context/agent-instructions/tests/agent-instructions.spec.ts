@@ -1,9 +1,9 @@
 import { FsError } from '@deepseek-ai/dsh-fs'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
-import { chmod, mkdtemp, mkdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdtemp, mkdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -141,8 +141,24 @@ function claimInbox(agent: Agent, target: 'next-turn' | 'next-step'): UserMessag
 }
 const requestTimeoutMs = process.platform === 'win32' ? 5_000 : 1_000
 
+/**
+ * Base directory for fixture workspaces whose ancestor chain owns no `.git`,
+ * so project-root walks started from a fixture cwd terminate at the fixture
+ * itself. `tmpdir()` sits under the user profile on Windows, and the profile
+ * may itself be a git work tree.
+ */
+const repoFreeBase = await (async () => {
+  let dir = tmpdir()
+  while (true) {
+    const parent = dirname(dir)
+    if (parent === dir) return dir
+    if (await access(join(parent, '.git')).then(() => true, () => false)) return parse(dir).root
+    dir = parent
+  }
+})()
+
 async function tempRepo(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'dsh-workspace-context-'))
+  return mkdtemp(join(repoFreeBase, 'dsh-workspace-context-'))
 }
 
 async function write(path: string, content: string): Promise<void> {

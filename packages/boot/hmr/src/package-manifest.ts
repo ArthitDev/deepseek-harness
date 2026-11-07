@@ -235,7 +235,11 @@ export class PackageManifests {
     if (!this.isUrlInInvalidatedDirectory(url)) return this.rawBinding.getPackageScopeConfig(url)
     const found = this.findNearestPackageConfig(fileURLToPath(url), true)
     if (typeof found === 'string') return this.rawBinding.getPackageScopeConfig(pathToFileURL(found).href)
-    return found.configuration?.serialized ?? found.path
+    const serialized = found.configuration?.serialized
+    // The scope-config tuple carries the plain manifest path, unlike readPackageJSON's namespaced one.
+    if (serialized === undefined) return found.path
+    const answered: PackageTuple = [serialized[0], serialized[1], serialized[2], serialized[3], serialized[4], found.path]
+    return answered
   }
 
   private hookBindingGetPackageType(url: string) {
@@ -252,7 +256,7 @@ export class PackageManifests {
     if (typeof found === 'string') return this.rawReader.getNearestParentPackageJSON(found)
     // A lookup that stops without a manifest keeps the running Node version's own absent result.
     if (found.configuration === undefined) return this.rawReader.getNearestParentPackageJSON(path)
-    return { data: found.configuration.data, exists: true, path: found.path }
+    return { data: found.configuration.data, exists: true, path: toNamespacedPath(found.path) }
   }
 
   private readCachedPackageConfig(path: string, context?: ImportContext): Configuration | undefined {
@@ -269,7 +273,7 @@ export class PackageManifests {
       if (basename(directory) === 'node_modules' || (!includeRoot && parent === directory)) return { path: manifest }
       if (!this.isPathInInvalidatedDirectory(manifest)) return manifest
       const configuration = this.readCachedPackageConfig(manifest)
-      if (configuration !== undefined) return { path: toNamespacedPath(manifest), configuration }
+      if (configuration !== undefined) return { path: manifest, configuration }
       /* v8 ignore next -- root-scope queries run in an isolated child to contain non-termination */
       if (parent === directory) return { path: manifest }
       directory = parent
@@ -306,13 +310,15 @@ export class PackageManifests {
     }
     const normalizePackageJsonField = (value: unknown): unknown =>
       value !== null && (typeof value === 'string' || typeof value === 'object') ? value : undefined
-    const data: PackageConfig = {
-      ...typeof fields.name === 'string' ? { name: fields.name } : {},
-      ...typeof fields.main === 'string' && fields.main.isWellFormed() ? { main: fields.main } : {},
-      type: fields.type === 'module' || fields.type === 'commonjs' ? fields.type : 'none',
-      exports: normalizePackageJsonField(fields.exports),
-      imports: normalizePackageJsonField(fields.imports),
-    }
+    // Node's parsed configuration is a null-prototype object holding only the fields the manifest declares.
+    const data = Object.create(null) as PackageConfig
+    data.type = fields.type === 'module' || fields.type === 'commonjs' ? fields.type : 'none'
+    if (typeof fields.name === 'string') data.name = fields.name
+    if (typeof fields.main === 'string' && fields.main.isWellFormed()) data.main = fields.main
+    const exportsField = normalizePackageJsonField(fields.exports)
+    if (exportsField !== undefined) data.exports = exportsField
+    const importsField = normalizePackageJsonField(fields.imports)
+    if (importsField !== undefined) data.imports = importsField
     const serializePackageJsonField = (value: unknown): string | undefined =>
       value === undefined ? undefined : typeof value === 'string' ? value : JSON.stringify(value)
     return {
