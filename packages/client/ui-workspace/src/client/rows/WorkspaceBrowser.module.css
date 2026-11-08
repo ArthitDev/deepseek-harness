@@ -672,9 +672,19 @@
   pointer-events: none;
 }
 
-/* The session row is the connector's positioning box. */
+/* Session rows shift into their own inner guide column (16px + indent),
+   clearing the hierarchy gutter so their elbows never overlap it. */
+.groupSection > :has(> [data-row-key^='session:']) {
+  box-sizing: border-box;
+  width: calc(100% - 16px - var(--dsh-workspace-indent, 0px));
+  margin-left: calc(16px + var(--dsh-workspace-indent, 0px));
+}
+
 .groupSection > * > [data-row-key^='session:'] {
   position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline-start: 8px;
 }
 
 /* Session guide chain. The status slot sits 6px below the row top (20px slot
@@ -751,11 +761,13 @@
 
 .sessionOverflowButton {
   position: relative;
-  width: 100%;
+  box-sizing: border-box;
+  width: calc(100% - 16px - var(--dsh-workspace-indent, 0px));
   height: 28px;
+  margin-left: calc(16px + var(--dsh-workspace-indent, 0px));
   border: none;
   border-radius: var(--dsw-radius-sm);
-  padding: 0 var(--dsh-sidebar-row-padding) 0 calc(var(--dsh-sidebar-row-padding) + 16px + var(--dsh-sidebar-label-gap) + var(--dsh-workspace-indent, 0px));
+  padding: 0 var(--dsh-sidebar-row-padding) 0 28px;
   background: transparent;
   cursor: pointer;
   text-align: left;
