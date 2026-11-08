@@ -459,7 +459,9 @@
   80%, 100% { opacity: 1; }
 }
 
-/* One workspace section: header row + a compact expanded session run. */
+/* One workspace section: header row + a compact expanded session run.
+   Each logical row sits in an AnimatedRows span wrapper, so row selectors
+   go through `> * >` and row-level paint keys off the row div itself. */
 .groupSection {
   position: relative;
   /* Mixed into the sidebar fill, not left translucent, so antialiased guide
@@ -468,46 +470,46 @@
      two stacked translucent segments read as a brighter line. */
   --dsh-tree-line: color-mix(in srgb, var(--dsw-alias-label-tertiary) 40%, var(--dsw-specific-sidebar-fill));
   --dsh-tree-branch-start: calc(4px + var(--dsh-workspace-indent, 0px));
-  --dsh-tree-branch-width: 4px;
+  --dsh-tree-branch-width: 8px;
 }
 
 /* Guides appear only when rows follow the header; a collapsed group shows
    none. The branch tick sits at the header's midline, reaching from the
    incoming guide column to the folder icon. */
-.groupSection:has(> [role='group'], > [data-row-key^='session:'], > .sessionOverflowButton) {
+.groupSection:has(> [role='group'], > * > [data-row-key^='session:'], > .sessionOverflowButton) {
   background: linear-gradient(var(--dsh-tree-line) 0 0)
-    var(--dsh-tree-branch-start) 17px / var(--dsh-tree-branch-width) 1px no-repeat;
+    var(--dsh-tree-branch-start) 16px / var(--dsh-tree-branch-width) 1px no-repeat;
 }
 
-.groupSection:not(:has(> [role='group'])):has(> [data-row-key^='session:']) {
+.groupSection:not(:has(> [role='group'])):has(> * > [data-row-key^='session:']) {
   background:
     linear-gradient(var(--dsh-tree-line) 0 0)
-      calc(16px + var(--dsh-workspace-indent, 0px)) 17px / 1px 17px no-repeat,
+      calc(12px + var(--dsh-workspace-indent, 0px)) 16px / 1px 16px no-repeat,
     linear-gradient(var(--dsh-tree-line) 0 0)
-      var(--dsh-tree-branch-start) 17px / var(--dsh-tree-branch-width) 1px no-repeat;
+      var(--dsh-tree-branch-start) 16px / var(--dsh-tree-branch-width) 1px no-repeat;
 }
 
-/* Nested group's riser: from above the section (bridging the sibling margin)
-   down to the branch tick at its header's midline. The drop indicator shares
+/* A group's riser: from above the section (bridging the sibling margin) down
+   to the branch tick at its header's midline. The drop indicator shares
    ::before, so a section carrying one yields the pseudo-element to it. */
-.groupSection:not(.workspaceDropBefore)::before {
+.groupSection:not([data-tree-depth='0']):not(.workspaceDropBefore)::before {
   content: '';
   position: absolute;
   left: var(--dsh-tree-branch-start);
   top: -4px;
-  height: 21px;
+  height: 20px;
   width: 1px;
   background: var(--dsh-tree-line);
   pointer-events: none;
 }
 
-/* A nested group with later siblings continues the riser down its own height
-   so the next sibling's riser connects. */
-.groupSection:not([data-tree-last='true']):not(.workspaceDropAfter)::after {
+/* A group with later siblings continues the riser down its own height so the
+   next sibling's riser connects. */
+.groupSection:not([data-tree-depth='0']):not([data-tree-last='true']):not(.workspaceDropAfter)::after {
   content: '';
   position: absolute;
   left: var(--dsh-tree-branch-start);
-  top: 17px;
+  top: 16px;
   bottom: 0;
   width: 1px;
   background: var(--dsh-tree-line);
@@ -517,12 +519,12 @@
 /* The parent's own session rows follow the nested groups: the last child's
    riser must continue to the section bottom, where the first session row's
    elbow takes over. */
-.groupSection:has(> [data-row-key^='session:'], > .sessionOverflowButton)
+.groupSection:has(> * > [data-row-key^='session:'], > .sessionOverflowButton)
   > [role='group'] > .groupSection:last-child:not(.workspaceDropAfter)::after {
   content: '';
   position: absolute;
   left: var(--dsh-tree-branch-start);
-  top: 17px;
+  top: 16px;
   bottom: 0;
   width: 1px;
   background: var(--dsh-tree-line);
@@ -532,18 +534,19 @@
 /* At depth 0 the tick reaches from the machine guide column to the icon. */
 .groupSection[data-tree-depth='0'] {
   --dsh-tree-branch-start: 0px;
-  --dsh-tree-branch-width: 8px;
+  --dsh-tree-branch-width: 12px;
 }
 
-/* The machine-to-Workspace turn is one rounded elbow. Root backgrounds keep
-   only the separate child-session bridge, never a second horizontal tick. */
-.groupSection[data-tree-depth='0']:has(> [role='group'], > [data-row-key^='session:'], > .sessionOverflowButton) {
+/* The machine-to-Workspace turn is one rounded elbow into the folder icon.
+   Root backgrounds keep only the separate child-session bridge, never a
+   second horizontal tick. */
+.groupSection[data-tree-depth='0']:has(> [role='group'], > * > [data-row-key^='session:'], > .sessionOverflowButton) {
   background: none;
 }
 
-.groupSection[data-tree-depth='0']:not(:has(> [role='group'])):has(> [data-row-key^='session:']) {
+.groupSection[data-tree-depth='0']:not(:has(> [role='group'])):has(> * > [data-row-key^='session:']) {
   background: linear-gradient(var(--dsh-tree-line) 0 0)
-    16px 17px / 1px 17px no-repeat;
+    12px 16px / 1px 16px no-repeat;
 }
 
 .groupSection[data-tree-depth='0']:not(.workspaceDropBefore)::before {
@@ -551,8 +554,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 8px;
-  height: 18px;
+  width: 12px;
+  height: 16px;
   border-bottom: 1px solid var(--dsh-tree-line);
   border-left: 1px solid var(--dsh-tree-line);
   border-bottom-left-radius: 8px;
@@ -567,7 +570,7 @@
   content: '';
   position: absolute;
   left: 0;
-  top: 18px;
+  top: 17px;
   bottom: -4px;
   width: 1px;
   background: var(--dsh-tree-line);
@@ -670,7 +673,7 @@
 }
 
 /* The session row is the connector's positioning box. */
-.groupSection > [data-row-key^='session:'] {
+.groupSection > * > [data-row-key^='session:'] {
   position: relative;
 }
 
@@ -680,7 +683,7 @@
    row margin, where the previous row's drop segment ends, to the row's
    midline where its rounded tick meets the status dot. Each row paints its
    own segment exactly once; nothing overlaps, so no segment reads brighter. */
-.groupSection > [data-row-key^='session:'] > [data-tree-connector] {
+.groupSection > * > [data-row-key^='session:'] > [data-tree-connector] {
   position: absolute;
   top: -2px;
   left: 0;
@@ -696,7 +699,7 @@
    (the 16px remainder of the row; the next elbow starts 2px above the next
    row top, closing the 2px margin). Absent on the section's last row — the
    guide ends on that row's tick. */
-.groupSection > :last-child[data-row-key^='session:'] > [data-tree-connector] {
+.groupSection > :last-child > [data-row-key^='session:'] > [data-tree-connector] {
   background-size: 1px 19px, 7px 1px;
 }
 
