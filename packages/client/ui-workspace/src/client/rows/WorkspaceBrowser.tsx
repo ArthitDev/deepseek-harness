@@ -22,7 +22,7 @@ import {
   IconChevronsUpDownOutlineRegular, IconClockOutlineRegular, IconCloseFillRegular,
   IconFlatListOutlineRegular, IconFolderCloseRegular, IconProjectAddOutlineRegular,
   IconQueueOutlineRegular, IconSearchOutlineRegular, IconSlidersTwoOutlineRegular,
-  IconWorkspaceTreeOutlineRegular, Menu, Tooltip,
+  IconTriangleRightFillRegular, IconWorkspaceTreeOutlineRegular, Menu, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   SessionListState, SessionSearchResultItem,
@@ -32,6 +32,7 @@ import { workspaceDisplayTitle } from '@deepseek-ai/dsh-api-workspace-controller
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import { ComputerIcon } from '../RemoteMachines.tsx'
 import type { ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState } from '../tree.ts'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
@@ -55,6 +56,26 @@ const SEARCH_QUERY_MAX_CODE_UNITS = 500
 const SESSION_WATERMARK_BASE = 5
 /** Highest watermark that attention-bearing Sessions raise automatically; Show more and search reveals may exceed it. */
 const SESSION_WATERMARK_AUTO_MAX = 50
+
+const LOCAL_MACHINE_KEY = 'local:'
+
+/** One machine's section in the tree: a header row and its Workspace groups. */
+interface MachineSection {
+  key: string
+  label: string
+  remote: boolean
+  groups: GroupNode[]
+}
+
+/**
+ * Bucket root groups by machine. The Host registry currently registers only
+ * local Workspaces, so this yields the single local section; remote buckets
+ * arrive with remote workspace registrations and need no shape change.
+ */
+function groupByMachine(groups: readonly GroupNode[], localLabel: string): MachineSection[] {
+  if (groups.length === 0) return []
+  return [{ key: LOCAL_MACHINE_KEY, label: localLabel, remote: false, groups: [...groups] }]
+}
 
 /** Show the blank row plus the first `watermark` non-blank rows, in list order. */
 function watermarkRows(sessions: readonly SessionNode[], watermark: number): {
@@ -266,6 +287,8 @@ type SessionTreeProps = Pick<
   list: SessionListState
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
+  /** The local machine's display label: the resolved hostname, else the locale fallback. */
+  localMachineLabel: string
   /** Workspaces in Host group order with browser-projected Session order. */
   workspaces: readonly WorkspaceView[]
   /** Browser-projected order for Sessions outside every Workspace. */
@@ -319,7 +342,7 @@ function SessionTree({
   renderSlot, renderFactorySlot, useContextMenuTarget, useContextMenu,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
-  setSessionOrder, home, t,
+  setSessionOrder, home, localMachineLabel, t,
   revealSessionId, onSessionRevealed, shortcuts,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
@@ -341,6 +364,7 @@ function SessionTree({
   const workspaceDropCommitted = useRef(false)
   const nativeDragActive = drag !== null || workspaceDrag !== null
   useNativeDragAcceptance(nativeDragActive)
+  const [collapsedMachines, setCollapsedMachines] = useState<string[]>([])
   const currentGroup = current === undefined || !workspaceReady
     ? undefined
     : owningGroupKey(workspaces, current)
@@ -661,7 +685,39 @@ function SessionTree({
     )
   }
 
-  const groupRows = rootGroups.map((group, index) => renderGroup(group, 0, index === rootGroups.length - 1))
+  const machineSections = useMemo(
+    () => groupByMachine(rootGroups, localMachineLabel),
+    [localMachineLabel, rootGroups],
+  )
+  const machineRows = machineSections.map((machine) => {
+    const expanded = !collapsedMachines.includes(machine.key)
+    rowKeys.push(`machine:${machine.key}`)
+    return (
+      <div key={machine.key} className={css.machineSection} data-row-key={`machine:${machine.key}`} role="none">
+        <button
+          type="button"
+          className={css.machineRow}
+          role="treeitem"
+          aria-expanded={expanded}
+          onClick={() => {
+            setCollapsedMachines(keys => keys.includes(machine.key)
+              ? keys.filter(key => key !== machine.key)
+              : [...keys, machine.key])
+          }}
+        >
+          <span className={css.machineChevron}>
+            <IconTriangleRightFillRegular className={clsx(css.machineArrow, expanded && css.machineArrowOpen)} />
+          </span>
+          <span className={css.machineIcon}><ComputerIcon remote={machine.remote} /></span>
+          <span className={css.machineName}>{machine.label}</span>
+          <span className={css.machineCount}>{machine.groups.length}</span>
+        </button>
+        {expanded && <div className={css.machineChildren} role="group">
+          {machine.groups.map((group, index) => renderGroup(group, 0, index === machine.groups.length - 1))}
+        </div>}
+      </div>
+    )
+  })
   return (
     <HoverCardGroup className={clsx(css.treeBody, css.wide)}>
       {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
@@ -676,7 +732,7 @@ function SessionTree({
         {groups.length === 0 && (
           <EmptySessions rowState={rowState} onLeaveArchivedOnly={onLeaveArchivedOnly} t={t} />
         )}
-        {groupRows}
+        {machineRows}
       </AnimatedRows>
     </HoverCardGroup>
   )
@@ -934,6 +990,9 @@ export function WorkspaceBrowser({
   t,
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
+  // The gateway ready frame carries no hostname yet, so the tree shows the
+  // locale label; the picker makes the same fallback.
+  const localMachineLabel = t('remote.local')
   const shortcuts = useShortcuts(rows => rows)
   const searchShortcut = shortcuts.find(row => row.id === 'session.search')
   const addShortcut = shortcuts.find(row => row.id === 'workspace.add')
@@ -1418,6 +1477,7 @@ export function WorkspaceBrowser({
                 useContextMenuTarget={useContextMenuTarget}
                 workspaces={orderedWorkspaces}
                 ungroupedSessionIds={orderedUngroupedSessionIds}
+                localMachineLabel={localMachineLabel}
                 workspaceReady={workspaceReady}
                 nestWorkspaces={groupBy === 'workspace-tree'}
                 animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}

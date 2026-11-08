@@ -529,14 +529,144 @@
   pointer-events: none;
 }
 
+/* At depth 0 the tick reaches from the machine guide column to the icon. */
+.groupSection[data-tree-depth='0'] {
+  --dsh-tree-branch-start: 0px;
+  --dsh-tree-branch-width: 8px;
+}
+
+/* The machine-to-Workspace turn is one rounded elbow. Root backgrounds keep
+   only the separate child-session bridge, never a second horizontal tick. */
+.groupSection[data-tree-depth='0']:has(> [role='group'], > [data-row-key^='session:'], > .sessionOverflowButton) {
+  background: none;
+}
+
+.groupSection[data-tree-depth='0']:not(:has(> [role='group'])):has(> [data-row-key^='session:']) {
+  background: linear-gradient(var(--dsh-tree-line) 0 0)
+    16px 17px / 1px 17px no-repeat;
+}
+
+.groupSection[data-tree-depth='0']:not(.workspaceDropBefore)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 18px;
+  border-bottom: 1px solid var(--dsh-tree-line);
+  border-left: 1px solid var(--dsh-tree-line);
+  border-bottom-left-radius: 8px;
+  pointer-events: none;
+}
+
+/* Machine guide (depth 0): runs the machine's left gutter through every
+   group, bridging the 4px margins between them; the machine's last group
+   stops it at its own tick. The drop indicator shares ::after, so a section
+   carrying one yields the pseudo-element to it. */
+.groupSection[data-tree-depth='0']:not([data-tree-last='true']):not(.workspaceDropAfter)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: -4px;
+  width: 1px;
+  background: var(--dsh-tree-line);
+  pointer-events: none;
+}
+
 .groupSection + .groupSection {
   margin-top: 4px;
 }
 
-/* The first root section has no parent line above it, so it draws no riser;
-   later siblings bridge the 4px margin with their own. */
-.groupSection[data-tree-depth='0']:first-child:not(.workspaceDropBefore)::before {
-  content: none;
+.machineSection + .machineSection {
+  margin-top: 8px;
+}
+
+.machineRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+@media (hover: hover) {
+  .machineRow:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.machineChevron,
+.machineIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.machineIcon {
+  width: 18px;
+}
+
+.machineIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.machineArrow {
+  transition: transform 150ms var(--ds-ease-in-out);
+}
+
+.machineArrowOpen {
+  transform: rotate(90deg);
+}
+
+.machineName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.machineCount {
+  min-width: 20px;
+  border-radius: 10px;
+  padding: 1px 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.machineChildren {
+  position: relative;
+  margin-left: 16px;
+}
+
+.machineChildren::before {
+  content: '';
+  position: absolute;
+  top: -17px;
+  height: 17px;
+  left: 0;
+  width: 1px;
+  /* Same mix as --dsh-tree-line; machineChildren sits above the sections
+     that define it, so the value is restated here. */
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 40%, var(--dsw-specific-sidebar-fill));
+  pointer-events: none;
 }
 
 /* The session row is the connector's positioning box. */
