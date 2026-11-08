@@ -583,6 +583,7 @@ export function SearchResultItem({
  * (`sidebar.workspaces.session.menu.item` / `sidebar.workspaces.session.row.action`),
  * its leading and trailing decorations, and its hover-card section.
  * @param props.onReveal - scroll this row into view after search navigation, then acknowledge it.
+ * @param props.tree - draw the Workspace hierarchy connector without tying it to row content.
  * @param props.drag - optional row-drag target wiring; blank rows, and rows whose access excludes
  * `workspace/insertSessionBefore`, cannot start a drag.
  * @param props.home - host account home for POSIX hover-path abbreviation.
@@ -593,7 +594,7 @@ export function SearchResultItem({
  */
 export function SessionNodeItem({
   node, currentId, now, onOpen, onRenameRequest, renderSlot, renderFactorySlot, useContextMenuTarget,
-  useContextMenu, onReveal, drag, home, useSessionAccess, t,
+  useContextMenu, onReveal, drag, tree, home, useSessionAccess, t,
 }: {
   useContextMenu: WorkspaceBrowserProps['useContextMenu']
   renderFactorySlot: WorkspaceBrowserProps['renderFactorySlot']
@@ -608,6 +609,8 @@ export function SessionNodeItem({
   onReveal?: (() => void) | undefined
   /** Present on reorderable-list rows so every row can remain a drop target. */
   drag?: RowDragProps | undefined
+  /** Draw the Workspace hierarchy connector without tying it to row content. */
+  tree?: boolean | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
   t: RowTranslate
@@ -698,6 +701,7 @@ export function SessionNodeItem({
           drag.drop(rowHalf(e))
         }}
     >
+      {tree === true && <span data-tree-connector aria-hidden="true" />}
       {/* Pending interaction and own or descendant activity outrank the
           finished-but-unviewed reminder, which returns after activity stops
           and is cleared by opening the session. Archived rows keep the slot

@@ -469,7 +469,7 @@ function SessionTree({
     && workspaceDrag.over.half === 'before'
 
   const rowKeys: string[] = groups.length === 0 ? ['empty'] : []
-  const renderGroup = (group: GroupNode, depth: number): ReactNode => {
+  const renderGroup = (group: GroupNode, depth: number, last: boolean): ReactNode => {
     const workspaceId = group.workspaceId
     const children = childrenByParent.get(group.key) ?? []
     const compatibleDrag = workspaceDrag !== null && parents.get(workspaceDrag.workspaceId) === parents.get(group.key)
@@ -478,7 +478,9 @@ function SessionTree({
     const visible = watermarkRows(group.sessions, watermark)
     const sessionsExpanded = visible.hiddenCount === 0
     rowKeys.push(`workspace:${group.key}`)
-    const childRows = group.expanded ? children.map(child => renderGroup(child, depth + 1)) : []
+    const childRows = group.expanded
+      ? children.map((child, index) => renderGroup(child, depth + 1, index === children.length - 1))
+      : []
     const sessions = visible.rows
     for (const node of sessions) rowKeys.push(`session:${node.id}`)
     if (collapsed.hiddenCount > 0) rowKeys.push(`overflow:${group.key}`)
@@ -518,6 +520,8 @@ function SessionTree({
       <div
         key={group.key}
         style={{ '--dsh-workspace-indent': `${depth * 12}px` } as CSSProperties}
+        data-tree-depth={depth}
+        data-tree-last={last ? 'true' : undefined}
         className={clsx(
           css.groupSection,
           workspaceMarker === 'before' && css.workspaceDropBefore,
@@ -617,6 +621,7 @@ function SessionTree({
               onOpen={open}
               onRenameRequest={onSessionRenameRequest}
               renderSlot={renderSlot}
+              tree
               renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
               useContextMenuTarget={useContextMenuTarget}
               onReveal={node.id === revealSessionId && group.key === revealGroup
@@ -656,7 +661,7 @@ function SessionTree({
     )
   }
 
-  const groupRows = rootGroups.map(group => renderGroup(group, 0))
+  const groupRows = rootGroups.map((group, index) => renderGroup(group, 0, index === rootGroups.length - 1))
   return (
     <HoverCardGroup className={clsx(css.treeBody, css.wide)}>
       {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}

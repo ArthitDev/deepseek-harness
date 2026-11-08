@@ -462,10 +462,112 @@
 /* One workspace section: header row + a compact expanded session run. */
 .groupSection {
   position: relative;
+  /* Mixed into the sidebar fill, not left translucent, so antialiased guide
+     edges keep one weight. Every guide pixel is painted by exactly one box
+     (rows chain their own segments; sections never overdrew them), because
+     two stacked translucent segments read as a brighter line. */
+  --dsh-tree-line: color-mix(in srgb, var(--dsw-alias-label-tertiary) 40%, var(--dsw-specific-sidebar-fill));
+  --dsh-tree-branch-start: calc(4px + var(--dsh-workspace-indent, 0px));
+  --dsh-tree-branch-width: 4px;
+}
+
+/* Guides appear only when rows follow the header; a collapsed group shows
+   none. The branch tick sits at the header's midline, reaching from the
+   incoming guide column to the folder icon. */
+.groupSection:has(> [role='group'], > [data-row-key^='session:'], > .sessionOverflowButton) {
+  background: linear-gradient(var(--dsh-tree-line) 0 0)
+    var(--dsh-tree-branch-start) 17px / var(--dsh-tree-branch-width) 1px no-repeat;
+}
+
+.groupSection:not(:has(> [role='group'])):has(> [data-row-key^='session:']) {
+  background:
+    linear-gradient(var(--dsh-tree-line) 0 0)
+      calc(16px + var(--dsh-workspace-indent, 0px)) 17px / 1px 17px no-repeat,
+    linear-gradient(var(--dsh-tree-line) 0 0)
+      var(--dsh-tree-branch-start) 17px / var(--dsh-tree-branch-width) 1px no-repeat;
+}
+
+/* Nested group's riser: from above the section (bridging the sibling margin)
+   down to the branch tick at its header's midline. The drop indicator shares
+   ::before, so a section carrying one yields the pseudo-element to it. */
+.groupSection:not(.workspaceDropBefore)::before {
+  content: '';
+  position: absolute;
+  left: var(--dsh-tree-branch-start);
+  top: -4px;
+  height: 21px;
+  width: 1px;
+  background: var(--dsh-tree-line);
+  pointer-events: none;
+}
+
+/* A nested group with later siblings continues the riser down its own height
+   so the next sibling's riser connects. */
+.groupSection:not([data-tree-last='true']):not(.workspaceDropAfter)::after {
+  content: '';
+  position: absolute;
+  left: var(--dsh-tree-branch-start);
+  top: 17px;
+  bottom: 0;
+  width: 1px;
+  background: var(--dsh-tree-line);
+  pointer-events: none;
+}
+
+/* The parent's own session rows follow the nested groups: the last child's
+   riser must continue to the section bottom, where the first session row's
+   elbow takes over. */
+.groupSection:has(> [data-row-key^='session:'], > .sessionOverflowButton)
+  > [role='group'] > .groupSection:last-child:not(.workspaceDropAfter)::after {
+  content: '';
+  position: absolute;
+  left: var(--dsh-tree-branch-start);
+  top: 17px;
+  bottom: 0;
+  width: 1px;
+  background: var(--dsh-tree-line);
+  pointer-events: none;
 }
 
 .groupSection + .groupSection {
   margin-top: 4px;
+}
+
+/* The first root section has no parent line above it, so it draws no riser;
+   later siblings bridge the 4px margin with their own. */
+.groupSection[data-tree-depth='0']:first-child:not(.workspaceDropBefore)::before {
+  content: none;
+}
+
+/* The session row is the connector's positioning box. */
+.groupSection > [data-row-key^='session:'] {
+  position: relative;
+}
+
+/* Session guide chain. The status slot sits 6px below the row top (20px slot
+   centered in a 32px row), so these span-relative offsets land on row
+   geometry: the elbow box spans rows-rel [-2px, 16px] — from above the 2px
+   row margin, where the previous row's drop segment ends, to the row's
+   midline where its rounded tick meets the status dot. Each row paints its
+   own segment exactly once; nothing overlaps, so no segment reads brighter. */
+.groupSection > [data-row-key^='session:'] > [data-tree-connector] {
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 8px;
+  height: 34px;
+  background:
+    linear-gradient(var(--dsh-tree-line) 0 0) 0 0 / 1px 100% no-repeat,
+    linear-gradient(var(--dsh-tree-line) 0 0) 1px 18px / 7px 1px no-repeat;
+  pointer-events: none;
+}
+
+/* Drop segment: carries the guide from this row's tick down to the next row
+   (the 16px remainder of the row; the next elbow starts 2px above the next
+   row top, closing the 2px margin). Absent on the section's last row — the
+   guide ends on that row's tick. */
+.groupSection > :last-child[data-row-key^='session:'] > [data-tree-connector] {
+  background-size: 1px 19px, 7px 1px;
 }
 
 .listTopDropIndicator,
@@ -515,6 +617,7 @@
 }
 
 .sessionOverflowButton {
+  position: relative;
   width: 100%;
   height: 28px;
   border: none;
@@ -525,6 +628,20 @@
   text-align: left;
   font-size: 12px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* The overflow control closes the group's guide chain on its own tick: the
+   same 8px elbow as the session rows, sized to this 28px row. */
+.groupSection > .sessionOverflowButton::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 8px;
+  height: 16px;
+  border-bottom-left-radius: 6px;
+  box-shadow: inset 1px -1px 0 var(--dsh-tree-line);
+  pointer-events: none;
 }
 
 .groupSection > .sessionOverflowButton {
