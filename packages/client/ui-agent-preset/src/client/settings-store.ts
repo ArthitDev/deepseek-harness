@@ -60,7 +60,9 @@ export type RosterPreset = AgentPresetRoster['presets'][number]
 /** The roster, or the message to show in its place. */
 export type RosterRead = { ok: true; value: AgentPresetRoster } | { ok: false; error: string }
 
-const EMPTY_ROSTER: AgentPresetRoster = { presets: [] }
+const EMPTY_ROSTER: AgentPresetRoster = {
+  presets: [], authorable: true, modeSelectionEnabled: true, models: [], modelPresets: {},
+}
 
 /**
  * Read the roster, turning a refusal into the message every surface shows.

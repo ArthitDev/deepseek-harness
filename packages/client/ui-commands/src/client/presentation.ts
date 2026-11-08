@@ -26,6 +26,7 @@ interface HostFace {
   readonly label: CommandKey
   readonly description: CommandKey
   readonly icon: ComponentType<IconProps>
+  readonly hideNameAlias?: boolean
 }
 
 /** One built-in Host command's face, keyed by its dictionary entries. */

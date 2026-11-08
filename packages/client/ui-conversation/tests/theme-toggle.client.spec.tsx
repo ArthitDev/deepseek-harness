@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { en } from '../src/client/locales.ts'
 import { ThemeToggle, type ThemeToggleProps } from '../src/client/skeleton/ThemeToggle.tsx'
 
 afterEach(cleanup)
@@ -14,8 +15,8 @@ describe('ThemeToggle', () => {
     const props = {
       useThemeMode: bindSnapshotSelector(mode),
       toggleTheme,
-      t: (key: string) => key === 'theme.toLight' ? 'Switch to light mode' : 'Switch to dark mode',
-    } as unknown as ThemeToggleProps
+      t: makeTranslate(en),
+    } as ThemeToggleProps
 
     render(<ThemeToggle {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'Switch to light mode' }))

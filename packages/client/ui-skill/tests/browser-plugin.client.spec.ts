@@ -1,4 +1,4 @@
-import { es, fr, de, ru, pt } from '../src/client/locales.ts'
+import { en, es, fr, de, ja, pt, ru, zh } from '../src/client/locales.ts'
 /**
  * ui-skill browser half: source and keyed toolview registration +
  * locale dictionaries + source duplicate-name proof +
@@ -141,40 +141,9 @@ describe('apply', () => {
     expect(entry?.locale).toBe('skill')
     expect(entry?.component).toBe(SkillToolRow)
     expect(presentation.dictionaries).toEqual([{
-      namespace: 'skill', dictionaries: {
-        es, fr, de, ru, pt,
-        zh: {
-          'row.title': '加载技能',
-          'row.running': '正在加载 skill',
-          'row.preparing': '准备加载技能',
-          'row.failed': 'skill 加载失败',
-          'row.stopped': 'skill 加载已中止',
-          'row.instructions': '说明',
-          'row.inspect': '查看',
-          'menu.userOnly': '仅用户',
-        },
-        en: {
-          'row.title': 'Skill',
-          'row.running': 'Loading skill',
-          'row.preparing': 'Preparing to load a skill',
-          'row.failed': 'Skill load failed',
-          'row.stopped': 'Skill load stopped',
-          'row.instructions': 'Instructions',
-          'row.inspect': 'Inspect',
-          'menu.userOnly': 'user-only',
-        },
-        ja: {
-          'row.title': 'スキル',
-          'row.running': 'スキルを読み込み中',
-          'row.preparing': 'スキルの読み込みを準備中',
-          'row.failed': 'スキルの読み込みに失敗しました',
-          'row.stopped': 'スキルの読み込みが停止しました',
-          'row.instructions': '手順',
-          'row.inspect': '詳細を確認',
-          'menu.userOnly': 'ユーザー専用',
-        },
-      },
+      namespace: 'skill', dictionaries: { zh, en, ja, es, fr, de, ru, pt },
     }])
+    expect(zh['manager.installedNotice']).toBeDefined()
   })
 
   it('registers the "/" skill source; disposal frees the name (HMR safety)', async () => {

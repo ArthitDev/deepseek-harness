@@ -8,21 +8,45 @@ import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { dump } from 'js-yaml'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
+import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the optional `settings` service this registry keeps off the generated pages.
 import type {} from '@deepseek-ai/dsh-settings'
+// Type-only: the optional `llm` and `agentDefaultModel` services the roster reads model routes from.
+import type {} from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { AgentPresetDocument, AgentPresetRoster } from './types.ts'
 import { entryListProblem, type PresetDefinition } from './definition.ts'
 import type { AgentPreset, Config } from './preset.ts'
 import { agentPresetProjectionDefinition } from './session.ts'
 import { auditRows, leakedServices, mountPreset, serviceForMount, type PresetMount } from './mount.ts'
+import { PresetAuthoring, notWritable, parseComposition } from './authoring.ts'
 import { activeCompositionModules, definitionComposition, mountedCompositionRows, type AgentPresetComposition, type AgentPresetInspection } from './composition-inventory.ts'
+import type SettingsService from '@deepseek-ai/dsh-settings'
 
 export { agentPresetProjectionDefinition } from './session.ts'
 export { entryListProblem, type PresetDefinition } from './definition.ts'
 export { auditRows, leakedServices, type PresetMount, type RowAudit } from './mount.ts'
+export {
+  PresetAuthoring, PRESET_ENTRY_PREFIX, PRESET_ID, PRESET_ROW_NAME, notWritable, parseComposition, presetExists,
+} from './authoring.ts'
 export type { AgentPresetInspection } from './composition-inventory.ts'
 export type { AgentPreset, Config } from './preset.ts'
+
+/** Settings namespace carrying the user's default, mode-selection switch, and per-model presets. */
+export const SETTINGS_NAMESPACE = 'agent-preset-registry'
+
+/** Refuse an empty preset id before invoking a domain operation. */
+function validatePresetId(value: string, field: 'agentPreset' | 'from'): void {
+  if (value.length === 0) {
+    throw new RemoteError('gateway/bad-request', `${field} must be a non-empty string`, {})
+  }
+}
+
+/** Refuse an authoring request aimed at a preset the deployment ships. */
+function notWritableSystem(presetId: string): RemoteError<'agent-preset/read-only'> {
+  return notWritable(presetId, 'it ships with the deployment; copy it into the profile to change it')
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -56,6 +80,8 @@ export class AgentPresetRegistry extends TypertRemoteService {
   static Config = z.object({
     default: z.string().required(),
     selectedDefault: z.string().volatile(),
+    modeSelectionEnabled: z.boolean().default(true).volatile(),
+    models: z.dict(z.dict(z.string())).volatile(),
   })
   private agentPresetProjectionHandle!: ProjectionHandle<string | null>
   private readonly owner: Context
@@ -63,6 +89,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
   private readonly generations = new Map<ScopeKey, Generation>()
   private readonly bindings = new WeakMap<ScopeKey, Binding>()
   private readonly switches = new Map<string, Promise<unknown>>()
+  private settingsService: SettingsService | undefined
 
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'agentPresets')
@@ -72,14 +99,72 @@ export class AgentPresetRegistry extends TypertRemoteService {
   protected async [Service.init](): Promise<void> {
     const ctx = this.owner
     this.agentPresetProjectionHandle = await ctx.sessionProjections.register(agentPresetProjectionDefinition)
-    ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
+    // The builtin authored preset declarations name: registering it here keeps
+    // `cordis:preset` resolvable in exactly the compositions that can author,
+    // without depending on the profile's package installation state.
+    ctx.effect(() => {
+      // The declarative `cordis:preset` row lives in a package the registry
+      // must not project-reference (its own row injects agentPresets, closing
+      // the reference cycle). Mirror its plugin structurally: the loader only
+      // needs the apply/inject/config faces the row already declared.
+      const declarationPlugin = PresetAuthoring.declarationPlugin()
+      ctx.loader.builtins.preset = declarationPlugin
+      return () => {
+        if (ctx.loader.builtins.preset === declarationPlugin) delete ctx.loader.builtins.preset
+      }
+    }, 'agent-preset-registry: cordis:preset builtin')
+    ctx.inject(['settings'], (child) => {
+      this.settingsService = child.settings
+      child.effect(() => {
+        const dispose = child.settings.configure({ auto: false }, ctx.fiber)
+        return () => {
+          dispose()
+          this.settingsService = undefined
+        }
+      })
+    })
     ctx.on('session/event', (session, event) => {
       if (event.type === 'agent-preset/selected') ctx.emit('agent-preset/selected', session.id, event.data.agentPreset)
     })
   }
 
+  /** One internally consistent snapshot of the selection policy. */
+  private selectionPolicy(): { enabled: boolean; defaultId: string } {
+    const enabled = this.config.modeSelectionEnabled.get() ?? true
+    return {
+      enabled,
+      defaultId: enabled ? this.config.selectedDefault.get() ?? this.config.default : this.config.default,
+    }
+  }
+
   /** Default preset for a subsequently created session. */
-  get defaultId(): string { return this.config.selectedDefault.get() ?? this.config.default }
+  get defaultId(): string { return this.selectionPolicy().defaultId }
+
+  /**
+   * Resolve the preset configured for one model route.
+   * @param provider - model provider route.
+   * @param model - provider-owned model id.
+   * @returns the route override, or the current default preset when unbound or selection is hidden.
+   */
+  presetIdForModel(provider: string, model: string): string {
+    const policy = this.selectionPolicy()
+    if (!policy.enabled) return policy.defaultId
+    return this.config.models.get()?.[provider]?.[model] ?? policy.defaultId
+  }
+
+  /**
+   * Authoring against the active profile's patch, or undefined in a
+   * composition no profile launched (nothing is authorable there).
+   */
+  private get authoring(): PresetAuthoring | undefined {
+    const profile = this.owner.get('profileContext') as ProfileContext | undefined
+    return profile === undefined ? undefined : new PresetAuthoring(this.owner, profile)
+  }
+
+  /** Whether the active profile accepts authored preset declarations. */
+  get authorable(): boolean {
+    return this.owner.get('profileContext') !== undefined
+  }
 
   /**
    * Read the preset recorded for a Session, including selections no longer in the roster.
@@ -205,12 +290,53 @@ export class AgentPresetRegistry extends TypertRemoteService {
   }
 
   /** Read the selection roster.
-   * @returns Current presets, each marked when it is the default.
+   * @returns Current presets with trust and authoring facts, each marked when it is the default.
    */
   @Remote('list')
   async remoteExportList(): Promise<AgentPresetRoster> {
-    const defaultId = this.defaultId
-    return { presets: (await this.list()).map(row => ({ ...row, isDefault: row.id === defaultId })) }
+    const policy = this.selectionPolicy()
+    const authoring = this.authoring
+    const userPresetIds = authoring === undefined ? new Set<string>() : await authoring.userPresetIds()
+    const defaultModel = this.owner.get('agentDefaultModel')?.currentSelection()
+    const llm = this.owner.get('llm')
+    const models = llm === undefined
+      ? []
+      : (await Promise.all(llm.listProviders().map(async (provider) => {
+        try {
+          return (await llm.listModels(provider.id)).map(model => ({
+            provider: provider.id,
+            providerName: provider.name,
+            id: model.id,
+            name: model.name,
+          }))
+        } catch {
+          return []
+        }
+      }))).flat()
+    if (defaultModel !== undefined && !models.some(
+      model => model.provider === defaultModel.provider && model.id === defaultModel.model,
+    )) {
+      models.unshift({
+        provider: defaultModel.provider,
+        providerName: defaultModel.provider,
+        id: defaultModel.model,
+        name: defaultModel.model,
+      })
+    }
+    return {
+      presets: (await this.list()).map(row => ({
+        ...row,
+        trust: userPresetIds.has(row.id) ? 'user' as const : 'system' as const,
+        isDefault: row.id === policy.defaultId,
+      })),
+      authorable: this.authorable,
+      modeSelectionEnabled: policy.enabled,
+      models,
+      modelPresets: this.config.models.get() ?? {},
+      ...defaultModel === undefined
+        ? {}
+        : { defaultModel: { provider: defaultModel.provider, model: defaultModel.model } },
+    }
   }
 
   /** Resolve an identity without starting an Agent.
@@ -228,21 +354,178 @@ export class AgentPresetRegistry extends TypertRemoteService {
 
   /** Read one declaration's child plugin list as YAML, for viewing only.
    * @param agentPreset Preset identity.
-   * @returns The declared composition beside its published metadata.
+   * @returns The declared composition beside its trust and published metadata.
    */
   @Remote('read')
-  readDocument(agentPreset: string): Promise<AgentPresetDocument> {
+  async readDocument(agentPreset: string): Promise<AgentPresetDocument> {
     const record = this.definitions.get(agentPreset)
     if (record === undefined) {
-      return Promise.reject(new RemoteError('agent-preset/not-found', `Unknown agent preset: ${agentPreset}`,
-        { agentPreset, available: [...this.definitions.keys()] }))
+      throw new RemoteError('agent-preset/not-found', `Unknown agent preset: ${agentPreset}`,
+        { agentPreset, available: [...this.definitions.keys()] })
     }
     const { id, name, description, plugins } = record.config
     // The Loader's own dialect, so `!!js` conditions read as declared rather than as expression objects.
     const content = dump(plugins, { schema: entryListSchema, noRefs: true, lineWidth: -1 })
-    return Promise.resolve({
-      agentPreset: id, content, ...(name === undefined ? {} : { name }), ...(description === undefined ? {} : { description }),
-    })
+    return {
+      agentPreset: id,
+      trust: (await this.authoring?.trustOf(id)) === 'user' ? 'user' as const : 'system' as const,
+      content,
+      ...(name === undefined ? {} : { name }),
+      ...(description === undefined ? {} : { description }),
+    }
+  }
+
+  /**
+   * Replace one profile-declared preset's composition.
+   * @param id - preset id whose declaring row the active profile patch holds.
+   * @param content - complete entry-list YAML to store.
+   * @returns once the row is rewritten and the Loader settled on it.
+   * @throws when the preset is unknown, ships with the deployment, or the
+   * composition is refused.
+   */
+  async write(id: string, content: string): Promise<void> {
+    const authoring = this.requireAuthoring(id)
+    if (!this.definitions.has(id)) {
+      throw new RemoteError('agent-preset/not-found', `Unknown agent preset: ${id}`,
+        { agentPreset: id, available: [...this.definitions.keys()] })
+    }
+    if ((await authoring.trustOf(id)) !== 'user') {
+      throw notWritableSystem(id)
+    }
+    await authoring.write(id, parseComposition(content).plugins)
+  }
+
+  /**
+   * Replace one profile-declared preset's composition through the Remote API.
+   * @param agentPreset - preset id resolved by the Host.
+   * @param content - complete entry-list YAML to store.
+   * @returns once the row is rewritten.
+   */
+  @Remote('write')
+  async remoteExportWrite(agentPreset: string, content: string): Promise<void> {
+    validatePresetId(agentPreset, 'agentPreset')
+    await this.write(agentPreset, content)
+  }
+
+  /**
+   * Create a profile-declared preset by copying an existing one's whole
+   * plugin list.
+   * @param from - the preset the copy starts from; any trust is accepted.
+   * @param id - the new preset's id.
+   * @param name - display name for the copy; omitted publishes none.
+   * @throws when the source is unknown, the id is unusable or taken, or the
+   * deployment configures no profile.
+   */
+  async copy(from: string, id: string, name?: string): Promise<void> {
+    await this.copyIntoProfile(from, id, name, undefined)
+  }
+
+  /**
+   * Create a profile-declared preset with a complete composition.
+   * @param from - source preset whose plugin list the copy starts from.
+   * @param id - new preset id.
+   * @param name - display name; undefined publishes none.
+   * @param content - complete entry-list YAML stored in the new preset.
+   * @returns once the declaring row is written and activated.
+   * @throws when the source is unknown, the id is unusable or taken, or the
+   * composition is refused.
+   */
+  async create(from: string, id: string, name: string | undefined, content: string): Promise<void> {
+    await this.copyIntoProfile(from, id, name, content)
+  }
+
+  /** Create or copy one preset into the active profile's patch. */
+  private async copyIntoProfile(from: string, id: string, name: string | undefined, content: string | undefined): Promise<void> {
+    const authoring = this.requireAuthoring(id)
+    const source = this.definitions.get(from)
+    if (source === undefined) {
+      throw new RemoteError('agent-preset/not-found', `Unknown agent preset: ${from}`,
+        { agentPreset: from, available: [...this.definitions.keys()] })
+    }
+    const plugins = content === undefined
+      ? structuredClone(source.config.plugins)
+      : parseComposition(content).plugins
+    await authoring.create(id, name, plugins, [...this.definitions.keys()])
+  }
+
+  /**
+   * Copy one preset through the Remote API.
+   * @param from - the source preset id.
+   * @param id - the new preset id.
+   * @param name - the copy's optional display name.
+   * @returns once the copy is stored.
+   */
+  @Remote('copy')
+  async remoteExportCopy(from: string, id: string, name?: string): Promise<void> {
+    validatePresetId(from, 'from')
+    validatePresetId(id, 'agentPreset')
+    await this.copy(from, id, name)
+  }
+
+  /**
+   * Create one preset with caller-supplied composition through the Remote API.
+   * @param from - source preset whose plugin list the copy starts from.
+   * @param id - new preset id.
+   * @param name - display name, or undefined to publish none.
+   * @param content - complete composition for the new preset.
+   * @returns once the complete preset is stored.
+   */
+  @Remote('create')
+  async remoteExportCreate(from: string, id: string, name: string | undefined, content: string): Promise<void> {
+    validatePresetId(from, 'from')
+    validatePresetId(id, 'agentPreset')
+    await this.create(from, id, name, content)
+  }
+
+  /** The authoring handle, or the refusal a profile-less deployment answers. */
+  private requireAuthoring(presetId: string): PresetAuthoring {
+    const authoring = this.authoring
+    if (authoring === undefined) {
+      throw notWritableSystem(presetId)
+    }
+    return authoring
+  }
+
+  /**
+   * Delete a profile-declared preset.
+   *
+   * Sessions already composed from it keep their retained revision; only new
+   * sessions see the roster without it. Bindings that named it — the selected
+   * default and per-model overrides — are cleared so nothing resolves a
+   * preset nothing will ever supply again.
+   * @param id - the preset id.
+   * @throws when the preset is unknown or ships with the deployment.
+   */
+  async remove(id: string): Promise<void> {
+    const authoring = this.requireAuthoring(id)
+    if (!this.definitions.has(id)) {
+      throw new RemoteError('agent-preset/not-found', `Unknown agent preset: ${id}`,
+        { agentPreset: id, available: [...this.definitions.keys()] })
+    }
+    if ((await authoring.trustOf(id)) !== 'user') {
+      throw notWritableSystem(id)
+    }
+    await authoring.remove(id)
+    const selectedDefault = this.config.selectedDefault.get()
+    const models = this.config.models.get()
+    const ops = [
+      ...selectedDefault === id ? [{ op: 'unset' as const, path: ['selectedDefault'] }] : [],
+      ...Object.entries(models ?? {}).flatMap(([provider, providerModels]) =>
+        Object.entries(providerModels).flatMap(([model, preset]) =>
+          preset === id ? [{ op: 'unset' as const, path: ['models', provider, model] }] : [])),
+    ]
+    if (ops.length > 0) await this.settingsService?.mutate(SETTINGS_NAMESPACE, ops)
+  }
+
+  /**
+   * Delete one preset through the Remote API.
+   * @param id - the preset id.
+   * @returns once the preset is deleted.
+   */
+  @Remote('deletePreset')
+  async remoteExportDelete(id: string): Promise<void> {
+    validatePresetId(id, 'agentPreset')
+    await this.remove(id)
   }
 
   private async retain(id?: string): Promise<Generation> {

@@ -36,31 +36,31 @@ function developerTools(enabled = true): { configForms: { developerTools: { enab
   return { configForms: { developerTools: { enabled: createSnapshotStore(enabled) } } }
 }
 
-const ROSTER_ONE = {
+const ROSTER_ONE: { ok: true; value: { presets: AgentPresetRow[] } } = {
   ok: true as const,
   value: {
-    presets: [{ id: 'standard', isDefault: true }],
+    presets: [{ id: 'standard', isDefault: true, trust: 'system' }],
   },
 }
 
 /** The roster after this browser copied one preset of its own. */
-const ROSTER_AUTHORED = {
+const ROSTER_AUTHORED: { ok: true; value: { presets: AgentPresetRow[] } } = {
   ok: true as const,
   value: {
     presets: [
-      { id: 'standard', isDefault: true },
-      { id: 'mine', isDefault: false },
+      { id: 'standard', isDefault: true, trust: 'system' },
+      { id: 'mine', isDefault: false, trust: 'user' },
     ],
   },
 }
 
 /** The same roster with a second preset carrying the default. */
-const ROSTER_MOVED = {
+const ROSTER_MOVED: { ok: true; value: { presets: AgentPresetRow[] } } = {
   ok: true as const,
   value: {
     presets: [
-      { id: 'standard', isDefault: false },
-      { id: 'minimal', isDefault: true },
+      { id: 'standard', isDefault: false, trust: 'system' },
+      { id: 'minimal', isDefault: true, trust: 'system' },
     ],
   },
 }
@@ -432,7 +432,7 @@ describe('ui-agent-preset apply', () => {
     await section.load()
     await section.makeDefault('standard')
     expect(section.hooks.agentPresetSection.getSnapshot().rows)
-      .toEqual([{ id: 'standard', isDefault: true }])
+      .toEqual([{ id: 'standard', isDefault: true, trust: 'system' }])
     await section.view('standard')
     expect(section.hooks.agentPresetSection.getSnapshot().view)
       .toEqual({ id: 'standard', title: 'standard', content: '# standard\n[]\n' })
@@ -704,7 +704,7 @@ describe('ui-agent-preset apply', () => {
       .inject as unknown as () => AgentPresetSectionInjected)()
     await section.load()
     expect(section.hooks.agentPresetSection.getSnapshot().rows)
-      .toEqual([{ id: 'standard', isDefault: true }])
+      .toEqual([{ id: 'standard', isDefault: true, trust: 'system' }])
 
     await section.makeDefault('minimal')
 
@@ -809,8 +809,8 @@ describe('ui-agent-preset apply', () => {
     .flatMap(preset => ['unbound', 'inactive bound'].map(source => ({ preset, source }))))(
     'clears the staged $preset choice on Coding Tools off without changing the Session ($source)', async ({ preset, source }) => {
       const { ctx, slots, calls, setDeveloperTools } = await bench({ presets: [
-        ...ROSTER_MOVED.value.presets, { id: 'ptc', isDefault: false },
-        { id: 'cordis', isDefault: false }, { id: 'mine', name: 'Mine', isDefault: false },
+        ...ROSTER_MOVED.value.presets, { id: 'ptc', isDefault: false, trust: 'system' },
+        { id: 'cordis', isDefault: false, trust: 'system' }, { id: 'mine', name: 'Mine', isDefault: false, trust: 'user' },
       ] })
       declareRoot(slots)
       declareConversation(slots)
@@ -898,7 +898,7 @@ describe('ui-agent-preset apply', () => {
 
   it.each(['ptc', 'minimal'])('resets an accepted disabled %s default once, without restoring it on enable', async (id) => {
     const b = await bench({ developerToolsEnabled: false, presets: [
-      { id: 'standard', isDefault: false }, { id, isDefault: true },
+      { id: 'standard', isDefault: false, trust: 'system' }, { id, isDefault: true, trust: 'system' },
     ] })
     b.ctx.provide('sessions', sessionsDouble(b.ctx, { byId: {} }) as never)
     declareRoot(b.slots)
@@ -915,8 +915,8 @@ describe('ui-agent-preset apply', () => {
   it.each([['standard', undefined], ['cordis', undefined], ['mine', 'Mine'], ['ptc', 'Custom PTC'], ['minimal', 'Custom Minimal']] as const)(
     'keeps the allowed default %s (%s) when Coding Tools are disabled', async (id, name) => {
       const b = await bench({ developerToolsEnabled: false, presets: [
-        { id, isDefault: true, ...(name === undefined ? {} : { name }) },
-        ...(id === 'standard' ? [] : [{ id: 'standard', isDefault: false }]),
+        { id, isDefault: true, trust: name === undefined ? 'system' as const : 'user' as const, ...(name === undefined ? {} : { name }) },
+        ...(id === 'standard' ? [] : [{ id: 'standard', isDefault: false, trust: 'system' as const }]),
       ] })
       b.ctx.provide('sessions', sessionsDouble(b.ctx, { byId: {} }) as never)
       declareRoot(b.slots)
@@ -976,8 +976,9 @@ describe('ui-agent-preset apply', () => {
   it.each([['cordis', true], ['mine', true], ['ptc', true], ['minimal', true], ['ptc', false], ['minimal', false]] as const)(
     'resets only the default while the current task uses %s (blank: %s)', async (preset, blank) => {
       const b = await bench({ presets: [
-        { id: 'standard', isDefault: false }, { id: 'minimal', isDefault: true }, { id: 'ptc', isDefault: false },
-        { id: 'cordis', isDefault: false }, { id: 'mine', name: 'Mine', isDefault: false },
+        { id: 'standard', isDefault: false, trust: 'system' }, { id: 'minimal', isDefault: true, trust: 'system' },
+        { id: 'ptc', isDefault: false, trust: 'system' },
+        { id: 'cordis', isDefault: false, trust: 'system' }, { id: 'mine', name: 'Mine', isDefault: false, trust: 'user' },
       ] })
       declareRoot(b.slots)
       declareConversation(b.slots)
@@ -1196,9 +1197,9 @@ describe('ui-agent-preset apply', () => {
 
 /** Official presets plus one custom preset whose id and name must not leave the Client. */
 const ANALYTICS_ROSTER: AgentPresetRow[] = [
-  { id: 'standard', isDefault: true }, { id: 'cordis', isDefault: false },
-  { id: 'ptc', isDefault: false }, { id: 'minimal', isDefault: false },
-  { id: 'private-id', name: 'Private name', isDefault: false },
+  { id: 'standard', isDefault: true, trust: 'system' }, { id: 'cordis', isDefault: false, trust: 'system' },
+  { id: 'ptc', isDefault: false, trust: 'system' }, { id: 'minimal', isDefault: false, trust: 'system' },
+  { id: 'private-id', name: 'Private name', isDefault: false, trust: 'user' },
 ]
 
 /**

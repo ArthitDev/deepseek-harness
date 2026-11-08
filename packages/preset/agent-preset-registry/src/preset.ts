@@ -15,4 +15,8 @@ export interface Config {
   default: string
   /** User-selected default; edited through Settings. */
   selectedDefault: Volatile<string | undefined>
+  /** Whether sessions that name no preset expose a preset choice; edited through Settings. */
+  modeSelectionEnabled: Volatile<boolean | undefined>
+  /** User-selected preset ids by provider and model; edited through Settings. */
+  models: Volatile<Record<string, Record<string, string>> | undefined>
 }

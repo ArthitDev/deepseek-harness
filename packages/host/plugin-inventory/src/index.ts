@@ -1,5 +1,7 @@
-/** Read-only projection of the current Cordis Loader plugin entries. */
+/** Loader inventory projection plus revision-checked plugin enablement editing. */
 
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import type { Context, FiberState } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 // Type-only: the optional agent-preset roster resolved through `ctx.get`.
@@ -10,6 +12,7 @@ import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from 'zod'
 import type {
   AgentPresetPluginGroup,
+  PluginEnablementDocument,
   PluginEntryId,
   PluginFiberPhase,
   PluginInventoryEntry,
@@ -47,12 +50,121 @@ const FIBER_PHASE = {
   [FIBER_STATE.UNLOADING]: 'unloading',
 } as const satisfies Record<FiberState, PluginFiberPhase>
 
+/** Why an agent-preset composition row cannot be toggled from the inventory in this build. */
+const PRESET_READONLY_REASON = 'Agent preset compositions are read-only here; the preset surface owns that edit'
+
+/** Host diagnostics for the manager's two addressability refusals. */
+function readOnlyMessage(reason: 'management-required' | 'unaddressable'): string {
+  return reason === 'management-required'
+    ? 'This plugin carries plugin management and must be managed in the profile configuration'
+    : 'This plugin is controlled by its composition; edit it in the profile configuration'
+}
+
+/**
+ * Hash the exact profile patch text so stale browser edits cannot overwrite newer writes.
+ * @param content - exact document text the hash covers.
+ * @returns the SHA-256 hex digest of the content.
+ */
+function revision(content: string): string {
+  return createHash('sha256').update(content).digest('hex')
+}
+
+/**
+ * The manager rows the editing face reads: a structural subset of the plugin
+ * manager's `PluginInfo`, named here because the manager package depends on
+ * this one and cannot be imported back.
+ */
+interface EditablePluginRow {
+  readonly entryId: PluginEntryId
+  readonly moduleName: string
+  readonly enabled: boolean
+  readonly readOnlyReason?: 'management-required' | 'unaddressable'
+}
+
+/** Locate one manager row by its inventory identity. */
+function findEditableRow(
+  rows: readonly EditablePluginRow[], entryId: string, moduleName: string,
+): EditablePluginRow | undefined {
+  return rows.find(item => item.entryId === entryId && item.moduleName === moduleName)
+}
+
 /** Remote-only service exposing the Loader's current non-group entry state. */
 export class PluginInventoryGateway extends TypertRemoteService {
   static inject = ['loader']
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
+  }
+
+  /** The exact profile patch text behind every enablement revision, with the writer's own absent-file default. */
+  private async patchText(): Promise<string | undefined> {
+    const profile = this.ctx.get('profileContext')
+    if (profile === undefined) return undefined
+    try {
+      return await readFile(profile.patchPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '[]\n'
+      throw error
+    }
+  }
+
+  /**
+   * Read one switch's stored state and revision without exposing config contents.
+   * @param entryId - entry id as the Loader tree spells it.
+   * @param moduleName - plugin module name the entry runs.
+   * @param preset - agent preset owning the composition; omitted targets the global profile.
+   * @returns the stored enablement and revision, or the failure reason.
+   */
+  @Remote('edit')
+  async edit(entryId: string, moduleName: string, preset?: string): Promise<PluginEnablementDocument> {
+    if (preset !== undefined) {
+      return { revision: '', enabled: false, reason: PRESET_READONLY_REASON }
+    }
+    const manager = this.ctx.get('pluginManager')
+    const text = await this.patchText()
+    if (manager === undefined || text === undefined) {
+      return { revision: '', enabled: false, reason: 'Plugin management is unavailable in this host' }
+    }
+    const row = findEditableRow(await manager.listPlugins(), entryId, moduleName)
+    if (row === undefined) {
+      return { revision: '', enabled: false, reason: 'Plugin entry is missing; refresh the list' }
+    }
+    if (row.readOnlyReason !== undefined) {
+      return { revision: '', enabled: false, reason: readOnlyMessage(row.readOnlyReason) }
+    }
+    return { revision: revision(text), enabled: row.enabled }
+  }
+
+  /**
+   * Persist a confirmed enablement change through the plugin manager against the
+   * exact profile-patch revision the browser read.
+   * @param entryId - entry id as the Loader tree spells it.
+   * @param moduleName - plugin module name the entry runs.
+   * @param enabled - enablement state to store.
+   * @param expectedRevision - revision previously read by `edit`; a mismatch rejects the write.
+   * @param preset - agent preset owning the composition; omitted targets the global profile.
+   * @returns the new revision and applied enablement.
+   */
+  @Remote('setEnabled')
+  async setEnabled(
+    entryId: string, moduleName: string, enabled: boolean, expectedRevision: string, preset?: string,
+  ): Promise<PluginEnablementDocument> {
+    if (preset !== undefined) {
+      throw new Error(PRESET_READONLY_REASON)
+    }
+    const manager = this.ctx.get('pluginManager')
+    const text = await this.patchText()
+    if (manager === undefined || text === undefined) {
+      throw new Error('Plugin management is unavailable in this host')
+    }
+    const row = findEditableRow(await manager.listPlugins(), entryId, moduleName)
+    if (row === undefined) throw new Error('Plugin entry is missing; refresh the list')
+    if (row.readOnlyReason !== undefined) throw new Error(readOnlyMessage(row.readOnlyReason))
+    if (revision(text) !== expectedRevision) {
+      throw new Error('Configuration changed; refresh and try again')
+    }
+    await manager.setPluginEnabled(row.entryId, enabled)
+    return { revision: revision((await this.patchText()) ?? text), enabled }
   }
 
   /**

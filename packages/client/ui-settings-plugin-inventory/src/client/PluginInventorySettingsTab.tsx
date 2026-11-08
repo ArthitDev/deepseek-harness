@@ -13,6 +13,7 @@ import {
 import type { StateDotState, TagTone } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
+import { PluginToggle } from './PluginToggle.tsx'
 import css from './PluginInventorySettingsTab.module.css'
 
 type PluginInventoryEntry = PluginInventorySnapshot['entries'][number]
@@ -21,6 +22,12 @@ type AgentPresetRow = AgentPresetGroup['rows'][number]
 
 /** Registration-side Remote face used by the section. */
 export interface PluginInventorySettingsTabInjected {
+  /** Optional editing face; read-only hosts can omit both callbacks. */
+  edit?: (entryId: string, moduleName: string, preset?: string) => Promise<{ revision: string; enabled: boolean; reason?: string }>
+  /** Persist a confirmed change against its exact read revision. */
+  setEnabled?: (
+    entryId: string, moduleName: string, enabled: boolean, revision: string, preset?: string,
+  ) => Promise<{ revision: string; enabled: boolean; reason?: string }>
   /** Resolve local package text in the current Client locale at render time. */
   resolveText: (text: LocalizedText) => string
   /** Page-local module synchronization, independent from the Host inventory. */
@@ -248,9 +255,9 @@ function StateTag({ kind, label }: { readonly kind: EnablementKind; readonly lab
   return kind === 'enabled' ? null : <Tag tone={TAG_TONES[kind]}>{label}</Tag>
 }
 
-/** Render the read-only plugin inventory: agent presets first, then the global plane. */
+/** Render the plugin inventory with optional enablement editing: agent presets first, then the global plane. */
 export function PluginInventorySettingsTab(
-  { list, presetName, resolveText, t, useClientSync, retryClient }: PluginInventorySettingsTabProps,
+  { list, presetName, edit, setEnabled, resolveText, t, useClientSync, retryClient }: PluginInventorySettingsTabProps,
 ): ReactNode {
   const clientSync = useClientSync(snapshot => snapshot)
   const sectionId = useId()
@@ -322,6 +329,7 @@ export function PluginInventorySettingsTab(
     setState({ status: 'loading' })
     setRequest(value => value + 1)
   }
+  const refreshAfterSave = (): void => { setRequest(value => value + 1) }
   const toggleRow = (key: string): void => {
     setExpanded(current => current === key ? null : key)
   }
@@ -357,6 +365,17 @@ export function PluginInventorySettingsTab(
           </>
         )}
       >
+        {edit && setEnabled && row.entryId !== null ? (
+          <PluginToggle
+            entryId={row.entryId}
+            moduleName={row.moduleName}
+            preset={preset.id}
+            edit={edit}
+            setEnabled={setEnabled}
+            onSaved={refreshAfterSave}
+            t={t}
+          />
+        ) : null}
         <CardFacts
           moduleName={row.moduleName}
           moduleLabel={t('moduleLabel')}
@@ -406,6 +425,16 @@ export function PluginInventorySettingsTab(
           </>
         )}
       >
+        {edit && setEnabled ? (
+          <PluginToggle
+            entryId={entry.entryId}
+            moduleName={entry.moduleName}
+            edit={edit}
+            setEnabled={setEnabled}
+            onSaved={refreshAfterSave}
+            t={t}
+          />
+        ) : null}
         <CardFacts
           moduleName={entry.moduleName}
           moduleLabel={t('moduleLabel')}

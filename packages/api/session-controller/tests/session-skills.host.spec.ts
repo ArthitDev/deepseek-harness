@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
@@ -6,7 +10,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-skill'
-import { describe, expect, it, vi } from 'vitest'
+import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionSkillCatalog } from '../src/skill-catalog.ts'
 
 function observation(
@@ -260,5 +265,158 @@ describe('SessionSkillCatalog', () => {
       .rejects.toMatchObject({
         code: 'gateway/internal', message: 'skill listing failed: Error: catalog offline',
       })
+  })
+})
+
+describe('SessionSkillCatalog user-global management', () => {
+  const roots: string[] = []
+  const contextsForCleanup: Context[] = []
+  const contexts = async (): Promise<Context> => {
+    const ctx = await context()
+    contextsForCleanup.push(ctx)
+    return ctx
+  }
+  const home = async (): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-skill-catalog-'))
+    roots.push(dir)
+    return dir
+  }
+  afterEach(async () => {
+    for (const ctx of contextsForCleanup.splice(0).reverse()) await ctx.fiber.dispose()
+    for (const dir of roots.splice(0)) await rm(dir, { recursive: true, force: true })
+  })
+
+  const install = async (root: string, name: string, disabled = false): Promise<string> => {
+    const dir = join(root, disabled ? 'disabled-skills' : 'skills', name)
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'SKILL.md'), `# ${name}\n`)
+    return dir
+  }
+
+  it('lists, moves, and removes installed skills against the user-global roots', async () => {
+    const dshHome = await home()
+    await install(dshHome, 'zebra')
+    await install(dshHome, 'alpha', true)
+    const catalog = new SessionSkillCatalog(await contexts(), { dshHome })
+
+    await expect(catalog.installed()).resolves.toEqual({
+      skills: [{ name: 'alpha', enabled: false }, { name: 'zebra', enabled: true }],
+    })
+
+    await expect(catalog.setEnabled({ name: 'alpha', enabled: true })).resolves.toEqual({
+      name: 'alpha', enabled: true,
+    })
+    await expect(catalog.installed()).resolves.toEqual({
+      skills: [{ name: 'alpha', enabled: true }, { name: 'zebra', enabled: true }],
+    })
+    await expect(catalog.setEnabled({ name: 'missing', enabled: false }))
+      .rejects.toMatchObject({ code: 'gateway/bad-request' })
+
+    await expect(catalog.remove({ name: 'zebra' })).resolves.toEqual({ name: 'zebra', removed: true })
+    await expect(catalog.remove({ name: 'zebra' })).resolves.toEqual({ name: 'zebra', removed: false })
+    const backups = await readdir(join(dshHome, 'skill-backups'))
+    expect(backups).toHaveLength(1)
+    expect(await readdir(join(dshHome, 'skill-backups', backups[0]!))).toContain('zebra')
+  })
+
+  it('searches the catalog through the maintained skills CLI and parses stable identifiers', async () => {
+    const runCli = vi.fn(() => Promise.resolve(
+      '\u001B[1m best \u001B[0m owner/repo@pentest and other/src@pentest plus owner/repo@pentest again\n',
+    ))
+    const catalog = new SessionSkillCatalog(await contexts(), { dshHome: await home(), runCli })
+
+    await expect(catalog.search({ query: '  pentest ' }, new AbortController().signal)).resolves.toEqual({
+      skills: [
+        { source: 'owner/repo@pentest', name: 'pentest', url: 'https://skills.sh/owner/repo/pentest' },
+        { source: 'other/src@pentest', name: 'pentest', url: 'https://skills.sh/other/src/pentest' },
+      ],
+    })
+    expect(runCli).toHaveBeenCalledWith(
+      ['--yes', 'skills', 'find', 'pentest'],
+      expect.any(String),
+      expect.any(AbortSignal),
+    )
+    await expect(catalog.search({ query: '' }, new AbortController().signal))
+      .rejects.toMatchObject({ code: 'gateway/bad-request' })
+  })
+
+  it('installs one staged skills.sh source with a backup when replacing', async () => {
+    const dshHome = await home()
+    await install(dshHome, 'pentest')
+    const runCli = vi.fn(async (_args: readonly string[], cwd: string) => {
+      await mkdir(join(cwd, '.agents', 'skills', 'pentest'), { recursive: true })
+      await writeFile(join(cwd, '.agents', 'skills', 'pentest', 'SKILL.md'), '# replaced\n')
+      return ''
+    })
+    const catalog = new SessionSkillCatalog(await contexts(), { dshHome, runCli })
+
+    await expect(catalog.install({ source: 'owner/repo@pentest' }, new AbortController().signal)).resolves.toEqual({
+      installed: ['pentest'], backedUp: ['pentest'],
+    })
+    expect(await readFile(join(dshHome, 'skills', 'pentest', 'SKILL.md'), 'utf8')).toBe('# replaced\n')
+    await expect(catalog.install({ source: 'not-a-source' }, new AbortController().signal))
+      .rejects.toMatchObject({ code: 'gateway/bad-request' })
+  })
+
+  it('runs one confirmed command in a host terminal and streams its output', async () => {
+    const written: string[] = []
+    let resolver: ((outcome: { exitCode: number | null; signal: NodeJS.Signals | null }) => void) | undefined
+    const output = new Readable({ read() {} })
+    const handle = {
+      pid: 4242,
+      output,
+      done: new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolve) => { resolver = resolve }),
+      write: (data: string) => { written.push(data); return Promise.resolve() },
+      resize: () => Promise.resolve(),
+      inspectForeground: () => Promise.resolve(undefined),
+      inspectActivity: () => Promise.resolve({ state: 'unknown', revision: 0 }),
+      signalForeground: () => Promise.reject(new Error('unused')),
+      terminate: () => Promise.resolve(),
+    }
+    const spawnTerminal = vi.fn(() => Promise.resolve(handle))
+    const ctx = await contexts()
+    ctx.provide('subprocess', {
+      resolveExecutable: (command: string) => Promise.resolve(command),
+      spawnTerminal,
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx, { dshHome: await home() })
+
+    const { id } = await catalog.terminalOpen({ command: 'npx skills find pentest' }, new AbortController().signal)
+    expect(written).toEqual(['npx skills find pentest\r'])
+    output.push('hello ')
+    output.push('world')
+    await new Promise(resolve => setImmediate(resolve))
+    expect(catalog.terminalRead({ id, offset: 0 })).toMatchObject({
+      text: 'hello world', nextOffset: 11, lossy: false, exited: false,
+    })
+    await expect(catalog.terminalWrite({ id, text: 'y\r' })).resolves.toEqual({ accepted: true })
+    expect(written).toEqual(['npx skills find pentest\r', 'y\r'])
+    output.push('done')
+    output.emit('end')
+    resolver?.({ exitCode: 0, signal: null })
+    await handle.done
+    await new Promise(resolve => setImmediate(resolve))
+    expect(catalog.terminalRead({ id, offset: 11 })).toMatchObject({
+      text: 'done', exited: true, exitCode: 0,
+    })
+    await expect(catalog.terminalClose({ id })).resolves.toEqual({ closed: true })
+    await expect(catalog.terminalClose({ id })).resolves.toEqual({ closed: false })
+    expect(() => catalog.terminalRead({ id: 'gone', offset: 0 })).toThrow(/terminal was not found/)
+  })
+
+  it('publishes the catalog and management Remotes under the skills namespace', async () => {
+    const catalog = new SessionSkillCatalog(await contexts(), { dshHome: await home() })
+    expect([...remoteMethods(catalog)].sort((a, b) => a.method.localeCompare(b.method))).toEqual([
+      { method: 'install', exportName: 'add', invocation: { kind: 'direct' } },
+      { method: 'installed', invocation: { kind: 'direct' } },
+      { method: 'list', invocation: { kind: 'direct' } },
+      { method: 'remove', exportName: 'uninstall', invocation: { kind: 'direct' } },
+      { method: 'search', invocation: { kind: 'direct' } },
+      { method: 'setEnabled', invocation: { kind: 'direct' } },
+      { method: 'terminalClose', invocation: { kind: 'direct' } },
+      { method: 'terminalOpen', invocation: { kind: 'direct' } },
+      { method: 'terminalRead', invocation: { kind: 'direct' } },
+      { method: 'terminalWrite', invocation: { kind: 'direct' } },
+    ])
   })
 })

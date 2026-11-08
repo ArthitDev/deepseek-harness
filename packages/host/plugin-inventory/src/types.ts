@@ -1,6 +1,14 @@
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { PluginLocalizedMeta } from '@deepseek-ai/dsh-package-manifest'
 
+/** File revision and configuration state for one plugin switch. */
+export interface PluginEnablementDocument {
+  readonly revision: string
+  readonly enabled: boolean
+  /** A blocked edit carries its reason and cannot be submitted. */
+  readonly reason?: string
+}
+
 /** Stable Loader-tree identity of one configured plugin entry. */
 export type PluginEntryId = Branded<'PluginEntryId'>
 

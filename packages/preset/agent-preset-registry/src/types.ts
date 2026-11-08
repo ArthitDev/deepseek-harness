@@ -1,6 +1,8 @@
 /** Client-safe payloads and event declarations owned by the agent-preset domain. */
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+/** Whether a preset's declaring row ships with the deployment or was authored in the active profile. */
+export type PresetTrust = 'system' | 'user'
 
 /**
  * One declared preset as a client reads it.
@@ -10,6 +12,8 @@ export interface AgentPresetRow {
   readonly id: string
   /** Whether a session naming no preset composes this one. */
   readonly isDefault: boolean
+  /** Whether the active profile's patch declares this preset (authorable) or the deployment ships it. */
+  readonly trust: PresetTrust
   /** Display name the preset published. */
   readonly name?: string
   /** One sentence on what this preset is for. */
@@ -18,16 +22,40 @@ export interface AgentPresetRow {
   readonly broken?: string
 }
 
-/** The roster one deployment currently supplies. */
+/** One model route offered for a preset binding. */
+export interface AgentPresetModelRow {
+  /** Provider route and `models` settings-map key. */
+  readonly provider: string
+  /** Provider display name. */
+  readonly providerName: string
+  /** Provider-owned model id and `models` settings-map key. */
+  readonly id: string
+  /** Model display name. */
+  readonly name: string
+}
+
+/** The roster one deployment currently supplies, with its authoring capability. */
 export interface AgentPresetRoster {
   /** Every current declaration, including activation failures. */
   readonly presets: readonly AgentPresetRow[]
+  /** Whether the active profile accepts authored preset declarations. */
+  readonly authorable: boolean
+  /** Whether visible mode selection is enabled for sessions that name no preset. */
+  readonly modeSelectionEnabled: boolean
+  /** Every model the live providers currently advertise. */
+  readonly models: readonly AgentPresetModelRow[]
+  /** User-selected preset ids by provider and model; absent routes use the default preset. */
+  readonly modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>
+  /** Model a new session uses before it selects another one. */
+  readonly defaultModel?: { readonly provider: string; readonly model: string }
 }
 
 /** One preset's declared composition, rendered for reading. */
 export interface AgentPresetDocument {
   /** The preset the composition belongs to. */
   readonly agentPreset: string
+  /** Whether the active profile's patch declares this preset (editable) or the deployment ships it. */
+  readonly trust: PresetTrust
   /** The declared child plugin list as entry-list YAML, `!!js` expressions included. */
   readonly content: string
   /** Display name the preset published. */
@@ -42,6 +70,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'agent-preset/not-found': { readonly agentPreset: string; readonly available: readonly string[] }
     /** The id is unusable, already taken, or its composition cannot be installed. */
     'agent-preset/invalid': { readonly agentPreset: string; readonly reason: string }
+    /** The preset ships with the deployment and is not the profile's to change. */
+    'agent-preset/read-only': { readonly agentPreset: string; readonly reason: string }
     /** The session's conversation has started, so its composition is fixed. */
     'agent-preset/locked': { readonly sessionId: SessionId; readonly agentPreset: string }
   }

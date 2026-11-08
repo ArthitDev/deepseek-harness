@@ -2,6 +2,15 @@
 
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
+  toggleLabel: '启用 {name}',
+  enablePlugin: '启用插件',
+  confirmGlobal: '保存此配置？全局变更可能影响当前会话，重新加载失败时可恢复备份。',
+  confirmPreset: '保存到此预设？新会话生效，现有会话保持不变。',
+  save: '保存变更',
+  saving: '正在保存…',
+  cancel: '取消',
+  savedGlobal: '配置已保存，并已创建 .bak 备份。运行状态会在列表刷新后更新；若更改未生效，请重启 Harness。',
+  savedPreset: '配置已保存，并已创建 .bak 备份。请使用此预设创建新会话。',
   tab: '插件列表',
   loading: '正在读取插件…',
   clientSyncing: '正在同步本页面的插件…',
@@ -46,6 +55,15 @@ export type PluginInventoryLocaleKey = keyof typeof zh
 
 /** English dictionary checked against the Chinese key set. */
 export const en = {
+  toggleLabel: 'Enable {name}',
+  enablePlugin: 'Enable plugin',
+  confirmGlobal: 'Save this configuration? Global changes can affect active sessions. Restore the backup if reloading fails.',
+  confirmPreset: 'Save to this preset? New sessions use the change; existing sessions keep their plugins.',
+  save: 'Save change',
+  saving: 'Saving…',
+  cancel: 'Cancel',
+  savedGlobal: 'Configuration saved with a .bak backup. Runtime status updates after the list refreshes; restart Harness if the change does not take effect.',
+  savedPreset: 'Configuration saved with a .bak backup. Start a new session with this preset.',
   tab: 'Plugin list',
   loading: 'Reading plugins…',
   clientSyncing: 'Syncing plugins on this page…',
@@ -87,6 +105,15 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  toggleLabel: '{name} を有効化',
+  enablePlugin: 'プラグインを有効化',
+  confirmGlobal: 'この設定を保存しますか？グローバルな変更は実行中のセッションに影響する可能性があります。再読み込みに失敗した場合はバックアップを復元してください。',
+  confirmPreset: 'このプリセットに保存しますか？新しいセッションから適用され、既存のセッションは変わりません。',
+  save: '変更を保存',
+  saving: '保存中…',
+  cancel: 'キャンセル',
+  savedGlobal: '設定を保存し、.bak バックアップを作成しました。実行状態は一覧の再読み込み後に更新されます。変更が反映されない場合は Harness を再起動してください。',
+  savedPreset: '設定を保存し、.bak バックアップを作成しました。このプリセットで新しいセッションを開始してください。',
   'tab': 'プラグイン一覧',
   'loading': 'プラグインを読み込み中…',
   'clientSyncing': 'このページでプラグインを同期中…',
@@ -128,6 +155,15 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  toggleLabel: 'Activar {name}',
+  enablePlugin: 'Activar plugin',
+  confirmGlobal: '¿Guardar esta configuración? Los cambios globales pueden afectar a sesiones activas. Restaura la copia de seguridad si la recarga falla.',
+  confirmPreset: '¿Guardar en este preset? Las sesiones nuevas usan el cambio; las existentes conservan sus plugins.',
+  save: 'Guardar cambio',
+  saving: 'Guardando…',
+  cancel: 'Cancelar',
+  savedGlobal: 'Configuración guardada con copia de seguridad .bak. El estado en ejecución se actualiza al refrescar la lista; reinicia Harness si el cambio no se aplica.',
+  savedPreset: 'Configuración guardada con copia de seguridad .bak. Inicia una sesión nueva con este preset.',
   tab: 'Lista de complementos',
   loading: 'Leyendo complementos…',
   clientSyncing: 'Sincronizando complementos en esta página…',
@@ -169,6 +205,15 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  toggleLabel: 'Activer {name}',
+  enablePlugin: 'Activer le plugin',
+  confirmGlobal: 'Enregistrer cette configuration ? Les changements globaux peuvent affecter les sessions actives. Restaurez la sauvegarde si le rechargement échoue.',
+  confirmPreset: 'Enregistrer dans ce préréglage ? Les nouvelles sessions appliquent le changement ; les sessions existantes conservent leurs plugins.',
+  save: 'Enregistrer le changement',
+  saving: 'Enregistrement…',
+  cancel: 'Annuler',
+  savedGlobal: 'Configuration enregistrée avec une sauvegarde .bak. L’état d’exécution se met à jour au rafraîchissement de la liste ; redémarrez Harness si le changement ne s’applique pas.',
+  savedPreset: 'Configuration enregistrée avec une sauvegarde .bak. Démarrez une nouvelle session avec ce préréglage.',
   tab: 'Liste des plugins',
   loading: 'Plugins de lecture…',
   clientSyncing: 'Synchronisation des plugins sur cette page…',
@@ -210,6 +255,15 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  toggleLabel: '{name} aktivieren',
+  enablePlugin: 'Plugin aktivieren',
+  confirmGlobal: 'Diese Konfiguration speichern? Globale Änderungen können aktive Sitzungen betreffen. Stelle die Sicherung wieder her, wenn das Neuladen fehlschlägt.',
+  confirmPreset: 'In diesem Preset speichern? Neue Sitzungen übernehmen die Änderung; bestehende behalten ihre Plugins.',
+  save: 'Änderung speichern',
+  saving: 'Speichern…',
+  cancel: 'Abbrechen',
+  savedGlobal: 'Konfiguration mit .bak-Sicherung gespeichert. Der Laufzeitzustand aktualisiert sich beim Aktualisieren der Liste; starte Harness neu, falls die Änderung nicht greift.',
+  savedPreset: 'Konfiguration mit .bak-Sicherung gespeichert. Starte eine neue Sitzung mit diesem Preset.',
   tab: 'Plugin-Liste',
   loading: 'Plugins lesen…',
   clientSyncing: 'Plugins auf dieser Seite werden synchronisiert…',
@@ -251,6 +305,15 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  toggleLabel: 'Включить {name}',
+  enablePlugin: 'Включить плагин',
+  confirmGlobal: 'Сохранить эту настройку? Глобальные изменения могут затронуть активные сессии. Восстановите резервную копию, если перезагрузка не удастся.',
+  confirmPreset: 'Сохранить в этот пресет? Новые сессии применят изменение; существующие сохранят свои плагины.',
+  save: 'Сохранить изменение',
+  saving: 'Сохранение…',
+  cancel: 'Отмена',
+  savedGlobal: 'Настройка сохранена, создана резервная копия .bak. Состояние выполнения обновится после обновления списка; перезапустите Harness, если изменение не применилось.',
+  savedPreset: 'Настройка сохранена, создана резервная копия .bak. Запустите новую сессию с этим пресетом.',
   tab: 'Список плагинов',
   loading: 'Чтение плагинов…',
   clientSyncing: 'Синхронизация плагинов на этой странице…',
@@ -292,6 +355,15 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  toggleLabel: 'Ativar {name}',
+  enablePlugin: 'Ativar plugin',
+  confirmGlobal: 'Salvar esta configuração? Mudanças globais podem afetar sessões ativas. Restaure o backup se o recarregamento falhar.',
+  confirmPreset: 'Salvar neste preset? Novas sessões usam a mudança; as existentes mantêm seus plugins.',
+  save: 'Salvar alteração',
+  saving: 'Salvando…',
+  cancel: 'Cancelar',
+  savedGlobal: 'Configuração salva com backup .bak. O estado de execução é atualizado quando a lista é recarregada; reinicie o Harness se a mudança não for aplicada.',
+  savedPreset: 'Configuração salva com backup .bak. Inicie uma nova sessão com este preset.',
   tab: 'Lista de plug-ins',
   loading: 'Lendo plug-ins…',
   clientSyncing: 'Sincronizando plug-ins nesta página…',

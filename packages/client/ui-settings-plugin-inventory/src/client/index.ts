@@ -41,13 +41,25 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
+  const edit: NonNullable<PluginInventorySettingsTabInjected['edit']> = async (entryId, moduleName, preset) => {
+    const result = await ctx.remote.pluginInventory.edit(entryId, moduleName, preset)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+  const setEnabled: NonNullable<PluginInventorySettingsTabInjected['setEnabled']> = async (
+    entryId, moduleName, enabled, revision, preset,
+  ) => {
+    const result = await ctx.remote.pluginInventory.setEnabled(entryId, moduleName, enabled, revision, preset)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
   // Resolved per call over ui-agent-preset's dictionaries, so a language
   // switch re-resolves shipped names; user-authored metadata passes through.
   const agentPresetCopy = ctx.locale.bind('settings.agentPreset')
   const presetName: PluginInventorySettingsTabInjected['presetName'] = preset =>
     presetDisplayText(preset, agentPresetCopy).name
   const injected = (): PluginInventorySettingsTabInjected => ({
-    list, presetName,
+    list, presetName, edit, setEnabled,
     resolveText: text => ctx.locale.resolveText(text),
     hooks: { clientSync: ctx.modules.entries.state },
     retryClient: () => { void ctx.modules.entries.retry().catch((error: unknown) => { ctx.logger.error(error) }) },

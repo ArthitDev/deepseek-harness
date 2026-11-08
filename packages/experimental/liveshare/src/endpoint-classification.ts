@@ -207,6 +207,8 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'goals/pause': 'owner-only', // owner pauses a goal
   'goals/resume': 'owner-only', // owner resumes a goal
   'pluginInventory/list': 'owner-only', // owner plugin inventory
+  'pluginInventory/edit': 'owner-only', // owner plugin inventory
+  'pluginInventory/setEnabled': 'owner-only', // owner plugin inventory
   'mcpManager/probe': 'owner-only', // owner MCP server management
   'mcpManager/restart': 'owner-only', // owner MCP server management
   'mcpManager/watch': 'owner-only', // owner MCP server management
@@ -216,9 +218,22 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'userQuestions/attachWait': 'owner-only', // owner answers a pending question
   'llm/discoverModels': 'owner-only', // owner discovers models
   'web/listProviders': 'owner-only', // owner web search and fetch settings
+  'skills/add': 'owner-only', // owner machine skill management
+  'skills/installed': 'owner-only', // owner machine skill inventory
+  'skills/uninstall': 'owner-only', // owner machine skill management
+  'skills/search': 'owner-only', // owner machine skill management
+  'skills/setEnabled': 'owner-only', // owner machine skill management
+  'skills/terminalClose': 'owner-only', // owner skill inspection terminal
+  'skills/terminalOpen': 'owner-only', // owner skill inspection terminal
+  'skills/terminalRead': 'owner-only', // owner skill inspection terminal
+  'skills/terminalWrite': 'owner-only', // owner skill inspection terminal
   'agentPresets/list': 'owner-only', // owner agent presets
   'agentPresets/read': 'owner-only', // owner agent presets
   'agentPresets/select': 'owner-only', // owner agent presets
+  'agentPresets/create': 'owner-only', // owner agent presets
+  'agentPresets/copy': 'owner-only', // owner agent presets
+  'agentPresets/write': 'owner-only', // owner agent presets
+  'agentPresets/deletePreset': 'owner-only', // owner agent presets
   'agentTeams/setEnabled': 'owner-only', // owner Team mode
   'pentestLoop/create': 'owner-only', // owner pentest loop control
   'pentestLoop/running': 'reader-session-read', // run status readback

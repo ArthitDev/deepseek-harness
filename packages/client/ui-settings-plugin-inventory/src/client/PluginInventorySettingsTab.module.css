@@ -510,3 +510,56 @@
     font-size: 16px;
   }
 }
+
+/* Confirmed enablement editing inside an expanded card. */
+.togglePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: var(--dsw-radius-lg);
+  padding: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.togglePanel p {
+  margin: 0;
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.togglePanel button {
+  margin-inline-end: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.togglePanel button:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.toggleLabel input {
+  accent-color: var(--dsw-alias-state-business-primary);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.togglePanel :disabled {
+  opacity: 0.5;
+  cursor: default;
+}
