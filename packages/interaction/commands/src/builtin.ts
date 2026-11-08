@@ -8,6 +8,7 @@ const BUILTINS = {
   compact: '@deepseek-ai/dsh-command-compact',
   permission: '@deepseek-ai/dsh-permission-presets',
   export: '@deepseek-ai/dsh-session-log-export',
+  webSearch: '@deepseek-ai/dsh-tool-web/web-search',
 } as const
 
 /** Stable first-party capabilities, independent of their registered command names. */
@@ -15,8 +16,8 @@ export type BuiltinCommandName = keyof typeof BUILTINS
 
 /** English and Simplified Chinese spellings recognized by command input. */
 export const builtinCommandTokens = {
-  en: { goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export' },
-  zh: { goal: '目标', plan: '计划', feedback: '反馈', compact: '压缩', permission: '权限', export: '导出' },
+  en: { goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export', webSearch: 'websearch' },
+  zh: { goal: '目标', plan: '计划', feedback: '反馈', compact: '压缩', permission: '权限', export: '导出', webSearch: '网页搜索' },
 } as const satisfies Record<'en' | 'zh', Record<BuiltinCommandName, string>>
 
 /**

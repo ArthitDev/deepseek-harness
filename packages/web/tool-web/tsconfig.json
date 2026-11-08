@@ -37,6 +37,12 @@
       "path": "../../util/output-retention"
     },
     {
+      "path": "../../interaction/commands"
+    },
+    {
+      "path": "../../session/session-projection"
+    },
+    {
       "path": "../web"
     }
   ]

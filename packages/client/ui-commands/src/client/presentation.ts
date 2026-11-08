@@ -4,6 +4,7 @@ import type { InputTriggerCandidate } from '@deepseek-ai/dsh-client-ui-input-tri
 import {
   IconCompactOutlineRegular, IconDownloadOutlineRegular,
   IconGoalOutlineRegular, IconPaperPlaneOutlineRegular, IconPlanOutlineRegular,
+  IconSearchOutlineRegular,
   PermissionIconFullAccessRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -30,11 +31,14 @@ interface HostFace {
 }
 
 /** One built-in Host command's face, keyed by its dictionary entries. */
-function hostFace(name: BuiltinCommandName, icon: ComponentType<IconProps>): readonly [BuiltinCommandName, HostFace] {
+function hostFace(
+  name: BuiltinCommandName, icon: ComponentType<IconProps>, hideNameAlias?: boolean,
+): readonly [BuiltinCommandName, HostFace] {
   return [name, {
     label: `label.${name}`,
     description: `description.${name}`,
     icon,
+    ...(hideNameAlias === undefined ? {} : { hideNameAlias }),
   }]
 }
 
@@ -46,6 +50,7 @@ const HOST_FACES: ReadonlyMap<BuiltinCommandName, HostFace> = new Map([
   hostFace('compact', IconCompactOutlineRegular),
   hostFace('permission', PermissionIconFullAccessRegular),
   hostFace('export', IconDownloadOutlineRegular),
+  hostFace('webSearch', IconSearchOutlineRegular, true),
 ])
 
 /**
