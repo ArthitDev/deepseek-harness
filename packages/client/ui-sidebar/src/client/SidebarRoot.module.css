@@ -291,6 +291,14 @@
   justify-content: center;
 }
 
+/* The sidebar's brand mark image; themed occupants override --dsh-agent-logo. */
+.localBrandLogo {
+  display: block;
+  width: 24px;
+  height: 24px;
+  background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
+}
+
 .brandName {
   display: inline-flex;
   align-items: center;

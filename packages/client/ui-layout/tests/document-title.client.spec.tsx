@@ -54,10 +54,10 @@ describe('DocumentTitle', () => {
   it('uses the localized product title supplied by the frame', () => {
     const { sessionId, sessions, props } = titleSources()
     sessions.update((state) => { state.byId[sessionId]!.title = 'First title' })
-    const mounted = render(<DocumentTitle {...props} productTitle="Shield Break Agent" />)
-    expect(document.title).toBe('First title — Shield Break Agent')
+    const mounted = render(<DocumentTitle {...props} productTitle="Shield Break Pentest" />)
+    expect(document.title).toBe('First title — Shield Break Pentest')
     mounted.unmount()
-    expect(document.title).toBe('Shield Break Agent')
+    expect(document.title).toBe('Shield Break Pentest')
   })
 
   it('keeps the product title across global panels and restores the latest Session title on return', () => {

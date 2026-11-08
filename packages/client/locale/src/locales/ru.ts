@@ -36,7 +36,7 @@ export const ru = {
   'subtitle.expand': 'Развернуть описание {name}',
   'subtitle.collapse': 'Свернуть описание {name}',
   'back': 'Назад',
-  'brand.localBuild': 'Shield Break Agent',
+  'brand.localBuild': 'Shield Break Pentest',
   'workspace.defaultName': 'Рабочая область по умолчанию',
   'unknown': 'Неизвестно',
   'none': 'Нет',

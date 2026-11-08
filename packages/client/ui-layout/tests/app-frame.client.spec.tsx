@@ -104,7 +104,7 @@ function mountFrame(windowWidth = frameWidth, content?: AppFrameProps['renderSlo
       useContextMenu={contextMenuHook()} useResource={useResource}
       useWorkspaces={sel => sel(workspaceState)}
       {...allowAllAccess}
-      t={key => key === 'brand.localBuild' ? 'Shield Break Agent' : key}
+      t={key => key === 'brand.localBuild' ? 'Shield Break Pentest' : key}
     />
   )
   const utils = render(element())
@@ -192,7 +192,7 @@ afterEach(() => {
 describe('AppFrame', () => {
   it('localizes the product title without a configured build title', () => {
     mountFrame()
-    expect(document.title).toBe('Shield Break Agent')
+    expect(document.title).toBe('Shield Break Pentest')
   })
 
   it('follows the selected durable Session title', () => {
@@ -293,7 +293,7 @@ describe('AppFrame', () => {
       expect(instance.getSnapshot().layoutInfo).toBe(layoutInfo)
       expect(tracks(frame)).toEqual([280, 0])
       expect(selectedSession).toBe(sessionId)
-      expect(document.title).toBe(panelId === null ? 'Session title — Shield Break Agent' : 'Shield Break Agent')
+      expect(document.title).toBe(panelId === null ? 'Session title — Shield Break Pentest' : 'Shield Break Pentest')
     }
   })
 })

@@ -36,7 +36,7 @@ export const de = {
   'subtitle.expand': 'Beschreibung für {name} ausklappen',
   'subtitle.collapse': 'Beschreibung für {name} einklappen',
   'back': 'Zurück',
-  'brand.localBuild': 'Shield Break Agent',
+  'brand.localBuild': 'Shield Break Pentest',
   'workspace.defaultName': 'Standardarbeitsbereich',
   'unknown': 'Unbekannt',
   'none': 'Keine',

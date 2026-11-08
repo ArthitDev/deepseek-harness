@@ -131,13 +131,10 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
                 class="copyVersion"
                 data-copy-version="true"
               >
-                <svg
+                <span
                   aria-hidden="true"
-                  data-content="965fe321"
-                  fill="none"
-                  height="17.6580310880829"
-                  viewBox="0 0 23.16 17.04"
-                  width="24"
+                  class="localBrandLogo"
+                  data-dsh-agent-logo=""
                 />
               </span>
             </div>
@@ -156,7 +153,7 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
                 <span
                   class="localBuildTitle"
                 >
-                  Shield Break Agent
+                  Shield Break Pentest
                 </span>
                 <span
                   class="buildVersion"
@@ -282,13 +279,10 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
             data-slot="sidebar.brand.mark"
             style="display: contents;"
           >
-            <svg
+            <span
               aria-hidden="true"
-              data-content="965fe321"
-              fill="none"
-              height="17.6580310880829"
-              viewBox="0 0 23.16 17.04"
-              width="24"
+              class="localBrandLogo"
+              data-dsh-agent-logo=""
             />
           </div>
         </span>
@@ -404,13 +398,10 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 class="copyVersion"
                 data-copy-version="true"
               >
-                <svg
+                <span
                   aria-hidden="true"
-                  data-content="965fe321"
-                  fill="none"
-                  height="17.6580310880829"
-                  viewBox="0 0 23.16 17.04"
-                  width="24"
+                  class="localBrandLogo"
+                  data-dsh-agent-logo=""
                 />
               </span>
             </div>
@@ -429,7 +420,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 <span
                   class="localBuildTitle"
                 >
-                  Shield Break Agent
+                  Shield Break Pentest
                 </span>
                 <span
                   class="buildVersion"
@@ -561,13 +552,10 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 class="copyVersion"
                 data-copy-version="true"
               >
-                <svg
+                <span
                   aria-hidden="true"
-                  data-content="965fe321"
-                  fill="none"
-                  height="17.6580310880829"
-                  viewBox="0 0 23.16 17.04"
-                  width="24"
+                  class="localBrandLogo"
+                  data-dsh-agent-logo=""
                 />
               </span>
             </div>
@@ -586,7 +574,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 <span
                   class="localBuildTitle"
                 >
-                  Shield Break Agent
+                  Shield Break Pentest
                 </span>
                 <span
                   class="buildVersion"

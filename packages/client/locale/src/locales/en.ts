@@ -35,7 +35,7 @@ export const en = {
   'subtitle.expand': 'Expand description for {name}',
   'subtitle.collapse': 'Collapse description for {name}',
   'back': 'Back',
-  'brand.localBuild': 'Shield Break Agent',
+  'brand.localBuild': 'Shield Break Pentest',
   'workspace.defaultName': 'Default workspace',
   'unknown': 'Unknown',
   'none': 'None',
