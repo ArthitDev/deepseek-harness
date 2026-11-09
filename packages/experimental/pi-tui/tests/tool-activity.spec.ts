@@ -51,7 +51,7 @@ function text(pane: ToolActivityPane, width = 46): string {
 
 function targetPaneWithUnicodeRows(): TargetsPane {
   const owner: Component & { focused: boolean } = { focused: false, invalidate() {}, render: () => [] }
-  const pane = new TargetsPane(owner)
+  const pane = new TargetsPane(owner, () => {})
   const root = 'https://example.test/ไทย/漢字/😀/'
   pane.update([
     { url: root, primary: true },
@@ -152,7 +152,7 @@ describe('agent tool activity', () => {
       expect(frame()).toContain('╭─ Targets')
       expect(frame()).toContain('Target · 1')
       expect(frame()).toContain('tool_0')
-      expect(frame()).toMatchSnapshot('targets above agent activity')
+      expect(frame().split('\n').map(line => line.trimEnd()).join('\n')).toMatchSnapshot('targets above agent activity')
       input('\t')
       input('\x1b[F')
       expect(frame()).toContain('Other · 1')
@@ -310,6 +310,104 @@ describe('agent tool activity', () => {
     } finally { tui.stop() }
   })
 
+  it('collapses each header independently and retains hidden summary updates', () => {
+    const pane = new ToolActivityPane()
+    const entries = [call(0, 'ok')]
+    const urls = [{ url: 'https://example.test/', primary: true }]
+    pane.update(entries, [], urls, 'task: inspect the service · elapsed: 1.0s')
+    const { tui, frame, input } = fixture(pane, 64, 18)
+    const click = (label: string): void => {
+      const y = frame().split('\n').findIndex(line => line.includes(label))
+      expect(y).toBeGreaterThanOrEqual(0)
+      input(`\x1b[<0;4;${y + 1}M`)
+      input(`\x1b[<0;4;${y + 1}m`)
+    }
+    try {
+      const expandedRow = frame().split('\n').findIndex(line => line.includes('tool_0'))
+      click('Main Agent ▾')
+      expect(frame()).toContain('Main Agent ▸')
+      expect(frame()).not.toContain('task: inspect')
+      expect(frame()).toContain('https://example.test/')
+      expect(frame().split('\n').findIndex(line => line.includes('tool_0'))).toBeLessThan(expandedRow)
+      expect(tui.getFocusedComponent()).toBe(pane)
+      click('Targets ▾')
+      expect(frame()).toContain('Targets ▸')
+      expect(frame()).toContain('Main Agent ▸')
+      expect(frame()).not.toContain('https://example.test/')
+      pane.update(entries, [], [...urls, { url: 'https://example.test/api/v1', primary: false }],
+        'task: latest summary · elapsed: 2.0s')
+      expect(frame()).toContain('Main Agent ▸')
+      expect(frame()).not.toContain('latest summary')
+      click('Main Agent ▸')
+      expect(frame()).toContain('latest summary')
+      expect(frame()).toContain('Targets ▸')
+      click('Targets ▸')
+      expect(frame()).toContain('https://example.test/')
+      expect(frame()).toContain('latest summary')
+      input('\r')
+      expect(frame()).toContain('Targets ▸')
+      expect(frame()).toContain('latest summary')
+    } finally { tui.stop() }
+  })
+
+  it('cycles keyboard focus through Targets, Main Agent and activity', () => {
+    const pane = new ToolActivityPane()
+    const entries = [call(0, 'ok')]
+    pane.update(entries, [], [{ url: 'https://example.test/', primary: true }], 'task: keyboard controls')
+    const { tui, frame, input } = fixture(pane, 64, 18)
+    tui.setFocus(pane)
+    try {
+      input('\t')
+      input('\r')
+      expect(frame()).toContain('Targets ▸')
+      input('\t')
+      input(' ')
+      expect(frame()).toContain('Main Agent ▸')
+      expect(frame()).not.toContain('task: keyboard')
+      input('\x1b[C')
+      expect(frame()).toContain('task: keyboard')
+      input('\x1b[D')
+      expect(frame()).not.toContain('task: keyboard')
+      input('\t')
+      input('\r')
+      expect(frame()).toContain('full output')
+      expect(frame()).toContain('Main Agent ▸')
+      pane.update(entries, [], [], 'task: no targets')
+      input('\t')
+      input('\r')
+      expect(frame()).toContain('task: no targets')
+      pane.update(entries)
+      input('\r')
+      expect(frame()).not.toContain('full output')
+      expect(frame()).not.toContain('Main Agent')
+    } finally { tui.stop() }
+  })
+
+  it.each([64, 30, 10, 1])('bounds both boxes at %i columns in a short pane', (width) => {
+    const pane = new ToolActivityPane()
+    pane.update([call(0, 'ok')], [], [{ url: 'https://example.test/', primary: true }],
+      `task: ${'ตรวจระบบ漢字'.repeat(20)}`)
+    const { tui, frame, input } = fixture(pane, width, 6)
+    tui.setFocus(pane)
+    try {
+      const bounded = (): void => {
+        const lines = frame().split('\n')
+        expect(lines.length).toBeLessThanOrEqual(6)
+        expect(lines.every(line => visibleWidth(line) <= width)).toBe(true)
+      }
+      bounded()
+      input('\t')
+      input('\r')
+      input('\t')
+      input('\r')
+      bounded()
+      if (width >= 30) {
+        expect(frame()).toContain('Targets ▸')
+        expect(frame()).toContain('Main Agent ▸')
+      }
+    } finally { tui.stop() }
+  })
+
   it('keeps collapsed branches through URL updates and navigates their parents with arrow keys', () => {
     const pane = new ToolActivityPane()
     const index = new TargetIndex()
@@ -331,7 +429,7 @@ describe('agent tool activity', () => {
       pane.update([], [], index.getSnapshot())
       expect(frame()).toContain('▸ Sub Target · 3')
       expect(frame()).not.toContain('v3')
-      expect(frame()).toMatchSnapshot('collapsed sub target after discovery')
+      expect(frame().split('\n').map(line => line.trimEnd()).join('\n')).toMatchSnapshot('collapsed sub target after discovery')
       input(' ')
       expect(frame()).toContain('v1')
       expect(frame()).toContain('v3')

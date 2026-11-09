@@ -11,7 +11,9 @@ import { style } from './theme.js'
 export class ToolActivityPane extends VStack {
   /** Whether keyboard navigation currently targets this timeline. */
   private active = false
-  private readonly targets = new TargetsPane(this)
+  private summaryFocused = false
+  private summaryCollapsed = false
+  private readonly targets = new TargetsPane(this, () => { this.summaryFocused = false })
   /**
    * Whether keyboard navigation currently targets the pane or its Targets tree.
    * @returns true while the pane holds keyboard focus.
@@ -19,7 +21,10 @@ export class ToolActivityPane extends VStack {
   get focused(): boolean { return this.active }
   set focused(value: boolean) {
     this.active = value
-    if (!value) this.targets.focused = false
+    if (!value) {
+      this.targets.focused = false
+      this.summaryFocused = false
+    }
   }
   private activity: readonly ActivityEntry[] = []
   private jobs: readonly JobView[] = []
@@ -41,19 +46,32 @@ export class ToolActivityPane extends VStack {
         const entry = this.rowEntries[event.y]
         if (entry === undefined) return undefined
         this.targets.focused = false
+        this.summaryFocused = false
         this.selected = entry
         if (entry.category === 'Sub Agent') this.inspectSubagent?.(entry.key)
         else this.toggle(entry)
         return { handled: true }
       },
     }
-    this.addChild(this.targets, { basis: 'auto', shrink: 1, maxSize: 10, minSize: 0, visible: () => this.targets.hasUrls })
+    this.addChild(this.targets, { basis: 'auto', shrink: 1, maxSize: 10, minSize: 1, visible: () => this.targets.hasUrls })
     this.addChild({
       invalidate: () => {},
-      render: width => new Text(style.muted(`── Agent Debug${this.targets.hasUrls ? ' · Tab Targets' : ''} ──`), 0, 0).render(width),
+      render: width => new Text(style.muted(`── Agent Debug${this.targets.hasUrls || this.mainSummary !== undefined ? ' · Tab panels' : ''} ──`), 0, 0).render(width),
     }, { basis: 'auto' })
-    this.addChild({ invalidate: () => {}, render: width => this.renderSummary(width) },
-      { basis: 'auto', shrink: 1, minSize: 0, visible: () => this.mainSummary !== undefined })
+    const summary: Component = {
+      invalidate: () => {}, render: width => this.renderSummary(width),
+      handleMouse: (event) => {
+        if (event.type !== 'press' || event.button !== 'left' || event.y !== 0) return undefined
+        this.targets.focused = false
+        this.summaryFocused = true
+        this.summaryCollapsed = !this.summaryCollapsed
+        return { handled: true, focus: !this.focused, focusTarget: this, target: {
+          component: summary, originX: event.screenX - event.x, originY: event.screenY - event.y,
+          width: event.width, height: event.height,
+        } }
+      },
+    }
+    this.addChild(summary, { basis: 'auto', shrink: 1, minSize: 1, visible: () => this.mainSummary !== undefined })
     this.scroll = new ScrollView(output, { follow: 'end', overscroll: 'contain' })
     this.addChild(this.scroll, { basis: 0, grow: 1, minSize: 1 })
   }
@@ -83,6 +101,7 @@ export class ToolActivityPane extends VStack {
     this.activity = entries
     this.jobs = visibleJobs
     this.mainSummary = mainSummary
+    if (mainSummary === undefined) this.summaryFocused = false
     this.waitingJobIds = waitingJobIds
     for (const entry of this.renderedEntries.keys()) {
       if (!entries.includes(entry)) this.renderedEntries.delete(entry)
@@ -95,13 +114,23 @@ export class ToolActivityPane extends VStack {
   }
 
   /**
-   * Navigate operations or toggle the selected operation's inline details.
+   * Navigate panel headers, Targets, or operations and toggle the focused details.
    * @param data - Raw terminal key input routed to this focused pane.
    */
   handleInput(data: string): void {
-    if (matchesKey(data, 'tab') && this.targets.hasUrls) {
-      this.targets.focused = !this.targets.focused
+    if (matchesKey(data, 'tab') && (this.targets.hasUrls || this.mainSummary !== undefined)) {
+      if (this.targets.focused) {
+        this.targets.focused = false
+        this.summaryFocused = this.mainSummary !== undefined
+      } else if (this.summaryFocused) this.summaryFocused = false
+      else if (this.targets.hasUrls) this.targets.focused = true
+      else this.summaryFocused = true
     } else if (this.targets.focused) this.targets.handleInput(data)
+    else if (this.summaryFocused) {
+      if (matchesKey(data, 'enter') || matchesKey(data, 'space')) this.summaryCollapsed = !this.summaryCollapsed
+      else if (matchesKey(data, 'left')) this.summaryCollapsed = true
+      else if (matchesKey(data, 'right')) this.summaryCollapsed = false
+    }
     else if (matchesKey(data, 'enter') && this.selected !== undefined) {
       if (this.selected.category === 'Sub Agent') this.inspectSubagent?.(this.selected.key)
       else this.toggle(this.selected)
@@ -129,11 +158,15 @@ export class ToolActivityPane extends VStack {
 
   private renderSummary(width: number): string[] {
     if (this.mainSummary === undefined) return []
-    if (width < 5) return new Text(style.accent(`Main Agent · ${this.mainSummary}`), 0, 0).render(width)
-    const title = truncateToWidth('╭─ Main Agent ', width - 1)
+    const label = `Main Agent ${this.summaryCollapsed ? '▸' : '▾'}${this.summaryFocused ? ' · Enter toggle · Tab next' : ''}`
+    const color = this.summaryFocused ? style.accent : style.muted
+    if (width < 5) return [color(truncateToWidth(label, width))]
+    const title = truncateToWidth(`╭─ ${label} `, width - 1)
+    const header = color(`${title}${'─'.repeat(width - visibleWidth(title) - 1)}╮`)
+    if (this.summaryCollapsed) return [header]
     const lines = new Text(style.accent(this.mainSummary), 0, 0).render(width - 4)
     return [
-      style.muted(`${title}${'─'.repeat(width - visibleWidth(title) - 1)}╮`),
+      header,
       ...lines.map(line => `${style.muted('│')} ${line}${' '.repeat(Math.max(0, width - visibleWidth(line) - 3))}${style.muted('│')}`),
       style.muted(`╰${'─'.repeat(width - 2)}╯`),
     ]

@@ -144,11 +144,14 @@ export class TargetsPane extends VStack {
   /** The tree scrollport, independent of the tool timeline. */
   readonly scroll: ScrollView
 
-  /** @param keyboardOwner - Debug pane that retains keyboard focus after tree clicks. */
-  constructor(private readonly keyboardOwner: Component & { focused: boolean }) {
+  /**
+   * @param keyboardOwner - Debug pane that retains keyboard focus after tree clicks.
+   * @param onFocus - Clear peer panel selection when a mouse click focuses the tree.
+   */
+  constructor(private readonly keyboardOwner: Component & { focused: boolean }, private readonly onFocus: () => void) {
     super()
     const rule = (width: number, top: boolean): string[] => {
-      const title = top ? `╭─ Targets ${this.paneCollapsed ? '▸' : '▾'}${this.focused ? ' · Enter toggle · Tab Debug' : ''} ` : '╰'
+      const title = top ? `╭─ Targets ${this.paneCollapsed ? '▸' : '▾'}${this.focused ? ' · Enter toggle · Tab next' : ''} ` : '╰'
       const color = top && this.focused && this.selected === undefined ? style.accent : style.muted
       return [color(truncateToWidth(`${title}${'─'.repeat(Math.max(0, width - visibleWidth(title) - 1))}${top ? '╮' : '╯'}`, width))]
     }
@@ -245,6 +248,7 @@ export class TargetsPane extends VStack {
   }
 
   private focusMouse(component: Component, event: TuiMouseEvent): TuiMouseDispatchResult {
+    this.onFocus()
     return { handled: true, focus: !this.keyboardOwner.focused, focusTarget: this.keyboardOwner, target: {
       component, originX: event.screenX - event.x, originY: event.screenY - event.y,
       width: event.width, height: event.height,

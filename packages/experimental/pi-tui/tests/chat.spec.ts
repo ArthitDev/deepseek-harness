@@ -226,16 +226,19 @@ describe('Agent Debug subagent lifecycle', () => {
 
 describe('exit and resume hints', () => {
   it('rebuilds the Main Agent summary when an externally driven replay is finalized', async () => {
+    const readGitState = vi.spyOn(gitState, 'readGitState').mockResolvedValue(undefined)
+    const now = vi.spyOn(Date, 'now').mockReturnValue(2000)
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     const session = ctx.sessions.create(SessionId('boot-summary'))
-    session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'inspect the service' }] }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'inspect the service at https://example.test/' }] }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     const callId = ToolCallId('boot-summary-call')
     session.append('tool/call', { turn: 1, step: 1, callId, name: 'read_file', arguments: '{}' })
     const agent = fixtureAgent(ctx, session)
+    const start = vi.fn<Terminal['start']>()
     const tui = new TuiAltScreen({ columns: 120, rows: 25, kittyProtocolActive: false,
-      start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
       clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
       setProgress: vi.fn(), setProgramStatus: vi.fn() })
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
@@ -249,7 +252,41 @@ describe('exit and resume hints', () => {
       expect(rendered).toContain('task: inspect the service')
       expect(rendered).toMatch(/last tool:[\s\S]*?read_file/)
       expect(rendered).toContain('1 pending')
-    } finally { tui.stop(); await ctx.fiber.dispose() }
+      const events = session.snapshotEvents()
+      const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
+      input('keep this draft')
+      const click = async (label: string): Promise<void> => {
+        const lines = (await renderScreen(tui)).split('\n')
+        const y = lines.findIndex(line => line.includes(label))
+        expect(y).toBeGreaterThanOrEqual(0)
+        const x = lines[y]!.indexOf(label)
+        input(`\x1b[<0;${x + 1};${y + 1}M`)
+        input(`\x1b[<0;${x + 1};${y + 1}m`)
+      }
+      await click('Main Agent ▾')
+      expect(await renderScreen(tui)).toContain('Main Agent ▸')
+      expect(await renderScreen(tui)).toContain('Targets ▾')
+      await click('Targets ▾')
+      expect(await renderScreen(tui)).toContain('Targets ▸')
+      expect(await renderScreen(tui)).toContain('Main Agent ▸')
+      const debugColumn = (await renderScreen(tui)).split('\n').find(line => line.includes('Targets ▸'))!.indexOf('╭')
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(debugColumn).trimEnd()))
+        .toMatchSnapshot('both debug boxes collapsed beside chat')
+      input('\r')
+      input('\t')
+      input(' ')
+      expect(await renderScreen(tui)).toContain('Main Agent ▾')
+      expect(await renderScreen(tui)).toContain('Targets ▾')
+      input('\x1b')
+      input('!')
+      expect(await renderScreen(tui)).toContain('keep this draft!')
+      expect(session.snapshotEvents()).toEqual(events)
+    } finally {
+      tui.stop()
+      await ctx.fiber.dispose()
+      readGitState.mockRestore()
+      now.mockRestore()
+    }
   })
 
   it('loads folded tool images only when revealed and reloads evicted images', async () => {
