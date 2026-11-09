@@ -54,7 +54,7 @@ function pipeTo(command: string, args: string[], text: string): Promise<void> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>
     try {
-      child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'] })
+      child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true })
     } catch (error) {
       debug(`spawn ${command} threw: ${String(error)}`)
       resolve()

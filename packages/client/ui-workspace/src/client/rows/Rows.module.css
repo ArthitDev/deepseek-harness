@@ -110,7 +110,8 @@
 
 /* Compact one-line Workspace row after removing the session-count subtitle. */
 .projectRow {
-  height: 32px;
+  height: 34px;
+  padding-inline-start: calc(8px - var(--dsh-sidebar-paint-inset) + var(--dsh-workspace-indent, 0px));
   align-items: center;
   box-sizing: border-box;
 }
@@ -127,6 +128,14 @@
 
 .sessionRow .title {
   margin: 0 6px 0 var(--dsh-sidebar-label-gap);
+}
+
+.sessionRow:has(> [data-tree-connector]) .title {
+  margin-inline-start: 4px;
+}
+
+.sessionRow:has(> [data-tree-connector]) > .slot {
+  width: 12px;
 }
 
 .slot {

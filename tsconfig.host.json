@@ -30,6 +30,8 @@
       "apps/web/tests/additional-locales.e2e.ts",
       "apps/web/tests/rich-text-quotes.e2e.ts",
       "apps/web/tests/hover-input.e2e.ts",
+      "apps/web/tests/composer-pentest-controls.e2e.ts",
+      "apps/web/tests/composer-dropdowns.e2e.ts",
       "apps/web/tests/collapse-timing.e2e.ts",
       "apps/web/tests/notice-wake-tail.e2e.ts",
       "apps/web/tests/fold-blank-matrix.e2e.ts",
@@ -169,6 +171,7 @@
       "apps/web/tests/stats-truncated-tooltip.e2e.ts",
       "apps/web/tests/sidebar-scrollbar.e2e.ts",
       "apps/web/tests/sidebar-alignment.e2e.ts",
+      "apps/web/tests/workspace-tree-guides.e2e.ts",
       "apps/web/tests/sidebar-title-hover-scroll.e2e.ts",
       "apps/web/tests/rail-search-expand.e2e.ts",
       "apps/web/tests/conversation-column-overflow.e2e.ts",
@@ -214,6 +217,9 @@
       "apps/web/tests/access-confirmation.e2e.ts",
       "apps/web/tests/agent-preset-selection.e2e.ts",
       "apps/web/tests/agent-preset-authoring.e2e.ts",
+      "apps/web/tests/agent-preset-management.e2e.ts",
+      "apps/web/tests/agent-preset-visibility.e2e.ts",
+      "apps/web/tests/proxy-server.e2e.ts",
       "apps/web/tests/shipped-composition.e2e.ts",
       "apps/web/tests/goal-bar.e2e.ts",
       "apps/web/tests/schedule-after.e2e.ts",
@@ -619,6 +625,7 @@
     { "path": "./packages/runtime-diagnostics/invariants" },
     { "path": "./packages/session/session-format-v4-to-v5" },
     { "path": "./packages/web/web-search-exa" },
-    { "path": "./packages/web/web-search-perplexity" }
+    { "path": "./packages/web/web-search-perplexity" },
+    { "path": "./packages/llm/proxy-server" }
   ]
 }

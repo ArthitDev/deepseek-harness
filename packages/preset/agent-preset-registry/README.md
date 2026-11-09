@@ -42,6 +42,7 @@ Choose an Agent’s tools, prompt sections and skills through declarative preset
 | Field | Default | Meaning |
 |---|---|---|
 | `default` | required | Preset ID used when none is requested |
+| `showBuiltInPresets` | `true` | Persistent display preference for built-in presets; does not change resolution or existing compositions |
 
 The Web definitions come from the `dsh-web-app` bundle. Definitions are ordinary plugin rows; the registry neither scans directories nor accepts preset paths. The `selectedDefault` volatile field of the `agent-preset-registry` entry retains the user default, which new sessions resolve over the deployment `default`. A profile patch may still carry the retired `modeSelectionEnabled` field; the registry declares no such field and neither reads nor rewrites it.
 

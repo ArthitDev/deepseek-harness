@@ -307,6 +307,8 @@
    controls without drifting from the + control. */
 .tools {
   gap: 12px;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 /* A held-down control (active tool or open popover) reads as engaged. */
@@ -318,6 +320,7 @@
 
 .modes {
   gap: 12px;
+  flex: none;
 }
 
 .trailing {

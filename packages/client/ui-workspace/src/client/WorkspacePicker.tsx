@@ -344,10 +344,12 @@ export function WorkspacePicker({
   createWorkspace,
   useDirectoryFlow,
   useRemoteMachines,
+  useHostInfo,
   renderSlot,
   t,
 }: WorkspacePickerProps) {
   const machines = useRemoteMachines?.(state => state.machines) ?? []
+  const localMachineLabel = useHostInfo(info => info.hostname)?.trim() || t('remote.local')
   return (
     <WorkspacePickFlow
       t={t}
@@ -361,7 +363,7 @@ export function WorkspacePicker({
       onPick={onPick}
       onClose={onClose}
       machines={machines}
-      localMachineLabel={t('remote.local')}
+      localMachineLabel={localMachineLabel}
       machineFirst
     />
   )

@@ -990,9 +990,7 @@ export function WorkspaceBrowser({
   t,
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
-  // The gateway ready frame carries no hostname yet, so the tree shows the
-  // locale label; the picker makes the same fallback.
-  const localMachineLabel = t('remote.local')
+  const localMachineLabel = useHostInfo(info => info.hostname)?.trim() || t('remote.local')
   const shortcuts = useShortcuts(rows => rows)
   const searchShortcut = shortcuts.find(row => row.id === 'session.search')
   const addShortcut = shortcuts.find(row => row.id === 'workspace.add')

@@ -96,6 +96,12 @@
         allowAnyTarget: true
 
     # Conversation view tab that reads the recon runs and evidence above.
+    - id: ui-pentest-runs
+      name: '@deepseek-ai/dsh-client-ui-pentest-runs'
+    - id: proxy-servers
+      name: '@deepseek-ai/dsh-proxy-server'
+    - id: ui-proxy-server
+      name: '@deepseek-ai/dsh-client-ui-proxy-server'
     - id: ui-recon
       name: '@deepseek-ai/dsh-client-ui-recon'
 

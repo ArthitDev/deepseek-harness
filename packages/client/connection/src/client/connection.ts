@@ -7,6 +7,8 @@ export type { ConnectionRecoveryConfig } from '../recovery-config.ts'
 export interface ConnectionHostInfo {
   /** Host account home used only to abbreviate displayed filesystem paths. */
   readonly home: string
+  /** Serving Host's OS name for machine labels, when supplied by the source. */
+  readonly hostname?: string
 }
 
 /** One successfully established Host generation. */

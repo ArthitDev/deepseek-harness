@@ -1,7 +1,7 @@
-/** Single scrollable Agent Debug timeline from session events and live job snapshots. */
+/** Fixed Main Agent summary above a scrollable session activity timeline. */
 import { stripVTControlCharacters } from 'node:util'
 import type { JobId, JobView } from '@deepseek-ai/dsh-jobs'
-import { matchesKey, ScrollView, Text, VStack, type Component } from '@earendil-works/pi-tui'
+import { matchesKey, ScrollView, Text, VStack, truncateToWidth, visibleWidth, type Component } from '@earendil-works/pi-tui'
 import type { ActivityEntry } from '../core/activity.js'
 import type { TargetUrl } from '../core/targets.js'
 import { TargetsPane } from './targets-pane.js'
@@ -52,6 +52,8 @@ export class ToolActivityPane extends VStack {
       invalidate: () => {},
       render: width => new Text(style.muted(`── Agent Debug${this.targets.hasUrls ? ' · Tab Targets' : ''} ──`), 0, 0).render(width),
     }, { basis: 'auto' })
+    this.addChild({ invalidate: () => {}, render: width => this.renderSummary(width) },
+      { basis: 'auto', shrink: 1, minSize: 0, visible: () => this.mainSummary !== undefined })
     this.scroll = new ScrollView(output, { follow: 'end', overscroll: 'contain' })
     this.addChild(this.scroll, { basis: 0, grow: 1, minSize: 1 })
   }
@@ -78,7 +80,6 @@ export class ToolActivityPane extends VStack {
       ...jobs.filter(job => job.status === 'running' || job.status === 'stopping'),
     ]
     const switched = this.activity !== entries || visibleJobs.some(job => !this.jobs.some(prior => prior.id === job.id))
-      || (mainSummary === undefined) !== (this.mainSummary === undefined)
     this.activity = entries
     this.jobs = visibleJobs
     this.mainSummary = mainSummary
@@ -126,15 +127,22 @@ export class ToolActivityPane extends VStack {
     if (row >= 0) this.scroll.scrollTo(row, { disableFollow: true })
   }
 
+  private renderSummary(width: number): string[] {
+    if (this.mainSummary === undefined) return []
+    if (width < 5) return new Text(style.accent(`Main Agent · ${this.mainSummary}`), 0, 0).render(width)
+    const title = truncateToWidth('╭─ Main Agent ', width - 1)
+    const lines = new Text(style.accent(this.mainSummary), 0, 0).render(width - 4)
+    return [
+      style.muted(`${title}${'─'.repeat(width - visibleWidth(title) - 1)}╮`),
+      ...lines.map(line => `${style.muted('│')} ${line}${' '.repeat(Math.max(0, width - visibleWidth(line) - 3))}${style.muted('│')}`),
+      style.muted(`╰${'─'.repeat(width - 2)}╯`),
+    ]
+  }
+
   private renderEntries(width: number): string[] {
     this.rowEntries = []
     if (this.activity.length === 0 && this.jobs.length === 0 && this.mainSummary === undefined) return new Text(style.muted('No activity yet. Send a task in chat.'), 0, 0).render(width)
     const lines: string[] = []
-    if (this.mainSummary !== undefined) {
-      const summaryLines = new Text(style.accent(`Main Agent · ${this.mainSummary}`), 0, 0).render(width)
-      lines.push(...summaryLines, '')
-      this.rowEntries.push(...Array<undefined>(summaryLines.length + 1).fill(undefined))
-    }
     for (const entry of this.activity) {
       const color = entry.status === 'error' ? style.toolError : entry.status === 'ok' || entry.status === 'changed'
         ? style.toolOk : entry.status === 'running' || entry.status === 'executing' || entry.status === 'retry' ? style.accent : style.muted

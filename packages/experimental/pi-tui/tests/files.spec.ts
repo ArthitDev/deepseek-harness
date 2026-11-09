@@ -153,7 +153,7 @@ describe('runRgFiles', () => {
       '-g',
       '!.sl/**',
     ])
-    expect(spawned[0]?.options).toMatchObject({ cwd: '/repo' })
+    expect(spawned[0]?.options).toMatchObject({ cwd: '/repo', windowsHide: true })
     expect(killed).toEqual([])
   })
 

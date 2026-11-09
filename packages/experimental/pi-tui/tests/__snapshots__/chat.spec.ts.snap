@@ -3,10 +3,10 @@
 exports[`exit and resume hints > creates only the visible history views with limit 3 > bounded history 1`] = `
 [
   " … 119 earlier messages folded — /expand-all shows all                  │ ── Agent Debug ──                             ",
-  " › saved-119                                                            │ Main Agent · task: saved-120 · calls: none ·  ",
-  " › saved-120                                                            │ usage: unknown                                ",
-  " ℹ Recap · Request: saved-120                                           │                                               ",
-  "                                                                        │                                               ",
+  " › saved-119                                                            │ ╭─ Main Agent ───────────────────────────────╮",
+  " › saved-120                                                            │ │ task: saved-120 · calls: none · usage:     │",
+  " ℹ Recap · Request: saved-120                                           │ │ unknown                                    │",
+  "                                                                        │ ╰────────────────────────────────────────────╯",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
@@ -21,22 +21,22 @@ exports[`exit and resume hints > creates only the visible history views with lim
   "                                                                        │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
-  "                                                                        │                                               ",
   "─────────────────────────────────────────────────────────────────────── │                                               ",
   "                                                                        │                                               ",
   "─────────────────────────────────────────────────────────────────────── │                                               ",
-  "⧉ Shield Break · 🤖 deepseek-v4-flash · ◈ Jev unavailable · ◌ normal    │                                               ",
-  "◌ bounded- · ▾ deepseek-harness · Σ 0 tok                               │                                               ",
+  "⧉ Shield Break · 🤖 deepseek-v4-flash · Kali unavailable                │                                               ",
+  "◈ Jev unavailable · ◌ normal · ◌ bounded- · ▾ deepseek-harness          │                                               ",
+  "Σ 0 tok                                                                 │                                               ",
 ]
 `;
 
 exports[`exit and resume hints > replays a seeded session once even when its parent no longer exists > resumed inherited messages with a missing parent 1`] = `
 [
   " ⧉  S H I E L D   B R E A K   A G E N T                                 │ ── Agent Debug ──                             ",
-  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ Main Agent · task: saved question · calls:    ",
-  " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │ none · usage: unknown                         ",
-  " › saved question                                                       │                                               ",
-  " saved answer                                                           │                                               ",
+  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ ╭─ Main Agent ───────────────────────────────╮",
+  " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │ │ task: saved question · calls: none ·       │",
+  " › saved question                                                       │ │ usage: unknown                             │",
+  " saved answer                                                           │ ╰────────────────────────────────────────────╯",
   " ℹ Recap · Request: saved question · Last reply: saved answer           │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
@@ -56,18 +56,18 @@ exports[`exit and resume hints > replays a seeded session once even when its par
   "                                                                        │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
-  "                                                                        │                                               ",
   "─────────────────────────────────────────────────────────────────────── │                                               ",
   "                                                                        │                                               ",
   "─────────────────────────────────────────────────────────────────────── │                                               ",
-  "⧉ Shield Break · 🤖 deepseek-v4-flash · ◈ Jev unavailable · ◌ normal    │                                               ",
-  "◌ seeded-r · ▾ deepseek-harness · Σ 0 tok                               │                                               ",
+  "⧉ Shield Break · 🤖 deepseek-v4-flash · Kali unavailable                │                                               ",
+  "◈ Jev unavailable · ◌ normal · ◌ seeded-r · ▾ deepseek-harness          │                                               ",
+  "Σ 0 tok                                                                 │                                               ",
 ]
 `;
 
 exports[`exit and resume hints > resumes at the latest transcript bubble after browsing an earlier session > latest resumed transcript bubble 1`] = `
 [
-  " LATEST_RESUMED_BUBBLE         │ calls: none · usage: unknown         ",
+  " LATEST_RESUMED_BUBBLE         │ ╭─ Main Agent ──────────────────────╮",
 ]
 `;
 
@@ -106,10 +106,10 @@ exports[`the split-pane shell > opens the shared shell beside the chat, cycles f
   " │                                               ",
   " │                                               ",
   " │                                               ",
-  " │                                               ",
   " │ ──────────────────────────────────────────────",
   " │                                               ",
   " │ ──────────────────────────────────────────────",
+  " │                                               ",
   " │                                               ",
   " │                                               ",
   " │                                               ",
@@ -156,8 +156,8 @@ exports[`the split-pane shell > opens the shared shell beside the chat, cycles f
   "                                                    │                                               ",
   "─────────────────────────────────────────────────── │                                               ",
   "⧉ Shield Break · 🤖 deepseek-v4-flash               │                                               ",
-  "◈ Jev unavailable · ◌ normal · ◌ shell-pa           │                                               ",
-  "▾ deepseek-harness · Σ 0 tok                        │                                               ",
+  "Kali unavailable · ◈ Jev unavailable · ◌ normal     │                                               ",
+  "◌ shell-pa · ▾ deepseek-harness · Σ 0 tok           │                                               ",
 ]
 `;
 
@@ -196,10 +196,10 @@ exports[`the split-pane shell > opens the shared shell beside the chat, cycles f
   " │                                               ",
   " │                                               ",
   " │                                               ",
-  " │                                               ",
   " │ ──────────────────────────────────────────────",
   " │  pending command                              ",
   " │ ──────────────────────────────────────────────",
+  " │                                               ",
   " │                                               ",
   " │                                               ",
   " │                                               ",
@@ -314,10 +314,10 @@ exports[`the split-pane shell > stages a scoped shell draft without execution, o
   " │                                               ",
   " │                                               ",
   " │                                               ",
-  " │                                               ",
   " │ ──────────────────────────────────────────────",
   " │  Get-Date                                     ",
   " │ ──────────────────────────────────────────────",
+  " │                                               ",
   " │                                               ",
   " │                                               ",
   " │                                               ",

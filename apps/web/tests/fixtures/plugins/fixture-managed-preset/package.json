@@ -1,0 +1,11 @@
+{
+  "name": "@fixture/managed-preset",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

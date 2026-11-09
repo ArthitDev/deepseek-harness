@@ -103,13 +103,13 @@ export function resolveModelPreset(ctx: Context, provider: string, model: string
   const presets = ctx.get('agentPresets') as
     | { presetIdForModel?(provider: string, model: string): string; config?: { default?: string } }
     | undefined
-  const config = readWebProfileConfig(ctx, 'agent-presets')
+  const config = readWebProfileConfig(ctx, 'agent-preset-registry') ?? readWebProfileConfig(ctx, 'agent-presets')
   if (config !== undefined) {
     const selected = config.get('modeSelectionEnabled') === false
       ? config.get('default')
       : config.getIn(['models', provider, model]) ?? config.get('selectedDefault') ?? config.get('default')
     if (typeof selected !== 'string' || selected.trim() === '') {
-      throw new Error('pi-tui: agent-presets selection in the Web profile must be a preset id')
+      throw new Error('pi-tui: agent preset selection in the Web profile must be a preset id')
     }
     return selected
   }

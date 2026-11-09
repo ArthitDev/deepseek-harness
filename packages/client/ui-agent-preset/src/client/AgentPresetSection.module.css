@@ -18,6 +18,14 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.visibility {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
 /* Cards, not rows: a preset is a thing you pick, and the description is the
    part that tells them apart — a row would bury it beside the actions. */
 .group {
@@ -385,7 +393,27 @@
 .error {
   margin: 0;
   font-size: 12px;
-  color: var(--dsw-alias-state-error-primary);
+  color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 85%, var(--dsw-alias-label-primary));
+}
+
+.editorLabel {
+  display: grid;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.editor {
+  box-sizing: border-box;
+  width: 100%;
+  height: min(50vh, 480px);
+  min-height: 160px;
+  resize: vertical;
+}
+
+.editor:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
 }
 
 /* The conversational authoring entry, after the card grid. Dashed like the

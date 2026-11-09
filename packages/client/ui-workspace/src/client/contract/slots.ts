@@ -556,6 +556,8 @@ export type WorkspacePickerInjected = DirectoryPickingInjected & {
   hooks: DirectoryPickingInjected['hooks'] & {
     /** Redacted saved-machine names used to group the picker by machine. */
     remoteMachines: HostObservable<RemoteMachineSnapshot>
+    /** Serving Host facts shared with the machine menu and sidebar. */
+    hostInfo: HostObservable<RemoteHostFacts>
   }
 }
 
@@ -569,5 +571,6 @@ export type WorkspacePickerProps =
   & PropsRenderSlots<'conversation.hero.workspace.directoryFlow'>
   & Omit<WorkspacePickerInjected, 'hooks'>
   & PropsHooks<DirectoryPickingInjected['hooks']>
+  & PropsHooks<Pick<WorkspacePickerInjected['hooks'], 'hostInfo'>>
   & Partial<PropsHooks<Pick<WorkspacePickerInjected['hooks'], 'remoteMachines'>>>
   & PropsLocale<'workspace'>

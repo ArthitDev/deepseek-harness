@@ -1,4 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
+import { hostname } from 'node:os'
 import type { Fiber } from '@deepseek-ai/cordis'
 import type {
   RemoteEventHostInfo,
@@ -79,10 +80,11 @@ function invocationOf(value: unknown): TypertRemoteEventInvocation {
 }
 
 describe('Remote event Host source', () => {
-  it('registers the Host home used by Client connection generations', async () => {
+  it('registers the Host home and machine name used by Client connection generations', async () => {
     const { gateway, fiber } = await setup()
     expect(gateway.host?.home).toBeTypeOf('string')
     expect(gateway.host?.home.length).toBeGreaterThan(0)
+    expect(gateway.host?.hostname).toBe(hostname())
     await fiber.dispose()
     expect(gateway.host).toBeUndefined()
   })

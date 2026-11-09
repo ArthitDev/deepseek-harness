@@ -90,10 +90,10 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(declarations('.searchExpanded')?.get('margin-inline')).toBe('0')
   })
 
-  it('keeps 2px between rows and 4px between workspace groups', () => {
+  it('keeps flat rows separated and grouped child rows contiguous', () => {
     expect(declarations('.flatList > * + *')?.get('margin-top')).toBe('2px')
     expect(declarations(".searchTree > [role='treeitem'] + [role='treeitem']")?.get('margin-top')).toBe('2px')
-    expect(declarations('.groupSection > * + *')?.get('margin-top')).toBe('2px')
+    expect(declarations('.groupSection > * + *')).toBeUndefined()
     expect(declarations('.groupSection + .groupSection')?.get('margin-top')).toBe('4px')
   })
 
@@ -121,13 +121,12 @@ describe('WorkspaceBrowser.module.css list', () => {
 
   it('keeps the overflow control, search field, and row heights', () => {
     expect(declarations('.sessionOverflowButton')?.get('height')).toBe('28px')
+    expect(declarations(".groupSection > * > [data-row-key^='session:']")?.get('height')).toBe('28px')
     expect(declarations('.searchExpanded')?.get('height')).toBe('32px')
-    expect(rowDeclarations('.projectRow')?.get('height')).toBe('32px')
+    expect(rowDeclarations('.projectRow')?.get('height')).toBe('34px')
     expect(rowDeclarations('.sessionRow')?.get('height')).toBe('32px')
-    // One leading status cell for every session row, grouped or flat: the cell
-    // hosts either the row's status dot or the leading seat, and it reserves its
-    // own box, so the title's one shared margin below needs no per-view override.
     expect(rowDeclarations('.slot')?.get('width')).toBe('16px')
+    expect(rowDeclarations('.sessionRow:has(> [data-tree-connector]) > .slot')?.get('width')).toBe('12px')
     expect(rowDeclarations('.slot')?.get('height')).toBe('20px')
     expect(rowDeclarations('.sessionRow .title')?.get('margin')).toBe('0 6px 0 var(--dsh-sidebar-label-gap)')
     expect(rowDeclarations('.searchResultRow')?.get('min-height')).toBe('48px')

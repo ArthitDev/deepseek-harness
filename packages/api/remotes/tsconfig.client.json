@@ -120,6 +120,9 @@
     },
     {
       "path": "../../web/web"
+    },
+    {
+      "path": "../../llm/proxy-server"
     }
   ]
 }

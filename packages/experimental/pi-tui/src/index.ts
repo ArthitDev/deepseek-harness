@@ -29,6 +29,10 @@ export interface Config {
   historyLimit?: number
   /** Quiet time after a recognized background-job prompt before Agent Debug warns. */
   jobInputWarningDelayMs?: number
+  /** Delay between settled Kali readiness probes. */
+  kaliStatusIntervalMs?: number
+  /** Deadline for one read-only Kali readiness probe. */
+  kaliStatusTimeoutMs?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -38,6 +42,8 @@ export const Config: Schema<Config> = Schema.object({
   cwd: Schema.string().required(false),
   historyLimit: Schema.number().step(1).min(1).default(20),
   jobInputWarningDelayMs: Schema.number().step(1).min(1).default(15000),
+  kaliStatusIntervalMs: Schema.number().step(1).min(1).default(30000),
+  kaliStatusTimeoutMs: Schema.number().step(1).min(1).default(10000),
 })
 
 /**

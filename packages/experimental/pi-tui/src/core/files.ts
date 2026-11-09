@@ -84,7 +84,7 @@ export function runRgFiles(rgPath: string, cwd: string, timeoutMs = 15000): Prom
         '--sort=modified',
         ...RG_EXCLUDE_GLOBS.flatMap(glob => ['-g', glob]),
       ],
-      { cwd, stdio: ['ignore', 'pipe', 'ignore'] },
+      { cwd, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
     )
     let stdout = ''
     let settled = false

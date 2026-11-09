@@ -64,7 +64,9 @@ export async function probeServer(ctx: Context, config: Config, options: McpProb
   const remaining = (): number => spec.timeoutMs - (Date.now() - startedAt)
   const binding = new McpTemplateBinding(ctx, config)
   const client = new Client({ name: 'dsh-mcp-probe', version: '0.0.1' }, { capabilities: {}, versionNegotiation: { mode: 'auto' } })
-  const generation = new McpGeneration(client, config.closeTimeoutMs, error => binding.diagnostic(error, 'cleanup'))
+  const generation = new McpGeneration(client, config.closeTimeoutMs,
+    error => binding.diagnostic(error, 'cleanup'),
+    (line) => { ctx.logger.info('mcp-client(%s): stderr: %s', config.serverName, binding.redact(line)) })
   const abort = (): void => { void generation.close() }
   spec.signal?.addEventListener('abort', abort, { once: true })
   if (spec.signal?.aborted) abort()

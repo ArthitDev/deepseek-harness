@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -100,6 +102,7 @@ function mount(
   const onClose = vi.fn()
   const anchorRef = anchor()
   const { probe, renderSlot } = flowProbe()
+  const hostInfo = createSnapshotStore<RemoteHostFacts>({ home: undefined, isLoopback: true })
   const renderPicker = (nextItems: readonly WorkspaceView[]) => (
     <WorkspacePicker
       open
@@ -115,6 +118,7 @@ function mount(
       createWorkspace={createWorkspace}
       useDirectoryFlow={occupancy.useDirectoryFlow}
       useRemoteMachines={hook(remoteMachines)}
+      useHostInfo={bindSnapshotSelector(hostInfo)}
       renderSlot={renderSlot}
       t={t}
     />
@@ -123,7 +127,7 @@ function mount(
     renderPicker(items),
   )
   return {
-    view, onPick, onClose, createWorkspace, probe, occupancy,
+    view, onPick, onClose, createWorkspace, probe, occupancy, hostInfo,
     rerenderItems: (nextItems: readonly WorkspaceView[]) => { view.rerender(renderPicker(nextItems)) },
   }
 }
@@ -138,6 +142,15 @@ function chooseAdd(): void {
 }
 
 describe('WorkspacePicker', () => {
+  it('updates the local machine label from connection facts and falls back for an absent or blank name', () => {
+    const b = mount()
+    expect(screen.getByRole('menuitem', { name: zh['remote.local'] })).toBeTruthy()
+    act(() => { b.hostInfo.set({ home: '/home/fixture', isLoopback: true, hostname: '  fixture-host  ' }) })
+    expect(screen.getByRole('menuitem', { name: 'fixture-host' })).toBeTruthy()
+    act(() => { b.hostInfo.set({ home: '/home/fixture', isLoopback: true, hostname: '  ' }) })
+    expect(screen.getByRole('menuitem', { name: zh['remote.local'] })).toBeTruthy()
+  })
+
   it('labels same-title Workspaces with distinguishing path suffixes and forwards the selected id', () => {
     const b = mount([
       { ...workspace('alpha', 'Shared'), path: '/one/a/Shared' },
@@ -264,6 +277,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open useSessions={hook(sessions)} useWorkspaces={hook(workspaceState([workspace('alpha', 'Alpha')]))}
+        useHostInfo={hook({ home: undefined, isLoopback: true })}
         useSessionStatus={hook(noPendingInteraction)}
         useSessionRetainInfo={() => undefined}
         usePanelInfo={usePanelInfo} useContextMenu={contextMenuHook()} useResource={useResource}
@@ -283,6 +297,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open anchorRef={anchor()} useSessions={hook(sessions)} useWorkspaces={hook(state)}
+        useHostInfo={hook({ home: undefined, isLoopback: true })}
         useSessionStatus={hook(noPendingInteraction)}
         useSessionRetainInfo={() => undefined}
         usePanelInfo={usePanelInfo} useContextMenu={contextMenuHook()} useResource={useResource}

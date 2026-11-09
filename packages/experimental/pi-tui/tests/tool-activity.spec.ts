@@ -469,13 +469,14 @@ describe('agent tool activity', () => {
     const pane = new ToolActivityPane()
     const items = Array.from({ length: 10 }, (_, id) => call(id))
     pane.update(items, [], [], 'task: inspect service · elapsed: 1.0s')
-    const { tui, frame, input } = fixture(pane, 46, 8)
+    const { tui, frame, input } = fixture(pane, 46, 14)
     try {
       expect(frame()).toContain('tool_9')
       const expandedItems = [...items, call(10)]
       pane.update(expandedItems, [], [], 'task: inspect service · elapsed: 2.0s')
       expect(frame()).toContain('tool_10')
-      for (let index = 0; index < 4; index++) input('\x1b[<64;2;3M')
+      const row = frame().split('\n').findIndex(line => line.includes('tool_10'))
+      for (let index = 0; index < 4; index++) input(`\x1b[<64;2;${row + 1}M`)
       expect(frame()).not.toContain('tool_10')
       expect(frame()).toContain('Agent Debug')
       pane.update(expandedItems, [], [], 'task: inspect service · elapsed: 3.0s')
@@ -487,7 +488,7 @@ describe('agent tool activity', () => {
     } finally { tui.stop() }
   })
 
-  it('maps mouse rows after the wrapped Main Agent summary prefix', () => {
+  it('maps mouse rows below the fixed Main Agent summary', () => {
     const pane = new ToolActivityPane()
     pane.update([call(0, 'ok'), call(1, 'ok')], [], [], 'task: inspect the service')
     const { tui, frame, input } = fixture(pane, 64, 14)
@@ -499,6 +500,51 @@ describe('agent tool activity', () => {
       input(`\x1b[<0;2;${row + 1}m`)
       expect(frame()).toContain('full output')
       expect(frame()).toContain('task: inspect the service')
+    } finally { tui.stop() }
+  })
+
+  it('keeps the Main Agent box fixed during keyboard and mouse scrolling and summary updates', () => {
+    const pane = new ToolActivityPane()
+    const entries = Array.from({ length: 20 }, (_, id) => call(id, 'ok'))
+    const urls = [{ url: 'https://example.test/', primary: true }]
+    const summary = 'task: ตรวจ service · calls: 20 completed · elapsed: 153.3s · usage: 752 in / 3005 out tokens'
+    pane.update(entries, [], urls, summary)
+    const { tui, frame, input } = fixture(pane, 64, 22)
+    tui.setFocus(pane)
+    try {
+      const initial = frame().split('\n')
+      const summaryStart = initial.findIndex(line => line.includes('Main Agent'))
+      const end = initial.findIndex((line, index) => line.startsWith('╰') && index > summaryStart)
+      const header = initial.slice(0, end + 1).join('\n')
+      expect(header).toContain('Main Agent')
+      expect(header).toContain('752 in / 3005 out tokens')
+      expect(frame()).toContain('tool_19')
+      expect(frame().split('\n').map(line => line.trimEnd()).join('\n')).toMatchSnapshot('fixed summary above scrollable activity')
+      pane.handleInput('\x1b[5~')
+      expect(frame()).not.toContain('tool_19')
+      expect(frame().split('\n').slice(0, end + 1).join('\n')).toBe(header)
+      const scrolled = frame().split('\n').slice(end + 1).join('\n')
+      pane.update(entries, [], urls, summary.replace('153.3s', '154.3s'))
+      expect(frame()).toContain('154.3s')
+      expect(frame().split('\n').slice(end + 1).join('\n')).toBe(scrolled)
+      const row = frame().split('\n').findIndex(line => line.includes('tool_'))
+      input(`\x1b[<64;2;${row + 1}M`)
+      expect(frame()).toContain('Main Agent')
+      expect(frame()).toContain('154.3s')
+      pane.update([], [], urls)
+      expect(frame()).not.toContain('Main Agent')
+      expect(frame()).toContain('No activity yet.')
+    } finally { tui.stop() }
+  })
+
+  it.each([64, 30, 10, 1])('fits the fixed summary and timeline within %i columns', (width) => {
+    const pane = new ToolActivityPane()
+    pane.update([call(0, 'ok')], [], [], 'task: ตรวจระบบ漢字 · elapsed: 1.0s · calls: 1 completed')
+    const { tui, frame } = fixture(pane, width, 16)
+    try {
+      const lines = frame().split('\n')
+      expect(lines.length).toBeLessThanOrEqual(16)
+      expect(lines.every(line => visibleWidth(line) <= width)).toBe(true)
     } finally { tui.stop() }
   })
 

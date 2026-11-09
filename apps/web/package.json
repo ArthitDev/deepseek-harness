@@ -73,7 +73,11 @@
     "typescript": "^6.0.3",
     "vite": "^6.4.3",
     "vitest": "^4.1.11",
-    "ws": "8.21.3"
+    "ws": "8.21.3",
+    "@deepseek-ai/dsh-pentest-run": "workspace:*",
+    "@deepseek-ai/dsh-pentest-executor": "workspace:*",
+    "@deepseek-ai/dsh-remote-machines": "workspace:*",
+    "@deepseek-ai/dsh-proxy-server": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/dsh-message-quotes": "workspace:*"

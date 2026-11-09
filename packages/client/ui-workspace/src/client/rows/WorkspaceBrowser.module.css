@@ -394,8 +394,7 @@
 }
 
 .flatList > * + *,
-.searchTree > [role='treeitem'] + [role='treeitem'],
-.groupSection > * + * {
+.searchTree > [role='treeitem'] + [role='treeitem'] {
   margin-top: 2px;
 }
 
@@ -464,13 +463,10 @@
    go through `> * >` and row-level paint keys off the row div itself. */
 .groupSection {
   position: relative;
-  /* Mixed into the sidebar fill, not left translucent, so antialiased guide
-     edges keep one weight. Every guide pixel is painted by exactly one box
-     (rows chain their own segments; sections never overdrew them), because
-     two stacked translucent segments read as a brighter line. */
+  /* Opaque guide ink keeps shared branch junctions at one weight. */
   --dsh-tree-line: color-mix(in srgb, var(--dsw-alias-label-tertiary) 40%, var(--dsw-specific-sidebar-fill));
   --dsh-tree-branch-start: calc(4px + var(--dsh-workspace-indent, 0px));
-  --dsh-tree-branch-width: 8px;
+  --dsh-tree-branch-width: 4px;
 }
 
 /* Guides appear only when rows follow the header; a collapsed group shows
@@ -478,15 +474,15 @@
    incoming guide column to the folder icon. */
 .groupSection:has(> [role='group'], > * > [data-row-key^='session:'], > .sessionOverflowButton) {
   background: linear-gradient(var(--dsh-tree-line) 0 0)
-    var(--dsh-tree-branch-start) 16px / var(--dsh-tree-branch-width) 1px no-repeat;
+    var(--dsh-tree-branch-start) 17px / var(--dsh-tree-branch-width) 1px no-repeat;
 }
 
 .groupSection:not(:has(> [role='group'])):has(> * > [data-row-key^='session:']) {
   background:
     linear-gradient(var(--dsh-tree-line) 0 0)
-      calc(12px + var(--dsh-workspace-indent, 0px)) 16px / 1px 16px no-repeat,
+      calc(16px + var(--dsh-workspace-indent, 0px)) 29px / 1px 5px no-repeat,
     linear-gradient(var(--dsh-tree-line) 0 0)
-      var(--dsh-tree-branch-start) 16px / var(--dsh-tree-branch-width) 1px no-repeat;
+      var(--dsh-tree-branch-start) 17px / var(--dsh-tree-branch-width) 1px no-repeat;
 }
 
 /* A group's riser: from above the section (bridging the sibling margin) down
@@ -497,7 +493,7 @@
   position: absolute;
   left: var(--dsh-tree-branch-start);
   top: -4px;
-  height: 20px;
+  height: 21px;
   width: 1px;
   background: var(--dsh-tree-line);
   pointer-events: none;
@@ -509,7 +505,7 @@
   content: '';
   position: absolute;
   left: var(--dsh-tree-branch-start);
-  top: 16px;
+  top: 17px;
   bottom: 0;
   width: 1px;
   background: var(--dsh-tree-line);
@@ -524,7 +520,7 @@
   content: '';
   position: absolute;
   left: var(--dsh-tree-branch-start);
-  top: 16px;
+  top: 17px;
   bottom: 0;
   width: 1px;
   background: var(--dsh-tree-line);
@@ -534,7 +530,7 @@
 /* At depth 0 the tick reaches from the machine guide column to the icon. */
 .groupSection[data-tree-depth='0'] {
   --dsh-tree-branch-start: 0px;
-  --dsh-tree-branch-width: 12px;
+  --dsh-tree-branch-width: 8px;
 }
 
 /* The machine-to-Workspace turn is one rounded elbow into the folder icon.
@@ -546,7 +542,7 @@
 
 .groupSection[data-tree-depth='0']:not(:has(> [role='group'])):has(> * > [data-row-key^='session:']) {
   background: linear-gradient(var(--dsh-tree-line) 0 0)
-    12px 16px / 1px 16px no-repeat;
+    16px 29px / 1px 5px no-repeat;
 }
 
 .groupSection[data-tree-depth='0']:not(.workspaceDropBefore)::before {
@@ -554,8 +550,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 12px;
-  height: 16px;
+  width: 8px;
+  height: 18px;
   border-bottom: 1px solid var(--dsh-tree-line);
   border-left: 1px solid var(--dsh-tree-line);
   border-bottom-left-radius: 8px;
@@ -570,7 +566,7 @@
   content: '';
   position: absolute;
   left: 0;
-  top: 17px;
+  top: 18px;
   bottom: -4px;
   width: 1px;
   background: var(--dsh-tree-line);
@@ -640,7 +636,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .machineCount {
@@ -675,42 +671,77 @@
 /* Session rows shift into their own inner guide column (16px + indent),
    clearing the hierarchy gutter so their elbows never overlap it. */
 .groupSection > :has(> [data-row-key^='session:']) {
+  position: relative;
   box-sizing: border-box;
   width: calc(100% - 16px - var(--dsh-workspace-indent, 0px));
   margin-left: calc(16px + var(--dsh-workspace-indent, 0px));
+}
+
+.groupSection > :has(> [data-row-key^='session:'])::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--dsh-tree-line);
+  pointer-events: none;
+}
+
+/* The last row's elbow is drawn by the trunk itself, so the curve and the
+   straight run are one element and cannot snap to different pixels. */
+.groupSection > :last-child:has(> [data-row-key^='session:'])::before {
+  bottom: auto;
+  box-sizing: border-box;
+  height: calc(50% + 1px);
+  width: var(--dsw-radius-sm);
+  background: none;
+  border-left: 1px solid var(--dsh-tree-line);
+  border-bottom: 1px solid var(--dsh-tree-line);
+  border-bottom-left-radius: var(--dsw-radius-sm);
 }
 
 .groupSection > * > [data-row-key^='session:'] {
   position: relative;
   box-sizing: border-box;
   width: 100%;
-  padding-inline-start: 8px;
+  height: 28px;
+  padding-inline-start: calc(8px - var(--dsh-sidebar-paint-inset));
 }
 
-/* Session guide chain. The status slot sits 6px below the row top (20px slot
-   centered in a 32px row), so these span-relative offsets land on row
-   geometry: the elbow box spans rows-rel [-2px, 16px] — from above the 2px
-   row margin, where the previous row's drop segment ends, to the row's
-   midline where its rounded tick meets the status dot. Each row paints its
-   own segment exactly once; nothing overlaps, so no segment reads brighter. */
+/* The wrapper carries the trunk (and the last row's elbow); each row adds
+   only a straight tick at its midline. */
 .groupSection > * > [data-row-key^='session:'] > [data-tree-connector] {
+  --dsh-tree-tick-start: 3px;
+  --dsh-tree-tick-end: 8px;
   position: absolute;
-  top: -2px;
-  left: 0;
-  width: 8px;
-  height: 34px;
-  background:
-    linear-gradient(var(--dsh-tree-line) 0 0) 0 0 / 1px 100% no-repeat,
-    linear-gradient(var(--dsh-tree-line) 0 0) 1px 18px / 7px 1px no-repeat;
+  top: 50%;
+  left: calc(var(--dsh-tree-tick-start) - var(--dsh-sidebar-paint-inset));
+  width: calc(var(--dsh-tree-tick-end) - var(--dsh-tree-tick-start));
+  height: 1px;
+  background: var(--dsh-tree-line);
   pointer-events: none;
 }
 
-/* Drop segment: carries the guide from this row's tick down to the next row
-   (the 16px remainder of the row; the next elbow starts 2px above the next
-   row top, closing the 2px margin). Absent on the section's last row — the
-   guide ends on that row's tick. */
+.groupSection > * > [data-row-key^='session:'] > [data-tree-connector]::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--dsh-tree-line);
+}
+
+/* Last row: the trunk's elbow covers the first radius-sm px. */
 .groupSection > :last-child > [data-row-key^='session:'] > [data-tree-connector] {
-  background-size: 1px 19px, 7px 1px;
+  --dsh-tree-tick-start: var(--dsw-radius-sm);
+}
+
+/* Extend through the unused status seat without moving titles or active markers. */
+.groupSection > * > [data-row-key^='session:'] > [data-tree-connector]:has(+ :empty, + * > [data-slot='sidebar.session.row.leading']:empty) {
+  --dsh-tree-tick-end: 16px;
 }
 
 .listTopDropIndicator,
@@ -775,22 +806,17 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* The overflow control closes the group's guide chain on its own tick: the
-   same 8px elbow as the session rows, sized to this 28px row. */
+/* The overflow control closes the group's guide chain on the session midline. */
 .groupSection > .sessionOverflowButton::before {
   content: '';
   position: absolute;
-  top: -2px;
+  top: 0;
   left: 0;
   width: 8px;
-  height: 16px;
-  border-bottom-left-radius: 6px;
+  height: 15px;
+  border-bottom-left-radius: var(--dsw-radius-sm);
   box-shadow: inset 1px -1px 0 var(--dsh-tree-line);
   pointer-events: none;
-}
-
-.groupSection > .sessionOverflowButton {
-  margin-top: 0;
 }
 
 @media (hover: hover) {

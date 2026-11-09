@@ -30,6 +30,8 @@ kind: "package-bundle"
 
 启动时先等待预设注册表和模型默认值就绪，再创建会话；缺少服务会阻止 TUI 激活。新会话使用共享 Web 设置中与所选提供方和模型绑定的预设；未绑定时使用配置的默认预设。`--preset <id>` 优先；恢复的会话保留其记录的预设。
 
+共享预设选择优先读取 Web profile 的 `agent-preset-registry` 行，再读取旧版 `agent-presets` 行。自定义预设声明也必须安装到 TUI profile；仅存在于 Web 的声明不会在 TUI 注册。所选预设不可用时启动失败，不会替换为其他提示词。
+
 源码检出在每次交互式启动时于后台启动透明 SB 转发服务。内置 ZCode 代理在首次实际发出 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求时启动；选择其他提供方不会启动 ZCode 辅助进程。同一 TUI 进程中的并发请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。健康服务会被复用，并在 TUI 关闭后继续运行。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
 
 `pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式由下文环境变量控制。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
@@ -152,6 +154,8 @@ shell 输入框固定在底部，下边框与聊天中自动换行的状态栏�
 
 Agent Debug 也会根据已接受的事件显示 Main Agent 和基于会话的 Sub Agent 摘要：任务、最近工具、调用计数、耗时、已测得的用量，以及可用时的 todo 进度。
 
+Main Agent 摘要固定显示在可滚动活动列表上方的框内。滚动或展开活动时摘要保持可见；摘要实时更新时保留列表的滚动位置。
+
 时间值使用会话事件时间戳，并以毫秒显示。`pre-step` 计算 `turn/start` 到首次 `step/start` 的时间，不包括 `turn/start` 前的 inbox 等待。`request sum` 汇总匹配的 `step/start` 到 `assistant/message` 区间，包括 `step/start` 后的请求准备、重试，以及 provider 或 transport 等待，因此不是纯 provider 耗时。`TTFT avg` 计算有 `assistant/message` 的 step 从 `step/start` 到首个 stream token 的时间，并在重试间保留首个 token。`tool sum` 汇总匹配的根级 `tool/call` 到 `tool/result` 区间，包括审批和准备时间；不会单独计算 PTC 子分派。工具区间可以重叠，因此总和可能超过总耗时。括号中的数量表示已完成的时间样本。缺少两个时间戳时，`pre-step` 显示 `unknown`；其他指标在没有匹配样本时显示 `unknown`。负区间按零计算。摘要不会通过从总耗时中减去工具耗时来估算本地时间。
 
 对于已注册的后台作业，TUI 使用不会消耗读取游标的 `readAt` 观察有界输出尾部。已识别的密码、口令、确认或继续提示必须持续安静 `jobInputWarningDelayMs`（默认 15,000 毫秒），TUI 才会在作业行旁显示仅供观察的警告。警告不包含提示或输出文本，也不会发送输入。
@@ -161,6 +165,10 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 `/exec` 按新到旧列出本会话中 agent 执行过的 shell 命令，标注 `KALI`（经 `wsl -d kali-linux` 路由）或 `WIN`，并显示配对结果状态。选择一行会聚焦对应的 transcript 工具卡片以查看完整输出与参数。
 
 ## 命令
+
+状态栏会显示 `Kali checking`、`Kali ready` 或 `Kali unavailable`，即使 `/shell` 已关闭。每次探测通过已激活的 `kali` terminal-bash 后端配置的可执行文件和参数运行有时限的只读 Bash 命令；WSL 保留配置的发行版和用户。`ready` 确认 Kali 的系统身份和 Bash 执行能力，不代表 PTY 启动、沙箱访问、网络访问或工具安装状态。探测可能启动已停止的 WSL 发行版。`kaliStatusTimeoutMs` 默认为 10,000 毫秒；`kaliStatusIntervalMs` 默认为每次探测结束后等待 30,000 毫秒。探测不会重叠，TUI 卸载时停止；不会创建终端会话、读取现有 shell 输出、发送模型请求或更改会话历史。
+
+后台 Git 状态、文件搜索、剪贴板辅助进程和 Kali 就绪探测命令在 Windows 上请求隐藏初始窗口。显式打开自身窗口的命令不在此保证范围内。
 
 `/exit`、`/new`、`/fork`、`/resume`、`/recap`、`/context`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/agent-debug`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
 

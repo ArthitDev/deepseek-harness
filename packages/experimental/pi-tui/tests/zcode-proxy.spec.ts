@@ -166,6 +166,7 @@ describe('TUI startup through Loader with optional proxies', () => {
       await ctx.loader.await()
       expect(terminal.start).toHaveBeenCalledOnce()
       const visible = () => stripVTControlCharacters(terminal.write.mock.calls.flat().join(''))
+      await vi.waitFor(() => { expect(visible()).toContain('Kali unavailable') })
       await expect(access(join(home, 'helper.pid'))).rejects.toThrow()
       expect(visible()).not.toContain('ZCode proxy startup failed.')
       if (sbMode === 'failed') {

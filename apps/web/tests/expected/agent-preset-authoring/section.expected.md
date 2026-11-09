@@ -5,10 +5,15 @@
     - button "模型"
     - button "内置插件"
     - button "Agent 预设"
+    - button "远程计算机"
+    - button "Proxy Server"
+    - button "Skills"
   - button "打开配置文件"
   - button "关闭"
   - heading "Agent 预设" [level=2]
   - paragraph: 选择 Agent 的工具和工作方式。日常任务用「标准模式」，扩展 DSH 的能力用「创造模式」。
+  - text: 显示内置预设
+  - switch "显示内置预设" [checked]
   - heading "内置" [level=3]
   - list:
     - listitem:

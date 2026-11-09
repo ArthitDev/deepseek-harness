@@ -1,12 +1,27 @@
 import { stripVTControlCharacters } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ViewportTUI } from '@earendil-works/pi-tui'
+import { ProcessTerminal, TuiAltScreen, type ViewportTUI } from '@earendil-works/pi-tui'
 import { StatusBar } from '../src/ui/views.ts'
 import { TEAM_MODE_OPTIONS } from '../src/core/team-mode.ts'
 
 afterEach(() => { vi.useRealTimers() })
 
 describe('status bar animation', () => {
+  it.each(['checking', 'ready', 'unavailable'] as const)('shows Kali %s as static text alongside Wiki and Jev', (state) => {
+    vi.useFakeTimers()
+    const bar = new StatusBar(new TuiAltScreen(new ProcessTerminal()))
+    try {
+      bar.update({ kali: state, wikiAvailable: true, jev: { state: 'on' } })
+      const rendered = stripVTControlCharacters(bar.render(30).join('\n'))
+      expect(rendered).toContain(`Kali ${state}`)
+      expect(rendered).toContain('Wiki')
+      expect(rendered).toContain('Jev ON')
+      expect(rendered).toMatchSnapshot()
+      expect(vi.getTimerCount()).toBe(0)
+      bar.update({})
+      expect(stripVTControlCharacters(bar.render(30).join('\n'))).not.toContain('Kali')
+    } finally { bar.stop() }
+  })
   it('shows Wiki availability without a spinner and removes it when disabled', () => {
     vi.useFakeTimers()
     const bar = new StatusBar({ requestRender: vi.fn() } as unknown as ViewportTUI)

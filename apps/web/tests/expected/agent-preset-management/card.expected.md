@@ -1,0 +1,8 @@
+- listitem:
+  - 'button "New task default: Editable example" [disabled] [pressed]':
+    - text: Editable example New task default
+    - code: editable-example
+    - text: No description.
+  - 'button "Edit preset: Editable example"': Edit preset
+  - 'button "Delete preset: Editable example"': Delete preset
+  - 'button "View configuration: Editable example"': View configuration

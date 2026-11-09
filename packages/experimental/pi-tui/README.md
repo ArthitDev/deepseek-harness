@@ -30,6 +30,8 @@ The plugin ships as a bundle row for the `tui` profile: install it once with `ds
 
 Startup waits for the preset registry and model defaults before creating a session; missing services prevent TUI activation. Sessions use the preset bound to the selected provider and model in the shared Web settings, or the configured default when unbound. `--preset <id>` takes precedence; resumed sessions retain their recorded preset.
 
+Shared preset selection reads the Web profile's `agent-preset-registry` row before the legacy `agent-presets` row. Custom preset declarations must also be installed in the TUI profile; a Web-only declaration does not register in TUI. An unavailable selected preset fails startup rather than substituting another prompt.
+
 The checkout starts transparent SB transport in the background on every interactive launch. The bundled ZCode proxy starts on the first actual `zcode-direct` or `zcode/glm-5.3[-flash]` request; selecting other providers starts no ZCode helper. Concurrent requests share one startup attempt per TUI process, and a cancelled request stops waiting independently. Startup failures display a notice; `/model` can still select another provider. Healthy services are reused and remain running after TUI closes. Closing TUI cancels pending helpers; help and non-interactive invocations skip startup.
 
 `pnpm zcode:setup` also configures the local `ZCODE_DIRECT_API_KEY` credential without printing it. After ZCode login, select `/model zcode-direct/glm-5.3-flash` or `/model zcode-direct/glm-5.3` to use `ZCode Direct` without 9router or SB. The direct preset defaults to `reasoning: low`; the following environment variables own the overrides. The shipped TUI and Web routes advertise 1M context and use port 18080. `ZCODE_PORT` changes both the launcher and direct route when set before harness startup. The bundled Antigravity proxy uses 18877, controlled by `ANTIGRAVITY_PORT`; a generic `PORT` variable does not change it. SB remains on 18899 with `SB_PORT`. System 9router and an external CLIProxyAPI keep their separately configured ports.
@@ -138,6 +140,8 @@ Click a row to expand or collapse its details. For keyboard navigation, press `C
 
 Agent Debug also shows Main Agent and session-backed Sub Agent summaries from accepted events: task, latest tool, call counts, elapsed time, measured usage, and todo progress when available.
 
+The Main Agent summary stays in a fixed box above the scrollable activity list. Scrolling or expanding activity leaves the summary visible; live summary updates preserve the list's scroll position.
+
 Timing values use session event timestamps and display milliseconds. `pre-step` measures `turn/start` to the first `step/start`; it excludes inbox wait before `turn/start`. `request sum` adds matched `step/start` to `assistant/message` intervals, including request preparation after `step/start`, retries, and provider or transport wait. It is not provider-only time. `TTFT avg` measures `step/start` to the first stream token for steps with an `assistant/message`, retaining the first token across retries. `tool sum` adds matched root `tool/call` to `tool/result` intervals, including approval and preparation time; PTC sub-dispatches are not timed separately. Tool intervals can overlap, so their sum can exceed elapsed time. Parenthesized counts show completed timing samples. `pre-step` displays `unknown` without both timestamps; the other figures display `unknown` when no timing samples match. Negative intervals contribute zero. The summary does not estimate local time by subtracting tool time from elapsed time.
 
 For registered background jobs, TUI observes a bounded output suffix through the non-consuming `readAt` cursor. A recognized password, passphrase, confirmation, or continue prompt must remain quiet for `jobInputWarningDelayMs` (default 15,000 ms) before TUI shows an observe-only warning beside the job row. The warning contains no prompt or output text and never sends input.
@@ -161,6 +165,10 @@ An unspecified TUI default effort uses the saved Web effort when the provider an
 The `/preset` and `--preset` pickers hide system presets and list healthy user presets. System presets remain available to model bindings and resumed sessions.
 
 ## Commands
+
+The status bar shows `Kali checking`, `Kali ready`, or `Kali unavailable` even when `/shell` is closed. Each probe runs a bounded, read-only Bash command through the active `kali` terminal-bash backend's configured executable and arguments; WSL retains its configured distribution and user. `ready` confirms Kali's OS identity and Bash execution, not PTY startup, sandbox access, network access, or installed tools. Probes may start a stopped WSL distribution. `kaliStatusTimeoutMs` defaults to 10,000 ms; `kaliStatusIntervalMs` defaults to 30,000 ms after each probe settles. Probes never overlap and stop when TUI unloads; they do not create terminal sessions, read existing shell output, send model requests, or change session history.
+
+Background Git status, file search, clipboard helpers, and Kali readiness commands request hidden initial windows on Windows. Commands that explicitly open their own windows remain outside this guarantee.
 
 `/exit`, `/new`, `/fork`, `/resume`, `/recap`, `/context`, `/tree`, `/agents`, `/jobs`, `/model`, `/preset`, `/thinking`, `/team-mode`, `/suppress-prompt`, `/mcp`, `/jev`, `/skills`, `/shell [win|kali|close]`, `/agent-debug`, `/exec`, `/wiki`, `/runs`, `/recon`, `/machines`, `/key`, `/provider`, `/providers`, `/memory`, `/sessions`, `/rewind`, `/clear`, `/queue`, `/export`, `/rename`, `/copy`, `/retry`, `/expand-all`, `/hotkeys`, plus the official dsh slash commands (`/compact`, `/goal`, `/plan`, `/feedback`).
 

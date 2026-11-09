@@ -13,7 +13,7 @@ import { createDeveloperMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
 import type { KnowledgeStatus } from './knowledge-types.ts'
 import type {} from '@deepseek-ai/dsh-session-projection'
-import { defineTool, renderToolsSdk, renderToolsSdkPy, RUN_CODE_NAME, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 
 /** Resolved local library entry points, shared with host UI readers. */
 export interface KnowledgeLibrary {
@@ -250,7 +250,7 @@ export async function applyKnowledgeListTool(ctx: Context, roots: KnowledgeRoot[
       if (currentTool !== undefined && currentTool !== tool) return
       const status = visible(agent) ? enabled : disabled
       const previous = knowledgeProjection.stateOf(agent.session)
-      if (previous?.libraries.join('\0') === status.libraries.join('\0')) return
+      if (previous.libraries.join('\0') === status.libraries.join('\0')) return
       agent.session.append('knowledge/status', status)
     }
     runtime.on('agent/created', ({ agent }) => { tracked.add(agent); publish(agent) })
@@ -296,34 +296,13 @@ export async function applyKnowledgeListTool(ctx: Context, roots: KnowledgeRoot[
       for (const agent of tracked) {
         publish(agent)
         if (ctx.tools.get(tool.name, agent) === undefined) {
-          const boundary = runtime.sessionProjections.stateOf(agent.session, 'turnBoundary') as { lastTurn: number } | undefined
-          if (boundary === undefined) throw new Error('withdrawing Wiki context on unload requires the turnBoundary projection')
+          const boundary = runtime.agents.turnBoundaryOf(agent.session)
           clearKnowledgeContexts(agent.session, boundary.lastTurn + 1, 1)
         }
       }
     })
     for (const agent of runtime.agents.list()) {
       if (visible(agent)) { tracked.add(agent); publish(agent) }
-    }
-  })
-  ctx.on('system-prompt/assemble', async (_assembly: import('@deepseek-ai/dsh-system-prompt').PromptAssembly, context, next) => {
-    const assembly = await next() as import('@deepseek-ai/dsh-system-prompt').PromptAssembly
-    if (ctx.tools.get(tool.name, context.scope) !== tool
-      || assembly.tools.some(schema => schema.name === tool.name)
-      || !assembly.tools.some(schema => schema.name === RUN_CODE_NAME)) return assembly
-    // A complete persona can remove SDK sections after this waterfall. Keep the retrieval API on the callable schema.
-    const retrievalNames = new Set([tool.name, createNote.name, 'read', 'glob', 'grep'])
-    const schemas = ctx.tools.schemas(context.scope).flatMap((schema) => {
-      if (!retrievalNames.has(schema.name)) return []
-      const output = ctx.tools.get(schema.name, context.scope)?.output.schema
-      return output === undefined ? [] : [{ ...schema, output }]
-    })
-    const sdk = ctx.get('ptcRuntime')?.language === 'python' ? renderToolsSdkPy(schemas) : renderToolsSdk(schemas)
-    return {
-      ...assembly,
-      tools: assembly.tools.map(schema => schema.name === RUN_CODE_NAME
-        ? { ...schema, description: `${schema.description}\n\n${sdk}` }
-        : schema),
     }
   })
 }

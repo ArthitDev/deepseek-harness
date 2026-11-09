@@ -179,6 +179,24 @@ export const zh = {
   'time.months': '{n}个月',
   'time.years': '{n}年',
   'time.ago': '{t}前',
+  'remote.saved': '已保存的远程计算机',
+  'remote.local.missing': '请先从侧边栏添加本机工作区。',
+  'remote.path.absolute': '远程路径必须以 / 开头。',
+  'remote.password.required': '请输入此连接的 SSH 密码。',
+  'remote.error.windowsUnsupported': '远程工作区目前支持 Linux 和 macOS SSH 主机。',
+  'remote.target.aria': '执行计算机：{name}',
+  'remote.connect.title': '连接到 {name}',
+  'remote.connect.description': '选择现有工作区，或输入远程计算机上的绝对目录路径。',
+  'remote.connecting': '正在连接...',
+  'remote.connect': '连接',
+  'remote.trustConnect': '信任并连接',
+  'remote.password.memoryOnly': '不会保存到磁盘。Host 关闭后即清除。',
+  'remote.existing': '此计算机上的工作区',
+  'remote.field.path': '远程工作区路径',
+  'remote.trust.verify': '请先在服务器上核对此指纹：',
+  'agentMode.failed': '未能保存团队模式，请重试',
+  'agentMode.error': '切换模式失败：{message}',
+  'remote.retry': '重试',
 } satisfies Record<string, string>
 
 /** The workspace namespace key union. */
@@ -359,10 +377,29 @@ export const en = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'time.ago': '{t} ago',
+  'remote.saved': 'Saved remote machines',
+  'remote.local.missing': 'Add a local workspace from the sidebar first.',
+  'remote.path.absolute': 'Remote paths must start with /.',
+  'remote.password.required': 'Enter the SSH password for this connection.',
+  'remote.error.windowsUnsupported': 'Remote workspaces currently support Linux and macOS SSH hosts.',
+  'remote.target.aria': 'Execution machine: {name}',
+  'remote.connect.title': 'Connect to {name}',
+  'remote.connect.description': 'Choose an existing workspace or enter an absolute directory path on the remote machine.',
+  'remote.connecting': 'Connecting...',
+  'remote.connect': 'Connect',
+  'remote.trustConnect': 'Trust and connect',
+  'remote.password.memoryOnly': 'Not saved to disk. Cleared when the Host exits.',
+  'remote.existing': 'Workspaces on this machine',
+  'remote.field.path': 'Remote workspace path',
+  'remote.trust.verify': 'Verify this fingerprint on the server first:',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<WorkspaceKey, string>
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  ...en,
   'defaultWorkspace.failed': 'デフォルトのワークスペースを作成できません。ワークスペースを選択してフォルダーを選んでください。',
   'draft.workspaceRequired': '先にワークスペースを選択してください。',
   'draft.initializationFailed': '下書きを埋め込めませんでした。しばらくしてからもう一度お試しください。',
@@ -536,10 +573,14 @@ export const ja = {
   'time.months': '{n}か月',
   'time.years': '{n}年',
   'time.ago': '{t}前',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  ...en,
   'defaultWorkspace.failed': 'No se puede crear el espacio de trabajo predeterminado. Utilice Elegir espacio de trabajo para seleccionar una carpeta.',
   'draft.workspaceRequired': 'Elija un espacio de trabajo primero.',
   'draft.initializationFailed': 'No se pudo completar el borrador. Inténtelo de nuevo en breve.',
@@ -713,10 +754,14 @@ export const es = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'time.ago': 'Hace {t}',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  ...en,
   'defaultWorkspace.failed': 'Impossible de créer un espace de travail par défaut. Utilisez Choisir un espace de travail pour sélectionner un dossier.',
   'draft.workspaceRequired': "Choisissez d'abord un espace de travail.",
   'draft.initializationFailed': 'Impossible de remplir le projet. Veuillez réessayer sous peu.',
@@ -890,10 +935,14 @@ export const fr = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'time.ago': 'Il y a {t}',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  ...en,
   'defaultWorkspace.failed': 'Der Standardarbeitsbereich kann nicht erstellt werden. Verwenden Sie „Arbeitsbereich auswählen“, um einen Ordner auszuwählen.',
   'draft.workspaceRequired': 'Wählen Sie zunächst einen Arbeitsbereich.',
   'draft.initializationFailed': 'Der Entwurf konnte nicht ausgefüllt werden. Bitte versuchen Sie es in Kürze noch einmal.',
@@ -1067,10 +1116,14 @@ export const de = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'time.ago': 'Vor {t}',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  ...en,
   'defaultWorkspace.failed': 'Невозможно создать рабочую область по умолчанию. Используйте «Выбрать рабочее пространство», чтобы выбрать папку.',
   'draft.workspaceRequired': 'Сначала выберите рабочее место.',
   'draft.initializationFailed': 'Не удалось заполнить черновик. Пожалуйста, повторите попытку в ближайшее время.',
@@ -1244,10 +1297,14 @@ export const ru = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'time.ago': '{t} назад',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  ...en,
   'defaultWorkspace.failed': 'Não foi possível criar o espaço de trabalho padrão. Use Escolher espaço de trabalho para selecionar uma pasta.',
   'draft.workspaceRequired': 'Escolha um espaço de trabalho primeiro.',
   'draft.initializationFailed': 'Não foi possível preencher o rascunho. Por favor, tente novamente em breve.',
@@ -1421,4 +1478,7 @@ export const pt = {
   'time.months': '{n} mês',
   'time.years': '{n}s',
   'time.ago': '{t} atrás',
+  'agentMode.failed': 'Could not save team mode. Try again.',
+  'agentMode.error': 'Mode switch failed: {message}',
+  'remote.retry': 'Retry',
 } satisfies Record<keyof typeof en, string>

@@ -285,7 +285,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       capabilities: {}, versionNegotiation: { mode: 'auto' },
       listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => { void refreshTools() } } },
     })
-    const record: Generation = { wire: new McpGeneration(client, config.closeTimeoutMs, error => diagnostic(error, 'cleanup')) }
+    const record: Generation = { wire: new McpGeneration(client, config.closeTimeoutMs,
+      error => diagnostic(error, 'cleanup'),
+      (line) => { ctx.logger.info('%s: stderr: %s', label, binding.redact(line)) }) }
     current = record
     status.opened()
     status.update({ state: 'connecting', attempt: failedAttempts })

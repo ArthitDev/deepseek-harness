@@ -377,6 +377,33 @@ describe('reconcileWorkspaceAttachments', () => {
 })
 
 describe('resolveModelPreset', () => {
+  it('prefers V3 registry settings over a stale legacy selection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pi-tui-v3-preset-'))
+    const web = join(root, 'profiles', 'web')
+    const ctx = harness({ profileContext: { home: root } })
+    try {
+      await mkdir(web, { recursive: true })
+      await writeFile(join(web, 'cordis.patch.yml'), JSON.stringify([
+        { id: 'agent-presets', config: { default: 'legacy', selectedDefault: 'all-model-preset',
+          models: { direct: { bound: 'legacy-bound' } } } },
+        { id: 'agent-preset-registry', config: { default: 'standard', selectedDefault: 'dark-api-v-7-1',
+          models: { direct: { bound: 'current-bound' } } } },
+      ]))
+      expect([
+        resolveModelPreset(ctx, 'direct', 'unbound'),
+        resolveModelPreset(ctx, 'direct', 'bound'),
+      ]).toMatchInlineSnapshot(`
+        [
+          "dark-api-v-7-1",
+          "current-bound",
+        ]
+      `)
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it.each([
     { model: 'gemini-3.1-pro-low', enabled: true, expected: 'gemini-pro' },
     { model: 'unbound', enabled: true, expected: 'gemini-preset-lite' },

@@ -104,7 +104,7 @@ function detectEnvironment() {
   // Detect Kali WSL
   if (env.platform === "win32") {
     try {
-      execSync("wsl -d kali-linux -- true", { timeout: 5000, stdio: "pipe", windowsHide: true });
+      execSync("wsl -d kali-linux -u root -- true", { timeout: 5000, stdio: "pipe", windowsHide: true });
       env.kaliAvailable = true;
     } catch {
       env.kaliAvailable = false;

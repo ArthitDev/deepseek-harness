@@ -46,6 +46,8 @@ export interface AppConfig {
   /** Newest transcript items rendered before older items are folded. */
   historyLimit?: number
   jobInputWarningDelayMs?: number
+  kaliStatusIntervalMs?: number
+  kaliStatusTimeoutMs?: number
 }
 
 /**
@@ -196,6 +198,8 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
       version: tuiVersion,
       historyLimit: config.historyLimit ?? 20,
       jobInputWarningDelayMs: config.jobInputWarningDelayMs ?? 15000,
+      kaliStatusIntervalMs: config.kaliStatusIntervalMs ?? 30000,
+      kaliStatusTimeoutMs: config.kaliStatusTimeoutMs ?? 10000,
       ...(effectiveProvider !== undefined ? { provider: effectiveProvider } : {}),
       ...(effectiveModel !== undefined ? { model: effectiveModel } : {}),
       ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),

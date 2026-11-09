@@ -29,6 +29,8 @@ Add `dsh-mcp-client` when the model should call tools from an external MCP serve
 
 ### Minimal configuration
 
+Stdio server diagnostics are captured as `info` records in the harness logger, labelled with the server name, instead of writing directly over the TUI. Resolved credential template values are redacted. Connection and tool failures retain their existing error reporting; MCP protocol messages still use the child process's stdin/stdout.
+
 Add one entry per server; nothing else is required. After the harness starts, the server's tools appear in the model's tool list.
 
 ```yaml

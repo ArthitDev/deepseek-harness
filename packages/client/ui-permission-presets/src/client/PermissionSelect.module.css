@@ -1,20 +1,22 @@
 .trigger {
+  position: relative;
+  box-sizing: border-box;
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  max-width: 220px;
-  height: 24px;
-  padding: 0 4px 0 8px;
+  max-width: 180px;
+  height: 28px;
+  padding: 0 40px 0 8px;
   border: none;
-  /* Rounded chip chrome, matching the sibling model trigger. */
-  border-radius: var(--dsw-radius-sm);
-  outline: none;
+  border-radius: var(--dsw-radius-md);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
   color: var(--dsw-alias-state-business-primary);
+  font: inherit;
   font-size: 13px;
   line-height: 20px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -29,11 +31,12 @@
 }
 
 .trigger:focus-visible {
-  box-shadow: 0 0 0 2px var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
 }
 
 .trigger:disabled {
-  color: var(--dsw-alias-label-dimmed);
+  opacity: .6;
   cursor: default;
 }
 
@@ -94,26 +97,14 @@
 }
 
 .chevron {
-  /* inline-flex, not inline: an inline seat reserves baseline descent under
-     the svg and floats the glyph off-center in the 28px trigger. */
+  position: absolute;
+  right: 12px;
+  top: 50%;
   display: inline-flex;
-  flex: 0 0 auto;
-  color: var(--dsw-alias-label-caption);
+  transform: translateY(-50%);
   transition: transform 120ms ease;
 }
 
-/* Narrow composer: mode text collapses while icons stay visible.
-   Only triggers that actually carry a mode glyph drop their label —
-   a host-configured mode without one keeps its text as the sole identifier.
-   The 620px cut is the point where the row (attach + modes + model + send)
-   starts squeezing labels; the container is the composer row (InputBar .row —
-   anonymous query because CSS modules hash container-names per module). */
-@container (max-width: 620px) {
-  .trigger:has(.triggerIcon) .triggerLabel {
-    display: none;
-  }
-}
-
 .chevronOpen {
-  transform: rotate(180deg);
+  transform: translateY(-50%) rotate(180deg);
 }

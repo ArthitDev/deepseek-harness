@@ -7,6 +7,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { AgentPresetSection, type AgentPresetSectionProps } from '../src/client/AgentPresetSection.tsx'
 import type { AgentPresetSectionState } from '../src/client/section-store.ts'
+import type { AgentPresetPreferences } from '../src/client/settings-store.ts'
 import { en } from '../src/client/locales.ts'
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
 const translations: ReadonlyMap<string, string> = new Map(Object.entries(en))
@@ -15,12 +16,13 @@ function unusedHook(): never {
 }
 function view(partial: Partial<AgentPresetSectionState> = {}, startCreatorDraft?: () => void, outerClose?: () => void, enabled = true) {
   const developerTools = createSnapshotStore(enabled)
+  const preferences = createSnapshotStore<AgentPresetPreferences>({ status: 'ready', value: { showBuiltInPresets: true }, base: {}, user: {}, revision: 0, writable: true })
   const store = createSnapshotStore<AgentPresetSectionState>({ status: 'ready', error: null,
     saving: false, rows: [{ id: 'standard', isDefault: true, trust: 'system' },
       { id: 'mine', name: 'Mine', isDefault: false, trust: 'user' }],
     view: null, ...partial })
   const actions = { load: vi.fn(async () => {}), view: vi.fn(async () => {}), closeView: vi.fn(), makeDefault: vi.fn(async () => {}),
-    close: vi.fn() }
+    close: vi.fn(), setShowBuiltInPresets: vi.fn(async () => {}), write: vi.fn(async () => true), remove: vi.fn(async () => true) }
   const props: AgentPresetSectionProps = { ...actions,
     ...(startCreatorDraft === undefined ? {} : { startCreatorDraft }),
     usePanelInfo: unusedHook, useSessions: unusedHook, useSessionStatus: unusedHook, useSessionRetainInfo: unusedHook,
@@ -29,16 +31,74 @@ function view(partial: Partial<AgentPresetSectionState> = {}, startCreatorDraft?
     useContextMenu: contextMenuHook(),
     useAgentPresetSection: bindSnapshotSelector(store),
     useDeveloperTools: bindSnapshotSelector(developerTools),
+    usePresetPreferences: bindSnapshotSelector(preferences),
     t: key => translations.get(key) ?? key }
   render(outerClose === undefined ? <AgentPresetSection {...props} />
     : <Modal open onClose={outerClose} title="Settings" closeLabel="Close"><AgentPresetSection {...props} /></Modal>)
-  return { ...actions, store, developerTools }
+  return { ...actions, store, developerTools, preferences }
 }
 function rowFor(id: string): HTMLElement {
   const row = document.querySelector<HTMLElement>(`[data-agent-preset-id="${id}"]`)
   if (row === null) throw new Error(`no card for ${id}`)
   return row
 }
+it('offers editing only for profile-owned presets and keeps a draft after a refused save', async () => {
+  const actions = view({ authorable: true })
+  expect(within(rowFor('standard')).queryByRole('button', { name: `${en.edit}: ${en.presetStandardName}` })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: `${en.edit}: Mine` }))
+  expect(actions.view).toHaveBeenCalledWith('mine')
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), view: { id: 'mine', title: 'Mine', content: '[]\n' } }) })
+  const dialog = screen.getByRole('dialog', { name: `${en.edit} · Mine` })
+  const input = within(dialog).getByRole<HTMLTextAreaElement>('textbox', { name: en.composition })
+  fireEvent.change(input, { target: { value: '- bad yaml' } })
+  actions.write.mockResolvedValueOnce(false)
+  fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
+  await waitFor(() => { expect(actions.write).toHaveBeenCalledWith('mine', '- bad yaml') })
+  expect(input.value).toBe('- bad yaml')
+  expect(actions.closeView).not.toHaveBeenCalled()
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), saving: true }) })
+  fireEvent.keyDown(input, { key: 'Escape' })
+  expect(actions.closeView).not.toHaveBeenCalled()
+  expect(within(dialog).getByRole<HTMLButtonElement>('button', { name: en.save }).disabled).toBe(true)
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), saving: false }) })
+  fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
+  await waitFor(() => { expect(actions.closeView).toHaveBeenCalledOnce() })
+})
+
+it('confirms deletion and keeps the confirmation open on failure', async () => {
+  const actions = view({ authorable: true })
+  fireEvent.click(screen.getByRole('button', { name: `${en.deletePreset}: Mine` }))
+  let dialog = screen.getByRole('dialog', { name: en.deletePreset })
+  expect(within(dialog).getByText(en.confirmDelete.replace('{name}', 'Mine'))).toBeTruthy()
+  expect(actions.remove).not.toHaveBeenCalled()
+  fireEvent.click(within(dialog).getAllByRole('button', { name: en.cancel }).at(-1)!)
+  expect(screen.queryByRole('dialog', { name: en.deletePreset })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: `${en.deletePreset}: Mine` }))
+  dialog = screen.getByRole('dialog', { name: en.deletePreset })
+  actions.remove.mockResolvedValueOnce(false)
+  fireEvent.click(within(dialog).getByRole('button', { name: en.deletePreset }))
+  await waitFor(() => { expect(actions.remove).toHaveBeenCalledWith('mine') })
+  expect(screen.getByRole('dialog', { name: en.deletePreset })).toBeTruthy()
+  fireEvent.click(within(dialog).getByRole('button', { name: en.deletePreset }))
+  await waitFor(() => { expect(screen.queryByRole('dialog', { name: en.deletePreset })).toBeNull() })
+})
+it('persists built-in visibility and keeps custom presets while the preference changes', () => {
+  const actions = view({ rows: [
+    { id: 'standard', isDefault: false, trust: 'system' },
+    { id: 'mine', name: 'Mine', isDefault: true, trust: 'user' },
+    { id: 'ptc', name: 'My PTC', isDefault: false, trust: 'user' },
+  ] })
+  fireEvent.click(screen.getByRole('switch', { name: en.showBuiltInPresets }))
+  expect(actions.setShowBuiltInPresets).toHaveBeenCalledWith(false)
+  act(() => { actions.preferences.set({ ...actions.preferences.getSnapshot(), value: { showBuiltInPresets: false } }) })
+  expect(document.querySelector('[data-agent-preset-id="standard"]')).toBeNull()
+  expect(screen.queryByRole('heading', { name: en.builtInGroup })).toBeNull()
+  expect(rowFor('mine')).toBeTruthy()
+  expect(rowFor('ptc')).toBeTruthy()
+  expect(actions.makeDefault).not.toHaveBeenCalled()
+  act(() => { actions.preferences.set({ ...actions.preferences.getSnapshot(), value: { showBuiltInPresets: true } }) })
+  expect(rowFor('standard')).toBeTruthy()
+})
 it.each([false, true])('offers Standard, Creator and custom defaults with Coding Tools %s', (enabled) => {
   const actions = view({ rows: [
     { id: 'standard', isDefault: false, trust: 'system' }, { id: 'ptc', isDefault: false, trust: 'system' },
@@ -79,7 +139,7 @@ it.each(['ptc', 'minimal'])('keeps a named custom %s override selectable with Co
 })
 it('reads the roster once and sets a default from the card body', async () => {
   const actions = view()
-  expect(screen.queryByRole('switch')).toBeNull()
+  expect(screen.getByRole('switch', { name: en.showBuiltInPresets })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: `${en.setDefault}: Mine` }))
   expect(actions.makeDefault).toHaveBeenCalledWith('mine')
   await waitFor(() =>{  expect(actions.load).toHaveBeenCalledOnce() })

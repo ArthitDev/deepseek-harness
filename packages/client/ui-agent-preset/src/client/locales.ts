@@ -6,6 +6,7 @@ import { guideEn, guideJa, guideEs, guideFr, guideDe, guideRu, guidePt, guideZh,
 export type AgentPresetSettingsKey =
   | PresetGuideKey
   | 'builtInGroup'
+  | 'showBuiltInPresets'
   | 'customGroup'
   | 'seatHint'
   | 'headerHint'
@@ -13,6 +14,12 @@ export type AgentPresetSettingsKey =
   | 'sectionIntro'
   | 'setDefault'
   | 'view'
+  | 'edit'
+  | 'save'
+  | 'cancel'
+  | 'deletePreset'
+  | 'confirmDelete'
+  | 'composition'
   | 'presetStandardName'
   | 'presetStandardDescription'
   | 'presetPtcName'
@@ -38,6 +45,10 @@ export type AgentPresetSettingsKey =
 export const en: Record<AgentPresetSettingsKey, string> = {
   ...guideEn,
   builtInGroup: 'Built-in', customGroup: 'Custom',
+  showBuiltInPresets: 'Show built-in presets',
+  edit: 'Edit preset', save: 'Save', cancel: 'Cancel', deletePreset: 'Delete preset',
+  confirmDelete: 'Delete "{name}"? Existing sessions keep their current preset. This cannot be undone.',
+  composition: 'Composition (YAML)',
   sectionIntro: 'Choose the agent’s tools and how it works. Use Standard mode for everyday tasks, or Creator mode to add capabilities to DSH.',
 
   seatHint: 'Choose the agent preset for your new task',
@@ -83,6 +94,10 @@ export const en: Record<AgentPresetSettingsKey, string> = {
 export const zh: Record<AgentPresetSettingsKey, string> = {
   ...guideZh,
   builtInGroup: '内置', customGroup: '自定义',
+  showBuiltInPresets: '显示内置预设',
+  edit: '编辑预设', save: '保存', cancel: '取消', deletePreset: '删除预设',
+  confirmDelete: '删除「{name}」？已有会话保留当前预设，此操作无法撤销。',
+  composition: '配置（YAML）',
   sectionIntro: '选择 Agent 的工具和工作方式。日常任务用「标准模式」，扩展 DSH 的能力用「创造模式」。',
 
   seatHint: '选择新任务使用的 Agent 预设',
@@ -130,6 +145,10 @@ export type { PresetDisplaySource, PresetDisplayText } from '@deepseek-ai/dsh-ag
 export const ja = {
   ...guideJa,
   'builtInGroup': '組み込み',
+  'showBuiltInPresets': '組み込みプリセットを表示',
+  edit: 'プリセットを編集', save: '保存', cancel: 'キャンセル', deletePreset: 'プリセットを削除',
+  confirmDelete: '「{name}」を削除しますか？既存のセッションは現在のプリセットを保持します。この操作は取り消せません。',
+  composition: '構成（YAML）',
   'customGroup': 'カスタム',
   'sectionIntro': 'エージェントのツールと動作を選択します。日々のタスクには標準モードを、DSH に機能を追加するにはクリエイターモードを使用してください。',
   'seatHint': '新しいタスクで使用するエージェントプリセットを選択',
@@ -163,6 +182,10 @@ export const ja = {
 export const es = {
   ...guideEs,
   builtInGroup: 'Incorporado', customGroup: 'personalizado',
+  showBuiltInPresets: 'Mostrar ajustes preestablecidos integrados',
+  edit: 'Editar preajuste', save: 'Guardar', cancel: 'Cancelar', deletePreset: 'Eliminar preajuste',
+  confirmDelete: '¿Eliminar «{name}»? Las sesiones existentes conservan su preajuste actual. Esta acción no se puede deshacer.',
+  composition: 'Configuración (YAML)',
   sectionIntro: 'Elija las herramientas del agente y cómo funciona. Utilice el modo Estándar para las tareas diarias o el modo Creador para agregar capacidades a DSH.',
 
   seatHint: 'Elija el agente preestablecido para su nueva tarea',
@@ -208,6 +231,10 @@ export const es = {
 export const fr = {
   ...guideFr,
   builtInGroup: 'Intégré', customGroup: 'Personnalisé',
+  showBuiltInPresets: 'Afficher les préréglages intégrés',
+  edit: 'Modifier le préréglage', save: 'Enregistrer', cancel: 'Annuler', deletePreset: 'Supprimer le préréglage',
+  confirmDelete: 'Supprimer « {name} » ? Les sessions existantes conservent leur préréglage actuel. Cette action est irréversible.',
+  composition: 'Configuration (YAML)',
   sectionIntro: 'Choisissez les outils de l’agent et son fonctionnement. Utilisez le mode Standard pour les tâches quotidiennes ou le mode Créateur pour ajouter des fonctionnalités à DSH.',
 
   seatHint: "Choisissez le préréglage d'agent pour votre nouvelle tâche",
@@ -253,6 +280,10 @@ export const fr = {
 export const de = {
   ...guideDe,
   builtInGroup: 'Eingebaut', customGroup: 'Benutzerdefiniert',
+  showBuiltInPresets: 'Integrierte Voreinstellungen anzeigen',
+  edit: 'Voreinstellung bearbeiten', save: 'Speichern', cancel: 'Abbrechen', deletePreset: 'Voreinstellung löschen',
+  confirmDelete: '„{name}“ löschen? Bestehende Sitzungen behalten ihre aktuelle Voreinstellung. Dies kann nicht rückgängig gemacht werden.',
+  composition: 'Konfiguration (YAML)',
   sectionIntro: 'Wählen Sie die Tools des Agenten und deren Funktionsweise aus. Verwenden Sie den Standardmodus für alltägliche Aufgaben oder den Creator-Modus, um DSH Funktionen hinzuzufügen.',
 
   seatHint: 'Wählen Sie die Agentenvoreinstellung für Ihre neue Aufgabe',
@@ -298,6 +329,10 @@ export const de = {
 export const ru = {
   ...guideRu,
   builtInGroup: 'Встроенный', customGroup: 'Пользовательский',
+  showBuiltInPresets: 'Показывать встроенные пресеты',
+  edit: 'Изменить пресет', save: 'Сохранить', cancel: 'Отмена', deletePreset: 'Удалить пресет',
+  confirmDelete: 'Удалить «{name}»? Текущие сеансы сохранят свой пресет. Это действие нельзя отменить.',
+  composition: 'Конфигурация (YAML)',
   sectionIntro: 'Выбирайте инструменты агента и то, как они работают. Используйте стандартный режим для повседневных задач или режим Creator, чтобы расширить возможности DSH.',
 
   seatHint: 'Выберите предустановку агента для вашей новой задачи',
@@ -343,6 +378,10 @@ export const ru = {
 export const pt = {
   ...guidePt,
   builtInGroup: 'Integrado', customGroup: 'Personalizado',
+  showBuiltInPresets: 'Mostrar predefinições integradas',
+  edit: 'Editar predefinição', save: 'Guardar', cancel: 'Cancelar', deletePreset: 'Eliminar predefinição',
+  confirmDelete: 'Eliminar «{name}»? As sessões existentes mantêm a predefinição atual. Esta ação não pode ser anulada.',
+  composition: 'Configuração (YAML)',
   sectionIntro: 'Escolha as ferramentas do agente e como funciona. Use o modo Padrão para tarefas diárias ou o modo Criador para adicionar recursos ao DSH.',
 
   seatHint: 'Escolha a predefinição de agente para sua nova tarefa',

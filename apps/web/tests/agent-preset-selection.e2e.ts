@@ -272,7 +272,7 @@ describe('web e2e: agent-preset selection', () => {
     await expect.poll(() => codingTools.getAttribute('aria-checked')).toBe('true')
     await dialog.getByRole('button', { name: 'Agent presets' }).click()
     await dialog.getByRole('button', { name: 'New task default: Standard mode' }).waitFor({ timeout: 10_000 })
-    expect(await dialog.getByRole('switch').count()).toBe(0)
+    expect(await dialog.getByRole('switch', { name: 'Show built-in presets', exact: true }).count()).toBe(1)
     await dialog.getByRole('button', { name: 'Set as new task default: Minimal mode' }).waitFor({ timeout: 10_000 })
     await dialog.getByRole('button', { name: 'Close' }).last().click()
 

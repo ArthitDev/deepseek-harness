@@ -180,42 +180,61 @@
 .controlWrap {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
+  flex: none;
 }
 
-.agentMode {
+.agentMode,
+.control {
+  position: relative;
+  box-sizing: border-box;
   display: inline-flex;
-  max-width: 140px;
+  flex: none;
+  min-width: 0;
+  max-width: 180px;
+  height: 28px;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 0 40px 0 8px;
   border: 0;
-  border-radius: 999px;
-  corner-shape: round;
+  border-radius: var(--dsw-radius-md);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
   color: var(--dsw-alias-state-business-primary);
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 20px;
   cursor: pointer;
 }
 
-.agentMode span {
+.agentMode span,
+.control span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agentMode:hover:not(:disabled) {
+@media (hover: hover) {
+  .agentMode:hover:not(:disabled),
+  .control:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
+  }
+}
+
+.agentMode[aria-expanded='true'],
+.control[aria-expanded='true'] {
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
 }
 
-.agentMode:focus-visible {
+.agentMode:focus-visible,
+.control:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
 
-.agentMode:disabled {
+.agentMode:disabled,
+.control:disabled {
   opacity: .6;
   cursor: default;
 }
@@ -298,3 +317,40 @@
   .modeLoading { animation: none; }
   .modeLoadingSpinner { animation-duration: 1.6s; }
 }
+
+.controlError {
+  padding-left: 3px;
+  font-weight: 500;
+}
+
+.existing,
+.trustInline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.existing button {
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.existing button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+
+.authTrigger { position: relative; box-sizing: border-box; min-height: 28px; }
+.control > svg:last-child, .agentMode > svg:last-child, .authTrigger > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
+.control > svg:first-child, .agentMode > svg:first-child { flex: none; }
+.authTrigger { width: 100%; padding: 9px 40px 9px 11px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; text-align: left; cursor: pointer; }
+.authTrigger:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+.authTrigger span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

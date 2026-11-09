@@ -17,6 +17,8 @@ export interface Config {
   selectedDefault: Volatile<string | undefined>
   /** Whether sessions that name no preset expose a preset choice; edited through Settings. */
   modeSelectionEnabled: Volatile<boolean | undefined>
+  /** Whether browser selection surfaces show the shipped presets; does not change session composition. */
+  showBuiltInPresets: Volatile<boolean | undefined>
   /** User-selected preset ids by provider and model; edited through Settings. */
   models: Volatile<Record<string, Record<string, string>> | undefined>
 }

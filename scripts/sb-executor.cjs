@@ -164,7 +164,7 @@ function classifyEnvironment(code, language) {
 
 async function bootKali() {
   try {
-    execSync(`wsl -d ${CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe", windowsHide: true });
+    execSync(`wsl -d ${CONFIG.kaliDistro} -u root -- true`, { timeout: 60000, stdio: "pipe", windowsHide: true });
     return true;
   } catch {
     return false;
@@ -192,21 +192,21 @@ async function execute(block, options = {}) {
     const wslPath = `/mnt/e/Prompt-Jail/exec-workspace/${filename}`;
     if (block.language === "bash") {
       cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "--", "bash", "-c", `chmod +x '${wslPath}' && bash '${wslPath}'`];
+      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `chmod +x '${wslPath}' && bash '${wslPath}'`];
     } else if (block.language === "python") {
       cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "--", "bash", "-c", `python3 '${wslPath}'`];
+      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `python3 '${wslPath}'`];
     } else if (block.language === "c") {
       cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "--", "bash", "-c",
+      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c",
         `gcc -o '${wslPath}.out' '${wslPath}' -lpthread -lm && '${wslPath}.out'`];
     } else if (block.language === "cpp") {
       cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "--", "bash", "-c",
+      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c",
         `g++ -o '${wslPath}.out' '${wslPath}' -lpthread -lm && '${wslPath}.out'`];
     } else {
       cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "--", "bash", "-c", `cat '${wslPath}' | bash`];
+      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `cat '${wslPath}' | bash`];
     }
     cwdOption = { cwd: CONFIG.workspace };
   } else {
@@ -221,9 +221,9 @@ async function execute(block, options = {}) {
       cmd = "node";
       args = [filepath];
     } else if (block.language === "bash") {
-      // bash on Windows via Git Bash or WSL default
+      // Bash uses the configured Kali distro and explicit root user.
       cmd = "wsl";
-      args = ["--", "bash", "-c", `cat /mnt/e/Prompt-Jail/exec-workspace/${filename} | bash`];
+      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `cat /mnt/e/Prompt-Jail/exec-workspace/${filename} | bash`];
     } else {
       return { success: false, error: `Language ${block.language} not runnable on Windows directly`, output: "" };
     }

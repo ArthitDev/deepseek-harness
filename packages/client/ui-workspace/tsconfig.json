@@ -85,6 +85,9 @@
     },
     {
       "path": "../ui-context-menu"
+    },
+    {
+      "path": "../ui-settings/tsconfig.client.json"
     }
   ]
 }

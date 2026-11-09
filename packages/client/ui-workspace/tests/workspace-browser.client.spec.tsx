@@ -335,6 +335,14 @@ describe('WorkspaceBrowser', () => {
     expect(b.props.startSession).not.toHaveBeenCalled()
   })
 
+  it('uses the serving Host name for the local machine group', () => {
+    mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
+      useHostInfo: selector => selector({ home: undefined, isLoopback: true, hostname: 'fixture-host' }),
+    })
+    expect(screen.getByText('fixture-host')).toBeTruthy()
+  })
+
   it('workspace hover card shows a POSIX home descendant as ~', () => {
     vi.useFakeTimers()
     try {

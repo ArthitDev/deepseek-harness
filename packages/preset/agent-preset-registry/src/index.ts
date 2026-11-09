@@ -8,7 +8,7 @@ import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { dump } from 'js-yaml'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
-import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import type {} from '@deepseek-ai/dsh-app-boot'
 // Type-only: the optional `settings` service this registry keeps off the generated pages.
 import type {} from '@deepseek-ai/dsh-settings'
 // Type-only: the optional `llm` and `agentDefaultModel` services the roster reads model routes from.
@@ -81,6 +81,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
     default: z.string().required(),
     selectedDefault: z.string().volatile(),
     modeSelectionEnabled: z.boolean().default(true).volatile(),
+    showBuiltInPresets: z.boolean().default(true).volatile(),
     models: z.dict(z.dict(z.string())).volatile(),
   })
   private agentPresetProjectionHandle!: ProjectionHandle<string | null>
@@ -157,7 +158,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
    * composition no profile launched (nothing is authorable there).
    */
   private get authoring(): PresetAuthoring | undefined {
-    const profile = this.owner.get('profileContext') as ProfileContext | undefined
+    const profile = this.owner.get('profileContext')
     return profile === undefined ? undefined : new PresetAuthoring(this.owner, profile)
   }
 

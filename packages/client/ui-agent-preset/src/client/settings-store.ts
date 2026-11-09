@@ -12,6 +12,10 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { AgentPresetRoster } from '@deepseek-ai/dsh-agent-preset-registry/types'
 import { isBuiltInPreset } from './locales.ts'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+
+/** Accepted display preference, independent from session preset selection. */
+export type AgentPresetPreferences = ConfigFormSnapshot<{ showBuiltInPresets: boolean }>
 
 /** The agent-preset settings namespace on the host wire. */
 export const AGENT_PRESET_SETTINGS_NS = 'agent-preset-registry'

@@ -27,7 +27,7 @@ export const EXCLUDED_SHARE_NAMESPACES: ReadonlySet<string> = new Set([
   'job', 'goals', 'schedule', 'subagents', 'userQuestions', 'messageFeedback', 'llm',
   'pluginManager', 'pluginMarket', 'pluginRegistryProbe', 'directoryPicker', 'fileUploads',
   'skills', 'toolResults', 'remoteAccess', 'sessionFeedback', 'sessionReferenceResolver',
-  'agentPresets', 'liveshareShares',
+  'agentPresets', 'liveshareShares', 'proxyServers',
 ])
 
 /** Languages the owner-facing dialog can display. */

@@ -13,6 +13,8 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex: none;
 }
 
 @media (hover: hover) {

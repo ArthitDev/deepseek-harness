@@ -27,7 +27,7 @@ export function readGitState(cwd: string, timeoutMs = 3000): Promise<GitState | 
     execFile(
       'git',
       ['rev-parse', '--abbrev-ref', 'HEAD'],
-      { cwd, timeout: timeoutMs },
+      { cwd, timeout: timeoutMs, windowsHide: true },
       (error, stdout) => {
         if (error !== null) {
           resolve(undefined)
@@ -41,7 +41,7 @@ export function readGitState(cwd: string, timeoutMs = 3000): Promise<GitState | 
         execFile(
           'git',
           ['status', '--porcelain'],
-          { cwd, timeout: timeoutMs },
+          { cwd, timeout: timeoutMs, windowsHide: true },
           (statusError, statusOut) => {
             resolve({ branch, dirty: statusError === null && statusOut.trim() !== '' })
           },

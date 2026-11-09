@@ -1,0 +1,75 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`captures connection startup and shutdown diagnostics without writing to the terminal 1`] = `
+[
+  {
+    "args": [
+      "%s: stderr: %s",
+      "mcp-client(noisy)",
+      "พร้อม",
+    ],
+    "type": "info",
+  },
+  {
+    "args": [
+      "%s: stderr: %s",
+      "mcp-client(noisy)",
+      "initialize: [redacted]",
+    ],
+    "type": "info",
+  },
+  {
+    "args": [
+      "%s: stderr: %s",
+      "mcp-client(noisy)",
+      "tools/list: [redacted]",
+    ],
+    "type": "info",
+  },
+  {
+    "args": [
+      "%s: stderr: %s",
+      "mcp-client(noisy)",
+      "final diagnostic",
+    ],
+    "type": "info",
+  },
+]
+`;
+
+exports[`captures probe startup and shutdown diagnostics without writing to the terminal 1`] = `
+[
+  {
+    "args": [
+      "mcp-client(%s): stderr: %s",
+      "noisy",
+      "พร้อม",
+    ],
+    "type": "info",
+  },
+  {
+    "args": [
+      "mcp-client(%s): stderr: %s",
+      "noisy",
+      "initialize: [redacted]",
+    ],
+    "type": "info",
+  },
+  {
+    "args": [
+      "mcp-client(%s): stderr: %s",
+      "noisy",
+      "tools/list: [redacted]",
+    ],
+    "type": "info",
+  },
+  {
+    "args": [
+      "mcp-client(%s): stderr: %s",
+      "noisy",
+      "final diagnostic",
+    ],
+    "type": "info",
+  },
+]
+`;

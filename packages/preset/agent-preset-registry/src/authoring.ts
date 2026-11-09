@@ -137,7 +137,7 @@ function declaredRows(patches: readonly PatchOptions[]): DeclaredRow[] {
   const found: DeclaredRow[] = []
   patches.forEach((patch, patchIndex) => {
     if (!Array.isArray(patch.insert)) return
-    patch.insert.forEach((entry, entryIndex) => {
+    patch.insert.forEach((entry: unknown, entryIndex) => {
       if (!declaresPreset(entry)) return
       found.push({
         patchIndex,
@@ -180,9 +180,9 @@ function retagExpressions(document: Document.Parsed): void {
 }
 
 /** The preset ids the profile patch itself declares. */
-async function declaredPresetIds(profile: ProfileContext): Promise<Set<string>> {
+function declaredPresetIds(profile: ProfileContext): Promise<Set<string>> {
   const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-  return new Set(declaredRows(loaded.patches).map(row => row.presetId))
+  return Promise.resolve(new Set(declaredRows(loaded.patches).map(row => row.presetId)))
 }
 
 /** Profile-patch-backed preset authoring; one instance per registry. */
@@ -247,7 +247,8 @@ export class PresetAuthoring {
    * @returns once the file is written and the Loader settled on it.
    */
   private async commit(edit: (document: Document.Parsed) => void, requiredIds: readonly string[] = []): Promise<void> {
-    await withFileLock(join(this.profile.dir, 'package.json'), async () => {
+    const hmr = this.ctx.get('hmr')
+    const run = () => withFileLock(join(this.profile.dir, 'package.json'), async () => {
       const { document, before } = await readPatchDocument(this.profile)
       edit(document)
       retagExpressions(document)
@@ -270,7 +271,9 @@ export class PresetAuthoring {
         }
         throw error
       }
-    })
+    // A package writer may already hold this file lock while waiting for HMR.
+    }, hmr === undefined ? undefined : { waitMs: 0 })
+    await (hmr === undefined ? run() : hmr.runExclusive(run))
   }
 
   /**

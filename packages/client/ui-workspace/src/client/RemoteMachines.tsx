@@ -1,15 +1,17 @@
 /** Saved remote-machine management and the team-mode switch rendered in Settings. */
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
-import type { RemoteMachineAuth, RemoteMachineSaveRequest, RemoteMachineView } from '@deepseek-ai/dsh-remote-machines/types'
+import { useEffect, useState, useMemo, type FormEvent } from 'react'
+import type { RemoteMachineAuth, RemoteMachineSaveRequest, RemoteMachineView, RemoteMachineProbeValue } from '@deepseek-ai/dsh-remote-machines/types'
 import type { WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular,
   IconGlobeOutlineRegular, IconGoalOutlineRegular, IconPlusOutlineRegular, IconShieldOutlineRegular,
-  Menu, Modal,
+  Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RemoteMachineController, RemoteMachineSnapshot } from './remote-machine-store.ts'
-import type { AgentMode, AgentModeController } from './agent-mode.ts'
+import type { AgentMode } from './agent-mode.ts'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import css from './RemoteMachines.module.css'
 /**
  * Parse a `__dsh_ssh__/<machine>/<path>` execution path client-side.
@@ -29,8 +31,9 @@ function parseRemoteExecutionPath(value: string): { machineId: string; path: str
 /** Share the settings section consumes: the machine controller, the mode controller, and roster facts. */
 export interface RemoteMachineInjected {
   controller: RemoteMachineController
-  agentMode: AgentModeController
+  selectMode: (mode: AgentMode) => Promise<boolean>
   hooks: {
+    agentMode: { getSnapshot: () => ConfigFormSnapshot<{ mode: AgentMode }>; subscribe: (fn: () => void) => () => void }
     remoteMachines: { getSnapshot: () => RemoteMachineSnapshot; subscribe: (fn: () => void) => () => void }
   }
   /** Adopt a machine-qualified path as a real Workspace. */
@@ -39,6 +42,9 @@ export interface RemoteMachineInjected {
 
 const AGENT_MODES: readonly AgentMode[] = ['blue', 'red', 'black', 'dead']
 const MODE_TRANSITION_MS = 1100
+type AgentModeInjected = Pick<RemoteMachineInjected, 'selectMode'> & {
+  hooks: Pick<RemoteMachineInjected['hooks'], 'agentMode'>
+}
 
 const BlackTeamIcon = ({ size = 16, className }: {
   size?: number | undefined
@@ -91,16 +97,15 @@ export function ComputerIcon({ remote = false }: { remote?: boolean }) {
  * @param props - injected controller, lock state, and locale.
  * @returns the mode switch menu and its transition overlay.
  */
-export function AgentModeControl({ controller, locked, t }: {
-  controller: AgentModeController
-  locked: boolean
-  t: PropsLocale<'workspace'>['t']
-}) {
-  const mode = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
+export function AgentModeControl({ useAgentMode, selectMode, t }: InjectFace<AgentModeInjected> & PropsLocale<'workspace'>) {
+  const state = useAgentMode(value => value)
+  const mode = state.value?.mode
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [transitioning, setTransitioning] = useState<AgentMode | null>(null)
-  const label = t(`agentMode.${mode}`)
-  const ActiveIcon = AGENT_MODE_ICONS[mode]
+  const label = mode === undefined ? t('agentMode.title') : t(`agentMode.${mode}`)
+  const ActiveIcon = mode === undefined ? IconShieldOutlineRegular : AGENT_MODE_ICONS[mode]
   useEffect(() => {
     if (transitioning === null) return
     const timeout = window.setTimeout(() => { setTransitioning(null) }, MODE_TRANSITION_MS)
@@ -121,12 +126,19 @@ export function AgentModeControl({ controller, locked, t }: {
             icon: <span className={css.modeMenuIcon} data-agent-mode={value}><Icon size={14} /></span>,
           }
         })}
-        selectedId={mode}
+        {...mode === undefined ? {} : { selectedId: mode }}
+        autoFocus
         onSelect={(id) => {
           const next = id as AgentMode
           if (next !== mode) {
-            controller.set(next)
-            setTransitioning(next)
+            setBusy(true)
+            setError(null)
+            void selectMode(next).then((accepted) => {
+              if (accepted) setTransitioning(next)
+              else setError(t('agentMode.failed'))
+            }, (reason: unknown) => {
+              setError(t('agentMode.error', { message: reason instanceof Error ? reason.message : String(reason) }))
+            }).finally(() => { setBusy(false) })
           }
           setOpen(false)
         }}
@@ -139,15 +151,16 @@ export function AgentModeControl({ controller, locked, t }: {
             aria-label={t('agentMode.aria', { mode: label })}
             aria-haspopup="menu"
             aria-expanded={open}
-            disabled={locked}
+            disabled={busy || state.status !== 'ready' || !state.writable || mode === undefined}
             onClick={() => { setOpen(value => !value) }}
           >
             <ActiveIcon size={14} />
             <span>{label}</span>
-            {open ? <IconChevronUpOutlineRegular size={14} /> : <IconChevronDownOutlineRegular size={14} />}
+            {open ? <IconChevronUpOutlineRegular size={16} /> : <IconChevronDownOutlineRegular size={16} />}
           </button>
         )}
       />
+      {error !== null && <span className={css.controlError} role="alert">{error}</span>}
       {transitioning !== null && (
         <div className={css.modeLoading} role="status" aria-live="polite">
           <div className={css.modeLoadingBrand}>
@@ -200,16 +213,17 @@ function draftOf(machine?: RemoteMachineView): MachineDraft {
   }
 }
 
-function MachineEditor({ open, machine, controller, onClose, onSaved, t }: {
+function MachineEditor({ open, machine, saveMachine, onClose, onSaved, t }: {
   open: boolean
   machine?: RemoteMachineView | undefined
-  controller: RemoteMachineController
+  saveMachine: (request: RemoteMachineSaveRequest) => Promise<RemoteMachineView>
   onClose: () => void
   onSaved: (machine: RemoteMachineView) => void
   t: RemoteMachinesSectionProps['t']
 }) {
   const [draft, setDraft] = useState<MachineDraft>(EMPTY_DRAFT)
   const [saving, setSaving] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -241,7 +255,7 @@ function MachineEditor({ open, machine, controller, onClose, onSaved, t }: {
     }
     setSaving(true)
     setError(null)
-    void controller.save(request).then((saved) => {
+    void saveMachine(request).then((saved) => {
       setSaving(false)
       setDraft({ ...EMPTY_DRAFT })
       onSaved(saved)
@@ -287,15 +301,20 @@ function MachineEditor({ open, machine, controller, onClose, onSaved, t }: {
           <span>{t('remote.field.username')}</span>
           <input required autoComplete="username" value={draft.username} onChange={(event) => { field('username')(event.target.value) }} />
         </label>
-        <label className={css.field}>
+        <div className={css.field}>
           <span>{t('remote.field.auth')}</span>
-          <select value={draft.auth} onChange={(event) => { field('auth')(event.target.value as RemoteMachineAuth) }}>
-            <option value="agent">{t('remote.auth.agent')}</option>
-            <option value="password">{t('remote.auth.password')}</option>
-            <option value="password-prompt">{t('remote.auth.passwordPrompt')}</option>
-            <option value="private-key">{t('remote.auth.privateKey')}</option>
-          </select>
-        </label>
+          <Menu open={authOpen} onClose={() => { setAuthOpen(false) }} portal autoFocus
+            items={([
+              ['agent', 'remote.auth.agent'], ['password', 'remote.auth.password'],
+              ['password-prompt', 'remote.auth.passwordPrompt'], ['private-key', 'remote.auth.privateKey'],
+            ] as const).map(([id, key]) => ({ id, label: t(key) }))}
+            selectedId={draft.auth} onSelect={(id) => { field('auth')(id as RemoteMachineAuth); setAuthOpen(false) }}
+            anchor={<button type="button" className={css.authTrigger} aria-label={t('remote.field.auth')}
+              aria-haspopup="menu" aria-expanded={authOpen} disabled={saving} onClick={() => { setAuthOpen(value => !value) }}>
+              <span>{t(({ agent: 'remote.auth.agent', password: 'remote.auth.password', 'password-prompt': 'remote.auth.passwordPrompt', 'private-key': 'remote.auth.privateKey' } as const)[draft.auth])}</span>
+              <IconChevronDownOutlineRegular size={16} />
+            </button>} />
+        </div>
         {draft.auth === 'password' && (
           <label className={css.field}>
             <span>{t('remote.field.password')}</span>
@@ -372,7 +391,9 @@ function TrustDialog({ machine, fingerprint, busy, error, onClose, onTrust, t }:
 }
 
 /** The Settings page listing saved machines with test, edit, and delete actions. */
-export function RemoteMachinesSection({ controller, agentMode, useRemoteMachines, useWorkspaces, t }: RemoteMachinesSectionProps) {
+export function RemoteMachinesSection({
+  controller, selectMode, useAgentMode, useRemoteMachines, useWorkspaces, t,
+}: RemoteMachinesSectionProps) {
   const state = useRemoteMachines(value => value)
   const workspaces = useWorkspaces(value => value.items)
   const [editor, setEditor] = useState<RemoteMachineView | 'new' | null>(null)
@@ -431,7 +452,7 @@ export function RemoteMachinesSection({ controller, agentMode, useRemoteMachines
           {t('remote.add')}
         </Button>
       </div>
-      <AgentModeControl controller={agentMode} locked={false} t={t} />
+      <AgentModeControl useAgentMode={useAgentMode} selectMode={selectMode} t={t} />
       {state.error !== null && <p className={css.error} role="alert">{state.error}</p>}
       {state.status === 'loading' && state.machines.length === 0 && <p className={css.muted}>{t('remote.loading')}</p>}
       {state.status === 'ready' && state.machines.length === 0 && <div className={css.empty}>{t('remote.empty')}</div>}
@@ -474,7 +495,7 @@ export function RemoteMachinesSection({ controller, agentMode, useRemoteMachines
       <MachineEditor
         open={editor !== null}
         machine={editor === 'new' || editor === null ? undefined : editor}
-        controller={controller}
+        saveMachine={request => controller.save(request)}
         onClose={() => { setEditor(null) }}
         onSaved={() => { setEditor(null) }}
         t={t}
@@ -489,5 +510,238 @@ export function RemoteMachinesSection({ controller, agentMode, useRemoteMachines
         t={t}
       />
     </div>
+  )
+}
+
+/** Composer machine navigation callbacks and redacted roster facts. */
+export interface MachineControlInjected {
+  hooks: {
+    hostInfo: { getSnapshot: () => RemoteHostFacts; subscribe: (fn: () => void) => () => void }
+    remoteMachines: { getSnapshot: () => RemoteMachineSnapshot; subscribe: (fn: () => void) => () => void }
+  }
+  loadMachines: () => Promise<void>
+  saveMachine: (request: RemoteMachineSaveRequest) => Promise<RemoteMachineView>
+  probeMachine: (id: string, password?: string) => Promise<RemoteMachineProbeValue>
+  trustMachine: (id: string, fingerprint: string) => Promise<RemoteMachineView>
+  createWorkspace: (path: string) => Promise<WorkspaceView>
+  openWorkspace: (workspaceId: WorkspaceView['workspaceId']) => Promise<void>
+}
+type RemoteMachineControlProps = PropsRuntime<'conversation.input.left'> & InjectFace<MachineControlInjected> & PropsLocale<'workspace'>
+
+/** Choose a machine and open a Workspace without relocating the current Session. */
+export function RemoteMachineControl({
+  useSession, useWorkspaces, useHostInfo, useRemoteMachines, loadMachines, saveMachine, probeMachine, trustMachine,
+  createWorkspace, openWorkspace, t,
+}: RemoteMachineControlProps) {
+  const sessionId = useSession(session => session.sessionId)
+  const workspaces = useWorkspaces(value => value.items)
+  const state = useRemoteMachines(value => value)
+  const localLabel = useHostInfo(info => info.hostname)?.trim() || t('remote.local')
+  const currentWorkspace = workspaces.find(workspace => workspace.sessionIds.includes(sessionId))
+  const currentRemote = currentWorkspace === undefined ? undefined : parseRemoteExecutionPath(currentWorkspace.path)
+  const currentMachine = state.machines.find(machine => machine.id === currentRemote?.machineId)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [target, setTarget] = useState<RemoteMachineView | null>(null)
+  const [path, setPath] = useState('')
+  const [connectionPassword, setConnectionPassword] = useState('')
+  const [fingerprint, setFingerprint] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { if (state.status === 'idle') void loadMachines() }, [loadMachines, state.status])
+  const targetWorkspaces = useMemo(() => target === null
+    ? []
+    : workspaces.filter(workspace => parseRemoteExecutionPath(workspace.path)?.machineId === target.id), [target, workspaces])
+
+  const entries: MenuEntry[] = [
+    { id: 'local', label: localLabel, icon: <ComputerIcon /> },
+    ...(state.machines.length === 0
+      ? []
+      : [
+        { type: 'separator' as const, id: 'remote-separator' },
+        { type: 'label' as const, id: 'remote-label', text: t('remote.saved') },
+        ...state.machines.map(machine => ({ id: machine.id, label: machine.name, icon: <ComputerIcon remote /> })),
+      ]),
+    { type: 'separator' as const, id: 'add-separator' },
+    { id: 'add', label: t('remote.add'), icon: <IconPlusOutlineRegular /> },
+  ]
+
+  const select = (id: string): void => {
+    setMenuOpen(false)
+    setError(null)
+    if (id === 'add') {
+      setEditorOpen(true)
+      return
+    }
+    if (id === 'local') {
+      const local = workspaces.find(workspace => parseRemoteExecutionPath(workspace.path) === undefined)
+      if (local === undefined) setError(t('remote.local.missing'))
+      else if (local.workspaceId !== currentWorkspace?.workspaceId) {
+        void openWorkspace(local.workspaceId).catch((reason: unknown) => {
+          setError(reason instanceof Error ? reason.message : String(reason))
+        })
+      }
+      return
+    }
+    const machine = state.machines.find(candidate => candidate.id === id)
+    if (machine === undefined) return
+    setTarget(machine)
+    setPath(machine.defaultPath ?? '')
+    setConnectionPassword('')
+    setFingerprint(null)
+  }
+
+  const connect = (remotePath = path): void => {
+    if (target === null) return
+    if (remotePath.length > 0 && !remotePath.startsWith('/')) {
+      setError(t('remote.path.absolute'))
+      return
+    }
+    if (target.auth === 'password-prompt' && connectionPassword.length === 0) {
+      setError(t('remote.password.required'))
+      return
+    }
+    setBusy(true)
+    setError(null)
+    void (async () => {
+      try {
+        let resolvedPath = remotePath
+        if (fingerprint === null) {
+          const probe = await probeMachine(target.id, target.auth === 'password-prompt' ? connectionPassword : undefined)
+          if (probe.platform === 'windows') throw new Error(t('remote.error.windowsUnsupported'))
+          resolvedPath = remotePath || probe.home || ''
+          if (!resolvedPath.startsWith('/')) throw new Error(t('remote.path.absolute'))
+          if (!probe.trusted) {
+            setPath(resolvedPath)
+            setFingerprint(probe.fingerprint)
+            return
+          }
+        } else await trustMachine(target.id, fingerprint)
+        const workspace = await createWorkspace('/__dsh_ssh__/' + target.id + resolvedPath)
+        await openWorkspace(workspace.workspaceId)
+        setTarget(null)
+        setConnectionPassword('')
+        setFingerprint(null)
+      } catch (reason: unknown) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      } finally { setBusy(false) }
+    })()
+  }
+
+  const label = currentMachine?.name ?? currentRemote?.machineId ?? localLabel
+  return (
+    <>
+      <span className={css.controlWrap}>
+        <Menu
+          open={menuOpen}
+          side="top"
+          items={entries}
+          selectedId={currentMachine?.id ?? 'local'}
+          onSelect={select}
+          onClose={() => { setMenuOpen(false) }}
+          portal
+          autoFocus
+          anchor={(
+            <button
+              type="button"
+              className={css.control}
+              data-active="true"
+              aria-label={t('remote.target.aria', { name: label })}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={busy}
+              onClick={() => { setMenuOpen(value => !value) }}
+            >
+              <ComputerIcon remote={currentRemote !== undefined} />
+              <span>{label}</span>
+              {menuOpen ? <IconChevronUpOutlineRegular size={16} /> : <IconChevronDownOutlineRegular size={16} />}
+            </button>
+          )}
+        />
+        {state.status === 'error' && <button type="button" className={css.controlError} onClick={() => { void loadMachines() }} title={state.error ?? undefined}>{t('remote.retry')}</button>}
+        {error !== null && target === null && <span className={css.controlError} role="alert">{error}</span>}
+      </span>
+      <MachineEditor
+        open={editorOpen}
+        saveMachine={saveMachine}
+        onClose={() => { setEditorOpen(false) }}
+        onSaved={(machine) => {
+          setEditorOpen(false)
+          setTarget(machine)
+          setPath(machine.defaultPath ?? '')
+          setFingerprint(null)
+          setConnectionPassword('')
+          setError(null)
+        }}
+        t={t}
+      />
+      <Modal
+        open={target !== null}
+        onClose={busy ? () => {} : () => { setTarget(null); setFingerprint(null); setConnectionPassword(''); setError(null) }}
+        closeLabel={t('remote.close')}
+        title={target === null ? '' : t('remote.connect.title', { name: target.name })}
+        description={t('remote.connect.description')}
+        {...css.dialog === undefined ? {} : { className: css.dialog }}
+        footer={(
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => { setTarget(null); setConnectionPassword(''); setFingerprint(null); setError(null) }}>{t('remote.cancel')}</Button>
+            <Button disabled={busy} onClick={() => { connect() }}>
+              {t(busy ? 'remote.connecting' : fingerprint === null ? 'remote.connect' : 'remote.trustConnect')}
+            </Button>
+          </>
+        )}
+      >
+        {target?.auth === 'password-prompt' && (
+          <label className={css.field}>
+            <span>{t('remote.field.password')}</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              aria-label={t('remote.field.password')}
+              disabled={busy}
+              value={connectionPassword}
+              onChange={(event) => { setConnectionPassword(event.target.value); setFingerprint(null); setError(null) }}
+            />
+            <small>{t('remote.password.memoryOnly')}</small>
+          </label>
+        )}
+        {targetWorkspaces.length > 0 && (
+          <div className={css.existing}>
+            <span>{t('remote.existing')}</span>
+            {targetWorkspaces.map((workspace) => {
+              const remote = parseRemoteExecutionPath(workspace.path)
+              return (
+                <button
+                  type="button"
+                  key={workspace.workspaceId}
+                  disabled={busy || remote === undefined}
+                  onClick={() => {
+                    if (remote === undefined) return
+                    setPath(remote.path)
+                    setFingerprint(null)
+                    connect(remote.path)
+                  }}
+                >
+                  {workspace.title}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        <label className={css.field}>
+          <span>{t('remote.field.path')}</span>
+          <input autoFocus value={path} disabled={busy} placeholder={t('remote.path.placeholder')}
+            onChange={(event) => { setPath(event.target.value); setFingerprint(null); setError(null) }} />
+        </label>
+        {fingerprint !== null && (
+          <div className={css.trustInline}>
+            <strong>{t('remote.trust.verify')}</strong>
+            <code className={css.fingerprint}>{fingerprint}</code>
+          </div>
+        )}
+        {error !== null && <p className={css.error} role="alert">{error}</p>}
+      </Modal>
+    </>
   )
 }

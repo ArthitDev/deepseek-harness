@@ -1,4 +1,4 @@
-/** Preset roster, the new-task default and the read-only composition viewer for the settings section. */
+/** Preset roster, selection, and composition management for the settings section. */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -22,6 +22,8 @@ export interface AgentPresetSectionState {
   rows: readonly AgentPresetRow[]
   /** The open viewer, or null. */
   view: PresetView | null
+  /** Whether the Host has an active profile that supports authoring. */
+  authorable?: boolean
 }
 const INITIAL: AgentPresetSectionState = { status: 'idle', error: null, saving: false, rows: [], view: null }
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error)
@@ -47,7 +49,7 @@ export class AgentPresetSectionController {
     try {
       const result = await this.ctx.remote.agentPresets.list()
       if (!result.ok) throw new Error(result.error.message)
-      this.set({ status: 'ready', error: null, rows: result.value.presets })
+      this.set({ status: 'ready', error: null, rows: result.value.presets, authorable: result.value.authorable })
     } catch (error) { this.set({ status: 'error', error: message(error) }) }
   }
 
@@ -69,6 +71,29 @@ export class AgentPresetSectionController {
   /** Close the viewer. */
   closeView(): void { this.viewRequest++; this.set({ view: null }) }
 
+  /** Store a user preset's complete composition; retain the editor on failure.
+   * @param id Preset to update.
+   * @param content Complete composition YAML.
+   * @returns Whether the Host accepted the write.
+   */
+  async write(id: string, content: string): Promise<boolean> {
+    return await this.save(async () => {
+      const result = await this.ctx.remote.agentPresets.write(id, content)
+      return result.ok ? undefined : result.error.message
+    })
+  }
+
+  /** Delete a user preset after confirmation in the view.
+   * @param id Preset to delete.
+   * @returns Whether the Host accepted deletion.
+   */
+  async remove(id: string): Promise<boolean> {
+    return await this.save(async () => {
+      const result = await this.ctx.remote.agentPresets.deletePreset(id)
+      return result.ok ? undefined : result.error.message
+    })
+  }
+
   /** Set the default and synchronize the current blank task when supplied.
    * @param id Selected default.
    * @param sync Blank-session synchronization callback.
@@ -76,6 +101,17 @@ export class AgentPresetSectionController {
    */
   async makeDefault(id: string, sync?: (id: string) => Promise<string | undefined>): Promise<void> {
     await this.save(() => writeDefaultPreset(this.ctx, id), sync)
+  }
+
+  /** Persist built-in visibility without changing the default or a running session.
+   * @param show Whether selection surfaces show shipped presets.
+   * @returns Once saved; refusals remain visible in the section.
+   */
+  async setShowBuiltInPresets(show: boolean): Promise<void> {
+    await this.save(async () => {
+      const result = await this.ctx.remote.settings.update(AGENT_PRESET_SETTINGS_NS, { showBuiltInPresets: show }, undefined)
+      return result.ok ? undefined : result.error.message
+    })
   }
 
   /** Replace a hidden built-in default after accepted Coding Tools changes.
@@ -98,8 +134,8 @@ export class AgentPresetSectionController {
     await this.save(() => writeDefaultPreset(this.ctx, 'standard', settings.revision))
   }
 
-  private async save(write: () => Promise<string | undefined>, sync?: (id: string) => Promise<string | undefined>): Promise<void> {
-    if (this.store.getSnapshot().saving) return
+  private async save(write: () => Promise<string | undefined>, sync?: (id: string) => Promise<string | undefined>): Promise<boolean> {
+    if (this.store.getSnapshot().saving) return false
     const completion = Promise.withResolvers<void>()
     this.pendingSave = completion.promise
     this.set({ saving: true, error: null })
@@ -112,7 +148,8 @@ export class AgentPresetSectionController {
         const error = await sync?.(selected.id)
         if (error !== undefined) throw new Error(error)
       }
-    } catch (error) { this.set({ error: message(error) }) }
+      return true
+    } catch (error) { this.set({ error: message(error) }); return false }
     finally {
       this.pendingSave = undefined
       this.set({ saving: false })

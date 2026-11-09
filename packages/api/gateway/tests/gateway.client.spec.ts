@@ -371,7 +371,7 @@ async function *unexpectedInProcessStream(): AsyncGenerator<never> {
 
 interface GenerationRun {
   readonly signal: AbortSignal
-  readonly ready: Promise<void>
+  readonly ready: Promise<ConnectionGeneration['host']>
   readonly done: Promise<void>
   abort(reason?: unknown): void
 }
@@ -397,8 +397,8 @@ class GenerationHarness {
     const source = this.source
     const controller = new AbortController()
     this.active = controller
-    let reportReady!: () => void
-    const ready = new Promise<void>((resolve) => { reportReady = resolve })
+    let reportReady!: (host: ConnectionGeneration['host']) => void
+    const ready = new Promise<ConnectionGeneration['host']>((resolve) => { reportReady = resolve })
     const done = Promise.resolve()
       .then(() => source(controller.signal, reportReady))
       .finally(() => {
@@ -416,8 +416,8 @@ class GenerationHarness {
   startOverlapping(): GenerationRun {
     if (this.source === undefined) throw new Error('fixture generation source is not registered')
     const controller = new AbortController()
-    let reportReady!: () => void
-    const ready = new Promise<void>((resolve) => { reportReady = resolve })
+    let reportReady!: (host: ConnectionGeneration['host']) => void
+    const ready = new Promise<ConnectionGeneration['host']>((resolve) => { reportReady = resolve })
     const done = Promise.resolve().then(() => this.source?.(controller.signal, reportReady))
       .then(() => undefined)
     void done.catch(() => undefined)
@@ -630,9 +630,21 @@ describe('Client Remote transport readiness', () => {
     expect(afterReady).not.toBe(beforeReady)
     expect(remote.$host).toBe(afterReady)
 
+    live.snapshot = { id: 2, host: { home: '/hosts/primary', hostname: 'fixture-host' } }
+    const namedHost = remote.$host
+    expect(namedHost).toEqual({ home: '/hosts/primary', hostname: 'fixture-host', isLoopback: true })
+    expect(namedHost).not.toBe(afterReady)
+    expect(remote.$host).toBe(namedHost)
+
+    live.snapshot = { id: 3, host: { home: '/hosts/primary', hostname: 'replacement-host' } }
+    const replacementHost = remote.$host
+    expect(replacementHost.hostname).toBe('replacement-host')
+    expect(replacementHost).not.toBe(namedHost)
+    expect(remote.$host).toBe(replacementHost)
+
     withdraw()
     expect(ctx.get('connection')).toBeUndefined()
-    expect(remote.$host).toBe(afterReady)
+    expect(remote.$host).toBe(replacementHost)
   })
 
   it('forwards each connection retry to the browser WebSocket owner', async () => {
@@ -2061,9 +2073,10 @@ describe('Client Typert API', () => {
       socket.receive({
         type: 'item',
         streamId: opened.streamId,
-        value: { type: 'ready', clientId: 'browser-client', host: { home: '/home/browser' } },
+        value: { type: 'ready', clientId: 'browser-client', host: { home: '/home/browser', hostname: 'browser-host' } },
       })
-      await run.ready
+      const readyHost = await run.ready
+      expect(readyHost.hostname).toBe('browser-host')
       socket.receive({
         type: 'item',
         streamId: opened.streamId,
@@ -2144,6 +2157,9 @@ describe('Client Typert API', () => {
     { type: 'ready', clientId: 'client', host: null },
     { type: 'ready', clientId: 'client', host: {} },
     { type: 'ready', clientId: 'client', host: { home: 1 } },
+    { type: 'ready', clientId: 'client', host: { home: '/home', hostname: 42 } },
+    { type: 'ready', clientId: 'client', host: { home: '/home', hostname: null } },
+    { type: 'ready', clientId: 'client', host: { home: '/home', hostname: 'host', extra: true } },
     { type: 'ready', clientId: 'client', host: { home: '/home', extra: true } },
     { type: 'emit', event: 'fixture/changed', args: ['too early'] },
   ])('rejects malformed forwarded-event readiness item %#', async (opening) => {

@@ -72,7 +72,7 @@ export const inject = [
  */
 export function apply(ctx: ClientContext): void {
   const toolsSettings = ctx.configForms.get<{ enabled: boolean }>('ui-settings')
-  const presetSettings = ctx.configForms.get(AGENT_PRESET_SETTINGS_NS)
+  const presetSettings = ctx.configForms.get<{ showBuiltInPresets: boolean }>(AGENT_PRESET_SETTINGS_NS)
   let active = true
   // Host preferences start at false before their first accepted document.
   const codingToolsDisabled = (): boolean => active && toolsSettings.getSnapshot().value?.enabled === false
@@ -186,7 +186,7 @@ export function apply(ctx: ClientContext): void {
       const binding = sessionId === undefined ? undefined : ctx.sessions.binding(sessionId)
       const seat = binding === undefined ? unboundSeat : seatFor(binding)
       return {
-        hooks: { agentPresetSeat: seat.store, developerTools: ctx.configForms.developerTools.enabled },
+        hooks: { agentPresetSeat: seat.store, developerTools: ctx.configForms.developerTools.enabled, presetPreferences: presetSettings },
         load: () => seat.load(),
         select: async (id: string) => {
           const state = seat.store.getSnapshot()
@@ -270,12 +270,15 @@ export function apply(ctx: ClientContext): void {
   }
 
   const sectionInjected = (): AgentPresetSectionInjected => ({
-    hooks: { agentPresetSection: section.store, developerTools: ctx.configForms.developerTools.enabled },
+    hooks: { agentPresetSection: section.store, developerTools: ctx.configForms.developerTools.enabled, presetPreferences: presetSettings },
     load: () => section.load(),
     view: (id: string) => section.view(id),
     closeView: () => { section.closeView() },
+    write: (id: string, content: string) => section.write(id, content),
+    remove: (id: string) => section.remove(id),
     ...creatorDraft === undefined ? {} : { startCreatorDraft: creatorDraft },
     makeDefault: (id: string) => section.makeDefault(id, captureBlankSessionSync()),
+    setShowBuiltInPresets: (show: boolean) => section.setShowBuiltInPresets(show),
   })
 
   // Ordered after Models: choosing a model is routine, and composing an

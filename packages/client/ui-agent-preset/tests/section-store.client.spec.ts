@@ -10,10 +10,12 @@ function fixture() {
     status: 'ready', writable: true, revision: 7, value: { selectedDefault: 'minimal' }, base: {}, user: {},
   })
   const remote = { agentPresets: {
-    list: vi.fn(async (): Promise<{ ok: true; value: { presets: AgentPresetRow[] } }> => ({
+    list: vi.fn(async (): Promise<{ ok: true; value: { presets: AgentPresetRow[]; authorable?: boolean } }> => ({
       ok: true, value: { presets: [{ id: 'standard', isDefault: true, trust: 'system' }] },
     })),
     read: vi.fn(async (id: string) => ({ ok: true as const, value: { agentPreset: id, name: 'Standard', content: '- name: fs\n' } })),
+    write: vi.fn(async (_id: string, _content: string) => ({ ok: true as const, value: undefined })),
+    deletePreset: vi.fn(async (_id: string) => ({ ok: true as const, value: undefined })),
   }, settings: {
     update: vi.fn(async (_ns: string, _patch: { selectedDefault: string }, _revision?: number) => ({ ok: true as const, value: {} })),
   } }
@@ -24,6 +26,42 @@ function fixture() {
 }
 
 describe('the preset roster', () => {
+  it('publishes authoring capability, saves compositions and retains rows on refused deletion', async () => {
+    const { controller, remote, state } = fixture()
+    remote.agentPresets.list.mockResolvedValueOnce({ ok: true, value: { authorable: true, presets: [{ id: 'mine', trust: 'user', isDefault: true }] } })
+    await controller.load()
+    expect(state().authorable).toBe(true)
+    expect(await controller.write('mine', '[]\n')).toBe(true)
+    expect(remote.agentPresets.write).toHaveBeenCalledWith('mine', '[]\n')
+    remote.agentPresets.deletePreset.mockResolvedValueOnce({ ok: false, error: { message: 'Read only' } } as never)
+    expect(await controller.remove('mine')).toBe(false)
+    expect(state()).toMatchObject({ saving: false, error: 'Read only' })
+    expect(state().rows).toHaveLength(1)
+    remote.agentPresets.write.mockRejectedValueOnce(new Error('Invalid YAML'))
+    expect(await controller.write('mine', 'broken')).toBe(false)
+    expect(state().error).toBe('Invalid YAML')
+  })
+
+  it('does not submit a second mutation while a preset save is pending', async () => {
+    const { controller, remote } = fixture()
+    const pending = Promise.withResolvers<Awaited<ReturnType<typeof remote.agentPresets.write>>>()
+    remote.agentPresets.write.mockImplementationOnce(() => pending.promise)
+    const save = controller.write('mine', '[]\n')
+    expect(await controller.remove('mine')).toBe(false)
+    expect(remote.agentPresets.deletePreset).not.toHaveBeenCalled()
+    pending.resolve({ ok: true, value: undefined })
+    expect(await save).toBe(true)
+    expect(await controller.remove('mine')).toBe(true)
+  })
+  it('writes only visibility and reports a refused write without changing the default', async () => {
+    const { controller, remote, state } = fixture()
+    await controller.setShowBuiltInPresets(false)
+    expect(remote.settings.update).toHaveBeenCalledWith('agent-preset-registry', { showBuiltInPresets: false }, undefined)
+    expect(state().rows.find(row => row.isDefault)?.id).toBe('standard')
+    remote.settings.update.mockResolvedValueOnce({ ok: false, error: { message: 'Read only' } } as never)
+    await controller.setShowBuiltInPresets(true)
+    expect(state()).toMatchObject({ saving: false, error: 'Read only' })
+  })
   it('reads the roster once for simultaneous loads and surfaces failed reads', async () => {
     const { controller, remote, state } = fixture()
     await Promise.all([controller.load(), controller.load()])

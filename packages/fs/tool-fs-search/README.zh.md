@@ -43,6 +43,10 @@ kind: "package-reference"
 
 `sampleOverCapGlobResults` 是必填项且没有回退值：部署必须显式选择超过上限时的排序约定。格式化 spill 成功时，两种模式都会在 spill 产物中保留完整排序列表。
 
+可选的 `knowledgeRoots` 条目（`name`、绝对 `path`、可选 `bootstrap`）为本地 Wiki 库启用 `knowledge_list` 和 `knowledge_create_note`。每个根目录必须包含 `INDEX.md`；`bootstrap: true` 仅创建缺失的库框架，不覆盖现有文件。省略或传入空列表时不注册知识工具。无效根目录会使激活失败。发现操作仅返回路径，不读取笔记内容；创建笔记会写入带来源的草稿并添加索引链接。注册随插件生命周期释放，因此 TUI Wiki 指示器和 `/wiki` 反映当前 agent 可用的库。
+
+所选工具执行器负责 Wiki 工具声明。Wiki 注册不修改提示词呈现，包括完整的预设提示词。
+
 ### 工具
 
 | 工具 | 参数 | 行为 |

@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`status bar animation > shows Kali checking as static text alongside Wiki and Jev 1`] = `
+"⧉ Shield Break · 📚 Wiki
+Kali checking · ◈ Jev ON
+◌ normal"
+`;
+
+exports[`status bar animation > shows Kali ready as static text alongside Wiki and Jev 1`] = `
+"⧉ Shield Break · 📚 Wiki
+Kali ready · ◈ Jev ON
+◌ normal"
+`;
+
+exports[`status bar animation > shows Kali unavailable as static text alongside Wiki and Jev 1`] = `
+"⧉ Shield Break · 📚 Wiki
+Kali unavailable · ◈ Jev ON
+◌ normal"
+`;

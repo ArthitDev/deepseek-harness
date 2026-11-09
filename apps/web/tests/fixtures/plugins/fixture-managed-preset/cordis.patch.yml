@@ -1,0 +1,11 @@
+- insert:
+    - id: source-editable-example
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: editable-example
+        name: Editable example
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: You help with workspace tasks.

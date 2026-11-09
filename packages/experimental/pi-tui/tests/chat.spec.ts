@@ -247,7 +247,7 @@ describe('exit and resume hints', () => {
       const rendered = await renderScreen(tui)
       expect(rendered).toContain('Main Agent')
       expect(rendered).toContain('task: inspect the service')
-      expect(rendered).toContain('tool: read_file')
+      expect(rendered).toMatch(/last tool:[\s\S]*?read_file/)
       expect(rendered).toContain('1 pending')
     } finally { tui.stop(); await ctx.fiber.dispose() }
   })
@@ -412,7 +412,7 @@ describe('exit and resume hints', () => {
     try {
       await screen.replayTranscript(first)
       expect(await renderScreen(tui)).toContain('FIRST_ASSISTANT_29')
-      for (let page = 0; page < 3; page++) terminalInput?.('\x1b[5~')
+      for (let page = 0; page < 10; page++) terminalInput?.('\x1b[5~')
       expect(tui.isFollowingOutput).toBe(false)
       expect(await renderScreen(tui)).not.toContain('FIRST_ASSISTANT_29')
 
@@ -427,7 +427,7 @@ describe('exit and resume hints', () => {
       expect(tui.isFollowingOutput).toBe(true)
       expect(resumed.session.snapshotEvents()).toEqual(resumedEvents)
 
-      for (let page = 0; page < 3; page++) terminalInput?.('\x1b[5~')
+      for (let page = 0; page < 10; page++) terminalInput?.('\x1b[5~')
       expect(tui.isFollowingOutput).toBe(false)
       screen.handleEvent(resumed.session.append('user/message', createUserMessage({ source: { kind: 'user' },
         content: [{ type: 'text', text: 'LIVE_AFTER_SCROLL' }] }), { surfaceOp: 'append' }))
@@ -919,12 +919,10 @@ describe('/clear transcript', () => {
         // 0.2.2 /clear appends a session-edit developer marker shadowing the
         // earlier surface; hidden- and wiki-context histories surface it next
         // to the system preamble.
-        const clearedModelHistory = history === 'empty' ? [] : [
-          system,
-          ...(history === 'hidden-context' || history === 'wiki-context'
-            ? [expect.objectContaining({ role: 'developer', source: { kind: 'session-edit' } })]
-            : []),
-        ]
+        const clearedModelHistory: unknown[] = history === 'empty' ? [] : [system]
+        if (history === 'hidden-context' || history === 'wiki-context') {
+          clearedModelHistory.push(expect.objectContaining({ role: 'developer', source: { kind: 'session-edit' } }))
+        }
         expect(session.deriveMessages()).toEqual(clearedModelHistory)
         if (history !== 'hidden-context' && history !== 'wiki-context') expect(session.snapshotEvents()).toEqual(before)
         screen.submit('/clear')
@@ -1274,7 +1272,12 @@ describe('the split-pane shell', () => {
       await vi.waitFor(async () => {
         expect(await renderScreen(tui)).toContain('Shell · win')
       })
+      const activityRow = (await renderScreen(tui)).split('\n').findIndex(line => line.includes('[PREPARING] Tool · read_file'))
+      expect(activityRow).toBeGreaterThanOrEqual(0)
+      for (let index = 0; index < 4; index++) input(`\x1b[<64;65;${activityRow + 1}M`)
+      await renderScreen(tui)
       expect(activity()).toContain('[OK] Shell · pwsh')
+      expect(activity()).toContain('Main Agent')
       expect(activity().match(/Agent Debug/g)).toHaveLength(1)
       const next = fixtureAgent(ctx, ctx.sessions.create(SessionId('next-tools-session')))
       await ctx.agents.register(next)

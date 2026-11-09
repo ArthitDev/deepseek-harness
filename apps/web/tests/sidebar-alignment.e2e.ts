@@ -1,11 +1,11 @@
 /** Browser geometry for sidebar controls, text clearance, and drag previews. */
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed, onTestFinished, vi } from 'vitest'
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
@@ -104,13 +104,14 @@ describe('web e2e: sidebar search alignment and row action targets', () => {
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let sessionId: Awaited<ReturnType<typeof seedSession>>
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold({})
     const workspace = await scaffold.ctx.workspaceRegistry.create(scaffold.workspaceCwd, workspaceTitle)
-    const id = await seedSession(scaffold, await readFile(SEED, 'utf8'), 'sidebar-action-geometry')
-    await workspace.attachSession(id)
-    await scaffold.ctx.sessionController.rename({ sessionId: id, title: sessionTitle })
+    sessionId = await seedSession(scaffold, await readFile(SEED, 'utf8'), 'sidebar-action-geometry')
+    await workspace.attachSession(sessionId)
+    await scaffold.ctx.sessionController.rename({ sessionId, title: sessionTitle })
     const archivedId = await seedSession(scaffold, await readFile(SEED, 'utf8'), 'sidebar-search-geometry')
     await workspace.attachSession(archivedId)
     await scaffold.ctx.sessionController.rename({ sessionId: archivedId, title: archivedTitle })
@@ -139,6 +140,86 @@ describe('web e2e: sidebar search alignment and row action targets', () => {
 
   afterAll(async () => {
     try { await browser?.close() } finally { await scaffold?.close() }
+  })
+
+  it('keeps the v2 workspace tree columns connected at narrow and wide widths', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-v2-workspace-tree'))
+    onTestFinished(async () => {
+      await scaffold.ctx.sessionController.rename({ sessionId, title: sessionTitle })
+      await scaffold.ctx.settings.mutate('ui-theme', [{ op: 'set', path: ['preference'], value: 'system' }])
+    })
+    const output = fileURLToPath(new URL('../../../.artifacts/sidebar-workspace-tree/', import.meta.url))
+    await mkdir(output, { recursive: true })
+    const workspace = page.locator('[data-row-key^="workspace:"]').filter({ hasText: workspaceTitle })
+    const session = page.locator('[data-row-key="session:sidebar-action-geometry"]')
+    for (const width of [900, 1280]) {
+      await page.setViewportSize({ width, height: 800 })
+      for (const dark of [false, true]) {
+        await scaffold.ctx.settings.mutate('ui-theme', [{ op: 'set', path: ['preference'], value: dark ? 'dark' : 'light' }])
+        await page.reload({ waitUntil: 'load' })
+        await page.getByRole('button', { name: 'Search sessions', exact: true }).waitFor()
+        const open = page.getByRole('button', { name: 'Open sidebar', exact: true })
+        if (await open.isVisible()) await open.click()
+        await workspace.waitFor()
+        await page.evaluate(async () => {
+          await Promise.all(document.getAnimations()
+            .filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+            .map(animation => animation.finished.then(() => undefined, () => undefined)))
+        })
+        await expect.poll(() => page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))).toBe(dark)
+        const geometry = await workspace.evaluate((row) => {
+          const section = row.closest<HTMLElement>('[data-tree-depth]')
+          const icon = row.querySelector<HTMLElement>('[class*="folder"]')
+          if (section === null || icon === null) throw new Error('Workspace tree geometry is missing')
+          const bounds = row.getBoundingClientRect()
+          const elbow = getComputedStyle(section, '::before')
+          return {
+            height: bounds.height,
+            iconInset: icon.getBoundingClientRect().left - bounds.left,
+            elbowWidth: elbow.width,
+            elbowHeight: elbow.height,
+            overflows: row.scrollWidth > row.clientWidth,
+          }
+        })
+        expect(geometry).toEqual({ height: 34, iconInset: 8, elbowWidth: '8px', elbowHeight: '18px', overflows: false })
+        const sessionGeometry = await session.evaluate((row) => {
+          const connector = row.querySelector('[data-tree-connector]')
+          const slot = connector?.nextElementSibling
+          const title = slot?.nextElementSibling
+          if (connector === null || connector === undefined
+            || slot === null || slot === undefined || title === null || title === undefined) {
+            throw new Error('Session tree columns are missing')
+          }
+          return {
+            height: row.getBoundingClientRect().height,
+            branchGap: title.getBoundingClientRect().left - connector.getBoundingClientRect().right,
+            titleGap: title.getBoundingClientRect().left - slot.getBoundingClientRect().right,
+            overflows: row.scrollWidth > row.clientWidth,
+          }
+        })
+        expect(sessionGeometry).toEqual({ height: 28, branchGap: 8, titleGap: 4, overflows: false })
+        await page.screenshot({ path: join(output, `sidebar-${width}-${dark ? 'dark' : 'light'}.png`) })
+      }
+    }
+    const { title: longTitle } = await scaffold.ctx.sessionController.rename({
+      sessionId, title: 'Session with a very long title that must stay clipped and leave every row action accessible',
+    })
+    await expect.poll(() => session.textContent()).toContain(longTitle)
+    await session.hover()
+    const longActions = await measureRowActions(session)
+    expect(longActions.overflows).toBe(false)
+    expect(longActions.titleRight).toBeLessThanOrEqual(longActions.actions[0]!.center.x - 12)
+    expect(longActions.actions.every(action => action.insideRow && action.edgeHits.every(Boolean))).toBe(true)
+    await page.screenshot({ path: join(output, 'sidebar-long-title.png') })
+    await workspace.getByText(workspaceTitle, { exact: true }).click()
+    expect(await workspace.getAttribute('aria-expanded')).toBe('false')
+    expect(await session.count()).toBe(0)
+    await workspace.getByText(workspaceTitle, { exact: true }).click()
+    await session.waitFor()
+    await session.focus()
+    await session.press('Enter')
+    await expect.poll(() => session.getAttribute('aria-selected')).toBe('true')
+    expect(tripwire.pageErrors).toEqual([])
   })
 
   it('aligns the 32px expanded search with both edges of New session', async () => {
@@ -585,7 +666,7 @@ describe('web e2e: sidebar search alignment and row action targets', () => {
     await row.getByRole('button', { name: labels[0], exact: true }).waitFor()
     const metrics = await measureRowActions(row)
     expect(await row.boundingBox()).toEqual(restingBox)
-    expect(metrics.height).toBe(32)
+    expect(metrics.height).toBe(kind === 'workspace' ? 34 : 28)
     expect(metrics.overflows).toBe(false)
     expect(metrics.actions.map(action => action.label)).toEqual(labels)
     for (const [index, action] of metrics.actions.entries()) {

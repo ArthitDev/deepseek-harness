@@ -16,7 +16,7 @@ import { AgentPresetLabel } from '../src/client/AgentPresetLabel.tsx'
 import type { AgentPresetLabelProps } from '../src/client/AgentPresetLabel.tsx'
 import { AgentPresetSeat } from '../src/client/AgentPresetSeat.tsx'
 import type { AgentPresetSeatProps } from '../src/client/AgentPresetSeat.tsx'
-import type { AgentPresetSettingsState } from '../src/client/settings-store.ts'
+import type { AgentPresetSettingsState, AgentPresetPreferences } from '../src/client/settings-store.ts'
 import type { AgentPresetSeatState } from '../src/client/seat-store.ts'
 import { en } from '../src/client/locales.ts'
 
@@ -57,6 +57,7 @@ function renderSeat(
 ) {
   const store = createSnapshotStore<AgentPresetSeatState>({ ...SEAT_READY, ...state })
   const developerTools = createSnapshotStore(enabled)
+  const preferences = createSnapshotStore<AgentPresetPreferences>({ status: 'ready', value: { showBuiltInPresets: true }, base: {}, user: {}, revision: 0, writable: true })
   const actions = {
     load: vi.fn(() => Promise.resolve()), select: vi.fn(select), introduced: vi.fn(),
     dismissRefusal: vi.fn((error: AgentPresetSeatState['error']) => {
@@ -69,6 +70,7 @@ function renderSeat(
     ...actions,
     sessionId: session === undefined ? undefined : SessionId(session.id),
     useDeveloperTools: bindSnapshotSelector(developerTools),
+    usePresetPreferences: bindSnapshotSelector(preferences),
     useAgentPresetSeat: bindSnapshotSelector(store),
     useSessionRetainInfo: session === undefined
       ? useSessionRetainInfo
@@ -76,7 +78,7 @@ function renderSeat(
     t: translate,
   } as AgentPresetSeatProps
   render(<AgentPresetSeat {...props} />)
-  return { ...actions, developerTools, store }
+  return { ...actions, developerTools, preferences, store }
 }
 
 function renderLabel(
@@ -100,6 +102,19 @@ function renderLabel(
 }
 
 describe('the new-session chip', () => {
+  it('hides shipped choices while preserving custom overrides and the active label', async () => {
+    const actions = renderSeat({ options: [{ id: 'standard' }, { id: 'mine', name: 'Mine' }, { id: 'ptc', name: 'My PTC' }] })
+    act(() => { actions.preferences.set({ ...actions.preferences.getSnapshot(), value: { showBuiltInPresets: false } }) })
+    const trigger = screen.getByRole('button', { name: en.presetStandardName })
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('menuitem', { name: new RegExp(en.presetStandardName) })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: /Mine/ })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: /My PTC/ })).toBeTruthy()
+    expect(actions.select).not.toHaveBeenCalled()
+    act(() => { actions.preferences.set({ ...actions.preferences.getSnapshot(), value: { showBuiltInPresets: true } }) })
+    fireEvent.click(trigger)
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: new RegExp(en.presetStandardName) })).toBeTruthy() })
+  })
   it.each([false, true])('offers Standard, Creator and custom presets with Developer tools %s', (enabled) => {
     const actions = renderSeat({ options: [
       { id: 'standard' }, { id: 'ptc' }, { id: 'minimal' }, { id: 'cordis' }, { id: 'mine' },

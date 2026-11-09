@@ -1105,7 +1105,7 @@ describe('createTransport', () => {
       startupTimeoutMs: 30_000,
       failOnStartupError: false,
     })
-    const transport = createTransport(config)
+    const transport = createTransport(config, vi.fn())
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
@@ -1121,7 +1121,7 @@ describe('createTransport', () => {
       startupTimeoutMs: 30_000,
       failOnStartupError: false,
     })
-    const transport = createTransport(config)
+    const transport = createTransport(config, vi.fn())
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
@@ -1137,7 +1137,7 @@ describe('createTransport', () => {
       startupTimeoutMs: 30_000,
       failOnStartupError: false,
     })
-    const transport = createTransport(config)
+    const transport = createTransport(config, vi.fn())
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
@@ -1163,8 +1163,8 @@ describe('createTransport', () => {
         failOnStartupError: false,
       })
       // StdioClientTransport keeps its env private; the observable contract is
-      // that createTransport(config) returns a transport without throwing.
-      const transport = createTransport(config)
+      // that createTransport returns a transport without throwing.
+      const transport = createTransport(config, vi.fn())
       expect(transport).toBeDefined()
     } finally {
       delete process.env.SAFE_VAR
@@ -1189,7 +1189,7 @@ describe('createTransport', () => {
       startupTimeoutMs: 30_000,
       failOnStartupError: false,
     })
-    const transport = createTransport(config)
+    const transport = createTransport(config, vi.fn())
     expect(transport).toBeDefined()
   })
 })

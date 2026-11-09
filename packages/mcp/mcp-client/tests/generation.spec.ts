@@ -98,7 +98,7 @@ it('reports confirmed transport closure when local work outlives cleanup', async
   const serving = serveStdio(() => server, { transport: serverTransport })
   mockTransport.mockReturnValue(clientTransport)
   const client = new Client({ name: 'fixture', version: '1' }, { versionNegotiation: { mode: 'auto' } })
-  const generation = new McpGeneration(client, 100, String)
+  const generation = new McpGeneration(client, 100, String, vi.fn())
   const entered: PromiseWithResolvers<void> = Promise.withResolvers()
   const release: PromiseWithResolvers<void> = Promise.withResolvers()
   onTestFinished(async () => {
@@ -131,7 +131,7 @@ it.each([false, true])('distinguishes local work from unfinished negotiation (tr
   // SDK stdio negotiation owns a sibling before starting or attaching the session transport.
   const connect = vi.spyOn(client, 'connect').mockImplementation(work)
   mockTransport.mockReturnValue({ start: async () => {}, close: async () => {}, send: async () => {} })
-  const generation = new McpGeneration(client, 100, String)
+  const generation = new McpGeneration(client, 100, String, vi.fn())
   const pending = (created ? generation.connect(config, undefined) : generation.run(work)).catch((error: unknown) => error)
   onTestFinished(async () => {
     release.resolve()

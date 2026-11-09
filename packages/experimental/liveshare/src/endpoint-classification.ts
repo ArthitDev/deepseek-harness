@@ -263,6 +263,8 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'remoteMachines/probe': 'owner-only', // owner machine inventory
   'remoteMachines/save': 'owner-only', // owner machine inventory
   'remoteMachines/trust': 'owner-only', // owner machine inventory
+  'proxyServers/list': 'owner-only', // owner process inventory
+  'proxyServers/setEnabled': 'owner-only', // owner process lifecycle
   'schedule/catalog': 'owner-only', // owner schedules
   'schedule/create': 'owner-only', // owner schedules
   'schedule/deliveryLimits': 'owner-only', // owner schedules

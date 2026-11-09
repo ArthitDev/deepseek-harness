@@ -29,6 +29,7 @@ const { mockConnect, mockClose, mockListTools, MockClient, MockTransport, instan
     throw new Error(`unexpected MCP request: ${request.method}`)
   })
   class MockTransport {
+    stderr = null
     onclose?: () => void
     start = async () => {}
     send = async () => {}

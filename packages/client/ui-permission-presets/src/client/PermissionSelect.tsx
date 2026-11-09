@@ -179,6 +179,7 @@ export function PermissionSelect({
         onClose={() => { setOpen(false) }}
         side="top"
         portal
+        autoFocus
         anchor={
           <button
             type="button"
@@ -195,7 +196,7 @@ export function PermissionSelect({
             )}
             <span className={css.triggerLabel}>{currentLabel}</span>
             <span className={clsx(css.chevron, open && css.chevronOpen)} aria-hidden>
-              <IconChevronDownOutlineRegular />
+              <IconChevronDownOutlineRegular size={16} />
             </span>
           </button>
         }

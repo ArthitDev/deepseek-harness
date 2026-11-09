@@ -68,6 +68,7 @@ import { buildRecap } from '../core/recap.js'
 import { inspectSubagent } from './subagent-viewer.js'
 import { osc52Encode } from '../core/clipboard.js'
 import { readGitState, type GitState } from '../core/git.js'
+import { watchKaliStatus, type KaliStatus } from '../core/kali-status.js'
 import { buildSearchIndex } from '../core/search.js'
 import {
   AgentDefaultModelService,
@@ -133,6 +134,8 @@ export interface ChatScreenOptions {
     historyLimit?: number
     /** Quiet time after a recognized job prompt before Agent Debug warns. */
     jobInputWarningDelayMs?: number
+    kaliStatusIntervalMs?: number
+    kaliStatusTimeoutMs?: number
   }
   onQuit: (resumeHint?: string) => void
   /** Called after a successful in-session agent switch (new/fork/resume). */
@@ -342,6 +345,7 @@ export class ChatScreen {
   private searchQuery: string | undefined
   /** Cached git state for the session cwd (boot + switch refresh only). */
   private gitState: GitState | undefined
+  private kaliStatus: KaliStatus = 'checking'
   /** Browse-mode focus ring: the tool card id Tab focuses (empty editor). */
   private focusedToolId: number | undefined
   /** Last folded replacement marker, shared by command dispatch and live delivery. */
@@ -616,6 +620,14 @@ export class ChatScreen {
     this.listenJobs()
     this.sync()
     this.refreshGitState()
+    watchKaliStatus(this.ctx, {
+      kaliStatusIntervalMs: this.config.kaliStatusIntervalMs ?? 30000,
+      kaliStatusTimeoutMs: this.config.kaliStatusTimeoutMs ?? 10000,
+    }, (status) => {
+      if (this.disposed || this.kaliStatus === status) return
+      this.kaliStatus = status
+      this.sync(false)
+    })
     // NOTE: the app layer already started the TUI (it must be live for the
     // boot-time session picker overlay); starting again would attach a
     // second stdin data listener and duplicate every keystroke.
@@ -1515,7 +1527,7 @@ export class ChatScreen {
   private currentEffort(): string | undefined {
     const current = this.selection.current
     if (current?.reasoningEffort !== undefined) return current.reasoningEffort
-    if (current !== undefined && (current.provider !== this.model.route?.provider || current.model !== this.model.route?.model)) return
+    if (current !== undefined && (current.provider !== this.model.route?.provider || current.model !== this.model.route.model)) return
     return this.model.effort
   }
 
@@ -4108,6 +4120,7 @@ export class ChatScreen {
         ...(jevCost !== undefined ? { cost: jevCost } : {}),
       },
       wikiAvailable: this.ctx.get('tools')?.get('knowledge_list', this.agent) !== undefined,
+      kali: this.kaliStatus,
       ...(planActive !== undefined ? { planActive } : {}),
       ...(goalPhase !== undefined ? { goalPhase } : {}),
       ...(contextPct !== undefined ? { contextPct } : {}),

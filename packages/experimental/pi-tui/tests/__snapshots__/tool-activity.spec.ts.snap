@@ -19,6 +19,30 @@ exports[`agent tool activity > keeps collapsed branches through URL updates and 
 No activity yet. Send a task in chat."
 `;
 
+exports[`agent tool activity > keeps the Main Agent box fixed during keyboard and mouse scrolling and summary updates > fixed summary above scrollable activity 1`] = `
+"╭─ Targets ▾ ──────────────────────────────────────────────────╮
+│   ▾ Target · 1                                               │
+│   └─   https://example.test/                                 │
+╰──────────────────────────────────────────────────────────────╯
+── Agent Debug · Tab Targets ──
+╭─ Main Agent ─────────────────────────────────────────────────╮
+│ task: ตรวจ service · calls: 20 completed · elapsed: 153.3s · │
+│ usage: 752 in / 3005 out tokens                              │
+╰──────────────────────────────────────────────────────────────╯
+
++ [OK] Tool · tool_17 · 1.5s
+{"command":"Get-Date"}
+exit code: 0
+
++ [OK] Tool · tool_18 · 1.5s
+{"command":"Get-Date"}
+exit code: 0
+
+› [OK] Tool · tool_19 · 1.5s
+{"command":"Get-Date"}
+exit code: 0"
+`;
+
 exports[`agent tool activity > preserves complete Target rows across narrow widths and avoids redundant wide clipping > complete Target rows across widths and states 1`] = `
 {
   "collapsed, width 0": [

@@ -375,6 +375,12 @@
     },
     {
       "path": "./packages/experimental/client-ui-agent-team/tsconfig.client.json"
+    },
+    {
+      "path": "./packages/client/ui-pentest-runs"
+    },
+    {
+      "path": "./packages/client/ui-proxy-server"
     }
   ]
 }

@@ -454,6 +454,8 @@ export interface StatusBarData {
   teamMode?: TeamMode
   /** Wiki discovery is callable by the current agent. */
   wikiAvailable?: boolean
+  /** Read-only execution status of the configured Kali backend. */
+  kali?: import('../core/kali-status.js').KaliStatus
   /** Jev tool availability, local switch state, and provider-reported session cost. */
   jev?: { state: 'on' | 'off' | 'unavailable'; cost?: number }
   planActive?: boolean
@@ -524,6 +526,9 @@ export class StatusBar extends Loader {
       }
     }
     if (data.wikiAvailable === true) parts.push(chalk.green('📚 Wiki'))
+    if (data.kali !== undefined) {
+      parts.push((data.kali === 'ready' ? chalk.green : data.kali === 'checking' ? chalk.yellow : chalk.red)(`Kali ${data.kali}`))
+    }
     if (data.jev !== undefined) {
       const label = data.jev.state === 'unavailable' ? 'Jev unavailable' : `Jev ${data.jev.state.toUpperCase()}`
       const cost = data.jev.cost === undefined ? '' : ` · cost ${data.jev.cost.toFixed(6).replace(/\.?0+$/, '')}`

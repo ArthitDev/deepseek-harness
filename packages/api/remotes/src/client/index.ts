@@ -37,6 +37,7 @@ import pentestRunsRemote from '@deepseek-ai/dsh-pentest-run/remote'
 import pentestLoopRemote from '@deepseek-ai/dsh-pentest-executor/remote'
 import reconRunsRemote from '@deepseek-ai/dsh-recon-engine/remote'
 import remoteMachinesRemote from '@deepseek-ai/dsh-remote-machines/remote'
+import proxyServersRemote from '@deepseek-ai/dsh-proxy-server/remote'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 
 export type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
@@ -90,6 +91,7 @@ export type {} from '@deepseek-ai/dsh-pentest-run/remote'
 export type {} from '@deepseek-ai/dsh-pentest-executor/remote'
 export type {} from '@deepseek-ai/dsh-recon-engine/remote'
 export type {} from '@deepseek-ai/dsh-remote-machines/remote'
+export type {} from '@deepseek-ai/dsh-proxy-server/remote'
 export type * from '@deepseek-ai/dsh-api-terminal-controller/types'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
 // compilation face `TypertRemoteEvent` is `never` and every `$on` call fails.
@@ -213,7 +215,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       fileUploadsRemote, sessionReferencesRemote,
       permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
       officeToPdfRemote, userQuestionsRemote, webRemote,
-      pentestRunsRemote, pentestLoopRemote, reconRunsRemote, remoteMachinesRemote,
+      pentestRunsRemote, pentestLoopRemote, reconRunsRemote, remoteMachinesRemote, proxyServersRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

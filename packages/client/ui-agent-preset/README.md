@@ -1,5 +1,5 @@
 ---
-description: "Choose Agent presets and the new-task default in Web, read what each mode does and what it declares. Authoring is guided to Creator mode."
+description: "Choose Agent presets and the new-task default in Web, inspect compositions, and edit or delete profile-owned presets."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Choose Agent presets and the new-task default in Web, read what each mode does and what it declares. Authoring is guided to Creator mode.
+Choose Agent presets and the new-task default in Web, inspect compositions, and edit or delete profile-owned presets.
 
 ## Table of Contents
 
@@ -25,9 +25,13 @@ Choose Agent presets and the new-task default in Web, read what each mode does a
 <a id="use-this-package"></a>
 ## Use this package
 
-Settings shows the built-in and custom card groups with default highlighting and card-body selection; a group without presets is omitted, except the custom group, which keeps its Creator entry on screen. Coarse-pointer devices show complete card descriptions; other devices clamp descriptions to four lines with the full text available on hover. Every card offers “View configuration”, which opens the preset's declared plugin list as read-only YAML in the Loader's own dialect (`!!js` conditions included); a failed preset stays readable because its diagnostic points into that YAML. Escape closes only the viewer and returns focus to its card; leaving Settings clears the viewer, and a late read does not reopen it. The page edits nothing: the Creator entry starts a Creator-mode task that authors or overrides a preset as a bundle, offered while the `cordis` preset is on the roster and a conversation flow exists.
+Settings shows the built-in and custom card groups with default highlighting and card-body selection; a group without presets is omitted, except the custom group, which keeps its Creator entry on screen. Coarse-pointer devices show complete card descriptions; other devices clamp descriptions to four lines with the full text available on hover. Every card offers “View configuration”, which opens the preset's declared plugin list as read-only YAML in the Loader's own dialect (`!!js` conditions included); a failed preset stays readable because its diagnostic points into that YAML. Escape closes only the viewer and returns focus to its card; leaving Settings clears the viewer, and a late read does not reopen it. The Creator entry starts a Creator-mode task that authors or overrides a preset as a bundle, offered while the `cordis` preset is on the roster and a conversation flow exists.
+
+Profile-owned presets also offer **Edit preset** and **Delete preset**. The editor saves the complete composition YAML through the Host and retains the draft when validation or saving fails. Deletion requires confirmation; a refused deletion keeps the card. Pending writes disable editing and modal dismissal. Existing sessions retain their composed revision. Bundle and machine declarations remain read-only.
 
 With Coding Tools off in General Settings, the new-session picker and Settings roster offer Standard, Creator, and custom presets; turning them on also offers PTC and Minimal. Default selection and the Creator entry remain available in both states. Choosing a healthy default also synchronizes the blank session on the current new-task surface. Creator starts a new task using the `cordis` preset.
+
+The **Show built-in presets** switch in Agent presets persists through Host settings and hides shipped presets from both this page and the new-task menu. Custom presets, including named overrides of shipped ids, remain visible. Visibility changes do not change the default, an existing session's composition, or its displayed preset label.
 
 Turning Coding Tools off clears all unapplied choices through the existing Developer tools subscription. Once the off value is accepted, every authenticated browser resets a saved built-in PTC or Minimal default to Standard. Saved Standard, Creator, and custom defaults (including named PTC or Minimal overrides) stay unchanged. The user can select an available preset again after turning Coding Tools off. Existing sessions keep their selected mode; New Session uses the current default. An existing mode's label remains visible even when that mode is absent from the menu. Turning Coding Tools back on does not restore the old default or cleared choice. If Standard is missing or broken, the default remains unchanged and an error is shown.
 
@@ -73,7 +77,7 @@ Selection changes affect only later tasks; existing plugins and prompts remain u
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Web creates and edits no preset: the configuration viewer is read-only, and a bundle installed through Creator mode declares a new preset or overrides a shipped one by row id, replacing its complete child list.
+- Web edits and deletes only profile-owned declarations. Creating a preset or changing a bundle declaration uses Creator mode or the profile configuration.
 
 <a id="dev-note"></a>
 ### Dev Note

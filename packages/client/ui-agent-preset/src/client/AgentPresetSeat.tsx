@@ -21,8 +21,8 @@ import {
 // Type-only: pulls the ui-conversation SlotMap merge (the hero seat).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { AgentPresetSeatState } from './seat-store.ts'
-import { presetDisplayText } from './locales.ts'
-import { requiresCodingTools } from './settings-store.ts'
+import { isBuiltInPreset, presetDisplayText } from './locales.ts'
+import { requiresCodingTools, type AgentPresetPreferences } from './settings-store.ts'
 import css from './AgentPresetSeat.module.css'
 
 /** Registration-side business face for the hero chip. */
@@ -32,6 +32,8 @@ export interface AgentPresetSeatInjected {
     developerTools: ObservableSnapshot<boolean>
     /** Seat snapshot bound by the renderer as useAgentPresetSeat. */
     agentPresetSeat: SnapshotStore<AgentPresetSeatState>
+    /** Shared Host-backed visibility of shipped presets. */
+    presetPreferences: ObservableSnapshot<AgentPresetPreferences>
   }
   /** Read the roster when the chip first renders. */
   load: () => Promise<void>
@@ -79,9 +81,10 @@ export type AgentPresetSeatProps =
  * @returns The chip and any pending selection refusal, or null outside the main view.
  */
 export function AgentPresetSeat({
-  sessionId, useSessionRetainInfo, load, select, dismissRefusal, introduced, useAgentPresetSeat, useDeveloperTools, t,
+  sessionId, useSessionRetainInfo, load, select, dismissRefusal, introduced, useAgentPresetSeat, useDeveloperTools, usePresetPreferences, t,
 }: AgentPresetSeatProps) {
   const developerTools = useDeveloperTools(value => value)
+  const showBuiltIns = usePresetPreferences(value => value.value?.showBuiltInPresets ?? true)
   const state = useAgentPresetSeat(snapshot => snapshot)
   const main = useSessionRetainInfo(info => sessionId === undefined
     || (info?.retainedBy.mainView ?? 0) > 0)
@@ -103,13 +106,14 @@ export function AgentPresetSeat({
   }, [load])
 
   const options = useMemo(
-    () => state.options.filter(option => developerTools || !requiresCodingTools(option)),
-    [state.options, developerTools],
+    () => state.options.filter(option => (showBuiltIns || !isBuiltInPreset(option))
+      && (developerTools || !requiresCodingTools(option))),
+    [state.options, developerTools, showBuiltIns],
   )
 
   useEffect(() => {
     setOpen(false)
-  }, [developerTools, options.length])
+  }, [developerTools, showBuiltIns, options.length])
 
   const chosen = state.options.find(option => option.id === state.current)
   const chosenText = chosen === undefined ? undefined : presetDisplayText(chosen, t)

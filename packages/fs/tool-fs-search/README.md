@@ -43,6 +43,10 @@ A subprocess backend, then the tools; the spill backend is optional and makes ca
 
 `sampleOverCapGlobResults` is required and has no fallback: deployments choose the over-cap ordering contract explicitly. When formatted spill succeeds, both modes preserve the complete sorted list in the spill artifact.
 
+Optional `knowledgeRoots` entries (`name`, absolute `path`, optional `bootstrap`) enable `knowledge_list` and `knowledge_create_note` for local Wiki libraries. Each root must contain `INDEX.md`; `bootstrap: true` creates missing library scaffolding without overwriting files. An omitted or empty list registers no knowledge tools. Invalid roots fail activation. Discovery returns paths without reading note contents; creating a note writes a sourced draft and adds its index link. Registrations follow plugin lifetime, so the TUI Wiki indicator and `/wiki` reflect the libraries available to the current agent.
+
+The selected tool executor owns Wiki tool declarations. Wiki registration leaves prompt presentation unchanged, including complete preset prompts.
+
 ### The tools
 
 | Tool | Arguments | Behavior |

@@ -1,14 +1,14 @@
-/** Preset selection settings: the roster, its default, mode help, a read-only view of each composition, and the Creator-mode entry. */
+/** Preset selection, user composition editing, deletion, and mode help. */
 import type { ReactNode } from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  Button, IconBrowseOutlineRegular, IconPlusOutlineRegular, Modal, Tag, Tooltip,
+  Button, IconBrowseOutlineRegular, IconPlusOutlineRegular, Modal, Switch, Tag, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentPresetSectionState } from './section-store.ts'
 import { isBuiltInPreset, presetDisplayText } from './locales.ts'
-import { requiresCodingTools } from './settings-store.ts'
+import { requiresCodingTools, type AgentPresetPreferences } from './settings-store.ts'
 import { PresetGuideDialog, presetGuide, trapPresetReaderTab, type PresetGuidePage } from './PresetGuideDialog.tsx'
 import css from './AgentPresetSection.module.css'
 
@@ -18,6 +18,8 @@ export interface AgentPresetSectionInjected {
     agentPresetSection: SnapshotStore<AgentPresetSectionState>
     /** Shared Coding Tools preference; off hides the built-in PTC and Minimal cards. */
     developerTools: ObservableSnapshot<boolean>
+    /** Accepted visibility preference shared with the new-session menu. */
+    presetPreferences: ObservableSnapshot<AgentPresetPreferences>
   }
   /** Stage the `cordis` preset and start a Creator-mode task; absent without a conversation flow. */
   startCreatorDraft?: () => void
@@ -26,7 +28,13 @@ export interface AgentPresetSectionInjected {
   view: (id: string) => Promise<void>
   /** Close the read-only viewer. */
   closeView: () => void
+  /** Store a profile-owned preset's composition; false keeps its draft visible. */
+  write: (id: string, content: string) => Promise<boolean>
+  /** Remove a profile-owned preset after explicit confirmation. */
+  remove: (id: string) => Promise<boolean>
   makeDefault: (id: string) => Promise<void>
+  /** Persist shipped-preset visibility without changing the selected preset. */
+  setShowBuiltInPresets: (show: boolean) => Promise<void>
 }
 /** Props assembled by the settings renderer. */
 export type AgentPresetSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.agentPreset'> & InjectFace<AgentPresetSectionInjected>
@@ -62,11 +70,15 @@ function CardDescription({ text }: { text: string }): ReactNode {
  * @returns The preset settings section.
  */
 export function AgentPresetSection({
-  useAgentPresetSection, load, view, closeView, makeDefault, startCreatorDraft,
-  close: closeSettings, useDeveloperTools, t,
+  useAgentPresetSection, load, view, closeView, write, remove, makeDefault, startCreatorDraft,
+  close: closeSettings, useDeveloperTools, usePresetPreferences, setShowBuiltInPresets, t,
 }: AgentPresetSectionProps) {
   const state = useAgentPresetSection(value => value)
   const developerTools = useDeveloperTools(enabled => enabled)
+  const preferences = usePresetPreferences(value => value)
+  const showBuiltIns = preferences.value?.showBuiltInPresets ?? true
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
   const [guide, setGuide] = useState<{
     content: NonNullable<ReturnType<typeof presetGuide>>
     page: PresetGuidePage
@@ -76,7 +88,7 @@ export function AgentPresetSection({
   useEffect(() => { void load() }, [load])
   useLayoutEffect(() => { closeViewOnUnmount.current = closeView }, [closeView])
   useEffect(() => () => { closeViewOnUnmount.current() }, [])
-  const closeViewer = () => { closeView(); viewTrigger.current?.focus() }
+  const closeViewer = () => { if (!state.saving) { closeView(); viewTrigger.current?.focus() } }
   const viewed = state.view
   const viewedRow = viewed === null ? undefined : state.rows.find(row => row.id === viewed.id)
   const viewedTitle = viewed === null ? '' : viewedRow === undefined ? viewed.title : presetDisplayText(viewedRow, t).name
@@ -101,8 +113,15 @@ export function AgentPresetSection({
   return <section className={css.section}>
     <h2 className={css.title}>{t('nav')}</h2>
     <p className={css.intro}>{t('sectionIntro')}</p>
+    <div className={css.visibility}>
+      <span>{t('showBuiltInPresets')}</span>
+      <Switch checked={showBuiltIns} label={t('showBuiltInPresets')}
+        disabled={state.saving || preferences.status !== 'ready' || !preferences.writable}
+        onChange={(show) => { void setShowBuiltInPresets(show) }} />
+    </div>
     {state.error === null ? null : <p className={css.error} role="alert">{state.error}</p>}
     {([true, false] as const).map((builtIn) => {
+      if (builtIn && !showBuiltIns) return null
       const rows = state.rows.filter(row => isBuiltInPreset(row) === builtIn
         && (developerTools || !requiresCodingTools(row)))
       const entry = builtIn ? null : creatorButton
@@ -145,11 +164,15 @@ export function AgentPresetSection({
                   <Button variant="ghost" className={css.helpButton} aria-label={`${t('howToUse')}: ${display.name}`}
                     onClick={() => { setGuide({ content: help, page: 'usage' }) }}>{t('howToUse')}</Button>
                 </div>}
-                {/* Reading the declaration is the one thing this page offers
-                  beyond choosing: a broken preset's YAML is also where its
-                  diagnostic points, so the viewer stays available for it. */}
+                {state.authorable === true && row.trust === 'user' ? <>
+                  <Button variant="ghost" size="sm" disabled={state.saving} aria-label={`${t('edit')}: ${display.name}`}
+                    onClick={(event) => { viewTrigger.current = event.currentTarget; setEditingId(row.id); void view(row.id) }}>{t('edit')}</Button>
+                  <Button variant="ghost" size="sm" disabled={state.saving} aria-label={`${t('deletePreset')}: ${display.name}`}
+                    onClick={() => { setDeleting({ id: row.id, name: display.name }) }}>{t('deletePreset')}</Button>
+                </> : null}
                 <button type="button" className={css.iconButton} data-tip={t('view')} aria-label={`${t('view')}: ${display.name}`}
-                  onClick={(event) => { viewTrigger.current = event.currentTarget; void view(row.id) }}>
+                  disabled={state.saving}
+                  onClick={(event) => { viewTrigger.current = event.currentTarget; setEditingId(null); void view(row.id) }}>
                   <IconBrowseOutlineRegular />
                 </button>
               </div>
@@ -160,17 +183,55 @@ export function AgentPresetSection({
       </section>
     })}
     {guide === null ? null : <PresetGuideDialog guide={guide.content} initialPage={guide.page} t={t} onClose={() => { setGuide(null) }} />}
-    <Modal open={viewed !== null} onClose={closeViewer} closeLabel={t('close')}
-      onKeyDownCapture={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          event.stopPropagation()
-          closeViewer()
-        } else trapPresetReaderTab(event)
-      }}
-      title={viewed === null ? '' : `${t('view')} · ${viewedTitle}`} className={css.dialog as string}
-      footer={<Button variant="outline" autoFocus onClick={closeViewer}>{t('close')}</Button>}>
-      {viewed === null ? null : <pre className={css.viewerCode}>{viewed.content}</pre>}
+    {viewed !== null && editingId === viewed.id ? <PresetEditor key={viewed.id}
+      content={viewed.content} title={`${t('edit')} · ${viewedTitle}`} saving={state.saving} error={state.error} t={t}
+      onClose={closeViewer} onSave={async (content) => {
+        if (await write(viewed.id, content)) { closeView(); viewTrigger.current?.focus() }
+      }} /> :
+      <Modal open={viewed !== null} onClose={closeViewer} closeLabel={t('close')}
+        onKeyDownCapture={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            closeViewer()
+          } else trapPresetReaderTab(event)
+        }}
+        title={viewed === null ? '' : `${t('view')} · ${viewedTitle}`} className={css.dialog as string}
+        footer={<Button variant="outline" autoFocus onClick={closeViewer}>{t('close')}</Button>}>
+        {viewed === null ? null : <pre className={css.viewerCode}>{viewed.content}</pre>}
+      </Modal>}
+    <Modal open={deleting !== null} title={t('deletePreset')} closeLabel={t('cancel')}
+      onClose={() => { if (!state.saving) setDeleting(null) }}
+      footer={<>
+        <Button variant="outline" disabled={state.saving} onClick={() => { setDeleting(null) }}>{t('cancel')}</Button>
+        <Button disabled={state.saving} onClick={() => { if (deleting !== null) void remove(deleting.id).then((ok) => { if (ok) setDeleting(null) }) }}>{t('deletePreset')}</Button>
+      </>}>
+      <p>{t('confirmDelete').replace('{name}', deleting?.name ?? '')}</p>
+      {state.error === null ? null : <p className={css.error} role="alert">{state.error}</p>}
     </Modal>
   </section>
+}
+
+/** A draft stays local to its open editor and survives a refused save. */
+function PresetEditor({ content, title, saving, error, t, onClose, onSave }: {
+  content: string
+  title: string
+  saving: boolean
+  error: string | null
+  t: AgentPresetSectionProps['t']
+  onClose: () => void
+  onSave: (content: string) => Promise<void>
+}) {
+  const [draft, setDraft] = useState(content)
+  return <Modal open title={title} closeLabel={t('cancel')} onClose={onClose} className={css.dialog as string}
+    footer={<>
+      <Button variant="outline" disabled={saving} onClick={onClose}>{t('cancel')}</Button>
+      <Button disabled={saving || draft === content} onClick={() => { void onSave(draft) }}>{t('save')}</Button>
+    </>}>
+    <label className={css.editorLabel}>{t('composition')}
+      <textarea className={`${css.viewerCode} ${css.editor}`} value={draft} disabled={saving}
+        data-modal-autofocus spellCheck={false} onChange={(event) => { setDraft(event.currentTarget.value) }} />
+    </label>
+    {error === null ? null : <p className={css.error} role="alert">{error}</p>}
+  </Modal>
 }

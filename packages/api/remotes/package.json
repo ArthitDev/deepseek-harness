@@ -106,6 +106,7 @@
     "@deepseek-ai/dsh-pentest-run": "workspace:*",
     "@deepseek-ai/dsh-pentest-executor": "workspace:*",
     "@deepseek-ai/dsh-recon-engine": "workspace:*",
-    "@deepseek-ai/dsh-remote-machines": "workspace:*"
+    "@deepseek-ai/dsh-remote-machines": "workspace:*",
+    "@deepseek-ai/dsh-proxy-server": "workspace:*"
   }
 }

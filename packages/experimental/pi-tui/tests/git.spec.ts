@@ -13,16 +13,18 @@ interface ScriptedResponse {
  */
 const responses: { match: (args: readonly string[]) => boolean; reply: ScriptedResponse }[] = []
 const spawnedCommands: string[][] = []
+const spawnedOptions: unknown[] = []
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>()
   const execFileMock = (
     file: string,
     args: readonly string[],
-    _options: unknown,
+    options: unknown,
     callback: ExecFileCallback,
   ): void => {
     spawnedCommands.push([file, ...args])
+    spawnedOptions.push(options)
     const entry = responses.find(candidate => candidate.match(args))
     const reply = entry?.reply ?? { error: null, stdout: '' }
     queueMicrotask(() => {
@@ -40,6 +42,7 @@ const { readGitState } = await import('../src/core/git.ts')
 afterEach(() => {
   responses.length = 0
   spawnedCommands.length = 0
+  spawnedOptions.length = 0
 })
 
 describe('readGitState', () => {
@@ -49,6 +52,10 @@ describe('readGitState', () => {
       { match: args => args.includes('--porcelain'), reply: { error: null, stdout: 'M a.ts\n' } },
     )
     await expect(readGitState('/repo')).resolves.toEqual({ branch: 'main', dirty: true })
+    expect(spawnedOptions).toEqual([
+      { cwd: '/repo', timeout: 3000, windowsHide: true },
+      { cwd: '/repo', timeout: 3000, windowsHide: true },
+    ])
   })
 
   it('reports a clean tree when status succeeds with no output', async () => {

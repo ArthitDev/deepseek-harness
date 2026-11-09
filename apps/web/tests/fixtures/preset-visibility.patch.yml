@@ -1,0 +1,17 @@
+- insert:
+    - id: preset-visibility-fixture
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: visibility-fixture
+        name: Workspace preset
+        description: A custom preset for testing visibility preferences.
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: You help with workspace tasks.
+- id: agent-preset-registry
+  name: '@deepseek-ai/dsh-agent-preset-registry'
+  config:
+    default: visibility-fixture
+    showBuiltInPresets: false

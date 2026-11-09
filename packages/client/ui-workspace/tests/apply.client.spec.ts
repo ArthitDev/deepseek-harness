@@ -173,6 +173,11 @@ async function bench(access: 'fake' | 'static' = 'fake') {
     overrideTokens: vi.fn(() => () => {}),
     setTheme: vi.fn(),
   } as never)
+  const modeForm = {
+    ...createSnapshotStore({ status: 'ready' as const, value: { mode: 'red' as const }, writable: true, revision: 0, base: {}, user: {} }),
+    set: vi.fn(async () => true),
+  }
+  ctx.provide('configForms', { get: () => modeForm } as never)
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -182,7 +187,7 @@ async function bench(access: 'fake' | 'static' = 'fake') {
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename, commands, accessSource, whenResourceAccess, stopGuard,
     retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory, pinSession, unpinSession,
-    workspacesSubscribe, initializeDefault, history, scope, sessionOf,
+    workspacesSubscribe, initializeDefault, history, scope, sessionOf, modeForm,
     setWorkspaces: (snapshot: WorkspaceSnapshot): void => { workspaceSnapshot = snapshot },
     setSessions: (snapshot: SessionListState): void => { sessionSnapshot = snapshot },
   }
@@ -253,7 +258,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual(['contextMenus',
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'layout', 'shortcuts', 'remoteAccess', 'theme',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'layout', 'shortcuts', 'remoteAccess', 'theme', 'configForms',
     ])
   })
 

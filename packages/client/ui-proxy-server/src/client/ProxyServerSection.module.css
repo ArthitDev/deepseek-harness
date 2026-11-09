@@ -1,0 +1,11 @@
+.section { display: flex; flex-direction: column; gap: 12px; max-width: 720px; color: var(--dsw-alias-label-primary); }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.heading h2 { margin: 0; font-size: 18px; font-weight: 500; }
+.description { margin: 0; font-size: 13px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-settings-card-fill); border: 0.5px solid var(--dsw-alias-settings-card-stroke); }
+.details { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.name { font-size: 14px; font-weight: 500; }
+.endpoint { font-size: 13px; overflow-wrap: anywhere; color: var(--dsw-alias-label-secondary); }
+.status { font-size: 13px; }
+.error { margin: 0; font-size: 13px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }

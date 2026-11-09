@@ -62,8 +62,9 @@ import { SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { registerToasts } from './toast/register.ts'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
-import { RemoteMachinesSection, type RemoteMachineInjected } from './RemoteMachines.tsx'
+import { RemoteMachinesSection, RemoteMachineControl, AgentModeControl, type RemoteMachineInjected, type MachineControlInjected } from './RemoteMachines.tsx'
 import { RemoteMachineController } from './remote-machine-store.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { AgentModeController } from './agent-mode.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
@@ -112,7 +113,7 @@ const NS = 'workspace'
  * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = ['contextMenus',
-  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'layout', 'shortcuts', 'remoteAccess', 'theme',
+  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'remote.remoteMachines', 'layout', 'shortcuts', 'remoteAccess', 'theme', 'configForms',
 ]
 
 /**
@@ -134,6 +135,15 @@ export function apply(ctx: Context): void {
   let toastSeq = 0
   const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
   const agentMode = new AgentModeController(ctx.theme)
+  const modeForm = ctx.configForms.get<{ mode: import('./agent-mode.ts').AgentMode }>('pentest-mode')
+  ctx.effect(() => {
+    const sync = (): void => {
+      const snapshot = modeForm.getSnapshot()
+      if (snapshot.status === 'ready' && snapshot.value !== undefined) agentMode.set(snapshot.value.mode)
+    }
+    sync()
+    return modeForm.subscribe(sync)
+  }, 'ui-workspace: accepted team mode theme')
   ctx.effect(() => () => { agentMode.dispose() }, 'ui-workspace: agent mode theme')
   const uiWorkspace = new UiWorkspaceService(
     ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
@@ -336,7 +346,7 @@ export function apply(ctx: Context): void {
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource, remoteMachines: remoteMachines.store },
+    hooks: { directoryFlow: pickerFlowSource, remoteMachines: remoteMachines.store, hostInfo },
   })
   // Each registration declares its owned children in the same call; slot
   // injection follows both the owner and declaration HMR lifetimes.
@@ -398,8 +408,8 @@ export function apply(ctx: Context): void {
   ))
   const remoteMachineInjected = (): RemoteMachineInjected => ({
     controller: remoteMachines,
-    agentMode,
-    hooks: { remoteMachines: remoteMachines.store },
+    selectMode: mode => modeForm.set('mode', mode),
+    hooks: { remoteMachines: remoteMachines.store, agentMode: modeForm },
     createWorkspace: async path => await workspaces.create({ path }),
   })
   ctx.effect(() => {
@@ -410,6 +420,22 @@ export function apply(ctx: Context): void {
     ]
     return () => { for (const dispose of disposers) dispose() }
   }, 'ui-workspace: remote machine roster refresh')
+  ctx.slots.inject('conversation.input.left', function* () {
+    yield ctx.slots.register({ name: 'conversation.input.left', id: 'agent-mode', order: -30, locale: NS,
+      inject: () => ({ hooks: { agentMode: modeForm }, selectMode: (mode: import('./agent-mode.ts').AgentMode) => modeForm.set('mode', mode) }),
+    }, AgentModeControl)
+    yield ctx.slots.register({ name: 'conversation.input.left', id: 'execution-machine', order: -20, locale: NS,
+      inject: (): MachineControlInjected => ({
+        hooks: { remoteMachines: remoteMachines.store, hostInfo },
+        loadMachines: () => remoteMachines.load(),
+        saveMachine: request => remoteMachines.save(request),
+        probeMachine: (id, password) => remoteMachines.probe(id, password),
+        trustMachine: (id, fingerprint) => remoteMachines.trust(id, fingerprint),
+        createWorkspace: path => workspaces.create({ path }),
+        openWorkspace: id => uiWorkspace.openWorkspace(id),
+      }),
+    }, RemoteMachineControl)
+  })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'remote-machines',

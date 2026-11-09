@@ -11,6 +11,7 @@ import { managerProfile } from './profile-fixture.ts'
 
 const { MockClient, MockTransport } = vi.hoisted(() => {
   class MockTransport {
+    stderr = null
     onclose?: () => void
     start = async () => {}
     send = async () => {}

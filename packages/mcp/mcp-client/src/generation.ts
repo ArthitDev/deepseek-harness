@@ -22,6 +22,7 @@ export class McpGeneration {
     readonly client: Client,
     private readonly closeTimeoutMs: number,
     private readonly diagnostic: (error: unknown) => string,
+    private readonly onStderr: (line: string) => void,
   ) {}
 
   /**
@@ -32,7 +33,7 @@ export class McpGeneration {
    */
   connect(config: Config, timeoutMs: number | undefined): Promise<void> {
     this.lifetime.signal.throwIfAborted()
-    const transport = this.transport = createTransport(config)
+    const transport = this.transport = createTransport(config, this.onStderr)
     const close = transport.close.bind(transport)
     let closing: Promise<void> | undefined
     transport.close = () => closing ??= close()

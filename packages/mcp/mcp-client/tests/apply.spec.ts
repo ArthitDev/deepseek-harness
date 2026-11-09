@@ -61,6 +61,7 @@ vi.mock('@modelcontextprotocol/client', async importOriginal => ({
 vi.mock('@modelcontextprotocol/client/stdio', () => ({
   StdioClientTransport: vi.fn(function () {
     return {
+      stderr: null,
       onclose: undefined as (() => void) | undefined,
       start: () => Promise.resolve(),
       send: () => Promise.resolve(),

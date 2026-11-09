@@ -26,6 +26,8 @@
     "tests/additional-locales.e2e.ts",
     "tests/rich-text-quotes.e2e.ts",
     "tests/hover-input.e2e.ts",
+    "tests/composer-pentest-controls.e2e.ts",
+    "tests/composer-dropdowns.e2e.ts",
     "tests/collapse-timing.e2e.ts",
     "tests/notice-wake-tail.e2e.ts",
     "tests/fold-blank-matrix.e2e.ts",
@@ -164,6 +166,7 @@
     "tests/stats-truncated-tooltip.e2e.ts",
     "tests/sidebar-scrollbar.e2e.ts",
     "tests/sidebar-alignment.e2e.ts",
+    "tests/workspace-tree-guides.e2e.ts",
     "tests/sidebar-title-hover-scroll.e2e.ts",
     "tests/rail-search-expand.e2e.ts",
     "tests/conversation-column-overflow.e2e.ts",
@@ -209,6 +212,8 @@
     "tests/access-confirmation.e2e.ts",
     "tests/agent-preset-selection.e2e.ts",
     "tests/agent-preset-authoring.e2e.ts",
+    "tests/agent-preset-management.e2e.ts",
+    "tests/agent-preset-visibility.e2e.ts",
     "tests/shipped-composition.e2e.ts",
     "tests/schedule-after.e2e.ts",
     "tests/schedule-manual.e2e.ts",
@@ -246,7 +251,8 @@
     "tests/window-drag-coverage.e2e.ts",
     "tests/complex-history.perf.ts",
     "tests/pwsh-terminal.e2e.ts",
-    "tests/workflow-run.e2e.ts"
+    "tests/workflow-run.e2e.ts",
+    "tests/proxy-server.e2e.ts"
   ],
   "references": [
     {

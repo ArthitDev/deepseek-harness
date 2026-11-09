@@ -100,10 +100,10 @@ describe('shareableViewerCatalog', () => {
   })
 
   it('excludes DSH core services and LiveShare management', () => {
-    for (const namespace of ['session', 'workspaceFiles', 'settings', 'credentials', 'terminal', 'pluginManager', 'liveshareShares']) {
+    for (const namespace of ['session', 'workspaceFiles', 'settings', 'credentials', 'terminal', 'pluginManager', 'liveshareShares', 'proxyServers']) {
       expect(EXCLUDED_SHARE_NAMESPACES.has(namespace)).toBe(true)
     }
-    expect(shareableViewerCatalog(registry('session/page', 'settings/mutate', 'mekGit/getGraph'),
+    expect(shareableViewerCatalog(registry('session/page', 'settings/mutate', 'proxyServers/list', 'proxyServers/setEnabled', 'mekGit/getGraph'),
       metadata({ package: '@fixture/plugins' }))).toEqual([
       { plugin: 'mekGit', package: '@fixture/plugins', endpoints: ['mekGit/getGraph'] },
     ])
