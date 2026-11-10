@@ -70,6 +70,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 if (process.argv[2] !== 'start') process.exit(99);
 fs.writeFileSync(path.join(__dirname, '../sb-helper.pid'), String(process.pid));
+fs.writeFileSync(path.join(__dirname, '../sb-helper.runtime'), process.versions.bun ? 'bun' : 'node');
 ${sbMode === 'pending' ? 'setInterval(() => {}, 1000);' : `process.exit(${sbMode === 'ready' ? '0' : '17'});`}
 `)
   return { home, anchor }
@@ -88,6 +89,7 @@ describe('ZCode startup helper', () => {
       if (mode === 'ready') await expect(result).resolves.toBeUndefined()
       else await expect(result).rejects.toThrow('SB startup helper exited with 17')
       expect(Number(await readFile(join(home, 'sb-helper.pid'), 'utf8'))).toBeGreaterThan(0)
+      expect(await readFile(join(home, 'sb-helper.runtime'), 'utf8')).toBe('bun')
     } finally { await cleanup(home) }
   })
   it.each(['ready', 'failed'] as const)('settles a relocated launcher that is %s', { timeout: 30_000 }, async (mode) => {
@@ -218,7 +220,10 @@ describe('TUI startup through Loader with optional proxies', () => {
         }
       }
       if (sbMode === 'pending') {
-        await vi.waitFor(async () => { expect(Number(await readFile(join(home, 'sb-helper.pid'), 'utf8'))).toBeGreaterThan(0) })
+        await vi.waitFor(async () => {
+          expect(Number(await readFile(join(home, 'sb-helper.pid'), 'utf8'))).toBeGreaterThan(0)
+          expect(await readFile(join(home, 'sb-helper.runtime'), 'utf8')).toBe('bun')
+        })
         const sbPid = Number(await readFile(join(home, 'sb-helper.pid'), 'utf8'))
         await ctx.fiber.dispose()
         expect(() => process.kill(sbPid, 0)).toThrow()

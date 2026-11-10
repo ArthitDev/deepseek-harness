@@ -112,14 +112,14 @@ export class TeamMailbox {
     const source = event.data.source
     const messageId = source.kind === 'team-message'
       ? source.messageId
-      : source.kind === 'agent-message' && source.form === 'relay'
+      : source.kind === 'agent-message'
         ? framedTeamMessageId(event.data.content)
         /* v8 ignore next 2 -- other merge-extensible source kinds carry no Team identity. */
         : undefined
     if (messageId === undefined) return
     const root = source.kind === 'team-message'
       ? this.ctx.agents.get(brandString<SessionId>(source.teamId))
-      : source.kind === 'agent-message' && source.form === 'relay'
+      : source.kind === 'agent-message'
         ? this.resolveRelayRoot(source.senderSessionId)
         : undefined
     if (root === undefined) return

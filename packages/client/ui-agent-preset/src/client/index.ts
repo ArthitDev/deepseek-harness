@@ -1,16 +1,7 @@
 /**
- * Agent-preset surface plugin, browser half — three surfaces over one roster:
- * a chip on the new-session screen for the session about to start, a
- * read-only label in the session header, and a settings section that lists
- * the roster (selection, the new-task default, a read-only view of each
- * declared composition, and the way into Creator mode).
- *
- * A running session keeps the composition it began with (the host switches a
- * session's preset only before its first turn). That is what splits
- * the choice from the display: the hero chip is before-the-fact, while the
- * header only reports what a session already runs. The default preset is
- * edited where the roster is visible — the settings section's "make default"
- * — so General settings carries no duplicate control for the same field.
+ * Agent-preset browser surfaces share one roster: a new-session picker,
+ * an idle-session header picker, and Settings for the new-task default,
+ * composition inspection, authoring and Creator entry.
  *
  * Coding Tools (General settings) hide PTC and Minimal from the hero menu
  * and Settings roster when off. Hidden saved defaults fall back to Standard;
@@ -67,7 +58,7 @@ export const inject = [
 ]
 
 /**
- * Mount the roster surfaces: hero chip, session-header label, settings section.
+ * Mount the roster surfaces: hero and session-header pickers, settings section.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
@@ -208,10 +199,7 @@ export function apply(ctx: ClientContext): void {
       }
     }
 
-    const labelInjected = (): AgentPresetLabelInjected => ({
-      hooks: { agentPresets: controller.store },
-      load: () => controller.load(),
-    })
+    const labelInjected = (sessionId: SessionId): AgentPresetLabelInjected => seatInjected(sessionId)
 
     const startCreatorDraft = () => {
       // The Host composes the reused draft or new Session; the stage only drives the chip's display and introduction.

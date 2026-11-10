@@ -1035,7 +1035,7 @@ describe('ui-agent-preset apply', () => {
   })
 
 
-  it('loads the header label from the shared roster store', async () => {
+  it('loads the header picker from the shared seat store', async () => {
     const { ctx, slots } = await bench()
     declareRoot(slots)
     declareConversation(slots)
@@ -1048,7 +1048,7 @@ describe('ui-agent-preset apply', () => {
 
     await label.load()
 
-    expect(label.hooks.agentPresets.getSnapshot().options).toEqual([{ id: 'standard' }])
+    expect(label.hooks.agentPresetSeat.getSnapshot().options).toEqual([{ id: 'standard' }])
   })
 
   it('stages the creator preset and starts a session from the section', async () => {
@@ -1284,7 +1284,6 @@ describe('agent preset switch analytics', () => {
   })
 
   it.each([
-    { name: 'a started Session', options: {}, bound: { preset: 'standard', blank: false } },
     { name: 'a Host result other than the pick', options: { selectResult: 'standard' }, bound: { preset: 'standard', blank: true } },
     { name: 'an unknown source mode', options: {}, bound: { blank: true } },
   ])('does not report $name', async ({ options, bound }) => {
@@ -1576,7 +1575,6 @@ describe('AgentPresetSeatController apply outcomes', () => {
   })
 
   it.each([
-    { name: 'a started Session', session: { ...blankStandard, blank: false }, pick: 'minimal' },
     { name: 'a Session already using the pick', session: blankStandard, pick: 'standard' },
   ])('leaves $name unchanged and drops the stage', async ({ session, pick }) => {
     let current: SessionView = session
@@ -1585,6 +1583,16 @@ describe('AgentPresetSeatController apply outcomes', () => {
     current = { ...blankStandard, id: SessionId('next') }
     await expect(controller.apply()).resolves.toEqual({ kind: 'unchanged' })
     expect(select).not.toHaveBeenCalled()
+  })
+
+  it('applies an explicit pick to a started Session but never reuses a leftover draft stage', async () => {
+    const current = { ...blankStandard, blank: false }
+    const { controller, select } = seatOver(() => current)
+    controller.stage('minimal')
+    await expect(controller.apply()).resolves.toEqual({ kind: 'unchanged' })
+    expect(select).not.toHaveBeenCalled()
+    await expect(controller.select('minimal')).resolves.toEqual({ kind: 'applied' })
+    expect(select).toHaveBeenCalledExactlyOnceWith(current.id, 'minimal')
   })
 
   it('is applied only when the Host commits the staged preset', async () => {

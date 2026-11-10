@@ -102,7 +102,7 @@ describe('declarative preset revisions', () => {
     expect(ctx.agentPresets.composeFrom(createScope(ctx, {}).ctx, ctx)).toBeUndefined()
   })
 
-  it('logs selection and rejects preset changes after the first turn', async () => {
+  it('logs selection and rejects preset changes during an open turn', async () => {
     const ctx = await setup()
     await declare(ctx, contribution('standard'))
     await declare(ctx, contribution('minimal'))
@@ -110,7 +110,9 @@ describe('declarative preset revisions', () => {
     expect(await ctx.agentPresets.select(agent, 'minimal')).toBe('minimal')
     expect(ctx.sessionProjections.checkpoint(agent.session).agentPreset?.val).toBe('minimal')
     agent.session.append('turn/start', { turn: 1 })
-    await expect(ctx.agentPresets.select(agent, 'standard')).rejects.toThrow('already started')
+    await expect(ctx.agentPresets.select(agent, 'standard')).rejects.toMatchObject({ code: 'agent-preset/locked' })
+    agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await expect(ctx.agentPresets.select(agent, 'standard')).resolves.toBe('standard')
   })
 
   it('inventories active and disabled child entries and declared display metadata', async () => {

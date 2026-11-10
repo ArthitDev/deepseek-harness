@@ -1,5 +1,47 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`agent tool activity > drags each bottom border independently and retains its height across collapse and updates > independently resized debug boxes 1`] = `
+"╭─ Targets ▾ · Enter toggle · Tab next ────────────────────────╮
+│   ▾ Target · 1                                               │
+│   └─ ▾ https://example.test/                                 │
+│      └─ ▾ Sub Target · 30                                    │
+│         ├─   path-0                                          │
+│         ├─   path-1                                          │
+│         ├─   path-2                                          │
+│         ├─   path-3                                          │
+│         ├─   path-4                                          │
+│         ├─   path-5                                          │
+│         ├─   path-6                                          │
+│         ├─   path-7                                          │
+│         ├─   path-8                                          │
+╰───────────────────────────── ↕ ──────────────────────────────╯
+── Agent Debug · Tab panels ──
+╭─ Main Agent ▾ ───────────────────────────────────────────────╮
+│ summary line 0                                               │
+│ summary line 1                                               │
+│ summary line 2                                               │
+│ summary line 3                                               │
+│ summary line 4                                               │
+│ summary line 5                                               │
+│ summary line 6                                               │
+│ summary line 7                                               │
+│ summary line 8                                               │
+│ summary line 9                                               │
+│ summary line 10                                              │
+│ summary line 11                                              │
+│ summary line 12                                              │
+│ summary line 13                                              │
+│ summary line 14                                              │
+╰───────────────────────────── ↕ ──────────────────────────────╯
++ [OK] Tool · tool_18 · 1.5s
+{"command":"Get-Date"}
+exit code: 0
+
+› [OK] Tool · tool_19 · 1.5s
+{"command":"Get-Date"}
+exit code: 0"
+`;
+
 exports[`agent tool activity > expands details with mouse or keyboard and preserves them through updates > expanded activity 1`] = `
 "── Agent Debug ──                             
 › [OK] Tool · tool_0 · 1.5s                   
@@ -14,7 +56,7 @@ exports[`agent tool activity > keeps collapsed branches through URL updates and 
 │   ▾ Target · 1                                               │
 │   └─ ▾ https://example.test/                                 │
 │ ›    └─ ▸ Sub Target · 3                                     │
-╰──────────────────────────────────────────────────────────────╯
+╰───────────────────────────── ↕ ──────────────────────────────╯
 ── Agent Debug · Tab panels ──
 No activity yet. Send a task in chat."
 `;
@@ -23,12 +65,12 @@ exports[`agent tool activity > keeps the Main Agent box fixed during keyboard an
 "╭─ Targets ▾ ──────────────────────────────────────────────────╮
 │   ▾ Target · 1                                               │
 │   └─   https://example.test/                                 │
-╰──────────────────────────────────────────────────────────────╯
+╰───────────────────────────── ↕ ──────────────────────────────╯
 ── Agent Debug · Tab panels ──
 ╭─ Main Agent ▾ ───────────────────────────────────────────────╮
 │ task: ตรวจ service · calls: 20 completed · elapsed: 153.3s · │
 │ usage: 752 in / 3005 out tokens                              │
-╰──────────────────────────────────────────────────────────────╯
+╰───────────────────────────── ↕ ──────────────────────────────╯
 
 + [OK] Tool · tool_17 · 1.5s
 {"command":"Get-Date"}
@@ -514,7 +556,7 @@ exports[`agent tool activity > shows Targets above Debug and scrolls the tree in
 │         ├─   path-2                        │
 │         ├─   path-3                        │
 │         ├─   path-4                        │
-╰────────────────────────────────────────────╯
+╰──────────────────── ↕ ─────────────────────╯
 ── Agent Debug · Tab panels ──
 › [OK] Tool · tool_0 · 1.5s
 {"command":"Get-Date"}

@@ -64,7 +64,7 @@ export function apply(ctx: Context): void {
       return current === null ? undefined : {
         provider: current.provider,
         model: current.model,
-        ...(current.reasoningEffort === undefined ? {} : { reasoningEffort: String(current.reasoningEffort) }),
+        ...(current.reasoningEffort === undefined ? {} : { reasoningEffort: current.reasoningEffort }),
       }
     } catch { /* The session can disappear mid-enqueue; the host then uses its default Main selection. */ }
     return undefined

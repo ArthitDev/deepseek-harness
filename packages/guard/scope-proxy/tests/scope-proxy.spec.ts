@@ -34,7 +34,7 @@ async function harness(config: Partial<Config> = {}): Promise<Context> {
     authorizedTargets: [`127.0.0.1:${originPort}`],
     excludedTargets: ['127.0.0.1:1'],
     ...config,
-  } as Config)
+  })
   await ctx.scopeProxy.whenReady()
   return ctx
 }
@@ -51,7 +51,7 @@ function proxyGet(ctx: Context, targetUrl: string): Promise<{ status: number; bo
     }, (response) => {
       let body = ''
       response.on('data', (chunk) => { body += String(chunk) })
-      response.on('end', () => resolve({ status: response.statusCode ?? 0, body }))
+      response.on('end', () => { resolve({ status: response.statusCode ?? 0, body }) })
     })
     request.on('error', reject)
     request.end()
@@ -68,13 +68,13 @@ function proxyConnect(ctx: Context, authority: string): Promise<{ status: number
       if (status !== 200) {
         let body = ''
         socket.on('data', (chunk) => { body += String(chunk) })
-        socket.on('end', () => resolve({ status, body }))
+        socket.on('end', () => { resolve({ status, body }) })
         return
       }
       socket.write(`GET / HTTP/1.1\r\nHost: ${authority}\r\nConnection: close\r\n\r\n`)
       let raw = ''
       socket.on('data', (chunk) => { raw += String(chunk) })
-      socket.on('close', () => resolve({ status, body: raw.includes('origin-ok') ? 'origin-ok' : raw }))
+      socket.on('close', () => { resolve({ status, body: raw.includes('origin-ok') ? 'origin-ok' : raw }) })
       socket.on('error', reject)
     })
     request.on('error', reject)

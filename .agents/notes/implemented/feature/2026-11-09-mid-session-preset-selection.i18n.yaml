@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-09-mid-session-preset-selection.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-09-mid-session-preset-selection.md
+/agent-note-mid-session-preset-selection:
+  en: 620fc0a2dd99fec0
+  zh: 415735572fed3da2
+/agent-note-mid-session-preset-selection/problem:
+  en: ca33717a1f6707c3
+  zh: 7ea2b9fa18acabd8
+/agent-note-mid-session-preset-selection/decision:
+  en: 9a36c77d1a30216a
+  zh: 0b27f71a1e014109
+/agent-note-mid-session-preset-selection/alternatives-considered:
+  en: 70b1ab8721cde082
+  zh: c64ed267724a9a1d
+/agent-note-mid-session-preset-selection/consequences:
+  en: 3d915a175ec4a5a5
+  zh: 011952d72f315924

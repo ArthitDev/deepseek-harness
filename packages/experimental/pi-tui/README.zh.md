@@ -34,7 +34,7 @@ kind: "package-bundle"
 
 源码检出在每次交互式启动时于后台启动透明 SB 转发服务。内置 ZCode 代理在首次实际发出 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求时启动；选择其他提供方不会启动 ZCode 辅助进程。同一 TUI 进程中的并发请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。健康服务会被复用，并在 TUI 关闭后继续运行。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
 
-`pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式由下文环境变量控制。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
+`pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式由下文环境变量控制。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置代理要求 `PATH` 中存在 Bun；Antigravity 和 SB 使用 `--no-env-file`，继承 Harness 环境。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
 
 迁移到另一台机器时，复制包含 `scripts/` 和 `third-party/` 的完整检出，安装 Node `^22.19 || >=24`、pnpm 与 Bun，再运行 `pnpm install`、`pnpm zcode:setup` 和 `pnpm build`。单独安装并配置系统 9router，注册目标机器的 ZCode 端点与密钥，并在该机器登录 ZCode。提供方路径为 Harness → 9router → ZCode → 提供方；可选 SB 转发位于 Harness 与 9router 之间。下文列出的本地集成必须另行恢复；仅复制 npm TUI 包不包含检出级启动脚本。
 
@@ -90,7 +90,7 @@ dsh --profile tui --dump-config
 
 `/new` 保留最近选择的提供方、模型和已挂载的预设。
 
-通过 `/preset` 切换预设，或选择绑定另一预设的模型时，会开启一个新会话，并保留对话历史、工具结果和压缩检查点。复制的日志重置系统消息，并从模型历史中移除 developer 消息和注入的用户指令；原会话保持不变。下一次请求组装新预设的系统提示词，并加载当前附加上下文。部署 skill hook 需要同时安装在 TUI 和 Web 配置档中；内容未变的 skill 从当前历史中复用。执行工作期间拒绝切换预设。先前的回答和检查点摘要仍可能影响后续回复。
+通过 `/preset` 切换预设，或选择绑定另一预设的模型时，会在同一会话内改变当前空闲 Agent。会话 id、对话历史、工具结果和压缩检查点保持不变。下一次请求组装新预设的提示词和工具；不移除既有事件或注入指令。部署 skill hook 需要同时安装在 TUI 和 Web 配置档中。执行工作期间拒绝切换预设。先前的回答和检查点摘要仍可能影响后续回复。
 
 按 Ctrl+X 或运行 `/thinking`，可打开带编号和说明的推理等级列表。选择器聚焦当前 effort 或配置默认值，并在可用时标记二者。用 ↑/↓ 或数字选择一行，按 Enter 从下一步开始应用，按 Esc 取消。列表只提供所选模型公布的等级；二态控制说明启用或禁用思考。仍可用 `/thinking <level>` 直接选择。确认后的选择通过共享模型默认设置持久化。在执行回合期间取消选择器不会中断该回合。
 
@@ -146,7 +146,7 @@ shell 输入框固定在底部，下边框与聊天中自动换行的状态栏�
 
 实时 MCP 调用只显示服务器报告的进度，TUI 不会自行推算百分比。实时工具行依次显示 `queued` → `preparing` → `executing` → 结束状态；重放只恢复记录中的 `queued`、`preparing` 和结束状态，不显示进度。后台作业保留独立的注册表状态行。Sub Agent 行显示最近一次已确认操作；点击该行或按 Enter 可打开现有子代理检查器。点击 `N agents` 或按 `Ctrl+Alt+G` 可搜索子代理历史。
 
-观察到 HTTP(S) URL 时，Debug 上方显示可滚动的 `Targets` 框，即使未打开 shell 也随 `/agent-debug` 一起显示或隐藏。`Target` 收录用户直接消息中的 URL；`Sub Target` 将同一主机名或其子域中的新 URL 按路径分层。若一个发现匹配多个直接目标，则优先选择主机名最长者，再选择同源匹配路径最长者；评分相同时保留最先出现的目标。候选扫描会在比较各个主目标时复用每个 URL 的主机名、来源和路径。`Other` 收录无关 URL。新 URL 来自已提交的助手文本和工具参数/结果，不包含注入上下文和流式增量。显示值移除凭据、查询参数和片段后去重，会话事件保持原样。回放会恢复观察记录，不受聊天窗口的 20 条限制和压缩影响；clear/rewind 移除被覆盖来源，切换会话重置树。框最多显示 10 行，支持独立的鼠标滚轮滚动。点击 `Targets` 标题可将整个框收起为一行；点击分组或路径分支可切换其子节点。按 `Ctrl+Alt+D` 后，Tab 在活动列表、Targets 标题和 Main Agent 标题间循环切换，跳过隐藏的框。Up/Down 选择可见行，Enter/Space 切换所选节点，Left 收起或选择父节点，Right 展开或选择第一个子节点。PageUp/PageDown 和 Home/End 滚动树。新 URL 到达时，已收起的分支保持关闭；清空目标集或将其替换为没有重叠 URL 的新集合会重置收起状态。这些观察到的链接不会触发扫描或授权执行。
+观察到 HTTP(S) URL 时，Debug 上方显示可滚动的 `Targets` 框，即使未打开 shell 也随 `/agent-debug` 一起显示或隐藏。`Target` 收录用户直接消息中的 URL；`Sub Target` 将同一主机名或其子域中的新 URL 按路径分层。若一个发现匹配多个直接目标，则优先选择主机名最长者，再选择同源匹配路径最长者；评分相同时保留最先出现的目标。候选扫描会在比较各个主目标时复用每个 URL 的主机名、来源和路径。`Other` 收录无关 URL。新 URL 来自已提交的助手文本和工具参数/结果，不包含注入上下文和流式增量。显示值移除凭据、查询参数和片段后去重，会话事件保持原样。回放会恢复观察记录，不受聊天窗口的 20 条限制和压缩影响；clear/rewind 移除被覆盖来源，切换会话重置树。框默认最多显示 10 行，支持独立的鼠标滚轮滚动；也可按下文所述拖动底部边框调整高度。点击 `Targets` 标题可将整个框收起为一行；点击分组或路径分支可切换其子节点。按 `Ctrl+Alt+D` 后，Tab 在活动列表、Targets 标题和 Main Agent 标题间循环切换，跳过隐藏的框。Up/Down 选择可见行，Enter/Space 切换所选节点，Left 收起或选择父节点，Right 展开或选择第一个子节点。PageUp/PageDown 和 Home/End 滚动树。新 URL 到达时，已收起的分支保持关闭；清空目标集或将其替换为没有重叠 URL 的新集合会重置收起状态。这些观察到的链接不会触发扫描或授权执行。
 
 后台作业在同一面板内显示为独立的简短状态行，例如 `[RUNNING] Job · pwsh-102 · 4.0s`；现有命令预览保持不变。工具成功或回合结束不会结束这些行。注册表事件即时更新 RUNNING、STOPPING、COMPLETED、FAILED 和 KILLED，即使 Debug 或 shell 隐藏也持续更新；状态栏统计运行中和停止中的作业。显示当前会话的所有活动作业及最近 20 个已结束作业，也包括无所有者作业。切换会话会重新绑定订阅，`/jobs` 使用同一会话 id。支持所有已注册的类型和后端，无需解析命令文本；注册表之外的脱离进程无法观察。作业行使用进程内注册表快照，不回放历史，也不读取输出、消耗 Agent 的读取游标或控制执行。
 
@@ -154,7 +154,7 @@ shell 输入框固定在底部，下边框与聊天中自动换行的状态栏�
 
 Agent Debug 也会根据已接受的事件显示 Main Agent 和基于会话的 Sub Agent 摘要：任务、最近工具、调用计数、耗时、已测得的用量，以及可用时的 todo 进度。
 
-Main Agent 摘要固定显示在可滚动活动列表上方的框内。点击标题可将其收起为一行或展开，状态独立于 Targets。标题获得焦点后，Enter/Space 切换收起状态，Left 收起，Right 展开。摘要实时更新时保留收起状态，重新展开时显示最新摘要。滚动或展开活动时标题保持可见；摘要实时更新时保留列表的滚动位置。
+Main Agent 摘要固定显示在可滚动活动列表上方的框内。点击标题可将其收起为一行或展开，状态独立于 Targets。标题获得焦点后，Enter/Space 切换收起状态，Left 收起，Right 展开。拖动任一框底部带有 `↕` 的边框可独立调整高度，也可在标题或树获得焦点时使用 Shift+Up/Down。高度受内容和面板可用空间限制，并为活动列表保留至少一行；TUI 打开期间，各框在收起和实时更新后保留所选高度。Main Agent 内容支持独立的鼠标滚轮滚动，也可在标题获得焦点后使用 Home/End。摘要实时更新时保留收起状态，重新展开时显示最新摘要。滚动或展开活动时标题保持可见；摘要实时更新时保留列表的滚动位置。
 
 时间值使用会话事件时间戳，并以毫秒显示。`pre-step` 计算 `turn/start` 到首次 `step/start` 的时间，不包括 `turn/start` 前的 inbox 等待。`request sum` 汇总匹配的 `step/start` 到 `assistant/message` 区间，包括 `step/start` 后的请求准备、重试，以及 provider 或 transport 等待，因此不是纯 provider 耗时。`TTFT avg` 计算有 `assistant/message` 的 step 从 `step/start` 到首个 stream token 的时间，并在重试间保留首个 token。`tool sum` 汇总匹配的根级 `tool/call` 到 `tool/result` 区间，包括审批和准备时间；不会单独计算 PTC 子分派。工具区间可以重叠，因此总和可能超过总耗时。括号中的数量表示已完成的时间样本。缺少两个时间戳时，`pre-step` 显示 `unknown`；其他指标在没有匹配样本时显示 `unknown`。负区间按零计算。摘要不会通过从总耗时中减去工具耗时来估算本地时间。
 

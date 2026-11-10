@@ -61,7 +61,9 @@ it('edits against the profile patch revision and persists through the plugin man
   const { api, path, writes } = await fixture()
   const moduleName = '@deepseek-ai/dsh-tool-test'
   const before = await api.edit('test', moduleName)
-  expect(before).toEqual({ revision: expect.any(String), enabled: true })
+  expect(before.enabled).toBe(true)
+  expect(before.revision).toBeTypeOf('string')
+  expect(Object.keys(before).sort()).toEqual(['enabled', 'revision'])
   expect(await readFile(path, 'utf8')).toBe('# existing config\n[]\n')
 
   const saved = await api.setEnabled('test', moduleName, false, before.revision)

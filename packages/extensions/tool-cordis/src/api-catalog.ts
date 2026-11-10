@@ -168,6 +168,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Registry of YAML-declared presets and the revisions live Agents retain.',
     methods: [
       {
+        signature: 'presetIdForModel(provider: string, model: string): string',
+        description: 'Resolve the preset configured for one model route.',
+        parameters: [{ name: 'provider', description: 'model provider route.' }, { name: 'model', description: 'provider-owned model id.' }],
+        returns: 'the route override, or the current default preset when unbound or selection is hidden.',
+      },
+      {
         signature: 'presetForSession(session: Session): string | null',
         description: 'Read the preset recorded for a Session, including selections no longer in the roster.',
         parameters: [{ name: 'session', description: 'Session whose committed preset selection is read.' }],
@@ -195,7 +201,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote(\'list\') async remoteExportList(): Promise<AgentPresetRoster>',
         description: 'Read the selection roster.',
         parameters: [],
-        returns: 'Current presets, each marked when it is the default.',
+        returns: 'Current presets with trust and authoring facts, each marked when it is the default.',
       },
       {
         signature: 'async resolve(id?: string): Promise<AgentPreset>',
@@ -204,10 +210,60 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Current metadata, including failure when activation failed.',
       },
       {
-        signature: '@Remote(\'read\') readDocument(agentPreset: string): Promise<AgentPresetDocument>',
+        signature: '@Remote(\'read\') async readDocument(agentPreset: string): Promise<AgentPresetDocument>',
         description: 'Read one declaration\'s child plugin list as YAML, for viewing only.',
         parameters: [{ name: 'agentPreset', description: 'Preset identity.' }],
-        returns: 'The declared composition beside its published metadata.',
+        returns: 'The declared composition beside its trust and published metadata.',
+      },
+      {
+        signature: 'async write(id: string, content: string): Promise<void>',
+        description: 'Replace one profile-declared preset\'s composition.',
+        parameters: [{ name: 'id', description: 'preset id whose declaring row the active profile patch holds.' }, { name: 'content', description: 'complete entry-list YAML to store.' }],
+        returns: 'once the row is rewritten and the Loader settled on it.',
+        throws: ['when the preset is unknown, ships with the deployment, or the composition is refused.'],
+      },
+      {
+        signature: '@Remote(\'write\') async remoteExportWrite(agentPreset: string, content: string): Promise<void>',
+        description: 'Replace one profile-declared preset\'s composition through the Remote API.',
+        parameters: [{ name: 'agentPreset', description: 'preset id resolved by the Host.' }, { name: 'content', description: 'complete entry-list YAML to store.' }],
+        returns: 'once the row is rewritten.',
+      },
+      {
+        signature: 'async copy(from: string, id: string, name?: string): Promise<void>',
+        description: 'Create a profile-declared preset by copying an existing one\'s whole plugin list.',
+        parameters: [{ name: 'from', description: 'the preset the copy starts from; any trust is accepted.' }, { name: 'id', description: 'the new preset\'s id.' }, { name: 'name', description: 'display name for the copy; omitted publishes none.' }],
+        throws: ['when the source is unknown, the id is unusable or taken, or the deployment configures no profile.'],
+      },
+      {
+        signature: 'async create(from: string, id: string, name: string | undefined, content: string): Promise<void>',
+        description: 'Create a profile-declared preset with a complete composition.',
+        parameters: [{ name: 'from', description: 'source preset whose plugin list the copy starts from.' }, { name: 'id', description: 'new preset id.' }, { name: 'name', description: 'display name; undefined publishes none.' }, { name: 'content', description: 'complete entry-list YAML stored in the new preset.' }],
+        returns: 'once the declaring row is written and activated.',
+        throws: ['when the source is unknown, the id is unusable or taken, or the composition is refused.'],
+      },
+      {
+        signature: '@Remote(\'copy\') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>',
+        description: 'Copy one preset through the Remote API.',
+        parameters: [{ name: 'from', description: 'the source preset id.' }, { name: 'id', description: 'the new preset id.' }, { name: 'name', description: 'the copy\'s optional display name.' }],
+        returns: 'once the copy is stored.',
+      },
+      {
+        signature: '@Remote(\'create\') async remoteExportCreate(from: string, id: string, name: string | undefined, content: string): Promise<void>',
+        description: 'Create one preset with caller-supplied composition through the Remote API.',
+        parameters: [{ name: 'from', description: 'source preset whose plugin list the copy starts from.' }, { name: 'id', description: 'new preset id.' }, { name: 'name', description: 'display name, or undefined to publish none.' }, { name: 'content', description: 'complete composition for the new preset.' }],
+        returns: 'once the complete preset is stored.',
+      },
+      {
+        signature: 'async remove(id: string): Promise<void>',
+        description: 'Delete a profile-declared preset.\n\nSessions already composed from it keep their retained revision; only new sessions see the roster without it. Bindings that named it — the selected default and per-model overrides — are cleared so nothing resolves a preset nothing will ever supply again.',
+        parameters: [{ name: 'id', description: 'the preset id.' }],
+        throws: ['when the preset is unknown or ships with the deployment.'],
+      },
+      {
+        signature: '@Remote(\'deletePreset\') async remoteExportDelete(id: string): Promise<void>',
+        description: 'Delete one preset through the Remote API.',
+        parameters: [{ name: 'id', description: 'the preset id.' }],
+        returns: 'once the preset is deleted.',
       },
       {
         signature: 'async mount(ctx: Context, id?: string): Promise<AgentPreset>',
@@ -235,13 +291,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async recompose(ctx: Context, id: string): Promise<AgentPreset>',
-        description: 'Rebind a blank Agent; the caller owns the blank-session check.',
+        description: 'Rebind an Agent; the caller owns exclusion of turn-driving work.',
         parameters: [{ name: 'ctx', description: 'Agent context.' }, { name: 'id', description: 'Requested preset.' }],
         returns: 'The bound identity.',
       },
       {
         signature: '@Remote(\'select\') async select(agent: Agent, agentPreset: string): Promise<string>',
-        description: 'Select a preset before a session starts its first turn. A Session whose log records the preset and whose Agent runs its current revision keeps its composition; nothing is logged or announced.',
+        description: 'Select a preset while the Agent is idle, retaining its Session history. A Session whose log records the preset and whose Agent runs its current revision keeps its composition; nothing is logged or announced.',
         parameters: [{ name: 'agent', description: 'Target Agent.' }, { name: 'agentPreset', description: 'Requested identity.' }],
         returns: 'Committed preset identity.',
       },
@@ -2712,6 +2768,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'proxyServers',
+    summary: 'Host-owned children are stopped through their live handles; external listeners are never killed.',
+    description: 'Host-owned children are stopped through their live handles; external listeners are never killed.',
+    methods: [
+      {
+        signature: '@Remote async list(): Promise<ProxyServerRow[]>',
+        description: 'Return current loopback listener state without starting anything.',
+        parameters: [],
+        returns: 'Three embedded proxy descriptors with persistent usage preferences.',
+      },
+      {
+        signature: '@Remote async setEnabled(id: ProxyId, enabled: boolean): Promise<void>',
+        description: 'Persist usage and start or stop the selected proxy. Other proxies and external processes remain untouched.',
+        parameters: [{ name: 'id', description: 'Embedded proxy identity.' }, { name: 'enabled', description: 'Whether new Harness model requests may use this proxy.' }],
+        returns: 'After saving and startup/idle shutdown; active streams defer shutdown, and startup failure retains the preference.',
+      },
+    ],
+  },
+  {
     key: 'ptcRuntime',
     summary: 'Registers one `ctx.ptcRuntime` implementation.',
     description: 'Registers one `ctx.ptcRuntime` implementation. Program, budget, abort, and substrate failures resolve in PtcRunResult; only Service Definition contract misuse rejects. Implementations bridge structured-cloneable bindings, materialize each declared namespace rejection class, treat programs as hostile peers, isolate distinct state owners, and terminate and await in-flight runs during disposal.',
@@ -3135,6 +3210,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the accepted title and durable event sequence.',
       },
       {
+        signature: '@Remote(\'delete\') async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>',
+        description: 'Permanently delete one stored Session: workspace accounting is forgotten, the stored history is removed, and the Session working directory is kept. A Session with a live Agent refuses; stop it (or archive it with stop) first. Unknown ids refuse as not-found.',
+        parameters: [{ name: 'request', description: 'Session identity to delete.' }, { name: 'signal', description: 'cancellation observed before the storage commit.' }],
+        returns: 'confirmation after durable deletion and list removal.',
+      },
+      {
         signature: '@Remote(\'fork\') async fork(request: SessionForkRequest): Promise<SessionForkValue>',
         description: 'Fork one cold-readable exact event prefix into a new Session. An omitted boundary selects the latest completed-turn prefix; an open cut receives synthetic fork closers.',
         parameters: [{ name: 'request', description: 'source Session, optional exact inclusive event boundary, and migration preflight choice.' }],
@@ -3282,6 +3363,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'id', description: 'the stored session to open.' }, { name: 'access', description: '`read` or `write`.' }, { name: 'options', description: 'optional cancellation.' }],
         returns: 'the open handle.',
         throws: ['{SessionPersistenceNotFoundError} when the session does not exist.', '{SessionAlreadyOwnedError} for `write` when ownership is taken.'],
+      },
+      {
+        signature: 'abstract delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<boolean>',
+        description: 'Permanently delete one stored session and its session-owned artifacts. Active write ownership rejects; read handles may fail their next read. The session working directory is never part of this operation.',
+        parameters: [{ name: 'id', description: 'the stored session to delete.' }, { name: 'options', description: 'optional cancellation observed before commit.' }],
+        returns: '`true` when a session was deleted, or `false` when absent.',
+        throws: ['{SessionAlreadyOwnedError} while a write handle owns the session.'],
       },
       {
         signature: 'abstract flush(): Promise<void>',
@@ -3611,6 +3699,60 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     description: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     methods: [
+      {
+        signature: '@Remote async terminalOpen(request: SkillTerminalOpenRequest, signal: AbortSignal): Promise<SkillTerminalOpenValue>',
+        description: 'Start one unrestricted command in the host platform\'s native interactive shell.',
+        parameters: [{ name: 'request', description: 'Command and initial terminal dimensions.' }, { name: 'signal', description: 'Caller cancellation for terminal startup.' }],
+        returns: 'the caller-owned terminal identifier.',
+      },
+      {
+        signature: '@Remote terminalRead(request: SkillTerminalReadRequest): SkillTerminalReadValue',
+        description: 'Read terminal output from the caller-owned character offset.',
+        parameters: [{ name: 'request', description: 'Terminal identifier and character offset.' }],
+        returns: 'retained output and the next readable offset.',
+      },
+      {
+        signature: '@Remote async terminalWrite(request: SkillTerminalWriteRequest): Promise<SkillTerminalWriteValue>',
+        description: 'Write terminal input verbatim, including control characters.',
+        parameters: [{ name: 'request', description: 'Terminal identifier and input text.' }],
+        returns: 'whether the terminal accepted the input.',
+      },
+      {
+        signature: '@Remote async terminalClose(request: SkillTerminalCloseRequest): Promise<SkillTerminalCloseValue>',
+        description: 'Terminate and forget one Skills settings terminal.',
+        parameters: [{ name: 'request', description: 'Terminal identifier to close.' }],
+        returns: 'whether an open terminal was closed.',
+      },
+      {
+        signature: '@Remote async installed(): Promise<InstalledSkillsValue>',
+        description: 'List skills installed directly in the user-global DSH skill root.',
+        parameters: [],
+        returns: 'the installed skill names in stable order.',
+      },
+      {
+        signature: '@Remote async setEnabled(request: SkillSetEnabledRequest): Promise<SkillSetEnabledValue>',
+        description: 'Enable or disable one global skill by moving it into or out of discovery.',
+        parameters: [{ name: 'request', description: 'Installed skill name and desired state.' }],
+        returns: 'the persisted state.',
+      },
+      {
+        signature: '@Remote(\'uninstall\') async remove(request: SkillRemoveRequest): Promise<SkillRemoveValue>',
+        description: 'Remove one global skill from discovery while retaining a recoverable backup.',
+        parameters: [{ name: 'request', description: 'Installed skill name to remove.' }],
+        returns: 'whether an installed directory was moved to backup.',
+      },
+      {
+        signature: '@Remote async search(request: SkillSearchRequest, signal: AbortSignal): Promise<SkillSearchValue>',
+        description: 'Search skills.sh through the maintained `skills` CLI.',
+        parameters: [{ name: 'request', description: 'validated search text.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'matching installable skills.',
+      },
+      {
+        signature: '@Remote(\'add\') async install(request: SkillInstallRequest, signal: AbortSignal): Promise<SkillInstallValue>',
+        description: 'Install one skills.sh source into the user-global DSH skill root.',
+        parameters: [{ name: 'request', description: 'canonical owner/repository and skill selection.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the installed skill identity.',
+      },
       {
         signature: '@Remote async list(request: SkillListRequest, signal: AbortSignal): Promise<SkillListValue>',
         description: 'List the user-invocable skills visible to one Session composition.',
@@ -5067,6 +5209,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'resolution after durability.',
       },
       {
+        signature: 'forgetSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one deleted session from workspace accounting and the registry-global archive set. Unknown ids are an idempotent no-op.',
+        parameters: [{ name: 'sessionId', description: 'permanently deleted session identity.' }],
+        returns: 'resolution after durability.',
+      },
+      {
         signature: 'pinSession(sessionId: SessionId): Promise<void>',
         description: 'Pin one session durably, prepending it to the registry-global pin set. The session must exist (live or in session persistence) and must not be archived. An already pinned id resolves without writing or reordering.',
         parameters: [{ name: 'sessionId', description: 'The session to pin.' }],
@@ -5947,19 +6095,23 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentPresetDocument',
-    declaration: 'export interface AgentPresetDocument {\n    readonly agentPreset: string;\n    readonly content: string;\n    readonly name?: string;\n    readonly description?: string;\n}',
+    declaration: 'export interface AgentPresetDocument {\n    readonly agentPreset: string;\n    readonly trust: PresetTrust;\n    readonly content: string;\n    readonly name?: string;\n    readonly description?: string;\n}',
   },
   {
     name: 'AgentPresetInspection',
     declaration: 'export interface AgentPresetInspection {\n    readonly id: string;\n    readonly modules: readonly {\n        readonly moduleName: string;\n        readonly baseUrl?: string;\n        readonly useHostBase: boolean;\n    }[];\n    readonly leakedServices: readonly string[];\n}',
   },
   {
+    name: 'AgentPresetModelRow',
+    declaration: 'export interface AgentPresetModelRow {\n    readonly provider: string;\n    readonly providerName: string;\n    readonly id: string;\n    readonly name: string;\n}',
+  },
+  {
     name: 'AgentPresetRoster',
-    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n}',
+    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly authorable: boolean;\n    readonly modeSelectionEnabled: boolean;\n    readonly models: readonly AgentPresetModelRow[];\n    readonly modelPresets: Readonly<Record<string, Readonly<Record<string, string>>>>;\n    readonly defaultModel?: {\n        readonly provider: string;\n        readonly model: string;\n    };\n}',
   },
   {
     name: 'AgentPresetRow',
-    declaration: 'export interface AgentPresetRow {\n    readonly id: string;\n    readonly isDefault: boolean;\n    readonly name?: string;\n    readonly description?: string;\n    readonly broken?: string;\n}',
+    declaration: 'export interface AgentPresetRow {\n    readonly id: string;\n    readonly isDefault: boolean;\n    readonly trust: PresetTrust;\n    readonly name?: string;\n    readonly description?: string;\n    readonly broken?: string;\n}',
   },
   {
     name: 'AgentResolver',
@@ -7190,6 +7342,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface InstallBundleOptions {\n    enabled?: boolean;\n    saveExact?: boolean;\n    requestId?: PluginInstallRequestId;\n    approvedBuilds?: string[];\n    registry?: Registry;\n}',
   },
   {
+    name: 'InstalledSkillEntry',
+    declaration: 'export interface InstalledSkillEntry {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
+  },
+  {
+    name: 'InstalledSkillsValue',
+    declaration: 'export interface InstalledSkillsValue {\n    readonly skills: readonly InstalledSkillEntry[];\n}',
+  },
+  {
     name: 'InstallSpecKind',
     declaration: 'export type InstallSpecKind = \'registry\' | \'path\' | \'git\' | \'tarball\';',
   },
@@ -8138,6 +8298,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PresetSpec {\n    sandbox: SandboxMode;\n    approval: ApprovalPolicy;\n    name?: string;\n    description?: string;\n}',
   },
   {
+    name: 'PresetTrust',
+    declaration: 'export type PresetTrust = \'system\' | \'user\';',
+  },
+  {
     name: 'PreStepDecision',
     declaration: 'export type PreStepDecision = {\n    kind: \'reject\';\n} | {\n    kind: \'enter\';\n    messages: UserMessage[];\n    startsRequestSeries?: true;\n};',
   },
@@ -8252,6 +8416,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProviderRequestId',
     declaration: 'export type ProviderRequestId = Branded<\'ProviderRequestId\'>;',
+  },
+  {
+    name: 'ProxyId',
+    declaration: 'export type ProxyId = \'zcode\' | \'antigravity\' | \'sb\';',
+  },
+  {
+    name: 'ProxyServerRow',
+    declaration: 'export interface ProxyServerRow {\n    id: ProxyId;\n    name: string;\n    endpoint: string;\n    enabled: boolean;\n    available: boolean;\n    status: \'stopped\' | \'running\' | \'external\' | \'port-in-use\';\n    providers: readonly string[];\n}',
   },
   {
     name: 'PrunedEntry',
@@ -8447,7 +8619,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RemoteEventHostInfo',
-    declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
+    declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n    readonly hostname?: string;\n}',
   },
   {
     name: 'RemoteMachineAuth',
@@ -8878,6 +9050,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteRequest',
+    declaration: 'export interface SessionDeleteRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionDeleteValue',
+    declaration: 'export interface SessionDeleteValue {\n    readonly deleted: true;\n}',
+  },
+  {
     name: 'SessionEndInput',
     declaration: 'export interface SessionEndInput {\n    reason: \'clear\' | \'logout\' | \'prompt_input_exit\' | \'resume\' | \'other\';\n    sessionId: string;\n}',
   },
@@ -9132,6 +9312,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionPersistenceCreateOptions',
     declaration: 'export interface SessionPersistenceCreateOptions {\n    readonly signal?: AbortSignal;\n    readonly inheritedEventCount?: SessionLogOffset;\n}',
+  },
+  {
+    name: 'SessionPersistenceDeleteOptions',
+    declaration: 'export interface SessionPersistenceDeleteOptions {\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'SessionPersistenceListOptions',
@@ -9554,6 +9738,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
   },
   {
+    name: 'SkillInstallRequest',
+    declaration: 'export interface SkillInstallRequest {\n    readonly source: string;\n}',
+  },
+  {
+    name: 'SkillInstallValue',
+    declaration: 'export interface SkillInstallValue {\n    readonly installed: readonly string[];\n    readonly backedUp: readonly string[];\n}',
+  },
+  {
     name: 'SkillInvocationPolicy',
     declaration: 'export interface SkillInvocationPolicy {\n    readonly modelInvocable: boolean;\n    readonly userInvocable: boolean;\n}',
   },
@@ -9586,8 +9778,36 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SkillRegistration = Omit<SkillDefinition, \'invocation\' | \'provider\'> & {\n    readonly invocation?: SkillInvocationPolicy;\n    readonly provider?: string;\n};',
   },
   {
+    name: 'SkillRemoveRequest',
+    declaration: 'export interface SkillRemoveRequest {\n    readonly name: string;\n}',
+  },
+  {
+    name: 'SkillRemoveValue',
+    declaration: 'export interface SkillRemoveValue {\n    readonly name: string;\n    readonly removed: boolean;\n}',
+  },
+  {
     name: 'SkillResourceBase',
     declaration: 'export type SkillResourceBase = {\n    readonly kind: \'directory\';\n    readonly path: string;\n} | {\n    readonly kind: \'url\';\n    readonly url: string;\n} | {\n    readonly kind: \'opaque\';\n    readonly description: string;\n};',
+  },
+  {
+    name: 'SkillSearchEntry',
+    declaration: 'export interface SkillSearchEntry {\n    readonly source: string;\n    readonly name: string;\n    readonly url: string;\n}',
+  },
+  {
+    name: 'SkillSearchRequest',
+    declaration: 'export interface SkillSearchRequest {\n    readonly query: string;\n}',
+  },
+  {
+    name: 'SkillSearchValue',
+    declaration: 'export interface SkillSearchValue {\n    readonly skills: readonly SkillSearchEntry[];\n}',
+  },
+  {
+    name: 'SkillSetEnabledRequest',
+    declaration: 'export interface SkillSetEnabledRequest {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
+  },
+  {
+    name: 'SkillSetEnabledValue',
+    declaration: 'export interface SkillSetEnabledValue {\n    readonly name: string;\n    readonly enabled: boolean;\n}',
   },
   {
     name: 'SkillSource',
@@ -9596,6 +9816,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillSummary',
     declaration: 'export interface SkillSummary {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
+  },
+  {
+    name: 'SkillTerminalCloseRequest',
+    declaration: 'export interface SkillTerminalCloseRequest {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'SkillTerminalCloseValue',
+    declaration: 'export interface SkillTerminalCloseValue {\n    readonly closed: boolean;\n}',
+  },
+  {
+    name: 'SkillTerminalOpenRequest',
+    declaration: 'export interface SkillTerminalOpenRequest {\n    readonly command: string;\n    readonly rows?: number;\n    readonly cols?: number;\n}',
+  },
+  {
+    name: 'SkillTerminalOpenValue',
+    declaration: 'export interface SkillTerminalOpenValue {\n    readonly id: string;\n}',
+  },
+  {
+    name: 'SkillTerminalReadRequest',
+    declaration: 'export interface SkillTerminalReadRequest {\n    readonly id: string;\n    readonly offset: number;\n}',
+  },
+  {
+    name: 'SkillTerminalReadValue',
+    declaration: 'export interface SkillTerminalReadValue {\n    readonly text: string;\n    readonly nextOffset: number;\n    readonly lossy: boolean;\n    readonly exited: boolean;\n    readonly exitCode?: number | null;\n    readonly error?: string;\n}',
+  },
+  {
+    name: 'SkillTerminalWriteRequest',
+    declaration: 'export interface SkillTerminalWriteRequest {\n    readonly id: string;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SkillTerminalWriteValue',
+    declaration: 'export interface SkillTerminalWriteValue {\n    readonly accepted: true;\n}',
   },
   {
     name: 'SkillViewOptions',

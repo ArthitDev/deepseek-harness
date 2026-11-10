@@ -20,6 +20,9 @@ const dryRun = process.argv.includes('--dry-run')
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '../../../../..')
 const proxyScript = join(here, 'antigravity_proxy.mjs')
+const bun = execFileSync('bun', ['--no-env-file', '--print', 'process.execPath'], {
+  encoding: 'utf8', windowsHide: true,
+}).trim()
 const dshHome = process.env.DSH_HOME ?? join(homedir(), '.dsh')
 const profileDir = join(dshHome, 'profiles', 'tui')
 const port = Number(process.env.ANTIGRAVITY_PORT ?? 18877)
@@ -63,7 +66,7 @@ const vbs = [
   'Set shell = CreateObject("WScript.Shell")',
   'shell.Environment("Process")("HOST") = "127.0.0.1"',
   `shell.Environment("Process")("ANTIGRAVITY_PORT") = "${port}"`,
-  `shell.Run """${process.execPath}"" ""${proxyScript}""", 0, False`,
+  `shell.Run """${bun}"" --no-env-file ""${proxyScript}""", 0, False`,
   '',
 ].join('\n')
 
@@ -106,7 +109,7 @@ if (!healthy) {
   mkdirSync(dirname(logFile), { recursive: true })
   const output = openSync(logFile, 'a', 0o600)
   try {
-    const child = spawn(process.execPath, [proxyScript], {
+    const child = spawn(bun, ['--no-env-file', proxyScript], {
       detached: true, stdio: ['ignore', output, output], windowsHide: true,
       env: { ...process.env, HOST: '127.0.0.1', ANTIGRAVITY_PORT: String(port) },
     })

@@ -1,11 +1,8 @@
 // Web e2e scenario: agent-preset selection. Every lane mounts the plugin's
 // own shipped presets; this is the lane that puts them in front of a browser.
 //
-// Two surfaces, one host rule: a session's composition is fixed when the
-// session starts. Before that, the new-session chip stages the choice beside
-// the workspace picker — the only screen where it still works. After it, the
-// session header names what the session runs and offers no control at all,
-// because the host answers `agent-preset-locked` to anything else.
+// The new-session picker stages choices; the header changes the current idle
+// Session's composition without replacing its history.
 //
 // Zero model calls: no replay fixture mounts, so a stray stream fails loud.
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -62,6 +59,8 @@ async function seedRefusingPreset(root: string): Promise<void> {
  * @param workspaceCwd - the scaffold's temp project parent.
  */
 async function seedWorkspaceSkill(workspaceCwd: string): Promise<void> {
+  // Anchor discovery here even when the machine's temp directory has a Git ancestor.
+  await mkdir(join(workspaceCwd, 'workspace', '.git'), { recursive: true })
   const directory = join(workspaceCwd, 'workspace', '.agents', 'skills', SKILL_NAME)
   await mkdir(directory, { recursive: true })
   await writeFile(join(directory, 'SKILL.md'), [
@@ -415,7 +414,7 @@ describe('web e2e: agent-preset selection', () => {
     await page.getByRole('button', { name: 'Standard mode' }).waitFor({ timeout: 10_000 })
   })
 
-  it('labels a resumed session with the preset it was created under', async () => {
+  it('changes a resumed session through the header without replacing its history', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-header'))
     // The seeded session's cwd is the scaffold root rather than the connected
     // workspace, so it lists under Ungrouped; the group collapses by default.
@@ -430,9 +429,35 @@ describe('web e2e: agent-preset selection', () => {
     expect(snapshot).toContain('button "1 subagent"')
     expect(snapshot.indexOf('Minimal mode')).toBeLessThan(snapshot.indexOf('button "1 subagent"'))
     expect(snapshot.indexOf('button "1 subagent"')).toBeLessThan(snapshot.indexOf('button "More actions"'))
-    // Static chrome, not a control: the header can only report a composition
-    // the host would refuse to change.
-    expect(snapshot).not.toContain('button "Minimal mode"')
+    expect(snapshot).toContain('button "Minimal mode"')
+    const agent = scaffold.ctx.agents.get(sessionId(SEED_ID))
+    if (agent === undefined) throw new Error('Resumed Session was not published')
+    const before = agent.session.snapshotEvents()
+    const messages = agent.session.deriveMessages()
+    const conversation = page.locator(`[data-conversation-session="${SEED_ID}"]`)
+    const picker = page.getByRole('button', { name: 'Minimal mode', exact: true })
+    await picker.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('menu').waitFor()
+    await page.keyboard.press('Escape')
+    expect(await picker.evaluate(element => element === document.activeElement)).toBe(true)
+    await picker.click()
+    await page.getByRole('menuitem', { name: /^Standard mode/ }).click()
+    await expect.poll(() => livePreset(scaffold, agent.id)).toBe('standard')
+    await page.getByRole('button', { name: 'Standard mode', exact: true }).waitFor()
+    expect(await conversation.count()).toBe(1)
+    expect(await page.getByText('Seeded turn.', { exact: true }).count()).toBe(1)
+    expect(agent.session.snapshotEvents().slice(0, before.length)).toEqual(before)
+    expect(agent.session.deriveMessages()).toEqual(messages)
+    expect(scaffold.ctx.agentPresets.composedPreset(agent.ctx)).toBe('standard')
+    await page.reload()
+    await conversation.waitFor()
+    await page.getByRole('button', { name: 'Standard mode', exact: true }).waitFor()
+    await page.setViewportSize({ width: 390, height: 844 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Standard mode', exact: true }).click()
+    await page.getByRole('menu').waitFor()
+    await page.keyboard.press('Escape')
   })
 
   it('drove every surface without a page error or a stream warning', () => {

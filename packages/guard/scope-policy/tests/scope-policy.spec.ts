@@ -20,7 +20,7 @@ const PUBLIC_ANSWER: AddressResolver = async () => [{ address: '93.184.216.34', 
 async function harness(config: Config = {}, resolve: AddressResolver = PUBLIC_ANSWER): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  ScopePolicy.apply(ctx, ScopePolicy.Config(config) as Config, resolve)
+  ScopePolicy.apply(ctx, ScopePolicy.Config(config), resolve)
   ctx.tools.register(defineContentToolFixture({ name: 'probe', description: 'p', parameters: {}, async execute() { return [{ type: 'text', text: 'done' }] } }))
   return ctx
 }
@@ -32,7 +32,7 @@ function probe(ctx: Context, args: unknown): Promise<{ isError: boolean; info: R
   })
     .then(batch => batch.results[0]!.result)
     .then(result => ({
-      isError: result.isError === true,
+      isError: result.isError,
       info: (result.error?.info ?? {}) as Record<string, unknown>,
       text: result.content.map(block => block.type === 'text' ? block.text : '').join(''),
     }))

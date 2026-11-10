@@ -114,10 +114,12 @@ export class TeamService extends TypertRemoteService {
     })
     ctx.effect(async () => {
       const disposeProjection = await ctx.root.sessionProjections.register(teamProjectionDefinition)
+      this.journal.projection = disposeProjection
       return async () => {
         try {
           await this.disposeRuntime()
         } finally {
+          this.journal.projection = undefined
           await disposeProjection.dispose()
         }
       }

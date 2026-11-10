@@ -1,0 +1,16 @@
+- id: standard
+  name: cordis:preset
+  config:
+    id: standard
+    plugins:
+      - name: ./plugins/contribute.js
+        config:
+          tool: standard
+- id: reviewing
+  name: cordis:preset
+  config:
+    id: reviewing
+    plugins:
+      - name: ./plugins/contribute.js
+        config:
+          tool: reviewing

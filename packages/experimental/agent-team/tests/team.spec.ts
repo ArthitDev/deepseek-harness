@@ -19,6 +19,7 @@ import { mountWorkingDirectoryFixture } from '../../../subagent/subagent/tests/w
 import TeamService, { TeamError, TeamId, TeamMessageId, TeamTaskId } from '../src/index.ts'
 import { TeamRuntimeLifecycle } from '../src/lifecycle.ts'
 import { teamProjectionDefinition } from '../src/projection.ts'
+import type { TeamJournal } from '../src/journal.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/index.ts'
 import { TestSessionQuery } from './test-session-query.ts'
 
@@ -99,7 +100,7 @@ async function setup(
  * tests read the mounted instance through the untyped service-store lookup.
  */
 function teams(ctx: Context): TeamService {
-  return ctx.reflect.get('agentTeams')
+  return ctx.reflect.get('agentTeams') as TeamService
 }
 
 function content(text: string) {
@@ -118,9 +119,7 @@ interface TeamServiceInternals {
     serializeDispatch(message: TeamMessageSnapshot, operation: () => Promise<boolean>): Promise<boolean>
     markDelivered(root: Agent, messageId: ReturnType<typeof TeamMessageId>, targetId: SessionId): Promise<void>
   }
-  readonly journal: {
-    state(root: Agent): unknown
-  }
+  readonly journal: TeamJournal
   disposeRuntime(): Promise<void>
   recoverFor(agent: Agent): Promise<void>
   scheduleRecovery(agent: Agent): void
@@ -164,14 +163,13 @@ describe('Team identity and provisioning', () => {
   it('rejects missing and failed authoritative Team projections', async () => {
     const first = await setup([])
     const journal = teamInternals(first.ctx).journal
-    const stateOf = first.ctx.sessionProjections.stateOf.bind(first.ctx.sessionProjections)
-    const stateOfSpy = vi.spyOn(first.ctx.sessionProjections, 'stateOf').mockImplementation((session, key) => (
-      key === 'experimentalAgentTeam' ? undefined : stateOf(session, key)
-    ))
+    const projection = journal.projection!
+    journal.projection = undefined
     expect(() => journal.state(first.lead)).toThrow('Agent Teams projection is not registered')
-    stateOfSpy.mockImplementation((session, key) => key === 'experimentalAgentTeam'
-      ? { ...teamProjectionDefinition.init(session.header), failure: 'failed Team projection' }
-      : stateOf(session, key))
+    journal.projection = projection
+    const stateOfSpy = vi.spyOn(projection, 'stateOf').mockImplementation(session => ({
+      ...teamProjectionDefinition.init(session.header), failure: 'failed Team projection',
+    }))
     expect(() => journal.state(first.lead)).toThrow('failed Team projection')
     stateOfSpy.mockRestore()
   })
@@ -202,11 +200,11 @@ describe('Team identity and provisioning', () => {
     const lead = await ctx.agentLoop.create(SessionId('preexisting-lead'), {})
     const service = new TeamService(ctx)
 
-    expect(service.listMembers(lead)).toEqual([expect.objectContaining({
+    await vi.waitFor(() => { expect(service.listMembers(lead)).toEqual([expect.objectContaining({
       name: 'lead',
       status: 'inactive',
       diagnostics: [],
-    })])
+    })]) })
     const provisioning = {
       id: SessionId('preexisting-child'),
       name: 'preexisting-worker',

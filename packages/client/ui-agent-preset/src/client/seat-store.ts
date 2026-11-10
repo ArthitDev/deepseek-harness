@@ -1,5 +1,5 @@
 /**
- * Hero-chip controller: which preset the NEXT session gets.
+ * Preset selection for a new Session or an explicit change to the current Session.
  *
  * The new-session screen has no session, so a pick is staged rather than
  * applied. It reaches a session when one becomes current and is still blank —
@@ -21,11 +21,11 @@ import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import { presetOptions, readRoster } from './settings-store.ts'
 import type { AgentPresetOption } from './settings-store.ts'
 
-/** Hero-chip snapshot. */
+/** Preset picker snapshot. */
 export interface AgentPresetSeatState {
   /** Presets the deployment supplies; empty means the chip renders nothing. */
   options: readonly AgentPresetOption[]
-  /** The staged choice, empty until the roster loads. */
+  /** Staged choice or the current Session's recorded preset; empty until loaded. */
   current: string
   /** An error message; explicit selection failures also carry the preset for a Toast. */
   error: string | { readonly preset: AgentPresetOption; readonly reason: string } | null
@@ -52,8 +52,7 @@ export interface AgentPresetStage {
 
 /**
  * Result of one attempt to hand a staged preset to the current Session: the Host applied it,
- * it waits for a Session to appear, nothing changed (busy, already composed, started, or no
- * stage), or the Host refused it.
+ * it waits for a Session to appear, nothing changed, or the Host refused it.
  */
 export type AgentPresetApplyOutcome =
   | { readonly kind: 'applied' | 'staged' | 'unchanged' }
@@ -61,7 +60,7 @@ export type AgentPresetApplyOutcome =
 
 const UNCHANGED: AgentPresetApplyOutcome = { kind: 'unchanged' }
 
-/** Stages the next session's preset and applies it when one appears. */
+/** Applies explicit Session choices and stages choices made before a Session exists. */
 export class AgentPresetSeatController {
   /** Chip snapshot the renderer subscribes to. */
   readonly store: SnapshotStore<AgentPresetSeatState> = createSnapshotStore(INITIAL)
@@ -79,7 +78,7 @@ export class AgentPresetSeatController {
 
   constructor(
     private readonly ctx: ClientContext,
-    /** The session the hero is about to hand over to, when there is one. */
+    /** Current main-view Session, when bound. */
     private readonly currentSession: () => Pick<
       SessionSummary,
       'id' | 'blank' | 'projectionValues'
@@ -129,8 +128,7 @@ export class AgentPresetSeatController {
   }
 
   /**
-   * Stage one preset for the next session, applying it immediately when a
-   * blank session is already current.
+   * Select the current Session's preset, or stage it until a Session appears.
    *
    * The refusal is stored for the chip's announcement and returned to callers
    * such as Settings that also report the result of their own write.
@@ -140,16 +138,14 @@ export class AgentPresetSeatController {
   async select(id: string): Promise<AgentPresetApplyOutcome> {
     if (this.store.getSnapshot().busy) return UNCHANGED
     this.stage(id)
-    return await this.apply()
+    return await this.apply(true)
   }
 
   /**
    * Stage a pick WITHOUT the immediate apply, for a flow that starts the
    * receiving session after the pick (the settings section's creator entry).
-   * `select()`'s immediate apply would meet the still-current running session
-   * and drop the stage as unservable; staging alone leaves it for the
-   * list-change applier, which fires when the started session becomes
-   * current.
+   * Staging alone leaves the current Session unchanged and waits for the
+   * receiving blank Session's binding.
    * @param id - the preset to stage.
    * @param introduce - true when the stage came from another screen and the
    * chip should announce itself on the session it lands on.
@@ -210,9 +206,10 @@ export class AgentPresetSeatController {
    * Called both by `select()` and by whoever observes the current session
    * changing, because the session may appear either before or after the pick.
    * List updates do not repeat a selection while its response is pending.
+   * @param allowStarted - true only for an explicit pick on the current Session; automatic stages target blank Sessions.
    * @returns how this attempt settled; only a Host commit of the staged preset is applied.
    */
-  async apply(): Promise<AgentPresetApplyOutcome> {
+  async apply(allowStarted = false): Promise<AgentPresetApplyOutcome> {
     if (this.store.getSnapshot().busy) return UNCHANGED
     const staged = this.staged.id
     const session = this.currentSession()
@@ -223,10 +220,9 @@ export class AgentPresetSeatController {
       return UNCHANGED
     }
     if (session === undefined) return { kind: 'staged' }
-    // A started session's history was produced under its own composition; the
-    // host refuses the swap, so the stage is no longer meaningful.
-    if (!session.blank || presetOf(session) === staged) {
+    if ((!session.blank && !allowStarted) || presetOf(session) === staged) {
       this.clearStage()
+      this.set({ current: presetOf(session) ?? '' })
       return UNCHANGED
     }
     const completion = Promise.withResolvers<undefined>()

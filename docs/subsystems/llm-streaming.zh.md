@@ -1193,6 +1193,28 @@ Types: [FileAttachmentRef](attachment.zh.md) · [ImageAttachmentRef](attachment.
 
 Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 
+<a id="ctxproxyservers--proxyservers"></a>
+
+### `ctx.proxyServers` — `ProxyServers`
+
+Host-owned children are stopped through their live handles; external listeners are never killed.
+
+```ts cordis-catalog
+/** Return current loopback listener state without starting anything.
+ * @returns Three embedded proxy descriptors with persistent usage preferences.
+ */
+@Remote async list(): Promise<ProxyServerRow[]>
+
+/** Persist usage and start or stop the selected proxy. Other proxies and external processes remain untouched.
+ * @param id Embedded proxy identity.
+ * @param enabled Whether new Harness model requests may use this proxy.
+ * @returns After saving and startup/idle shutdown; active streams defer shutdown, and startup failure retains the preference.
+ */
+@Remote async setEnabled(id: ProxyId, enabled: boolean): Promise<void>
+```
+
+Source: [`packages/llm/proxy-server/src/index.ts`](../../packages/llm/proxy-server/src/index.ts)
+
 <a id="llm-events"></a>
 
 ### `llm/*` events

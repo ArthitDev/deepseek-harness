@@ -58,7 +58,7 @@ Each declaration eagerly creates a registry-owned scope and an in-memory Loader 
 
 A preset service provider and its consumers must share one `cordis:group` isolation realm. Entry-local isolation does not propagate through the Agent registration scope: ordinary Context lookup outside the group, including `agent.ctx`, still selects the Host realm. `agentPresets.serviceFor()` explicitly inspects the retained composition; it does not change ordinary service lookup.
 
-Activation auditing checks imports, missing services and globally leaked services. Import failures, activation failures and leaks reject the mount. A row waiting for a Host service stays mounted, and every read and binding re-audits it after the Host Loader tree settles, so startup order does not decide the outcome. Failure prevents new bindings to that definition. `presetForSession(session)` synchronously reads the latest recorded preset ID, or null when none is recorded. Session logs retain the preset ID and blank-session selections; recovery after restart uses the current definition of that ID and rejects a missing definition. `select` leaves a blank Session that records the requested preset and already runs its current revision unchanged, without another selection record or `tools/change`.
+Activation auditing checks imports, missing services and globally leaked services. Import failures, activation failures and leaks reject the mount. A row waiting for a Host service stays mounted, and every read and binding re-audits it after the Host Loader tree settles, so startup order does not decide the outcome. Failure prevents new bindings to that definition. `presetForSession(session)` synchronously reads the latest recorded preset ID, or null when none is recorded. Session logs retain the preset ID and between-turn selections; recovery after restart uses the current definition of that ID and rejects a missing definition. `select` acquires idle maintenance, preserves the same Session and all prior events, and changes prompt/tools for the next request. Active turns are refused; waking inputs wait for maintenance. A Session that records the requested preset and already runs its current revision stays unchanged, without another selection record or `tools/change`.
 
 `inspectCompositions()` reads all revisions retained by this registry; passing an Agent context selects its exact revision, or returns an empty list when it has no binding here. Each `AgentPresetInspection` contains a preset ID, detached active-module references with their resolution bases, and leaked-service names. Inspectors query the runtime service rather than a module-local mount table; the results contain no Loader trees or fibers. [composition-inventory.ts](src/composition-inventory.ts) defines these records.
 
@@ -91,7 +91,7 @@ None from this package; each mounted `plugins` row declares its own tools and se
 
 #### KV Cache effect
 
-Existing Agents retain their plugins and prompts. New Agents build their prefixes from the current definition.
+Existing Agents retain their plugins and prompts until explicitly switched while idle. Switching changes the next request's prompt/tools and can invalidate its cached prefix; history remains intact. New Agents build their prefixes from the current definition.
 
 ## Known Limitations and Deferred Work
 

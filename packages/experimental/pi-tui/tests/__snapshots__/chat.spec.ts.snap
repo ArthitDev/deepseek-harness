@@ -6,7 +6,7 @@ exports[`exit and resume hints > creates only the visible history views with lim
   " › saved-119                                                            │ ╭─ Main Agent ▾ ─────────────────────────────╮",
   " › saved-120                                                            │ │ task: saved-120 · calls: none · usage:     │",
   " ℹ Recap · Request: saved-120                                           │ │ unknown                                    │",
-  "                                                                        │ ╰────────────────────────────────────────────╯",
+  "                                                                        │ ╰──────────────────── ↕ ─────────────────────╯",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",
@@ -60,13 +60,43 @@ exports[`exit and resume hints > rebuilds the Main Agent summary when an externa
 ]
 `;
 
+exports[`exit and resume hints > rebuilds the Main Agent summary when an externally driven replay is finalized > resized debug boxes beside chat and draft 1`] = `
+[
+  " ⧉  S H I E L D   B R E A K   A G E N T                                 │ ╭─ Targets ▾ ────────────────────────────────╮",
+  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ │   ▾ Target · 1                             │",
+  " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │ │   └─   https://example.test/               │",
+  " › inspect the service at https://example.test/                         │ ╰──────────────────── ↕ ─────────────────────╯",
+  "│ ◆ ⏺ read_file {}                                                      │ ── Agent Debug · Tab panels ──                ",
+  "                                                                        │ ╭─ Main Agent ▾ ─────────────────────────────╮",
+  " ⟦█▓░·····⟧ Working… 0s                                                 │ │ task: inspect the service at               │",
+  "                                                                        │ │ https://example.test/ · last tool:         │",
+  "                                                                        │ │ read_file · calls: 1 pending, 0 completed, │",
+  "                                                                        │ │ 0 failed, 0 cancelled, 0 stopped ·         │",
+  "                                                                        │ │ elapsed: 0.0s · pre-step: unknown ·        │",
+  "                                                                        │ │ request sum: unknown · TTFT avg: unknown · │",
+  "                                                                        ↔ ╰──────────────────── ↕ ─────────────────────╯",
+  "                                                                        │ + [RUNNING] Agent · turn 1 · 0.0s             ",
+  "                                                                        │ Agent is working.                             ",
+  "                                                                        │                                               ",
+  "                                                                        │ + [PREPARING] Tool · read_file · 0.0s         ",
+  "                                                                        │ {}                                            ",
+  "                                                                        │                                               ",
+  "─────────────────────────────────────────────────────────────────────── │                                               ",
+  " keep this draft                                                        │                                               ",
+  "─────────────────────────────────────────────────────────────────────── │                                               ",
+  "⧉ Shield Break · 🤖 deepseek-v4-flash · Kali unavailable                │                                               ",
+  "◈ Jev unavailable · ◌ normal · ◌ boot-sum · ▾ deepseek-harness          │                                               ",
+  "Σ 0 tok                                                                 │                                               ",
+]
+`;
+
 exports[`exit and resume hints > replays a seeded session once even when its parent no longer exists > resumed inherited messages with a missing parent 1`] = `
 [
   " ⧉  S H I E L D   B R E A K   A G E N T                                 │ ── Agent Debug · Tab panels ──                ",
   " model: deepseek-v4-flash · cwd: deepseek-harness                       │ ╭─ Main Agent ▾ ─────────────────────────────╮",
   " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │ │ task: saved question · calls: none ·       │",
   " › saved question                                                       │ │ usage: unknown                             │",
-  " saved answer                                                           │ ╰────────────────────────────────────────────╯",
+  " saved answer                                                           │ ╰──────────────────── ↕ ─────────────────────╯",
   " ℹ Recap · Request: saved question · Last reply: saved answer           │                                               ",
   "                                                                        │                                               ",
   "                                                                        │                                               ",

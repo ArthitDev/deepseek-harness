@@ -27,7 +27,7 @@ export async function ensureSbProxy(installAnchor: string, signal?: AbortSignal)
 async function ensureProxy(installAnchor: string, script: string, command: string, label: string, signal?: AbortSignal): Promise<void> {
   const root = resolve(dirname(installAnchor), '../..')
   await new Promise<void>((complete, reject) => {
-    const helper = spawn(process.execPath, [resolve(root, 'scripts', script), command], {
+    const helper = spawn('bun', ['--no-env-file', resolve(root, 'scripts', script), command], {
       cwd: root, stdio: 'ignore', windowsHide: true, timeout: 300_000, signal,
     })
     let failure: Error | undefined

@@ -84,7 +84,7 @@ describe('TUI Web prompt settings', () => {
       ctx.loader.builtins['tui-settings-test'] = {
         name: 'tui-settings-test', inject: ['pentestModePolicy', 'systemPrompt'], apply: async (context: Context) => {
           installContextCapture(context)
-          await installWebPromptSettings(context)
+          installWebPromptSettings(context)
         },
       }
       const composition = join(root, 'cordis.yml')

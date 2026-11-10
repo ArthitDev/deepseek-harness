@@ -1,0 +1,87 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`changes an idle conversation in place and retains history (system updates in history: false) > next request after a preset change 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Runtime host: Shield Break Harness.
+
+section for reviewing",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+  },
+  {
+    "content": [
+      {
+        "text": "retained question",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "retained answer",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "text": "continue reviewing",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`changes an idle conversation in place and retains history (system updates in history: true) > next request after a preset change 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Runtime host: Shield Break Harness.
+
+section for reviewing",
+        "type": "text",
+      },
+    ],
+    "role": "system",
+  },
+  {
+    "content": [
+      {
+        "text": "retained question",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "retained answer",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "text": "continue reviewing",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;

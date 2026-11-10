@@ -944,6 +944,17 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('rename') rename(request: SessionRenameRequest): Promise<SessionRenameValue>
 
 /**
+ * Permanently delete one stored Session: workspace accounting is forgotten,
+ * the stored history is removed, and the Session working directory is kept.
+ * A Session with a live Agent refuses; stop it (or archive it with stop)
+ * first. Unknown ids refuse as not-found.
+ * @param request - Session identity to delete.
+ * @param signal - cancellation observed before the storage commit.
+ * @returns confirmation after durable deletion and list removal.
+ */
+@Remote('delete') async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>
+
+/**
  * Fork one cold-readable exact event prefix into a new Session. An omitted
  * boundary selects the latest completed-turn prefix; an open cut receives
  * synthetic fork closers.

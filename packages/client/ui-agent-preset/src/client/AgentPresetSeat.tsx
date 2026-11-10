@@ -1,15 +1,8 @@
 /**
- * The agent-preset chip on the new-session screen, beside the workspace
- * picker.
- *
- * It lives here rather than in the composer because the choice is only
- * available before a conversation starts: once a turn has run, the session's
- * history was produced under that preset's tools and the host refuses to swap
- * them. A control that spends most of its life disabled belongs on the screen
- * where it still works.
+ * The agent-preset picker on the new-session screen and in the Session header.
  *
  * The menu opens on the staged choice, which starts as the deployment default.
- * Picking stages; the choice reaches a session when one becomes current.
+ * Picking changes the current idle Session or stages a choice until a blank Session appears.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -37,7 +30,7 @@ export interface AgentPresetSeatInjected {
   }
   /** Read the roster when the chip first renders. */
   load: () => Promise<void>
-  /** Stage one preset for the next session; resolves to a refusal, or undefined. */
+  /** Select the current Session's preset or stage one for a new Session; resolves to a refusal, or undefined. */
   select: (id: string) => Promise<string | undefined>
   /** Acknowledge the refusal whose Toast finished. */
   dismissRefusal: (error: AgentPresetSeatState['error']) => void
@@ -71,21 +64,24 @@ function introStaggerMs(count: number): number {
 
 /** Full component props. */
 export type AgentPresetSeatProps =
-  PropsRuntime<'conversation.hero.agentPreset'>
+  (PropsRuntime<'conversation.hero.agentPreset'> | PropsRuntime<'conversation.session.header.actions'>)
   & PropsLocale<'settings.agentPreset'>
   & InjectFace<AgentPresetSeatInjected>
 
 /**
- * Render the new-session agent-preset chip.
+ * Render the agent-preset picker, disabled while the Session is running.
  * @param props - composed slot props.
  * @returns The chip and any pending selection refusal, or null outside the main view.
  */
 export function AgentPresetSeat({
-  sessionId, useSessionRetainInfo, load, select, dismissRefusal, introduced, useAgentPresetSeat, useDeveloperTools, usePresetPreferences, t,
+  sessionId, useSessions, useSessionRetainInfo, load, select, dismissRefusal, introduced,
+  useAgentPresetSeat, useDeveloperTools, usePresetPreferences, t,
 }: AgentPresetSeatProps) {
   const developerTools = useDeveloperTools(value => value)
   const showBuiltIns = usePresetPreferences(value => value.value?.showBuiltInPresets ?? true)
   const state = useAgentPresetSeat(snapshot => snapshot)
+  const running = useSessions(snapshot => sessionId !== undefined && snapshot.byId[sessionId]?.running === true)
+  const started = useSessions(snapshot => sessionId !== undefined && snapshot.byId[sessionId]?.blank === false)
   const main = useSessionRetainInfo(info => sessionId === undefined
     || (info?.retainedBy.mainView ?? 0) > 0)
   const [open, setOpen] = useState(false)
@@ -113,7 +109,7 @@ export function AgentPresetSeat({
 
   useEffect(() => {
     setOpen(false)
-  }, [developerTools, showBuiltIns, options.length])
+  }, [developerTools, showBuiltIns, options.length, running])
 
   const chosen = state.options.find(option => option.id === state.current)
   const chosenText = chosen === undefined ? undefined : presetDisplayText(chosen, t)
@@ -196,13 +192,13 @@ export function AgentPresetSeat({
             className={css.seat}
             aria-haspopup="menu"
             aria-expanded={open && options.length > 0}
-            title={(typeof state.error === 'object' ? state.error?.reason : state.error) ?? t('seatHint')}
-            disabled={state.busy || options.length === 0}
+            title={(typeof state.error === 'object' ? state.error?.reason : state.error) ?? t(started ? 'headerHint' : 'seatHint')}
+            disabled={state.busy || running || options.length === 0}
             onClick={() => { setOpen(value => !value) }}
           >
-            <IconAgentPresetOutlineRegular className={introducing ? `${css.seatIcon} ${css.introIcon}` : css.seatIcon} />
+            <IconAgentPresetOutlineRegular aria-hidden="true" className={introducing ? `${css.seatIcon} ${css.introIcon}` : css.seatIcon} />
             <span className={css.seatLabel}>{shownLabel}</span>
-            <IconChevronDownOutlineRegular className={css.chevron} />
+            <IconChevronDownOutlineRegular aria-hidden="true" className={css.chevron} />
           </button>
         )}
       />}

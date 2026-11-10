@@ -145,7 +145,7 @@ async function stack(
  * tests read the mounted instance through the untyped service-store lookup.
  */
 function teams(ctx: Context): TeamService {
-  return ctx.reflect.get('agentTeams')
+  return ctx.reflect.get('agentTeams') as TeamService
 }
 
 function provisioning(childId: SessionId, name: string): TeamMemberSnapshot {

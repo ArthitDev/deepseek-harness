@@ -29,9 +29,9 @@ Settings shows the built-in and custom card groups with default highlighting and
 
 Profile-owned presets also offer **Edit preset** and **Delete preset**. The editor saves the complete composition YAML through the Host and retains the draft when validation or saving fails. Deletion requires confirmation; a refused deletion keeps the card. Pending writes disable editing and modal dismissal. Existing sessions retain their composed revision. Bundle and machine declarations remain read-only.
 
-With Coding Tools off in General Settings, the new-session picker and Settings roster offer Standard, Creator, and custom presets; turning them on also offers PTC and Minimal. Default selection and the Creator entry remain available in both states. Choosing a healthy default also synchronizes the blank session on the current new-task surface. Creator starts a new task using the `cordis` preset.
+The new-session screen and session header share a preset picker. The header allows changes while the Agent is idle, retaining the same session id and conversation; the next request uses the selected prompt/tools. It is disabled while work or a selection is pending. With Coding Tools off in General Settings, the pickers and Settings roster offer Standard, Creator, and custom presets; turning them on also offers PTC and Minimal. Choosing a healthy default also synchronizes the blank session on the current new-task surface. Creator starts a new task using the `cordis` preset.
 
-The **Show built-in presets** switch in Agent presets persists through Host settings and hides shipped presets from both this page and the new-task menu. Custom presets, including named overrides of shipped ids, remain visible. Visibility changes do not change the default, an existing session's composition, or its displayed preset label.
+The **Show built-in presets** switch in Agent presets persists through Host settings and hides shipped presets from this page and both picker menus. Custom presets, including named overrides of shipped ids, remain visible. Visibility changes do not change the default, an existing session's composition, or its displayed preset label.
 
 Turning Coding Tools off clears all unapplied choices through the existing Developer tools subscription. Once the off value is accepted, every authenticated browser resets a saved built-in PTC or Minimal default to Standard. Saved Standard, Creator, and custom defaults (including named PTC or Minimal overrides) stay unchanged. The user can select an available preset again after turning Coding Tools off. Existing sessions keep their selected mode; New Session uses the current default. An existing mode's label remains visible even when that mode is absent from the menu. Turning Coding Tools back on does not restore the old default or cleared choice. If Standard is missing or broken, the default remains unchanged and an error is shown.
 
@@ -41,7 +41,7 @@ Known shipped presets offer mode details and usage examples in a read-only dialo
 
 Entering Creator selects `cordis` for the receiving blank Session without changing the new-task default or Coding Tools setting. If no workspace or blank Session is bound yet, the choice waits for that binding. After the choice is applied, the Creator Session keeps its preset; a later newly created Session uses the configured default, such as Standard.
 
-On Desktop, the optional [product analytics](../product-analytics/README.md) service receives `agent_preset_switch` when a direct mode-picker choice moves to a different built-in preset: an unbound choice counts once it is staged for the next Session, and a choice for the bound blank Session counts once the Host applies it. The event carries the source and target categories mapped from the preset id (`cordis` is `creator`; `ptc`, `minimal`, and `standard` keep their ids; any other id is `other`) and the Coding Tools setting known at the choice. Custom targets, refused choices, choices the Host settles on another preset, default changes and their blank-Session synchronization report nothing, and neither does a choice made while the source mode or Coding Tools setting is unknown. Custom preset ids and names are not collected.
+On Desktop, the optional [product analytics](../product-analytics/README.md) service receives `agent_preset_switch` when a direct mode-picker choice moves to a different built-in preset: an unbound choice counts once it is staged for the next Session, and a choice for a bound Session counts once the Host applies it. The event carries the source and target categories mapped from the preset id (`cordis` is `creator`; `ptc`, `minimal`, and `standard` keep their ids; any other id is `other`) and the Coding Tools setting known at the choice. Custom targets, refused choices, choices the Host settles on another preset, default changes and their blank-Session synchronization report nothing, and neither does a choice made while the source mode or Coding Tools setting is unknown. Custom preset ids and names are not collected.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -49,11 +49,11 @@ On Desktop, the optional [product analytics](../product-analytics/README.md) ser
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`agentPresets/list` supplies the roster and marks the current default, and `agentPresets/read` one declaration's YAML for the viewer; default changes write the `agent-preset-registry` settings namespace. The picker, blank-session synchronization and read-only session label use recorded preset identities. Connection resets and settings updates refresh the roster.
+`agentPresets/list` supplies the roster and marks the current default, and `agentPresets/read` one declaration's YAML for the viewer; default changes write the `agent-preset-registry` settings namespace. Both pickers and blank-session synchronization use recorded preset identities. Connection resets and settings updates refresh the roster.
 
 `CreatePluginMenuItem` contributes to `plugins.add.actions` using the shared roster store. Its selection calls the owner's `onDismiss()` before the same `startCreatorDraft` callback exposed to Settings as `creatorDraft`. That callback stages `cordis` through `AgentPresetSeatController`, except when the main blank Session lists a different preset (navigation then opens another blank and leaves that one unchanged), and opens the task through `uiWorkspace.startSession` with explicit draft preservation and `agentPreset: 'cordis'`, so the Host composes the reused blank or new Session under Creator; without a target Workspace, the staged choice applies when a Session binding becomes available. The choice is consumed once applied. Both Coding Tools states use the same picker and selection store, and `AgentPresetSeat` renders refusals through the shared `Toast` component.
 
-`AgentPresetSeatController.select()` and `apply()` return the attempt's outcome: `applied` when the Host commits the staged preset, `staged` while no Session is current, `unchanged` when busy, without a stage, for a started or already matching Session, or when the Host settles on another preset, and `refused` with the bare Host reason. The chip's injected `select` reports `agent_preset_switch` from that outcome and returns only the refusal reason.
+`AgentPresetSeatController.select()` explicitly applies to the current Session; automatic `apply()` consumes stages only for blank Sessions. Both return `applied` when the Host commits the staged preset, `staged` while no Session is current, `unchanged` when busy, without a stage, already matching, automatically targeting a started Session, or when the Host settles on another preset, and `refused` with the bare Host reason. The picker's injected `select` reports `agent_preset_switch` from that outcome and returns only the refusal reason.
 
 </details>
 
@@ -71,7 +71,7 @@ Indirectly, through the selected preset, whose plugins own model-visible capabil
 
 #### KV Cache effect
 
-Selection changes affect only later tasks; existing plugins and prompts remain unchanged.
+An explicit idle-session selection changes the next request's prompt/tools and can invalidate its cached prefix. Conversation history remains intact; changing the new-task default alone does not alter started Sessions.
 
 ## Known Limitations and Deferred Work
 

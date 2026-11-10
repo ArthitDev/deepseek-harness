@@ -193,7 +193,6 @@ export class PresetAuthoring {
    * faces the loader needs (apply reading the declared config, inject waiting
    * for the registry) without a project reference back into agent-preset —
    * that package injects agentPresets, which would close a reference cycle.
-   * @param definition - the composition's preset declaration.
    * @returns an object plugin registering the declared composition.
    */
   static declarationPlugin(): object {
@@ -223,17 +222,28 @@ export class PresetAuthoring {
     private readonly profile: ProfileContext,
   ) {}
 
-  /** Entry id a created preset declaration would carry. */
+  /**
+   * Entry id a created preset declaration would carry.
+   * @param presetId - declared preset id.
+   * @returns the profile patch entry id for that preset.
+   */
   entryIdFor(presetId: string): string {
     return `${PRESET_ENTRY_PREFIX}${presetId}`
   }
 
-  /** Preset ids the profile patch itself declares; those presets are authorable. */
+  /**
+   * Preset ids the profile patch itself declares; those presets are authorable.
+   * @returns ids declared by the active profile patch.
+   */
   async userPresetIds(): Promise<Set<string>> {
     return await declaredPresetIds(this.profile)
   }
 
-  /** Trust of one preset id: `user` when the profile patch declares it. */
+  /**
+   * Trust of one preset id: `user` when the profile patch declares it.
+   * @param presetId - preset whose declaration owner is queried.
+   * @returns `user` for profile-patch declarations, otherwise `system`.
+   */
   async trustOf(presetId: string): Promise<'system' | 'user'> {
     return (await this.userPresetIds()).has(presetId) ? 'user' : 'system'
   }

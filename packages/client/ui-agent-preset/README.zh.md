@@ -29,7 +29,7 @@ kind: "package-reference"
 
 当前 profile 拥有的预设还提供**编辑预设**和**删除预设**。编辑器通过 Host 保存完整的配置 YAML，校验或保存失败时保留草稿。删除需要确认；删除被拒绝时保留卡片。写入期间禁用编辑和对话框关闭操作。已有会话保留已组合的版本。bundle 和机器级声明仍为只读。
 
-关闭通用设置中的代码工作工具后，新会话选择器和设置页列表提供标准、创造和自定义预设；开启后还提供 PTC 和极简模式。两种状态下均保留默认值选择和创造入口。选择健康定义作为默认值也会同步当前新任务页面的空白会话。Creator 入口开启一个使用 `cordis` preset 的新任务。
+新会话页面和会话标题共享预设选择器。标题允许在 Agent 空闲时切换，保留同一会话 id 和对话；下次请求使用所选提示词和工具。工作或选择尚未完成时禁用。关闭通用设置中的代码工作工具后，两个选择器和设置页列表提供标准、创造和自定义预设；开启后还提供 PTC 和极简模式。选择健康定义作为默认值也会同步当前新任务页面的空白会话。Creator 入口开启一个使用 `cordis` preset 的新任务。
 
 关闭代码工作工具时，沿用现有 Developer tools 订阅清空所有尚未应用的选择。关闭状态被接受后，每个已认证浏览器都会将已保存的内置 PTC 或极简默认值回退为标准模式。已保存的标准、创造和自定义默认值（包括有名称的 PTC 或极简覆盖项）保持不变。关闭后用户仍可重新选择可用预设。已有会话保留所选模式；新会话使用当前默认值。即使已有会话的模式不在菜单中，其标签仍会显示。重新开启代码工作工具不会恢复原默认值或已清除的选择。标准模式缺失或损坏时，默认值保持不变，并显示错误。
 
@@ -39,9 +39,9 @@ kind: "package-reference"
 
 进入创造模式会为接收该选择的空白 Session 选择 `cordis`，不改变新任务默认值或代码工作工具设置。尚未绑定工作区或空白 Session 时，选择等待绑定完成后应用。应用后，创造 Session 保留该预设；之后真正创建的新 Session 使用配置的默认值，例如标准模式。
 
-在桌面端，模式选择器中的直接选择切换到另一个内置 preset 时，可选的[产品埋点](../product-analytics/README.zh.md)服务会收到 `agent_preset_switch`：未绑定 Session 的选择在暂存给下一个 Session 时计入，已绑定空白 Session 的选择在 Host 应用后计入。事件携带按 preset id 映射的来源与目标类别（`cordis` 记为 `creator`；`ptc`、`minimal`、`standard` 保持原 id；其他 id 记为 `other`），以及选择时已知的代码工作工具设置。选择自定义目标、被拒绝的选择、Host 最终落在其他 preset 的选择、默认值修改及其空白 Session 同步均不报告；来源模式或代码工作工具设置未知时做出的选择同样不报告。不采集自定义 preset 的 id 和名称。
+在桌面端，模式选择器中的直接选择切换到另一个内置 preset 时，可选的[产品埋点](../product-analytics/README.zh.md)服务会收到 `agent_preset_switch`：未绑定 Session 的选择在暂存给下一个 Session 时计入，已绑定 Session 的选择在 Host 应用后计入。事件携带按 preset id 映射的来源与目标类别（`cordis` 记为 `creator`；`ptc`、`minimal`、`standard` 保持原 id；其他 id 记为 `other`），以及选择时已知的代码工作工具设置。选择自定义目标、被拒绝的选择、Host 最终落在其他 preset 的选择、默认值修改及其空白 Session 同步均不报告；来源模式或代码工作工具设置未知时做出的选择同样不报告。不采集自定义 preset 的 id 和名称。
 
-Agent presets 页面的**显示内置预设**开关通过 Host 设置持久保存，同时控制此页面和新任务菜单中的内置预设。自定义预设（包括具有自定义名称的内置 id 覆盖）仍然显示。显示设置不会改变默认预设、现有会话的组合或其预设标签。
+Agent presets 页面的**显示内置预设**开关通过 Host 设置持久保存，同时控制此页面和两个选择器菜单中的内置预设。自定义预设（包括具有自定义名称的内置 id 覆盖）仍然显示。显示设置不会改变默认预设、现有会话的组合或其预设标签。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -49,11 +49,11 @@ Agent presets 页面的**显示内置预设**开关通过 Host 设置持久保�
 <details>
 <summary>实现细节 — 点击展开</summary>
 
-`agentPresets/list` 提供列表并标记当前默认值，`agentPresets/read` 为查看器提供一条声明的 YAML；默认值的修改写入 `agent-preset-registry` settings 命名空间。选择器、空白会话同步和只读会话标签使用记录的 preset 标识。连接重置和设置更新会刷新列表。
+`agentPresets/list` 提供列表并标记当前默认值，`agentPresets/read` 为查看器提供一条声明的 YAML；默认值的修改写入 `agent-preset-registry` settings 命名空间。两个选择器和空白会话同步使用记录的 preset 标识。连接重置和设置更新会刷新列表。
 
 `CreatePluginMenuItem` 使用共享的预设列表 store，向 `plugins.add.actions` 贡献菜单项。选择时先调用页面传入的 `onDismiss()`，再调用与设置页 `creatorDraft` 相同的 `startCreatorDraft` 回调。该回调通过 `AgentPresetSeatController` 暂存 `cordis`（主区空白 Session 列出其他 preset 时不暂存，因为导航会打开另一个空白 Session，原空白 Session 保持不变），再通过显式保留草稿并传入 `agentPreset: 'cordis'` 的 `uiWorkspace.startSession` 调用打开任务，由 Host 以创造模式组合被复用的空白 Session 或新 Session；没有目标工作区时，暂存选择在 Session 绑定可用时应用。暂存选择应用后即清除。代码工作工具开启或关闭时均使用同一个选择器和选择 store，`AgentPresetSeat` 通过共享的 `Toast` 组件显示拒绝原因。
 
-`AgentPresetSeatController.select()` 与 `apply()` 返回本次尝试的结果：Host 提交暂存 preset 时为 `applied`；没有当前 Session 时为 `staged`；忙碌、没有暂存选择、Session 已开始或已使用该 preset，或 Host 最终落在其他 preset 时为 `unchanged`；Host 拒绝时为携带原始原因的 `refused`。选择器注入的 `select` 根据该结果报告 `agent_preset_switch`，并且只返回拒绝原因。
+`AgentPresetSeatController.select()` 显式应用于当前 Session；自动 `apply()` 仅将暂存选择用于空白 Session。两者在 Host 提交暂存 preset 时返回 `applied`；没有当前 Session 时为 `staged`；忙碌、没有暂存选择、已使用该 preset、自动应用到已开始的 Session，或 Host 最终落在其他 preset 时为 `unchanged`；Host 拒绝时为携带原始原因的 `refused`。选择器注入的 `select` 根据该结果报告 `agent_preset_switch`，并且只返回拒绝原因。
 
 </details>
 
@@ -71,7 +71,7 @@ Agent presets 页面的**显示内置预设**开关通过 Host 设置持久保�
 
 #### KV Cache effect
 
-选择变更只影响之后的任务，已有插件与提示词保持不变。
+显式的空闲会话选择会改变下次请求的提示词和工具，可能使缓存前缀失效。对话历史保持完整；仅修改新任务默认值不会改变已开始的 Session。
 
 ## 已知限制与待办
 

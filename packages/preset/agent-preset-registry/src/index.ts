@@ -626,7 +626,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
     return mount === undefined ? undefined : serviceForMount(this.owner, mount, name)
   }
 
-  /** Rebind a blank Agent; the caller owns the blank-session check.
+  /** Rebind an Agent; the caller owns exclusion of turn-driving work.
    * @param ctx Agent context.
    * @param id Requested preset.
    * @returns The bound identity.
@@ -638,7 +638,7 @@ export class AgentPresetRegistry extends TypertRemoteService {
     return preset
   }
 
-  /** Select a preset before a session starts its first turn. A Session whose
+  /** Select a preset while the Agent is idle, retaining its Session history. A Session whose
    * log records the preset and whose Agent runs its current revision keeps its
    * composition; nothing is logged or announced.
    * @param agent Target Agent.
@@ -649,15 +649,26 @@ export class AgentPresetRegistry extends TypertRemoteService {
   async select(agent: Agent, agentPreset: string): Promise<string> {
     const turn = (this.switches.get(agent.id) ?? Promise.resolve()).then(async () => {
       const boundary = this.owner.agents.turnBoundaryOf(agent.session)
-      if (boundary.openTurnStartSeq !== null || boundary.lastTurn > 0) {
-        throw new RemoteError('agent-preset/locked', 'This session has already started', { sessionId: agent.id, agentPreset })
+      if (agent.status !== 'idle' || boundary.openTurnStartSeq !== null) {
+        throw new RemoteError('agent-preset/locked', 'Wait for the current work to finish before switching presets', { sessionId: agent.id, agentPreset })
       }
-      const current = this.definitions.get(agentPreset)?.generation
-      if (current !== undefined && this.generationFor(agent.ctx) === current
-        && this.agentPresetProjectionHandle.stateOf(agent.session) === agentPreset) return agentPreset
-      const preset = await this.recompose(agent.ctx, agentPreset)
-      agent.session.append('agent-preset/selected', { agentPreset: preset.id })
-      return preset.id
+      return agent.runMaintenance(async (signal) => {
+        const current = this.definitions.get(agentPreset)?.generation
+        if (current !== undefined && this.generationFor(agent.ctx) === current
+          && this.agentPresetProjectionHandle.stateOf(agent.session) === agentPreset) return agentPreset
+        const generation = await this.retain(agentPreset)
+        try {
+          signal.throwIfAborted()
+          await this.bind(agent.ctx, generation)
+          agent.session.append('agent-preset/selected', { agentPreset })
+          try { this.owner.emit('tools/change') }
+          catch (error) { this.owner.logger.warn(`Preset tools observer: ${String(error)}`) }
+          return agentPreset
+        } finally {
+          generation.users--
+          await this.collect(generation)
+        }
+      })
     })
     const guard = turn.catch(() => undefined)
     this.switches.set(agent.id, guard)

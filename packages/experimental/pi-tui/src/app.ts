@@ -100,7 +100,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
     proxyStartupAbort.abort()
     await Promise.all(proxyStartups)
   })
-  await installWebPromptSettings(ctx)
+  installWebPromptSettings(ctx)
 
   const terminal = new ClipboardTerminal()
   const tui: ViewportTUI = new TuiAltScreen(terminal)

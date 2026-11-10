@@ -3,7 +3,8 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEventMap, SessionId } from '@deepseek-ai/dsh-session'
-import type { TeamEventType, TeamState } from './projection.ts'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
+import type { TeamEventType, TeamProjectionState, TeamState } from './projection.ts'
 
 type AppendTeamEvent = <T extends TeamEventType>(type: T, data: SessionEventMap[T]) => void
 type MutableTeamEventType = 'experimental-team/member' | 'experimental-team/task' | 'experimental-team/message/queued' | 'experimental-team/message/delivered'
@@ -11,6 +12,8 @@ type MutableTeamEventType = 'experimental-team/member' | 'experimental-team/task
 /** Owns per-Lead transaction order and committed Team event publication. */
 export class TeamJournal {
   private readonly tails = new Map<SessionId, Promise<void>>()
+  /** Awaited registration retained by the Team service's runtime lifecycle. */
+  projection: ProjectionHandle<TeamProjectionState> | undefined
 
   /**
    * @param ctx - Team service context with the injected Session service.
@@ -27,15 +30,10 @@ export class TeamJournal {
    * @returns current projected state selected by the Lead Team id.
    */
   state(root: Agent): TeamState {
-    // The deprecated keyed stateOf stays the only cross-package read path; the
-    // owning registration lives in the host package's runtime lifecycle.
-    const projection = this.ctx.sessionProjections.stateOf(root.session, 'experimentalAgentTeam') as
-      | TeamState
-      | { failure: string }
-      | undefined
-    if (projection === undefined) throw new Error('Agent Teams projection is not registered')
-    if ('failure' in projection && projection.failure !== undefined) throw new Error(projection.failure)
-    return projection as TeamState
+    if (this.projection === undefined) throw new Error('Agent Teams projection is not registered')
+    const state = this.projection.stateOf(root.session)
+    if (state.failure !== undefined) throw new Error(state.failure)
+    return state
   }
 
   /**

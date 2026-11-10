@@ -369,6 +369,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Lists the Session composition\'s user-invocable skills without activating a cold Agent.',
   },
   {
+    key: 'proxyServers',
+    pkg: 'proxy-server',
+    title: 'Embedded model proxy lifecycle',
+    mode: 'core',
+    consumers: ['client-ui-proxy-server'],
+    note: 'Owns proxy usage preferences and managed child processes before matching model requests are dispatched.',
+  },
+  {
     key: 'jobController',
     pkg: 'api-job-controller',
     title: 'Host job Remote controller',

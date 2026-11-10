@@ -37,15 +37,25 @@ declare module '@deepseek-ai/cordis' {
 
 /** Live usage switches and deployment-specific ports, routes and startup deadline. */
 export interface Config {
+  /** Permit new model requests to use ZCode Direct. */
   zcodeEnabled: Volatile<boolean>
+  /** Permit new model requests to use Antigravity. */
   antigravityEnabled: Volatile<boolean>
+  /** Permit new model requests to use SB transport. */
   sbEnabled: Volatile<boolean>
+  /** Loopback port used by the ZCode Direct proxy. */
   zcodePort: number
+  /** Loopback port used by the Antigravity proxy. */
   antigravityPort: number
+  /** Loopback port used by the SB transport proxy. */
   sbPort: number
+  /** Provider ids routed through ZCode Direct. */
   zcodeProviders: string[]
+  /** Provider ids routed through Antigravity. */
   antigravityProviders: string[]
+  /** Provider ids routed through SB transport. */
   sbProviders: string[]
+  /** Maximum time in milliseconds to wait for a managed proxy to become healthy. */
   startupTimeoutMs: number
 }
 
@@ -135,9 +145,9 @@ export default class ProxyServers extends TypertRemoteService {
         files: [join(zcode, 'src/index.ts'), join(zcode, 'config.yaml'), join(zcode, 'src/proxy/captcha-worker-entry.bundle.js')] },
       { id: 'antigravity', name: 'Antigravity', active: 0,
         port: config.antigravityPort, enabled: config.antigravityEnabled, providers: config.antigravityProviders,
-        command: process.execPath, args: [antigravity], cwd: root, files: [antigravity] },
+        command: 'bun', args: ['--no-env-file', antigravity], cwd: root, files: [antigravity] },
       { id: 'sb', name: 'SB transport', active: 0, port: config.sbPort, enabled: config.sbEnabled, providers: config.sbProviders,
-        command: process.execPath, args: [sb, 'serve'], cwd: root, files: [sb] },
+        command: 'bun', args: ['--no-env-file', sb, 'serve'], cwd: root, files: [sb] },
     ]
     ctx.settings.configure({ auto: false }, ctx.fiber)
     ctx.on('llm/stream', this.stream.bind(this), { global: true })

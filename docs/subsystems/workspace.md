@@ -561,6 +561,14 @@ archiveSession(sessionId: SessionId, options: ArchiveSessionOptions = {}): Promi
 unarchiveSession(sessionId: SessionId): Promise<void>
 
 /**
+ * Remove one deleted session from workspace accounting and the registry-global
+ * archive set. Unknown ids are an idempotent no-op.
+ * @param sessionId - permanently deleted session identity.
+ * @returns resolution after durability.
+ */
+forgetSession(sessionId: SessionId): Promise<void>
+
+/**
  * Pin one session durably, prepending it to the registry-global pin set.
  * The session must exist (live or in session persistence) and must not be
  * archived. An already pinned id resolves without writing or reordering.

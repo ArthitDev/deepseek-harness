@@ -255,6 +255,20 @@ describe('exit and resume hints', () => {
       const events = session.snapshotEvents()
       const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
       input('keep this draft')
+      for (const [label, delta] of [['Targets', 2], ['Main Agent', -1]] as const) {
+        const lines = (await renderScreen(tui)).split('\n')
+        const top = lines.findIndex(line => line.includes(`╭─ ${label}`))
+        const y = lines.findIndex((line, row) => row > top && line.includes('↕'))
+        const x = lines[y]!.indexOf('↕')
+        input(`\x1b[<0;${x + 1};${y + 1}M`)
+        input(`\x1b[<32;${x + 1};${y + delta + 1}M`)
+        await renderScreen(tui)
+        input(`\x1b[<0;${x + 1};${y + delta + 1}m`)
+        expect(tui.hasActiveSelection()).toBe(false)
+      }
+      expect(await renderScreen(tui)).toContain('keep this draft')
+      expect(tui.getScreenLines().map(line => stripVTControlCharacters(line)))
+        .toMatchSnapshot('resized debug boxes beside chat and draft')
       const click = async (label: string): Promise<void> => {
         const lines = (await renderScreen(tui)).split('\n')
         const y = lines.findIndex(line => line.includes(label))
@@ -670,7 +684,7 @@ describe('/new model selection', () => {
 })
 
 describe('preset switches with conversation history', () => {
-  it.each(['preset', 'model'] as const)('opens an independent session through /%s and keeps its model and preset', async (command) => {
+  it.each(['preset', 'model'] as const)('retains conversation and selection through /%s', async (command) => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-tui-preset-command-'))
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -696,7 +710,11 @@ describe('preset switches with conversation history', () => {
     session.append('step/end', { turn: 1, step: 1 })
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     const original = session.snapshotEvents()
-    const select = vi.fn(async (agent: Agent, id: string) => { mounted.set(agent.ctx, id); return id })
+    const select = vi.fn(async (agent: Agent, id: string) => {
+      mounted.set(agent.ctx, id)
+      agent.session.append('agent-preset/selected', { agentPreset: id })
+      return id
+    })
     ctx.provide('agentPresets', {
       list: async () => ['old-preset', 'new-preset'].map(id => ({ id, name: id, trust: 'user' })),
       resolve: async (id: string) => ({ id }), mount: async (agentCtx: Context, id: string) => { mounted.set(agentCtx, id) },
@@ -712,49 +730,48 @@ describe('preset switches with conversation history', () => {
       return { agent, dispose: vi.fn() }
     })
     ctx.provide('agents', { create })
+    const setTitle = vi.fn()
     const terminal: Terminal = {
       columns: 120, rows: 80, kittyProtocolActive: false,
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(),
       moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(),
-      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
+      clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle, setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
     const onAgentSwitch = vi.fn()
     const screen = new ChatScreen({ ctx, tui, agent: source, config: { ...oldRoute, preset: 'old-preset' }, onQuit: vi.fn(), onAgentSwitch })
     tui.start()
     try {
+      await screen.replayTranscript(source)
       screen.submit(command === 'preset' ? '/preset new-preset' : '/model mock/new-model')
-      await vi.waitFor(() => { expect(onAgentSwitch).toHaveBeenCalledOnce() })
-      const child = (onAgentSwitch.mock.calls[0]![0] as { agent: Agent }).agent
-      expect(child.id).not.toBe(source.id)
-      expect(child.session.inheritedEventCount).toBe(0)
-      expect(create.mock.calls[0]![0].meta).toMatchObject({ agentPreset: 'new-preset', parentSession: source.id })
-      expect(select).toHaveBeenCalledWith(child, 'new-preset')
-      expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_PRESET')
-      expect(JSON.stringify(child.session.deriveMessages())).not.toContain('OLD_WIKI_GUIDANCE')
-      expect(source.session.snapshotEvents()).toEqual(original)
+      await vi.waitFor(() => { expect(select).toHaveBeenCalledOnce() })
+      await renderScreen(tui)
+      expect(screen.currentSessionId).toBe(source.id)
+      expect(create).not.toHaveBeenCalled()
+      expect(onAgentSwitch).not.toHaveBeenCalled()
+      expect(source.session.snapshotEvents().slice(0, original.length)).toEqual(original)
       const rendered = await renderScreen(tui)
       expect(rendered).toContain('retained question')
       expect(rendered).toContain('retained answer')
       expect(rendered).toContain('new-preset')
       expect(rendered).toContain(newRoute.model)
+      expect(setTitle).toHaveBeenLastCalledWith(expect.stringContaining('new-preset'))
       screen.submit('/preset new-preset')
       await renderScreen(tui)
-      expect(create).toHaveBeenCalledOnce()
-      screen.submit('/new')
-      await vi.waitFor(() => { expect(onAgentSwitch).toHaveBeenCalledTimes(2) })
-      expect(create.mock.calls[1]![0]).toMatchObject({ agentOptions: newRoute, meta: { agentPreset: 'new-preset' } })
-      const currentId = screen.currentSessionId
-      create.mockRejectedValueOnce(new Error('unavailable preset'))
+      expect(select).toHaveBeenCalledOnce()
+      select.mockRejectedValueOnce(new Error('unavailable preset'))
       screen.submit('/preset old-preset')
       await vi.waitFor(async () => { expect(await renderScreen(tui)).toContain('unavailable preset') })
-      expect(screen.currentSessionId).toBe(currentId)
-      expect(onAgentSwitch).toHaveBeenCalledTimes(2)
-      const current = (onAgentSwitch.mock.calls[1]![0] as { agent: Agent }).agent
-      screen.handleEvent(current.session.append('turn/start', { turn: 1 }))
+      expect(screen.currentSessionId).toBe(source.id)
+      expect(mounted.get(source.ctx)).toBe('new-preset')
+      screen.handleEvent(session.append('turn/start', { turn: 2 }))
       screen.submit('/preset old-preset')
       expect(await renderScreen(tui)).toContain('cannot switch presets while work is running')
-      expect(create).toHaveBeenCalledTimes(3)
+      expect(select).toHaveBeenCalledTimes(2)
+      screen.handleEvent(session.append('turn/end', { turn: 2, reason: { kind: 'completed' } }))
+      screen.submit('/new')
+      await vi.waitFor(() => { expect(onAgentSwitch).toHaveBeenCalledOnce() })
+      expect(create.mock.calls[0]![0]).toMatchObject({ agentOptions: newRoute, meta: { agentPreset: 'new-preset' } })
     } finally {
       tui.stop()
       await ctx.fiber.dispose()

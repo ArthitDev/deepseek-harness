@@ -16,7 +16,9 @@ export function apply(ctx: Context, config: { presets?: string[] } = {}): void {
   ctx.on('agent/created', async ({ agent }) => {
     if (agent.session.header.parentSession !== undefined) return
     for (const preset of config.presets ?? ['parent']) {
-      await ctx.agentPresets.select(agent, preset)
+      // Creation already excludes turn work; select() would nest maintenance.
+      await ctx.agentPresets.recompose(agent.ctx, preset)
+      agent.session.append('agent-preset/selected', { agentPreset: preset })
     }
   }, { prepend: true })
 }

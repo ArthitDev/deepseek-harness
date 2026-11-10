@@ -9,7 +9,7 @@ import TurndownService from 'turndown'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { type ResolvedToolSet, type ToolExecutionInput, type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import type { WebFetchProvider, WebSearchProvider, WebSearchResult } from '@deepseek-ai/dsh-web'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
@@ -83,6 +83,18 @@ async function mountTools(opts: {
   const call = (name: string, args: unknown) => executeInStep(ctx, agent, { signal: testToolSignal, callId: ToolCallId(`call-${++counter}`), name, arguments: args })
   return { ctx, agent, fiber, call }
 }
+
+describe('persisted web-search mode', () => {
+  it.each([{ choices: [] }, { choices: [true] }, { choices: [true, false] }])('restores $choices without adding model messages', ({ choices }) => {
+    const events: SessionEvent<'web-search/mode'>[] = choices.map((always, index) => ({
+      type: 'web-search/mode', seq: SessionSeq(index), time: index + 1, data: { always },
+    }))
+    const session = Session.create(SessionId('web-search-mode'), events)
+    const state = events.reduce(ToolWeb.webSearchModeProjectionDefinition.apply, ToolWeb.webSearchModeProjectionDefinition.init())
+    expect(state.always).toBe(choices.at(-1) ?? false)
+    expect(session.deriveMessages()).toEqual([])
+  })
+})
 
 describe('search formatting', () => {
   it('renders content, sources with titles/hostnames, snippets, and a citation reminder', () => {

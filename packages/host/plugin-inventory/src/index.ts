@@ -81,6 +81,12 @@ interface EditablePluginRow {
   readonly readOnlyReason?: 'management-required' | 'unaddressable'
 }
 
+/** Optional editing capability; the manager depends on this package, so importing it would create a cycle. */
+interface EditablePluginManager {
+  listPlugins(): Promise<readonly EditablePluginRow[]>
+  setPluginEnabled(id: PluginEntryId, enabled: boolean): Promise<unknown>
+}
+
 /** Locate one manager row by its inventory identity. */
 function findEditableRow(
   rows: readonly EditablePluginRow[], entryId: string, moduleName: string,
@@ -120,7 +126,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     if (preset !== undefined) {
       return { revision: '', enabled: false, reason: PRESET_READONLY_REASON }
     }
-    const manager = this.ctx.get('pluginManager')
+    const manager = this.ctx.get('pluginManager') as EditablePluginManager | undefined
     const text = await this.patchText()
     if (manager === undefined || text === undefined) {
       return { revision: '', enabled: false, reason: 'Plugin management is unavailable in this host' }
@@ -152,7 +158,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     if (preset !== undefined) {
       throw new Error(PRESET_READONLY_REASON)
     }
-    const manager = this.ctx.get('pluginManager')
+    const manager = this.ctx.get('pluginManager') as EditablePluginManager | undefined
     const text = await this.patchText()
     if (manager === undefined || text === undefined) {
       throw new Error('Plugin management is unavailable in this host')

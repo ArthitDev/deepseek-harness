@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`starts antigravity with Bun, serializes repeated switches and awaits its stop 1`] = `
+{
+  "runtime": "bun",
+  "service": "antigravity-proxy",
+}
+`;
+
+exports[`starts sb with Bun, serializes repeated switches and awaits its stop 1`] = `
+{
+  "runtime": "bun",
+  "service": "dsh-sb-transport",
+}
+`;

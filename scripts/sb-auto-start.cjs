@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S bun --no-env-file
 /**
  * SB Auto-Start Daemon — keeps SB Proxy v6 alive automatically.
  *
@@ -10,10 +10,10 @@
  *   - Zero configuration on new machines
  *
  * Usage:
- *   node scripts/sb-auto-start.cjs start     — start daemon + proxy
- *   node scripts/sb-auto-start.cjs stop      — stop everything
- *   node scripts/sb-auto-start.cjs status    — check health
- *   node scripts/sb-auto-start.cjs install   — install as harness boot hook
+ *   bun --no-env-file scripts/sb-auto-start.cjs start     — start daemon + proxy
+ *   bun --no-env-file scripts/sb-auto-start.cjs stop      — stop everything
+ *   bun --no-env-file scripts/sb-auto-start.cjs status    — check health
+ *   bun --no-env-file scripts/sb-auto-start.cjs install   — install as harness boot hook
  *
  * Or require as module:
  *   const { startDaemon, stopDaemon } = require('./sb-auto-start.cjs')
@@ -202,7 +202,7 @@ async function startProxy(env, silent = false) {
   ];
 
   const backendKey = resolveBackendKey(env.backendUrl);
-  proxyProcess = spawn("node", args, {
+  proxyProcess = spawn("bun", ["--no-env-file", ...args], {
     stdio: "ignore",
     detached: true,
     windowsHide: true,
@@ -615,7 +615,7 @@ async function install() {
 
       if (pkg && pkg.scripts) {
         // Add pre-dev and pre-start hooks if not present
-        const autoScript = "node scripts/sb-auto-start.cjs start --background";
+        const autoScript = "bun --no-env-file scripts/sb-auto-start.cjs start --background";
         if (!pkg.scripts["predev"]) {
           pkg.scripts["predev"] = autoScript;
           console.log("  ✓ Added predev hook");
@@ -626,9 +626,9 @@ async function install() {
         }
 
         // Ensure sb:* scripts exist
-        if (!pkg.scripts["sb:start"]) pkg.scripts["sb:start"] = "node scripts/sb-auto-start.cjs start";
-        if (!pkg.scripts["sb:stop"]) pkg.scripts["sb:stop"] = "node scripts/sb-auto-start.cjs stop";
-        if (!pkg.scripts["sb:status"]) pkg.scripts["sb:status"] = "node scripts/sb-auto-start.cjs status";
+        if (!pkg.scripts["sb:start"]) pkg.scripts["sb:start"] = "bun --no-env-file scripts/sb-auto-start.cjs start";
+        if (!pkg.scripts["sb:stop"]) pkg.scripts["sb:stop"] = "bun --no-env-file scripts/sb-auto-start.cjs stop";
+        if (!pkg.scripts["sb:status"]) pkg.scripts["sb:status"] = "bun --no-env-file scripts/sb-auto-start.cjs status";
 
         fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
         console.log("  ✓ package.json updated with sb:* scripts + hooks");
@@ -643,7 +643,7 @@ async function install() {
     try {
       const scriptPath = path.resolve(__filename);
       execSync(
-        `schtasks /create /tn "SB-AutoStart" /tr "node ${scriptPath} start --background" /sc onlogon /rl limited /f`,
+        `schtasks /create /tn "SB-AutoStart" /tr "bun --no-env-file ${scriptPath} start --background" /sc onlogon /rl limited /f`,
         { stdio: "pipe", windowsHide: true }
       );
       console.log("  ✓ Windows Task Scheduler: SB-AutoStart on logon");
@@ -656,7 +656,7 @@ async function install() {
   console.log("  Install complete!");
   console.log("");
   console.log("  Quick start:");
-  console.log("    node scripts/sb-auto-start.cjs start");
+  console.log("    bun --no-env-file scripts/sb-auto-start.cjs start");
   console.log("    pnpm sb:status");
   console.log("");
   console.log("  Auto-start on harness boot:");
@@ -710,7 +710,7 @@ if (require.main === module) {
       if (background) {
         // Spawn detached daemon
         const scriptPath = __filename;
-        const proc = spawn("node", [scriptPath, "start"], { windowsHide: true,
+        const proc = spawn("bun", ["--no-env-file", scriptPath, "start"], { windowsHide: true,
           stdio: "ignore",
           detached: true,
         });
@@ -738,7 +738,7 @@ if (require.main === module) {
       stopDaemon();
       setTimeout(() => {
         if (background) {
-          const proc = spawn("node", [__filename, "start"], { stdio: "ignore", detached: true, windowsHide: true });
+          const proc = spawn("bun", ["--no-env-file", __filename, "start"], { stdio: "ignore", detached: true, windowsHide: true });
           proc.unref();
           setTimeout(() => process.exit(0), 1000);
         } else {
@@ -752,14 +752,14 @@ if (require.main === module) {
 SB Auto-Start Daemon
 
 Usage:
-  node sb-auto-start.cjs start          Start daemon + proxy (foreground)
-  node sb-auto-start.cjs start --bg     Start daemon in background
-  node sb-auto-start.cjs stop           Stop everything
-  node sb-auto-start.cjs status         Check health
-  node sb-auto-start.cjs restart        Restart
-  node sb-auto-start.cjs install        Install auto-start hooks
-  node sb-auto-start.cjs setup-zcode    Install bundled ZCode dependencies and build CAPTCHA worker
-  node sb-auto-start.cjs start-zcode    Ensure only ZCode is running, then exit
+  bun --no-env-file sb-auto-start.cjs start          Start daemon + proxy (foreground)
+  bun --no-env-file sb-auto-start.cjs start --bg     Start daemon in background
+  bun --no-env-file sb-auto-start.cjs stop           Stop everything
+  bun --no-env-file sb-auto-start.cjs status         Check health
+  bun --no-env-file sb-auto-start.cjs restart        Restart
+  bun --no-env-file sb-auto-start.cjs install        Install auto-start hooks
+  bun --no-env-file sb-auto-start.cjs setup-zcode    Install bundled ZCode dependencies and build CAPTCHA worker
+  bun --no-env-file sb-auto-start.cjs start-zcode    Ensure only ZCode is running, then exit
 
 Environment variables:
   SB_PORT=18899                         Proxy port

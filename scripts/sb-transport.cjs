@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S bun --no-env-file
 // Checkout-local OpenAI transport. It never imports the legacy prompt or execution pipeline.
 const http = require('node:http');
 const https = require('node:https');
@@ -109,7 +109,7 @@ async function start() {
   const fd = fs.openSync(logFile, 'a', 0o600);
   let child;
   try {
-    child = spawn(process.execPath, [__filename, 'serve'], {
+    child = spawn('bun', ['--no-env-file', __filename, 'serve'], {
       cwd: __dirname, env: process.env, detached: true, windowsHide: true, stdio: ['ignore', fd, fd],
     });
   } finally { fs.closeSync(fd); }

@@ -1,0 +1,15 @@
+{
+  "formatVersion": 2,
+  "roots": [
+    {"key":"event:web-search/mode","kind":"event","event":"web-search/mode","surface":false,"digest":"20a765f6ff6ae356224bcdb0b18e9547c6f9d6e2f39b6f4e5e07de076d5579fd"}
+  ],
+  "types": [],
+  "nodes": {
+    "0657d3ca5ac4e7bf": {"kind":"primitive","type":"number"},
+    "1702f5f1f2dc04a9": {"kind":"object","properties":[{"name":"always","type":"aa93010d0e521ad7","optional":false}],"indices":[]},
+    "20a765f6ff6ae356": {"kind":"object","properties":[{"name":"data","type":"1702f5f1f2dc04a9","optional":false},{"name":"ignorable","type":"dacf3d5f3e4ff619","optional":true},{"name":"seq","type":"0657d3ca5ac4e7bf","optional":false},{"name":"time","type":"0657d3ca5ac4e7bf","optional":false},{"name":"type","type":"53d139cfbbaa087f","optional":false}],"indices":[]},
+    "53d139cfbbaa087f": {"kind":"literal","value":"web-search/mode"},
+    "aa93010d0e521ad7": {"kind":"primitive","type":"boolean"},
+    "dacf3d5f3e4ff619": {"kind":"literal","value":true}
+  }
+}

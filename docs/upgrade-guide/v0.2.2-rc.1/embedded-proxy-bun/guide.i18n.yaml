@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/embedded-proxy-bun/guide.md
+/:
+  en: 9f483b593612eb91
+  zh: 19219a3856c534fb
+/embedded-proxies-require-bun:
+  en: 3068c7d6db0b71c8
+  zh: 287661fce5c3afab
+/embedded-proxies-require-bun/change:
+  en: 7eb89fe5e08e7fda
+  zh: 906b2b0a9347c5ef
+/embedded-proxies-require-bun/migration:
+  en: 99363b0b1cb0c007
+  zh: 74196e97226b6af8

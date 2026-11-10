@@ -22,12 +22,6 @@ import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
-const ROSTER_READY: AgentPresetSettingsState = {
-  status: 'ready',
-  error: null,
-  options: [{ id: 'standard' }, { id: 'mine' }],
-}
-
 const SEAT_READY: AgentPresetSeatState = {
   current: 'standard',
   options: [
@@ -52,12 +46,16 @@ function translate(key: keyof typeof en, params?: Record<string, unknown>): stri
 function renderSeat(
   state: Partial<AgentPresetSeatState> = {},
   select: () => Promise<string | undefined> = () => Promise.resolve(undefined),
-  session?: { id: string; retainInfo: SessionRetainInfo | undefined },
+  session?: { id: string; retainInfo: SessionRetainInfo | undefined; running?: boolean; blank?: boolean },
   enabled = true,
+  surface: 'hero' | 'header' = 'hero',
 ) {
   const store = createSnapshotStore<AgentPresetSeatState>({ ...SEAT_READY, ...state })
   const developerTools = createSnapshotStore(enabled)
   const preferences = createSnapshotStore<AgentPresetPreferences>({ status: 'ready', value: { showBuiltInPresets: true }, base: {}, user: {}, revision: 0, writable: true })
+  const sessions = createSnapshotStore({ byId: session === undefined ? {} : {
+    [session.id]: { running: session.running ?? false, blank: session.blank ?? true },
+  } })
   const actions = {
     load: vi.fn(() => Promise.resolve()), select: vi.fn(select), introduced: vi.fn(),
     dismissRefusal: vi.fn((error: AgentPresetSeatState['error']) => {
@@ -72,33 +70,24 @@ function renderSeat(
     useDeveloperTools: bindSnapshotSelector(developerTools),
     usePresetPreferences: bindSnapshotSelector(preferences),
     useAgentPresetSeat: bindSnapshotSelector(store),
+    useSessions: bindSnapshotSelector(sessions),
     useSessionRetainInfo: session === undefined
       ? useSessionRetainInfo
       : <Selected,>(selector: (value: SessionRetainInfo | undefined) => Selected) => selector(session.retainInfo),
     t: translate,
   } as AgentPresetSeatProps
-  render(<AgentPresetSeat {...props} />)
-  return { ...actions, developerTools, preferences, store }
+  const view = surface === 'header'
+    ? render(<AgentPresetLabel {...props as AgentPresetLabelProps} />)
+    : render(<AgentPresetSeat {...props} />)
+  return { ...actions, developerTools, preferences, store, sessions, view }
 }
 
 function renderLabel(
   summary: { blank: boolean; projectionValues?: { agentPreset?: string | null } } | undefined,
   roster: Partial<AgentPresetSettingsState> = {},
 ) {
-  // The chip and the label read the same roster, metadata included.
-  const store = createSnapshotStore<AgentPresetSettingsState>({
-    ...ROSTER_READY, options: SEAT_READY.options, ...roster,
-  })
-  const sessions = createSnapshotStore({ byId: summary === undefined ? {} : { s1: summary } })
-  const load = vi.fn(() => Promise.resolve())
-  const view = render(<AgentPresetLabel {...({
-    load,
-    sessionId: 's1',
-    useSessions: bindSnapshotSelector(sessions),
-    useAgentPresets: bindSnapshotSelector(store),
-    t: (key: keyof typeof en) => en[key],
-  } as unknown as AgentPresetLabelProps)} />)
-  return { load, view }
+  return renderSeat({ current: summary?.projectionValues?.agentPreset ?? '', options: roster.options ?? SEAT_READY.options },
+    undefined, { id: 's1', retainInfo: { referenceCount: 1, retainedBy: { mainView: 1 } }, blank: summary?.blank ?? true }, true, 'header')
 }
 
 describe('the new-session chip', () => {
@@ -396,21 +385,21 @@ describe('the chip introduce cue', () => {
   })
 })
 
-describe('the session-header label', () => {
-  it('names the preset the session runs, and never offers a switch', async () => {
-    const { load } = renderLabel({
+describe('the session-header picker', () => {
+  it('changes a started Session through the shared picker', async () => {
+    const { load, select } = renderLabel({
       blank: false,
       projectionValues: { agentPreset: 'standard' },
     })
 
     await waitFor(() => { expect(load).toHaveBeenCalledTimes(1) })
-    // A control here would promise a switch the host refuses outright.
-    expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.getByTitle(en.presetStandardDescription).textContent).toBe(en.presetStandardName)
+    fireEvent.click(screen.getByRole('button', { name: en.presetStandardName }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^mine/ }))
+    expect(select).toHaveBeenCalledExactlyOnceWith('mine')
   })
 
   it('falls back to the id, and to the generic hint, when metadata is absent', () => {
-    renderLabel({ blank: true, projectionValues: { agentPreset: 'mine' } })
+    renderLabel({ blank: false, projectionValues: { agentPreset: 'mine' } })
 
     expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
   })
@@ -423,10 +412,10 @@ describe('the session-header label', () => {
 
     // The session's own summary is the authority on which preset it runs; the
     // roster only supplies the display name, and its arrival is a later frame.
-    expect(screen.getByTitle(en.headerHint).textContent).toBe('standard')
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('renders nothing, and reads no roster, when the session records no preset', async () => {
+  it('renders nothing when the Session records no preset', async () => {
     const absent = renderLabel({ blank: true })
     expect(absent.view.container.firstChild).toBeNull()
     cleanup()
@@ -436,7 +425,19 @@ describe('the session-header label', () => {
     const unknown = renderLabel(undefined)
     expect(unknown.view.container.firstChild).toBeNull()
     await act(async () => { await Promise.resolve() })
-    expect(absent.load).not.toHaveBeenCalled()
-    expect(unknown.load).not.toHaveBeenCalled()
+    expect(absent.load).toHaveBeenCalledOnce()
+    expect(unknown.load).toHaveBeenCalledOnce()
+  })
+
+  it('disables and closes the picker while work runs, then restores selection', () => {
+    const actions = renderLabel({ blank: false, projectionValues: { agentPreset: 'standard' } })
+    const button = screen.getByRole<HTMLButtonElement>('button')
+    fireEvent.click(button)
+    expect(screen.getByRole('menu')).toBeTruthy()
+    act(() => { actions.sessions.set({ byId: { s1: { running: true, blank: false } } }) })
+    expect(button.disabled).toBe(true)
+    expect(screen.queryByRole('menu')).toBeNull()
+    act(() => { actions.sessions.set({ byId: { s1: { running: false, blank: false } } }) })
+    expect(button.disabled).toBe(false)
   })
 })

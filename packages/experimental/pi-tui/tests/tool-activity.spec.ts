@@ -26,9 +26,9 @@ function call(id: number, status: ToolCardStatus = 'running'): ActivityEntry {
 
 function fixture(pane: ToolActivityPane, width = 46, rows = 100) {
   const start = vi.fn<Terminal['start']>()
-  const dimensions = { columns: width }
+  const dimensions = { columns: width, rows }
   const terminal: Terminal = {
-    get columns() { return dimensions.columns }, rows, kittyProtocolActive: false,
+    get columns() { return dimensions.columns }, get rows() { return dimensions.rows }, kittyProtocolActive: false,
     start, stop: () => {}, drainInput: async () => {}, write: () => {},
     moveBy: () => {}, hideCursor: () => {}, showCursor: () => {}, clearLine: () => {},
     clearFromCursor: () => {}, clearScreen: () => {}, setTitle: () => {}, setProgress: () => {}, setProgramStatus: () => {},
@@ -380,6 +380,93 @@ describe('agent tool activity', () => {
       input('\r')
       expect(frame()).not.toContain('full output')
       expect(frame()).not.toContain('Main Agent')
+    } finally { tui.stop() }
+  })
+
+  it('drags each bottom border independently and retains its height across collapse and updates', () => {
+    const pane = new ToolActivityPane()
+    const urls = [{ url: 'https://example.test/', primary: true },
+      ...Array.from({ length: 30 }, (_, id) => ({ url: `https://example.test/path-${id}`, primary: false }))]
+    const entries = Array.from({ length: 20 }, (_, id) => call(id, 'ok'))
+    const summary = Array.from({ length: 20 }, (_, id) => `summary line ${id}`).join('\n')
+    pane.update(entries, [], urls, summary)
+    const { tui, dimensions, frame, input } = fixture(pane, 64, 40)
+    const lines = () => frame().split('\n')
+    const bounds = (label: string): [number, number] => {
+      const rows = lines()
+      const top = rows.findIndex(line => line.includes(label))
+      const bottom = rows.findIndex((line, y) => y > top && line.includes('↕'))
+      expect(top).toBeGreaterThanOrEqual(0)
+      expect(bottom).toBeGreaterThan(top)
+      return [top, bottom]
+    }
+    const height = (label: string) => { const [top, bottom] = bounds(label); return bottom - top + 1 }
+    const drag = (label: string, delta: number) => {
+      const [, y] = bounds(label)
+      input(`\x1b[<0;30;${y + 1}M`)
+      frame()
+      input(`\x1b[<32;30;${y + delta + 1}M`)
+      frame()
+      input(`\x1b[<0;30;${y + delta + 1}m`)
+      frame()
+      expect(tui.hasActiveSelection()).toBe(false)
+    }
+    try {
+      const targetHeight = height('Targets')
+      const summaryHeight = height('Main Agent')
+      drag('Main Agent', -5)
+      expect(height('Main Agent')).toBe(summaryHeight - 5)
+      expect(height('Targets')).toBe(targetHeight)
+      drag('Targets', 4)
+      expect(height('Targets')).toBe(targetHeight + 4)
+      expect(height('Main Agent')).toBe(summaryHeight - 5)
+      expect(frame()).toContain('tool_19')
+      const [y] = bounds('Targets')
+      input(`\x1b[<0;4;${y + 1}M`)
+      input(`\x1b[<0;4;${y + 1}m`)
+      expect(frame()).toContain('Targets ▸')
+      input('\r')
+      expect(height('Targets')).toBe(targetHeight + 4)
+      pane.update(entries, [], [...urls], `${summary}\nlatest update`)
+      expect(height('Targets')).toBe(targetHeight + 4)
+      expect(height('Main Agent')).toBe(summaryHeight - 5)
+      expect(lines().map(line => line.trimEnd()).join('\n')).toMatchSnapshot('independently resized debug boxes')
+      drag('Targets', -12)
+      expect(height('Targets')).toBe(3)
+      drag('Targets', 30)
+      expect(bounds('Main Agent')[1]).toBeLessThan(39)
+      drag('Targets', -4)
+      expect(frame()).toContain('tool_19')
+      dimensions.rows = 10
+      expect(lines().length).toBeLessThanOrEqual(10)
+      expect(lines().every(line => visibleWidth(line) <= 64)).toBe(true)
+    } finally { tui.stop() }
+  })
+
+  it('resizes focused panels with Shift arrows and scrolls a shortened Main Agent box', () => {
+    const pane = new ToolActivityPane()
+    pane.update([], [], [{ url: 'https://example.test/', primary: true },
+      ...Array.from({ length: 12 }, (_, id) => ({ url: `https://example.test/path-${id}`, primary: false }))],
+    Array.from({ length: 20 }, (_, id) => `summary line ${id}`).join('\n'))
+    const { tui, frame, input } = fixture(pane, 64, 40)
+    tui.setFocus(pane)
+    try {
+      frame()
+      input('\t')
+      input('\x1b[1;2B')
+      expect(frame().split('\n').findIndex(line => line.includes('Agent Debug'))).toBe(11)
+      input('\t')
+      for (let step = 0; step < 10; step++) { input('\x1b[1;2A'); frame() }
+      expect(frame()).toContain('summary line 0')
+      expect(frame()).not.toContain('summary line 19')
+      input('\x1b[F')
+      expect(frame()).toContain('summary line 19')
+      expect(frame()).not.toContain('summary line 0')
+      input('\x1b[H')
+      expect(frame()).toContain('summary line 0')
+      const summaryRow = frame().split('\n').findIndex(line => line.includes('summary line 0'))
+      input(`\x1b[<65;3;${summaryRow + 1}M`)
+      expect(frame()).not.toContain('summary line 0')
     } finally { tui.stop() }
   })
 

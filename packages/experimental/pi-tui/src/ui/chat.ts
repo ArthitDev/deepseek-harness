@@ -1749,25 +1749,20 @@ export class ChatScreen {
     }
   }
 
-  /** Open a child session under the new preset, retaining conversation without old instructions. */
+  /** Change the idle Agent's preset without replacing its Session or conversation. */
   private async switchPreset(preset: string): Promise<void> {
     if (preset === this.currentPresetId()) return
     if (this.isBusy() || this.presetSwitching) throw new Error('cannot switch presets while work is running')
     this.presetSwitching = true
     const source = this.agent
-    const selection = this.selection.current
     try {
-      const resolved = await forkSession(this.ctx, source, this.sessionOptions(), {
-        cwd: this.cwd, agentPreset: preset,
-      }, true)
-      if (source !== this.agent || this.isBusy() || this.quitting) {
-        await resolved.handle?.dispose()
-        throw new Error('session changed while switching presets; try again when idle')
-      }
-      await this.commitSwitch(resolved)
-      this.selection.current = selection
-      if (selection !== undefined) this.agent.model.select(selection)
-      this.pushNotice(`preset → ${preset} · new session ${this.currentSessionId.slice(0, 8)} · conversation kept`, 'info')
+      const presets = this.ctx.get('agentPresets')
+      if (presets === undefined) throw new Error('agent presets unavailable in this profile')
+      await presets.select(source, preset)
+      if (source !== this.agent || this.quitting) return
+      this.rebuildAutocomplete()
+      this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
+      this.pushNotice(`preset → ${preset} · applies to the next request · conversation kept`, 'info')
       this.sync()
     } finally {
       this.presetSwitching = false
@@ -2297,7 +2292,7 @@ export class ChatScreen {
       } catch {
         // Best effort; session selection already applied.
       }
-      // A changed model binding opens a child session without the previous preset's instructions.
+      // Follow the new model's preset without replacing the conversation.
       await this.followModelPreset(resolved.provider, resolved.model)
       this.pushNotice(`model → ${resolved.model} (${resolved.provider}) · from the next step`)
       this.sync()
@@ -2309,7 +2304,7 @@ export class ChatScreen {
     }
   }
 
-  /** Follow the model's preset in a new session while preserving conversation. */
+  /** Follow the model's preset in the current idle Session. */
   private async followModelPreset(provider: string, model: string): Promise<void> {
     const presets = this.ctx.get('agentPresets') as
       | { presetIdForModel?(provider: string, model: string): string }

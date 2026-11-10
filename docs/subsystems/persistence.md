@@ -386,6 +386,17 @@ abstract create(header: SessionHeader, options?: SessionPersistenceCreateOptions
 abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle>
 
 /**
+ * Permanently delete one stored session and its session-owned artifacts.
+ * Active write ownership rejects; read handles may fail their next read.
+ * The session working directory is never part of this operation.
+ * @param id - the stored session to delete.
+ * @param options - optional cancellation observed before commit.
+ * @returns `true` when a session was deleted, or `false` when absent.
+ * @throws {SessionAlreadyOwnedError} while a write handle owns the session.
+ */
+abstract delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<boolean>
+
+/**
  * Flush every active write handle owned by this service instance in one
  * durability barrier: each handle's routed live events drain durably and
  * its session materializes, exactly as that handle's own

@@ -387,7 +387,7 @@ describe('the new-session chip controller', () => {
     expect(writes).toEqual([{ ns: 'select', ops: 'minimal' }])
   })
 
-  it('drops the stage against a session that already started', async () => {
+  it('drops automatic staging but allows explicit selection in a started session', async () => {
     const writes: Recorded[] = []
     const controller = chip(ROSTER, {
       id: 's1' as SessionId,
@@ -396,10 +396,13 @@ describe('the new-session chip controller', () => {
     }, { writes })
     await controller.load()
 
-    await controller.select('minimal')
-
-    // The host enforces the same rule; the chip simply never asks.
+    controller.stage('minimal')
+    await controller.apply()
     expect(writes).toEqual([])
+    expect(controller.store.getSnapshot().current).toBe('standard')
+
+    await controller.select('minimal')
+    expect(writes).toEqual([{ ns: 'select', ops: 'minimal' }])
   })
 
   it('drops the stage when the session already runs it', async () => {

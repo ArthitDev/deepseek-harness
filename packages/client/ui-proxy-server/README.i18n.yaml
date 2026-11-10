@@ -8,15 +8,39 @@
 /deepseek-ai-dsh-client-ui-proxy-server:
   en: a13f9741cb4c0a98
   zh: d33b5f289ac12aa4
+/deepseek-ai-dsh-client-ui-proxy-server/summary:
+  en: 49795cb7544e560d
+  zh: f5891ccf2186e4de
+/deepseek-ai-dsh-client-ui-proxy-server/table-of-contents:
+  en: 075c087c5fdceff0
+  zh: 1212e8034a7e4860
 /deepseek-ai-dsh-client-ui-proxy-server/use-this-package:
-  en: 70425ba1a5e05d15
-  zh: 77f898481d5a1179
+  en: fb61977b26846051
+  zh: 0e9c83db0ffdb906
 /deepseek-ai-dsh-client-ui-proxy-server/composition:
-  en: 9111c3465aa94119
-  zh: 0ba5fa911e84ab32
+  en: ab0898d8d4ffea6a
+  zh: 1e9ce270739e31cc
+/deepseek-ai-dsh-client-ui-proxy-server/further-exploration:
+  en: d77e2eb6dc8309ed
+  zh: 1f2575c1d8e74987
 /deepseek-ai-dsh-client-ui-proxy-server/model-experience:
-  en: d434c5b6a189de24
-  zh: 9691cdc0439370b4
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-client-ui-proxy-server/model-experience/proxy-preferences:
+  en: 19937ea5d38423d9
+  zh: 17a954560f66fdf1
+/deepseek-ai-dsh-client-ui-proxy-server/model-experience/proxy-preferences/what-the-model-sees:
+  en: 459332a0dc0908e0
+  zh: 92d0541dadd77fb3
+/deepseek-ai-dsh-client-ui-proxy-server/model-experience/proxy-preferences/token-effect:
+  en: 449d38998e4f8d39
+  zh: eb8324c7241d9933
+/deepseek-ai-dsh-client-ui-proxy-server/model-experience/proxy-preferences/kv-cache-effect:
+  en: f2d34324e0f17537
+  zh: 4201b29b0290a0bf
 /deepseek-ai-dsh-client-ui-proxy-server/known-limitations-and-deferred-work:
-  en: 4423a0f4966bd775
-  zh: 2e79a981e076c8a4
+  en: c470c6824d4b64fe
+  zh: b8585756d6282c46
+/deepseek-ai-dsh-client-ui-proxy-server/known-limitations-and-deferred-work/dev-note:
+  en: b836f01bd0bceb4a
+  zh: 25e979141fbe5501

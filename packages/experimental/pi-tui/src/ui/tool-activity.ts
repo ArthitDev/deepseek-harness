@@ -1,7 +1,8 @@
 /** Fixed Main Agent summary above a scrollable session activity timeline. */
 import { stripVTControlCharacters } from 'node:util'
 import type { JobId, JobView } from '@deepseek-ai/dsh-jobs'
-import { matchesKey, ScrollView, Text, VStack, truncateToWidth, visibleWidth, type Component } from '@earendil-works/pi-tui'
+import { matchesKey, ScrollView, Text, VStack, truncateToWidth, visibleWidth, type Component, type TuiMouseEvent } from '@earendil-works/pi-tui'
+import { LAYOUT_NODE, type StackLayoutNode } from '@earendil-works/pi-tui/dist/layout-node.js'
 import type { ActivityEntry } from '../core/activity.js'
 import type { TargetUrl } from '../core/targets.js'
 import { TargetsPane } from './targets-pane.js'
@@ -13,7 +14,10 @@ export class ToolActivityPane extends VStack {
   private active = false
   private summaryFocused = false
   private summaryCollapsed = false
-  private readonly targets = new TargetsPane(this, () => { this.summaryFocused = false })
+  private summaryRows = 0
+  private readonly targets = new TargetsPane(this, () => { this.summaryFocused = false }, this.resizeHandle('targets'))
+  private readonly heights: Partial<Record<'targets' | 'summary', number>> = {}
+  private drag: { panel: 'targets' | 'summary'; y: number; height: number } | undefined
   /**
    * Whether keyboard navigation currently targets the pane or its Targets tree.
    * @returns true while the pane holds keyboard focus.
@@ -35,6 +39,7 @@ export class ToolActivityPane extends VStack {
   private rowEntries: (ActivityEntry | undefined)[] = []
   private readonly renderedEntries = new Map<ActivityEntry, { text: string; width: number; lines: string[] }>()
   private readonly scroll: ScrollView
+  private readonly summaryScroll: ScrollView
 
   constructor(private readonly inspectSubagent?: (key: string) => void) {
     super()
@@ -58,22 +63,85 @@ export class ToolActivityPane extends VStack {
       invalidate: () => {},
       render: width => new Text(style.muted(`── Agent Debug${this.targets.hasUrls || this.mainSummary !== undefined ? ' · Tab panels' : ''} ──`), 0, 0).render(width),
     }, { basis: 'auto' })
-    const summary: Component = {
-      invalidate: () => {}, render: width => this.renderSummary(width),
+    const summary = new VStack()
+    const summaryHeader: Component = {
+      invalidate: () => {}, render: width => this.renderSummaryHeader(width),
       handleMouse: (event) => {
         if (event.type !== 'press' || event.button !== 'left' || event.y !== 0) return undefined
         this.targets.focused = false
         this.summaryFocused = true
         this.summaryCollapsed = !this.summaryCollapsed
         return { handled: true, focus: !this.focused, focusTarget: this, target: {
-          component: summary, originX: event.screenX - event.x, originY: event.screenY - event.y,
+          component: summaryHeader, originX: event.screenX - event.x, originY: event.screenY - event.y,
           width: event.width, height: event.height,
         } }
       },
     }
+    summary.addChild(summaryHeader, { basis: 'auto', shrink: 0 })
+    this.summaryScroll = new ScrollView({
+      invalidate: () => {}, render: width => this.renderSummaryBody(width),
+    }, { overscroll: 'contain' })
+    summary.addChild(this.summaryScroll, { basis: 'auto', grow: 1, shrink: 1, minSize: 1, visible: () => !this.summaryCollapsed })
+    summary.addChild(this.resizeHandle('summary'), { basis: 'auto', shrink: 0, visible: () => !this.summaryCollapsed })
     this.addChild(summary, { basis: 'auto', shrink: 1, minSize: 1, visible: () => this.mainSummary !== undefined })
     this.scroll = new ScrollView(output, { follow: 'end', overscroll: 'contain' })
     this.addChild(this.scroll, { basis: 0, grow: 1, minSize: 1 })
+  }
+
+  override [LAYOUT_NODE](): StackLayoutNode {
+    const node = super[LAYOUT_NODE]()
+    return { ...node, entries: node.entries.map((entry, index) => {
+      const panel = index === 0 ? 'targets' : index === 2 ? 'summary' : undefined
+      if (panel === undefined || this.panelCollapsed(panel) || this.heights[panel] === undefined) return entry
+      const height = Math.min(this.heights[panel], this.panelContentHeight(panel))
+      return { ...entry, basis: height, maxSize: height }
+    }) }
+  }
+
+  private panelCollapsed(panel: 'targets' | 'summary'): boolean {
+    return panel === 'targets' ? this.targets.isCollapsed : this.summaryCollapsed
+  }
+
+  private panelHeight(panel: 'targets' | 'summary'): number {
+    return (panel === 'targets' ? this.targets.scroll : this.summaryScroll).viewportHeight + 2
+  }
+
+  private panelContentHeight(panel: 'targets' | 'summary'): number {
+    return Math.max(3, panel === 'targets' ? this.targets.contentHeight : this.summaryRows + 2)
+  }
+
+  private resizePanel(panel: 'targets' | 'summary', height: number): void {
+    if (this.panelCollapsed(panel)) return
+    // Leave one row for activity and keep the peer box at its current height.
+    this.heights[panel] = Math.max(3, Math.min(height, this.panelContentHeight(panel),
+      this.panelHeight(panel) + this.scroll.viewportHeight - 1))
+  }
+
+  private resizeHandle(panel: 'targets' | 'summary'): Component {
+    return {
+      invalidate: () => {},
+      render: (width) => {
+        const rule = width < 5 ? `╰${'─'.repeat(Math.max(0, width - 2))}╯`
+          : `╰${'─'.repeat(Math.floor((width - 5) / 2))} ↕ ${'─'.repeat(Math.ceil((width - 5) / 2))}╯`
+        return [(this.drag?.panel === panel ? style.accent : style.muted)(truncateToWidth(rule, width))]
+      },
+      handleMouse: (event: TuiMouseEvent) => {
+        if (event.type === 'press' && event.button === 'left') {
+          this.drag = { panel, y: event.screenY, height: this.panelHeight(panel) }
+          return { capture: true }
+        }
+        if (this.drag?.panel !== panel) return undefined
+        if (event.type === 'drag') {
+          this.resizePanel(panel, this.drag.height + event.screenY - this.drag.y)
+          return { handled: true }
+        }
+        if (event.type === 'release') {
+          this.drag = undefined
+          return { handled: true, render: true }
+        }
+        return undefined
+      },
+    }
   }
 
   /**
@@ -118,7 +186,10 @@ export class ToolActivityPane extends VStack {
    * @param data - Raw terminal key input routed to this focused pane.
    */
   handleInput(data: string): void {
-    if (matchesKey(data, 'tab') && (this.targets.hasUrls || this.mainSummary !== undefined)) {
+    if ((this.targets.focused || this.summaryFocused) && (matchesKey(data, 'shift+up') || matchesKey(data, 'shift+down'))) {
+      const panel = this.targets.focused ? 'targets' : 'summary'
+      this.resizePanel(panel, this.panelHeight(panel) + (matchesKey(data, 'shift+up') ? -1 : 1))
+    } else if (matchesKey(data, 'tab') && (this.targets.hasUrls || this.mainSummary !== undefined)) {
       if (this.targets.focused) {
         this.targets.focused = false
         this.summaryFocused = this.mainSummary !== undefined
@@ -130,6 +201,8 @@ export class ToolActivityPane extends VStack {
       if (matchesKey(data, 'enter') || matchesKey(data, 'space')) this.summaryCollapsed = !this.summaryCollapsed
       else if (matchesKey(data, 'left')) this.summaryCollapsed = true
       else if (matchesKey(data, 'right')) this.summaryCollapsed = false
+      else if (matchesKey(data, 'home')) this.summaryScroll.scrollToStart()
+      else if (matchesKey(data, 'end')) this.summaryScroll.scrollToEnd()
     }
     else if (matchesKey(data, 'enter') && this.selected !== undefined) {
       if (this.selected.category === 'Sub Agent') this.inspectSubagent?.(this.selected.key)
@@ -156,20 +229,21 @@ export class ToolActivityPane extends VStack {
     if (row >= 0) this.scroll.scrollTo(row, { disableFollow: true })
   }
 
-  private renderSummary(width: number): string[] {
+  private renderSummaryHeader(width: number): string[] {
     if (this.mainSummary === undefined) return []
     const label = `Main Agent ${this.summaryCollapsed ? '▸' : '▾'}${this.summaryFocused ? ' · Enter toggle · Tab next' : ''}`
     const color = this.summaryFocused ? style.accent : style.muted
     if (width < 5) return [color(truncateToWidth(label, width))]
     const title = truncateToWidth(`╭─ ${label} `, width - 1)
     const header = color(`${title}${'─'.repeat(width - visibleWidth(title) - 1)}╮`)
-    if (this.summaryCollapsed) return [header]
+    return [header]
+  }
+
+  private renderSummaryBody(width: number): string[] {
+    if (this.mainSummary === undefined || width < 5) return []
     const lines = new Text(style.accent(this.mainSummary), 0, 0).render(width - 4)
-    return [
-      header,
-      ...lines.map(line => `${style.muted('│')} ${line}${' '.repeat(Math.max(0, width - visibleWidth(line) - 3))}${style.muted('│')}`),
-      style.muted(`╰${'─'.repeat(width - 2)}╯`),
-    ]
+    this.summaryRows = lines.length
+    return lines.map(line => `${style.muted('│')} ${line}${' '.repeat(Math.max(0, width - visibleWidth(line) - 3))}${style.muted('│')}`)
   }
 
   private renderEntries(width: number): string[] {

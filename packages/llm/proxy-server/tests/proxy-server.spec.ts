@@ -44,12 +44,14 @@ async function fixture() {
     installAnchor: join(root, 'apps/cli/package.json'), cwd: root, home: root, overlays: [], telemetryDisabledEnv: undefined,
   }
   let ctx: Context
-  const prepareSb = async (): Promise<void> => {
+  const prepareSidecar = async (id: 'sb' | 'antigravity' = 'sb'): Promise<void> => {
     const reservation = createServer()
-    config.sbPort = await listen(reservation)
+    config[`${id}Port`] = await listen(reservation)
     await close(reservation)
     await mkdir(join(root, 'scripts'), { recursive: true })
-    await writeFile(join(root, 'scripts/sb-transport.cjs'), "const http=require('node:http');http.createServer((req,res)=>res.end(JSON.stringify({service:'dsh-sb-transport'}))).listen(Number(process.env.SB_PORT),'127.0.0.1')")
+    const script = id === 'sb' ? 'scripts/sb-transport.cjs' : 'packages/experimental/pi-tui/tools/antigravity-proxy/antigravity_proxy.mjs'
+    await mkdir(join(root, script, '..'), { recursive: true })
+    await writeFile(join(root, script), `import http from 'node:http';http.createServer((req,res)=>res.end(JSON.stringify({service:'${id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy'}',runtime:process.versions.bun?'bun':'node'}))).listen(Number(process.env.${id === 'sb' ? 'SB_PORT' : 'ANTIGRAVITY_PORT'}),'127.0.0.1')`)
   }
   const mount = async () => {
     await writeFile(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
@@ -67,7 +69,7 @@ async function fixture() {
     onTestFinished(() => mounted.fiber.dispose())
     return ctx.proxyServers
   }
-  return { root, get ctx() { return ctx }, config, mount, prepareSb }
+  return { root, get ctx() { return ctx }, config, mount, prepareSidecar }
 }
 
 it('reads the three proxies without starting one, and records independent usage switches', async () => {
@@ -102,17 +104,20 @@ it('leaves an external proxy running after disable and distinguishes occupied po
   expect(other.listening).toBe(true)
 })
 
-it('starts one owned sidecar, serializes repeated switches and awaits its stop', async () => {
+it.each(['sb', 'antigravity'] as const)('starts %s with Bun, serializes repeated switches and awaits its stop', async (id) => {
   const f = await fixture()
-  await f.prepareSb()
+  await f.prepareSidecar(id)
   const service = await f.mount()
-  await Promise.all([service.setEnabled('sb', true), service.setEnabled('sb', true)])
-  expect((await service.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'running' })
-  await service.setEnabled('sb', false)
-  expect((await service.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'stopped', enabled: false })
-  await service.setEnabled('sb', true)
+  await Promise.all([service.setEnabled(id, true), service.setEnabled(id, true)])
+  expect((await service.list()).find(row => row.id === id)).toMatchObject({ status: 'running' })
+  const health: unknown = await (await fetch(`http://127.0.0.1:${f.config[`${id}Port`]}/health`)).json()
+  expect(health).toMatchObject({ runtime: 'bun' })
+  expect(health).toMatchSnapshot()
+  await service.setEnabled(id, false)
+  expect((await service.list()).find(row => row.id === id)).toMatchObject({ status: 'stopped', enabled: false })
+  await service.setEnabled(id, true)
   await f.ctx.fiber.dispose()
-  expect((await service.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'stopped' })
+  expect((await service.list()).find(row => row.id === id)).toMatchObject({ status: 'stopped' })
 })
 
 it('refuses an unowned ZCode port even when it answers with a generic authentication response', async () => {
@@ -132,7 +137,7 @@ it('refuses an unowned ZCode port even when it answers with a generic authentica
 
 it('retains ownership of a live but non-listening child until an explicit stop', async () => {
   const f = await fixture()
-  await f.prepareSb()
+  await f.prepareSidecar()
   await writeFile(join(f.root, 'scripts/sb-transport.cjs'), "const http=require('node:http');const server=http.createServer((req,res)=>{if(req.url==='/stop-listening'){res.end('ok');server.close();setInterval(()=>{},1000)}else res.end(JSON.stringify({service:'dsh-sb-transport'}))});server.listen(Number(process.env.SB_PORT),'127.0.0.1')")
   const service = await f.mount()
   await service.setEnabled('sb', true)
@@ -144,7 +149,7 @@ it('retains ownership of a live but non-listening child until an explicit stop',
 
 it('disables new use immediately and stops its child only after the active model stream settles', async () => {
   const f = await fixture()
-  await f.prepareSb()
+  await f.prepareSidecar()
   const service = await f.mount()
   const gate = Promise.withResolvers<undefined>()
   const next = vi.fn(async function* (): AsyncGenerator<StreamChunk> {

@@ -1,6 +1,6 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S bun --no-env-file
 /**
- * Antigravity OpenAI-compatible proxy — Node rewrite of the vendored
+ * Antigravity OpenAI-compatible proxy — Bun runtime for the vendored
  * Python proxy (tools/antigravity-proxy upstream). Zero dependencies.
  *
  * Exposes:

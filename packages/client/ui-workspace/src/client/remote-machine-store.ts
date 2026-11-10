@@ -32,13 +32,7 @@ export class RemoteMachineController {
   /** Load the redacted machine list, or an empty list when the Host service is absent. */
   async load(): Promise<void> {
     this.store.update((state) => { state.status = 'loading'; state.error = null })
-    // A composition without the Host service (or a fake remote in tests) lists
-    // no machines rather than failing the whole roster surface.
     const namespace = this.ctx.remote.remoteMachines
-    if (namespace === undefined) {
-      this.store.set({ status: 'ready', machines: [], error: null })
-      return
-    }
     const result = await namespace.list()
     if (!result.ok) {
       if (result.error.code === 'gateway/invocation-unavailable') {

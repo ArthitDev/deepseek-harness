@@ -591,6 +591,14 @@ Registry of YAML-declared presets and the revisions live Agents retain.
 
 ```ts cordis-catalog
 /**
+ * Resolve the preset configured for one model route.
+ * @param provider - model provider route.
+ * @param model - provider-owned model id.
+ * @returns the route override, or the current default preset when unbound or selection is hidden.
+ */
+presetIdForModel(provider: string, model: string): string
+
+/**
  * Read the preset recorded for a Session, including selections no longer in the roster.
  * @param session - Session whose committed preset selection is read.
  * @returns the recorded preset, or null when none was selected.
@@ -615,7 +623,7 @@ inspectCompositions(ctx?: Context): AgentPresetInspection[]
 async list(): Promise<AgentPreset[]>
 
 /** Read the selection roster.
- * @returns Current presets, each marked when it is the default.
+ * @returns Current presets with trust and authoring facts, each marked when it is the default.
  */
 @Remote('list') async remoteExportList(): Promise<AgentPresetRoster>
 
@@ -627,9 +635,88 @@ async resolve(id?: string): Promise<AgentPreset>
 
 /** Read one declaration's child plugin list as YAML, for viewing only.
  * @param agentPreset Preset identity.
- * @returns The declared composition beside its published metadata.
+ * @returns The declared composition beside its trust and published metadata.
  */
-@Remote('read') readDocument(agentPreset: string): Promise<AgentPresetDocument>
+@Remote('read') async readDocument(agentPreset: string): Promise<AgentPresetDocument>
+
+/**
+ * Replace one profile-declared preset's composition.
+ * @param id - preset id whose declaring row the active profile patch holds.
+ * @param content - complete entry-list YAML to store.
+ * @returns once the row is rewritten and the Loader settled on it.
+ * @throws when the preset is unknown, ships with the deployment, or the
+ * composition is refused.
+ */
+async write(id: string, content: string): Promise<void>
+
+/**
+ * Replace one profile-declared preset's composition through the Remote API.
+ * @param agentPreset - preset id resolved by the Host.
+ * @param content - complete entry-list YAML to store.
+ * @returns once the row is rewritten.
+ */
+@Remote('write') async remoteExportWrite(agentPreset: string, content: string): Promise<void>
+
+/**
+ * Create a profile-declared preset by copying an existing one's whole
+ * plugin list.
+ * @param from - the preset the copy starts from; any trust is accepted.
+ * @param id - the new preset's id.
+ * @param name - display name for the copy; omitted publishes none.
+ * @throws when the source is unknown, the id is unusable or taken, or the
+ * deployment configures no profile.
+ */
+async copy(from: string, id: string, name?: string): Promise<void>
+
+/**
+ * Create a profile-declared preset with a complete composition.
+ * @param from - source preset whose plugin list the copy starts from.
+ * @param id - new preset id.
+ * @param name - display name; undefined publishes none.
+ * @param content - complete entry-list YAML stored in the new preset.
+ * @returns once the declaring row is written and activated.
+ * @throws when the source is unknown, the id is unusable or taken, or the
+ * composition is refused.
+ */
+async create(from: string, id: string, name: string | undefined, content: string): Promise<void>
+
+/**
+ * Copy one preset through the Remote API.
+ * @param from - the source preset id.
+ * @param id - the new preset id.
+ * @param name - the copy's optional display name.
+ * @returns once the copy is stored.
+ */
+@Remote('copy') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>
+
+/**
+ * Create one preset with caller-supplied composition through the Remote API.
+ * @param from - source preset whose plugin list the copy starts from.
+ * @param id - new preset id.
+ * @param name - display name, or undefined to publish none.
+ * @param content - complete composition for the new preset.
+ * @returns once the complete preset is stored.
+ */
+@Remote('create') async remoteExportCreate(from: string, id: string, name: string | undefined, content: string): Promise<void>
+
+/**
+ * Delete a profile-declared preset.
+ *
+ * Sessions already composed from it keep their retained revision; only new
+ * sessions see the roster without it. Bindings that named it — the selected
+ * default and per-model overrides — are cleared so nothing resolves a
+ * preset nothing will ever supply again.
+ * @param id - the preset id.
+ * @throws when the preset is unknown or ships with the deployment.
+ */
+async remove(id: string): Promise<void>
+
+/**
+ * Delete one preset through the Remote API.
+ * @param id - the preset id.
+ * @returns once the preset is deleted.
+ */
+@Remote('deletePreset') async remoteExportDelete(id: string): Promise<void>
 
 /** Bind an unpublished Agent to the current preset revision.
  * @param ctx Agent context from its setup callback.
@@ -658,14 +745,14 @@ composedPreset(ctx: Context): string | undefined
  */
 serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): Context[K] | undefined
 
-/** Rebind a blank Agent; the caller owns the blank-session check.
+/** Rebind an Agent; the caller owns exclusion of turn-driving work.
  * @param ctx Agent context.
  * @param id Requested preset.
  * @returns The bound identity.
  */
 async recompose(ctx: Context, id: string): Promise<AgentPreset>
 
-/** Select a preset before a session starts its first turn. A Session whose
+/** Select a preset while the Agent is idle, retaining its Session history. A Session whose
  * log records the preset and whose Agent runs its current revision keeps its
  * composition; nothing is logged or announced.
  * @param agent Target Agent.

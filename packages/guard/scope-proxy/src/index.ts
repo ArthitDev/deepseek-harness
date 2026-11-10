@@ -32,7 +32,7 @@ import {
   type PentestNetworkTarget,
 } from '@deepseek-ai/dsh-pentest-run'
 import { DSH_ENV_PREFIX } from '@deepseek-ai/dsh-shell'
-import type { BashEnvContributor, ShellEnvRegistry } from '@deepseek-ai/dsh-shell-env'
+import type { BashEnvContributor } from '@deepseek-ai/dsh-shell-env'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 
 declare module '@deepseek-ai/cordis' {
@@ -120,7 +120,7 @@ export class ScopeProxy extends Service {
   constructor(ctx: Context, raw: Config, resolve: AddressResolver = resolveWithSystemDns) {
     super(ctx, 'scopeProxy')
     // Class plugins receive the raw config object; the schema fills defaults.
-    const config = Config(raw) as Config
+    const config = Config(raw)
     const parseScope = (target: string): PentestNetworkTarget => {
       const parsed = normalizePentestTarget(target)
       if (parsed === undefined) {
@@ -151,7 +151,7 @@ export class ScopeProxy extends Service {
     this.listenHost = config.host as string
     this.listenPort = config.port as number
     this.server = http.createServer()
-    this.server.on('request', (request, response) => { void this.forwardAbsolute(request, response).catch((error) => {
+    this.server.on('request', (request, response) => { void this.forwardAbsolute(request, response).catch((error: unknown) => {
       if (!response.headersSent) response.writeHead(500)
       response.end()
       // Surface the proxy-side failure on the client socket instead of leaving it open.
@@ -193,14 +193,14 @@ export class ScopeProxy extends Service {
   private async listen(): Promise<void> {
     await new Promise<void>((resolveListen, rejectListen) => {
       this.server.once('error', rejectListen)
-      this.server.listen(this.listenPort, this.listenHost, () => resolveListen())
+      this.server.listen(this.listenPort, this.listenHost, () => { resolveListen() })
     })
   }
 
   /** Register `DSH_SCOPE_PROXY` so every managed shell call can find the proxy. */
   private registerEnvironmentFact(): void {
     const registry = this.ctx.get('shellEnv')
-    if (registry === undefined || typeof (registry as ShellEnvRegistry).register !== 'function') {
+    if (registry === undefined || typeof registry.register !== 'function') {
       throw new Error('scope-proxy: the shell-env service (`ctx.shellEnv`) must be mounted to expose DSH_SCOPE_PROXY')
     }
     const contributor: BashEnvContributor = {
@@ -226,33 +226,45 @@ export class ScopeProxy extends Service {
     try {
       url = new URL(rawUrl)
     } catch {
-      return deny("denied by scope proxy: only absolute-form proxy requests (scheme://host/path) are served; origin-form is not a proxy request'")
+      deny("denied by scope proxy: only absolute-form proxy requests (scheme://host/path) are served; origin-form is not a proxy request'")
+      return
     }
     const scheme = url.protocol.replace(/:$/, '').toLowerCase()
     if (!this.scope.schemes.has(scheme)) {
-      return deny(`denied by scope proxy: '${scheme}://' uses a scheme outside the allowed protocol list`)
+      deny(`denied by scope proxy: '${scheme}://' uses a scheme outside the allowed protocol list`)
+      return
     }
     const candidate = normalizePentestTarget(rawUrl)
-    if (candidate === undefined) return deny(`denied by scope proxy: '${rawUrl}' is not a parsable target`)
+    if (candidate === undefined) {
+      deny(`denied by scope proxy: '${rawUrl}' is not a parsable target`)
+      return
+    }
     const refusal = this.judge(candidate)
-    if (refusal !== undefined) return deny(refusal)
+    if (refusal !== undefined) { deny(refusal); return }
 
     let addresses: readonly ResolvedAddress[] = [{ address: candidate.host, family: isIpLiteral(candidate.host) ? (candidate.host.includes(':') ? 6 : 4) : 0 }]
     if (!isIpLiteral(candidate.host)) {
-      if (!this.scope.resolves) return deny(`denied by scope proxy: '${candidate.host}' must resolve but resolution is disabled by configuration`)
+      if (!this.scope.resolves) {
+        deny(`denied by scope proxy: '${candidate.host}' must resolve but resolution is disabled by configuration`)
+        return
+      }
       try {
         addresses = await this.resolve(candidate.host)
       } catch {
-        return deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' could not be resolved and scope enforcement is active`)
+        deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' could not be resolved and scope enforcement is active`)
+        return
       }
       const refusedAddress = this.judgeResolved(addresses)
-      if (refusedAddress !== undefined) return deny(refusedAddress)
+      if (refusedAddress !== undefined) { deny(refusedAddress); return }
     }
     // Pin: the outbound socket opens to the validated address, so a later DNS
     // answer cannot re-point this connection. An empty answer set is refused
     // fail-closed rather than dialled.
     const pinned = addresses[0]
-    if (pinned === undefined) return deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' resolved to no address`)
+    if (pinned === undefined) {
+      deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' resolved to no address`)
+      return
+    }
     const upstream = http.request({
       host: pinned.address,
       port: url.port === '' ? (scheme === 'https' ? 443 : 80) : Number(url.port),
@@ -279,27 +291,35 @@ export class ScopeProxy extends Service {
     const authority = request.url ?? ''
     const candidate = normalizePentestTarget(authority)
     if (candidate === undefined || candidate.port === '') {
-      return deny(`denied by scope proxy: CONNECT requires a parsable host:port authority, got '${authority}'`)
+      deny(`denied by scope proxy: CONNECT requires a parsable host:port authority, got '${authority}'`)
+      return
     }
     const refusal = this.judge(candidate)
-    if (refusal !== undefined) return deny(refusal)
+    if (refusal !== undefined) { deny(refusal); return }
 
     void (async () => {
       let addresses: readonly ResolvedAddress[]
       if (isIpLiteral(candidate.host)) {
         addresses = [{ address: candidate.host, family: candidate.host.includes(':') ? 6 : 4 }]
       } else {
-        if (!this.scope.resolves) return deny(`denied by scope proxy: '${candidate.host}' must resolve but resolution is disabled by configuration`)
+        if (!this.scope.resolves) {
+          deny(`denied by scope proxy: '${candidate.host}' must resolve but resolution is disabled by configuration`)
+          return
+        }
         try {
           addresses = await this.resolve(candidate.host)
         } catch {
-          return deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' could not be resolved and scope enforcement is active`)
+          deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' could not be resolved and scope enforcement is active`)
+          return
         }
         const refusedAddress = this.judgeResolved(addresses)
-        if (refusedAddress !== undefined) return deny(refusedAddress)
+        if (refusedAddress !== undefined) { deny(refusedAddress); return }
       }
       const pinnedTunnel = addresses[0]
-      if (pinnedTunnel === undefined) return deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' resolved to no address`)
+      if (pinnedTunnel === undefined) {
+        deny(`denied by scope proxy: '${formatPentestNetworkTarget(candidate)}' resolved to no address`)
+        return
+      }
       const upstream = net.connect({ host: pinnedTunnel.address, port: Number(candidate.port) })
       upstream.once('connect', () => {
         clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
@@ -349,7 +369,8 @@ export class ScopeProxy extends Service {
  * @param config - validated {@link Config}; scope entries are re-checked in the service.
  * @param resolve - resolver override for focused tests; defaults to system DNS.
  */
-export function apply(ctx: Context, config: Config, resolve: AddressResolver = resolveWithSystemDns): void {  const proxy = new ScopeProxy(ctx, Config(config) as Config, resolve)
+export function apply(ctx: Context, config: Config, resolve: AddressResolver = resolveWithSystemDns): void {
+  const proxy = new ScopeProxy(ctx, Config(config), resolve)
   // Registered from `apply` (not the constructor): an effect created inside a
   // Service constructor re-enters the context mid-load and deadlocks the fiber.
   // The effect's execute returns the disposer callback (see entries.ts usage).

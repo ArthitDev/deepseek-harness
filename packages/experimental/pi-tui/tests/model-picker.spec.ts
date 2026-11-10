@@ -111,6 +111,7 @@ describe('reasoning effort across model switches', () => {
     })
     ctx.provide('llm', { ...llm, resolveModelInfo, resolveCallConfig })
     const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('effort-switch')), prior)
+    const select = vi.spyOn(agent.model, 'select')
     const tui = new TuiAltScreen(terminal())
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
     screen.handleEvent(agent.session.append('request/header', { header: { config: prior }, reason: 'initial' }))
@@ -127,10 +128,10 @@ describe('reasoning effort across model switches', () => {
       })
       // 0.2.2 records the validated pick on the agent's durable selection;
       // agent/request can no longer adjust the effort after step preparation.
-      expect(agent.model.select).toHaveBeenCalledWith({
+      expect(select.mock.calls).toContainEqual([{
         provider: 'gateway', model: 'openai/test-model',
         ...expected === undefined ? {} : { reasoningEffort: ReasoningEffortId(expected) },
-      })
+      }])
     } finally { tui.stop(); await ctx.fiber.dispose() }
   })
 })

@@ -167,6 +167,12 @@ export interface Config {
   default: string
   /** User-selected default; edited through Settings. */
   selectedDefault: Volatile<string | undefined>
+  /** Whether sessions that name no preset expose a preset choice; edited through Settings. */
+  modeSelectionEnabled: Volatile<boolean | undefined>
+  /** Whether browser selection surfaces show the shipped presets; does not change session composition. */
+  showBuiltInPresets: Volatile<boolean | undefined>
+  /** User-selected preset ids by provider and model; edited through Settings. */
+  models: Volatile<Record<string, Record<string, string>> | undefined>
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-agent-preset-registry -->
@@ -262,7 +268,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-session-controller`
 
 - `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `remoteAccess` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `typertGateway` · `workspaceRegistry`
-- `source`: [`packages/api/session-controller/src/index.ts:110`](../packages/api/session-controller/src/index.ts)
+- `source`: [`packages/api/session-controller/src/index.ts:112`](../packages/api/session-controller/src/index.ts)
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -2653,7 +2659,7 @@ export interface Config {
 
 - `inject`: `systemPrompt`
 - `refs`: [`PentestMode`](subsystems/pentest.md) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/pentest/pentest-executor/src/index.ts:338`](../packages/pentest/pentest-executor/src/index.ts)
+- `source`: [`packages/pentest/pentest-executor/src/index.ts:345`](../packages/pentest/pentest-executor/src/index.ts)
 
 ```ts config-catalog
 interface PentestModeConfig {
@@ -2791,6 +2797,10 @@ export interface Config {
   historyLimit?: number
   /** Quiet time after a recognized background-job prompt before Agent Debug warns. */
   jobInputWarningDelayMs?: number
+  /** Delay between settled Kali readiness probes. */
+  kaliStatusIntervalMs?: number
+  /** Deadline for one read-only Kali readiness probe. */
+  kaliStatusTimeoutMs?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-pi-tui -->
@@ -2918,6 +2928,42 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-plugin-package-inventory-deepseek -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-proxy-server -->
+<a id="deepseek-aidsh-proxy-server"></a>
+
+## `@deepseek-ai/dsh-proxy-server`
+
+- `inject`: `profileContext` · `settings`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/llm/proxy-server/src/index.ts:39`](../packages/llm/proxy-server/src/index.ts)
+
+```ts config-catalog
+/** Live usage switches and deployment-specific ports, routes and startup deadline. */
+export interface Config {
+  /** Permit new model requests to use ZCode Direct. */
+  zcodeEnabled: Volatile<boolean>
+  /** Permit new model requests to use Antigravity. */
+  antigravityEnabled: Volatile<boolean>
+  /** Permit new model requests to use SB transport. */
+  sbEnabled: Volatile<boolean>
+  /** Loopback port used by the ZCode Direct proxy. */
+  zcodePort: number
+  /** Loopback port used by the Antigravity proxy. */
+  antigravityPort: number
+  /** Loopback port used by the SB transport proxy. */
+  sbPort: number
+  /** Provider ids routed through ZCode Direct. */
+  zcodeProviders: string[]
+  /** Provider ids routed through Antigravity. */
+  antigravityProviders: string[]
+  /** Provider ids routed through SB transport. */
+  sbProviders: string[]
+  /** Maximum time in milliseconds to wait for a managed proxy to become healthy. */
+  startupTimeoutMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-proxy-server -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-ptc-runtime-node -->
 <a id="deepseek-aidsh-ptc-runtime-node"></a>
@@ -4409,13 +4455,15 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-fs-search`
 
 - `inject`: `tools` · `systemPrompt` · `subprocess` · `workingDirectory`
-- `source`: [`packages/fs/tool-fs-search/src/index.ts:74`](../packages/fs/tool-fs-search/src/index.ts)
+- `source`: [`packages/fs/tool-fs-search/src/index.ts:75`](../packages/fs/tool-fs-search/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config; over-cap glob sampling is an explicit deployment choice and the remaining fields have defaults. */
 export interface Config {
   /** Whether an over-cap `glob` page is sampled across top-level entries instead of taking the modification-time head. */
   sampleOverCapGlobResults: boolean
+  /** Explicit local Wiki libraries; omitted or empty exposes no knowledge tools. */
+  knowledgeRoots?: KnowledgeRoot[]
   /** Max paths one `glob` call retains inline; later paths go to the formatted spill file. */
   globMaxResults?: number
   /** Max flat matches one `grep` call retains inline; later matches go to the formatted spill file. */
@@ -4435,6 +4483,16 @@ export interface Config {
    * `@deepseek-ai/dsh-tool-call-timeout-policy` through `exec.signal`.
    */
   timeoutMs?: number
+}
+
+/** A local reference library advertised only when explicitly configured. */
+export interface KnowledgeRoot {
+  /** Unique lowercase library name, using letters, digits, and hyphens. */
+  name: string
+  /** Absolute directory path containing an INDEX.md entry point. */
+  path: string
+  /** Create the standard library skeleton when files are absent; never overwrite existing files. */
+  bootstrap?: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-fs-search -->
@@ -4792,7 +4850,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-web`
 
 - `inject`: `tools` · `web` · `systemPrompt`
-- `source`: [`packages/web/tool-web/src/index.ts:39`](../packages/web/tool-web/src/index.ts)
+- `source`: [`packages/web/tool-web/src/index.ts:46`](../packages/web/tool-web/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: which web tools to register, search bounds, per-tool budgets, and the fetch output cap. */
@@ -5262,10 +5320,12 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-client-ui-message-feedback` | — | [`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-model-selection` | — | [`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-open-in-app` | — | [`packages/client/ui-open-in-app/src/index.ts`](../packages/client/ui-open-in-app/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-pentest-runs` | — | [`packages/client/ui-pentest-runs/src/index.ts`](../packages/client/ui-pentest-runs/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-permission-presets` | — | [`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-plan` | — | [`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-plugin-market` | — | [`packages/client/ui-plugin-market/src/index.ts`](../packages/client/ui-plugin-market/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-plugin-recommendations` | — | [`packages/experimental/client-ui-plugin-recommendations/src/index.ts`](../packages/experimental/client-ui-plugin-recommendations/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-proxy-server` | — | [`packages/client/ui-proxy-server/src/index.ts`](../packages/client/ui-proxy-server/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-recon` | — | [`packages/client/ui-recon/src/index.ts`](../packages/client/ui-recon/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-reference` | — | [`packages/client/ui-reference/src/index.ts`](../packages/client/ui-reference/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-renderer` | — | [`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts) |

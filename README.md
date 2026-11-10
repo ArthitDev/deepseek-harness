@@ -18,6 +18,10 @@ Review the [safety notice](SAFETY.md) before running the project.
 
 This repository is the **Shield Break** fork of DeepSeek Harness, tracking upstream `0.2.2-rc.1` with the full upstream feature set plus the Shield Break security-testing capabilities: the pentest control plane (durable runs, supervisor/executor episodes, deterministic recon), target-scope and run-budget guards, saved SSH machines, runtime package invariants, team-based agent swarms, the Exa and Perplexity web-search providers, and the Shield Break terminal UI with Kali WSL integration.
 
+The embedded proxies (ZCode Direct, Antigravity, and SB transport) run on **Bun**; the Harness Host runs on **Node.js**. Make Bun available on the service account's `PATH`. See the [proxy runtime requirements](packages/llm/proxy-server/README.md) and [Bun migration guide](docs/upgrade-guide/v0.2.2-rc.1/embedded-proxy-bun/guide.md).
+
+Use Shield Break only for lawful purposes and authorized security testing. Users are responsible for their use and misuse; the project's liability disclaimer applies only to the extent permitted by law. Read the [lawful-use and liability notice](SAFETY.md#lawful-use-and-user-responsibility).
+
 Before using the security-testing features, review the [pentest lab authorization template](docs/pentest-lab-authorization-template.md) and the [Kali WSL guide](docs/user/guide/kali-wsl.md).
 
 ## Run

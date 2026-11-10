@@ -147,8 +147,9 @@ export class TargetsPane extends VStack {
   /**
    * @param keyboardOwner - Debug pane that retains keyboard focus after tree clicks.
    * @param onFocus - Clear peer panel selection when a mouse click focuses the tree.
+   * @param footer - Optional resize control replacing the passive bottom border; omitted keeps the passive border.
    */
-  constructor(private readonly keyboardOwner: Component & { focused: boolean }, private readonly onFocus: () => void) {
+  constructor(private readonly keyboardOwner: Component & { focused: boolean }, private readonly onFocus: () => void, footer?: Component) {
     super()
     const rule = (width: number, top: boolean): string[] => {
       const title = top ? `╭─ Targets ${this.paneCollapsed ? '▸' : '▾'}${this.focused ? ' · Enter toggle · Tab next' : ''} ` : '╰'
@@ -181,7 +182,7 @@ export class TargetsPane extends VStack {
     }
     this.scroll = new ScrollView(output, { overscroll: 'contain' })
     this.addChild(this.scroll, { basis: 'auto', grow: 1, shrink: 1, minSize: 1, visible: () => !this.paneCollapsed })
-    this.addChild({ invalidate: () => {}, render: width => rule(width, false) }, { basis: 'auto', shrink: 0, visible: () => !this.paneCollapsed })
+    this.addChild(footer ?? { invalidate: () => {}, render: width => rule(width, false) }, { basis: 'auto', shrink: 0, visible: () => !this.paneCollapsed })
   }
 
   private renderRows(width: number): string[] {
@@ -281,4 +282,10 @@ export class TargetsPane extends VStack {
    * @returns true when at least one URL row exists.
    */
   get hasUrls(): boolean { return this.urls.length > 0 }
+
+  /** Whether only the box header is visible; its expanded height is retained by the owner. */
+  get isCollapsed(): boolean { return this.paneCollapsed }
+
+  /** Expanded row count, including the header and footer. */
+  get contentHeight(): number { return this.rows.length + 2 }
 }

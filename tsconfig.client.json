@@ -8,6 +8,7 @@
     ]
   },
   "include": [
+    "apps/web/tests/desktop-boot.spec.ts",
     "apps/desktop/tests/keyboard.spec.ts",
     "apps/desktop/src/keyboard.ts",
     "apps/desktop/src/keybindings.ts",
