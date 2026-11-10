@@ -71,9 +71,9 @@ describe('stream rendering', () => {
       const input = f.start.mock.calls[0]?.[0]
       input?.('\x1b[100;7u')
       input?.('\t')
-      expect(targets()).toContain('Tab Debug')
+      expect(targets()).toContain('╭─ Targets ▾ · Enter toggle · Tab next')
       input?.('\x1b')
-      expect(targets()).not.toContain('Tab Debug')
+      expect(targets()).not.toContain('╭─ Targets ▾ · Enter toggle · Tab next')
       f.screen.submit('/agent-debug')
       expect(targets()).not.toContain('Targets')
       f.screen.submit('/agent-debug')

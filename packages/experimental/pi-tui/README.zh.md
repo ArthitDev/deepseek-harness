@@ -166,7 +166,7 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 
 ## 命令
 
-状态栏会显示 `Kali checking`、`Kali ready` 或 `Kali unavailable`，即使 `/shell` 已关闭。每次探测通过已激活的 `kali` terminal-bash 后端配置的可执行文件和参数运行有时限的只读 Bash 命令；WSL 保留配置的发行版和用户。`ready` 确认 Kali 的系统身份和 Bash 执行能力，不代表 PTY 启动、沙箱访问、网络访问或工具安装状态。探测可能启动已停止的 WSL 发行版。`kaliStatusTimeoutMs` 默认为 10,000 毫秒；`kaliStatusIntervalMs` 默认为每次探测结束后等待 30,000 毫秒。探测不会重叠，TUI 卸载时停止；不会创建终端会话、读取现有 shell 输出、发送模型请求或更改会话历史。
+状态栏会显示 `Kali checking`、`Kali ready` 或 `Kali unavailable`，即使 `/shell` 已关闭。每次探测通过已激活的 `kali` terminal-bash 后端求值后的可执行文件和参数（包括 `!!js` 表达式）运行有时限的只读 Bash 命令；WSL 保留配置的发行版和用户。`ready` 确认 Kali 的系统身份和 Bash 执行能力，不代表 PTY 启动、沙箱访问、网络访问或工具安装状态。探测可能启动已停止的 WSL 发行版。`kaliStatusTimeoutMs` 默认为 10,000 毫秒；`kaliStatusIntervalMs` 默认为每次探测结束后等待 30,000 毫秒。探测不会重叠，TUI 卸载时停止；不会创建终端会话、读取现有 shell 输出、发送模型请求或更改会话历史。
 
 后台 Git 状态、文件搜索、剪贴板辅助进程和 Kali 就绪探测命令在 Windows 上请求隐藏初始窗口。显式打开自身窗口的命令不在此保证范围内。
 

@@ -10,7 +10,7 @@ export type KaliStatus = 'checking' | 'ready' | 'unavailable'
 const PROBE = '. /etc/os-release && [ "$ID" = kali ] && printf "DSH_KALI_READY\\n"'
 
 /**
- * Poll the active backend without opening a PTY or reading operator shell output.
+ * Poll the active backend's evaluated configuration without opening a PTY or reading operator shell output.
  * Missing services/configuration and failed or timed-out commands report unavailable.
  * @param ctx - TUI owner; disposal cancels the current probe and stops polling.
  * @param config - refresh delay after settlement and per-probe deadline, in milliseconds.
@@ -31,13 +31,13 @@ export function watchKaliStatus(
       const terminals = ctx.get('terminals')
       const entry = [...(ctx.get('loader')?.entries() ?? [])].find((entry) => {
         if (entry.options.name !== '@deepseek-ai/dsh-terminal-bash' || entry.fiber?.state !== FiberState.ACTIVE) return false
-        const backend = entry.fiber.config as TerminalLocalConfig
+        const backend = entry.fiber.effectiveConfig as TerminalLocalConfig
         return backend.backendType === 'kali' && backend.shellDialect !== 'pwsh'
       })
       if (entry?.fiber === undefined || !terminals?.listBackends().includes('kali')) {
         update('unavailable')
       } else {
-        const backend = entry.fiber.config as TerminalLocalConfig
+        const backend = entry.fiber.effectiveConfig as TerminalLocalConfig
         const command = backend.shellPath || '/bin/bash'
         const wsl = /^wsl(?:\.exe)?$/i.test(win32.basename(command))
         const args = wsl
