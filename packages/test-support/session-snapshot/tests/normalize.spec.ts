@@ -27,6 +27,24 @@ const ctx: NormalizeContext = {
 }
 
 describe('normalizeStdout', () => {
+  it('scrubs JSON-quoted Windows cwd values without matching longer path prefixes', () => {
+    const cwd = String.raw`C:\Users\tester\Temp\role-test`
+    const raw = JSON.stringify({
+      text: `Current working directory: ${JSON.stringify(cwd)}.`,
+      other: `Keep ${JSON.stringify(cwd + '-other')}.`,
+    })
+    expect(JSON.parse(normalizeStdout(raw, { cwd, sessionIds: [] }))).toEqual({
+      text: 'Current working directory: "{{cwd}}".',
+      other: `Keep ${JSON.stringify(cwd + '-other')}.`,
+    })
+    const fixture = [JSON.stringify({ type: 'session', cwd }), raw].join('\n') + '\n'
+    const tokenized = tokenizeSessionFixtureCwd(fixture).trim().split('\n').map((line): unknown => JSON.parse(line))
+    expect(tokenized).toEqual([
+      { type: 'session', cwd: '{{cwd}}' },
+      { text: 'Current working directory: "{{cwd}}".', other: `Keep ${JSON.stringify(cwd + '-other')}.` },
+    ])
+  })
+
   it('rewrites JSON-RPC ids to a stable first-seen sequence', () => {
     const raw = [
       JSON.stringify({ jsonrpc: '2.0', id: 42, method: 'initialize' }),

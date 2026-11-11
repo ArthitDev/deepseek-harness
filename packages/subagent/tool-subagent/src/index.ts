@@ -63,6 +63,11 @@ export interface Config extends PresetSelectionConfig {
    */
   modelDiscovery?: boolean
   /**
+   * Optional task roles exposed through `role`; omission leaves the task unchanged.
+   * Values are child instructions, not tool or model restrictions.
+   */
+  roles?: Record<string, string> | undefined
+  /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
   agentOptions?: AgentOptions
@@ -84,6 +89,7 @@ export const Config: z<Config> = z.object({
   toolName: z.string().default('subagent'),
   modelSelection: z.boolean().default(false),
   modelDiscovery: z.boolean().default(false),
+  roles: (z.dict(z.string().min(1)) as z<Record<string, string> | undefined>).default(undefined),
   // Prevent Schemastery from materializing omitted agentOptions as `{}`.
   agentOptions: z.object({
     provider: z.string(),
@@ -153,6 +159,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }
   }
   const presets = new SubagentPresetSelection(config)
+  if (config.roles !== undefined && (Object.keys(config.roles).length === 0
+    || Object.entries(config.roles).some(([role, instructions]) => role.trim() === '' || instructions.trim() === ''))) {
+    throw new Error('tool-subagent: roles must contain non-empty role names and instructions')
+  }
   if (presets.configured && ctx.get('agentPresets') === undefined) {
     throw new Error('tool-subagent: agent preset selection requires the agent-presets service')
   }
@@ -234,7 +244,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         prompt: {
           type: 'string',
           required: true,
-          description: wording.promptDescription,
+          description: wording.promptDescription + (config.roles === undefined ? ''
+            : ' Include the goal, needed context and skills, assigned files, acceptance checks, and constraints. A role supplements this task; it does not supply missing project context.'),
+        },
+        ...config.roles === undefined ? {} : {
+          role: {
+            type: 'string' as const,
+            enum: Object.keys(config.roles),
+            description: 'Optional task role. Omit to keep the task unchanged. Roles do not change the child preset, model, tools, or permissions.\n'
+              + Object.entries(config.roles).map(([role, instructions]) => `${role}: ${instructions}`).join('\n'),
+          },
         },
         ...presets.choices === undefined ? {} : {
           agent_preset: {
@@ -277,6 +296,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           // Non-agent callers provide no parent for delegation ownership.
           throw new Error('subagent tool requires a calling agent (exec.agent was undefined)')
         }
+        const role = args.role
+        let roleInstructions: string | undefined
+        if (role !== undefined) {
+          if (config.roles === undefined || !Object.hasOwn(config.roles, role)) {
+            throw new Error('role must name one of the configured subagent roles')
+          }
+          roleInstructions = `Delegated role: ${role}\n${config.roles[role]}`
+        }
 
         const routes = subagentModelSelectionPolicy(subagentModelSelectionProjectionHandle, parent.session)
         const modelSelectionPolicy = routes === undefined ? undefined : { routes }
@@ -316,7 +343,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         const maxDepth = ctx.subagents.resolveMaxDepth(config.maxDepth)
         const request = {
           ...args.cwd === undefined ? {} : { cwd: args.cwd },
-          prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
+          prompt: [
+            ...roleInstructions === undefined ? [] : [{ type: 'text' as const, text: roleInstructions }],
+            { type: 'text', text: args.prompt },
+          ] as ContentBlock[],
           parent,
           ...agentPreset === undefined ? {} : { agentPreset },
           ...requestedChildAgentOptions !== undefined ? { agentOptions: requestedChildAgentOptions } : {},

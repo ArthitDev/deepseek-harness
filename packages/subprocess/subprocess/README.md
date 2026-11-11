@@ -79,7 +79,10 @@ A terminal request can opt into `shellActivity`. `inspectActivity()` combines su
 
 Children never inherit the harness's ambient secrets: credential-shaped names and ambient `DSH_*` facts are scrubbed, and the caller's explicit `env` merges after that scrub. A deliberately forwarded credential or a current `DSH_*` deployment fact still reaches the child; an explicit `undefined` tombstone removes an ordinary ambient entry.
 
+<a id="what-can-go-wrong"></a>
 ### What can go wrong
+
+`SubprocessWorkingDirectoryError` identifies a failed local start whose requested directory was subsequently confirmed missing or not a directory. Its `code` is `INVALID_WORKDIR`, `workdir` retains the request, and `reason` is `missing` or `not-directory`. The original start error, including its machine fields, remains in `cause`. The directory observation can race with filesystem changes; it does not establish that the executable exists.
 
 An executable that cannot be resolved fails loudly with a stable error. A spawn that never starts rejects `done`; there is no buffered output for a process that never ran. `waitForExit()` also rejects when the provider cannot prove its selected range is empty, and a provider fallback may not own descendants that escape its process group or observed session. When a transport owns its own spawn (the SDK client, MCP), route around the service and import `scrubbedParentEnv` directly so environment policy stays single-sourced.
 

@@ -48,6 +48,7 @@ kind: "package-reference"
 | `toolName` | `subagent` | 面向模型的工具名称；每个已加载实例必须不同 |
 | `modelSelection` | `false` | 公开可选子级路由字段；要求提供方支持 `agentOptions` |
 | `modelDiscovery` | `false` | 注册 `list_subagent_models`；每个工具作用域仅在一个实例上启用 |
+| `roles` | 未设置 | 角色名称到子级指令的映射；公开可选的 `role`，不改变子级组合或路由 |
 | `agentOptions` | — | 配置的子级 `provider`、`model`、适配器所有的 `reasoningEffort` 与正整数 `maxTokens` 默认值；要求提供方支持 `agentOptions`，并会覆盖提供方持有的路由默认值 |
 | `agentPreset` | — | 独立子级 preset 的默认 id；要求进程内 spawn |
 | `allowedAgentPresets` | — | 非空 preset-id 白名单，作为模型可选的 `agent_preset` 枚举；与 `agentPreset` 同时配置时必须包含后者 |
@@ -71,6 +72,14 @@ kind: "package-reference"
 重复或空 preset id 在加载时被拒绝。调用启动子级时解析选中的 preset；未知或无法加载的 preset 返回出错的工具结果，不会启动子级。创建父 Agent 或切换其 preset 时不解析子级引用。两个选择字段都省略时，工具不要求 preset 服务。模型省略选择时使用配置的 `agentPreset`；若也没有默认值，则加入父方当前 preset 代际。任何显式 id 都挂载当前可用代际，即使与父方 id 相同。
 
 在 [preset 插件列表](../../preset/agent-preset-registry/README.zh.md)中配置 persona 与工具。包含 `persona` 或 `toolFilter` 的工具配置在加载时会报迁移错误。本地子级采用共享的 [preset 恢复规则](../subagent/README.zh.md#restoring-child-composition)。
+
+### 选择任务角色
+
+随附的角色指导要求子级在返回前检查当前 preset 与任务要求的输出。纠正失败尝试时，指导要求子级指出变更的参数，并区分新结果与原始失败。这些是报告指令，不是运行时强制措施，也不保证模型遵守。
+
+配置 `roles`，即可独立于 `agent_preset` 公开可选的任务指导。例如，`roles: { explore: 'Inspect the assigned files and return evidence and limits.' }` 允许调用传入 `role: explore`。共享基础层与随附的 Web spawn 工具提供 `explore`、`implement` 和 `verify`；fork 保持不变。替换 spawn 工具配置的 preset 必须包含 `roles` 才能提供这些选项。角色选择不改变子级 preset、模型、工具或权限，也不强制委派。
+
+父级在 `prompt` 中提供目标、必要上下文与技能、负责文件、验收检查和约束。选定角色作为独立文本块放在原样保留的任务之前，因此与子级输入一起记录，并采用常规恢复与上下文压缩处理。省略时不添加内容；未配置的角色在启动前失败。空映射、名称或指令在加载时失败。角色指令仅提供指导，不提供文件系统隔离，也不保证完成报告真实。父级在整合前审查结果并核验依据。
 
 ### 选择子级 LLM
 
@@ -204,6 +213,20 @@ Delegation depth for `subagent`: current 1, maximum 1, remaining levels 0. Do no
 #### KV Cache 影响
 
 深度变化不改变系统提示词或工具 schema。更新的运行时上下文追加在已有历史之后；模型尝试委派时，提供方仍会强制执行上限。
+
+### 任务角色
+
+#### 模型看到什么
+
+配置的角色名称与指令出现在可选的 `role` 参数中。只有选中角色的指令放在子级原样保留的任务之前。
+
+#### Token 影响
+
+角色名称与指令为父级请求增加固定 schema 文本。省略 `role` 不增加子级上下文。
+
+#### KV Cache 影响
+
+角色配置在编辑前保持前缀稳定。选择角色只追加任务文本，不改变子级系统提示词或工具。
 
 ### 启动结果
 

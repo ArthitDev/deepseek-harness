@@ -29,6 +29,8 @@ Desktop analytics follows the [product collection policy](../../client/product-a
 
 Prompt retries use the request identity in the first committed inbox insertion, including after the message is claimed or removed. Admission checks again after asynchronous attachment preparation, so concurrent retries accept one input. Acceptance acknowledges insertion, not execution or completion.
 
+`session.cancel` stops the current turn and retains the Agent for further conversation. `session.delete` releases an idle Agent created, resumed, or forked by this controller and waits for its writer to close before deleting stored history. Active Session work and Agents owned by another capability reject with `session/agent-busy`; failed disposal preserves history and workspace membership. Create, resume, and delete operations for the same identity serialize. Deletion keeps the working directory.
+
 The controller reads a Session's recorded preset through the optional `agentPresets.presetForSession(session)` service method. A null result means no preset was recorded; an absent service means preset identity is unavailable to the controller.
 
 History pages and follow opening snapshots carry one `{ type: 'event', event: SessionWireEvent }` record per durable Session event. The Client retains each accepted record as one durable `SessionEventLikeEntry`; Assistant token boundaries remain inside the compact stream on `assistant/message` or `assistant/attempt`. Tool arguments, result content, failures, and `tool/result.data.meta` pass through unchanged; the controller does not resolve a Tool definition, run a presenter, or attach UI data.

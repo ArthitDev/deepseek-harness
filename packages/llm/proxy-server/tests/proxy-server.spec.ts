@@ -9,6 +9,7 @@ import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import Settings from '@deepseek-ai/dsh-settings'
 import LlmRuntime, { type StreamChunk, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 import ProxyServers from '../src/index.ts'
+import type { ProxyId } from '../src/types.ts'
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((complete) => { server.listen(0, '127.0.0.1', complete) })
@@ -31,6 +32,7 @@ async function fixture() {
     zcodeEnabled: true, antigravityEnabled: true, sbEnabled: true,
     zcodePort: 1, antigravityPort: 2, sbPort: 3, zcodeProviders: ['zcode-direct'],
     antigravityProviders: ['antigravity'], sbProviders: ['sb'], startupTimeoutMs: 1000,
+    externalProxies: [] as ProxyId[],
   }
   const dir = join(root, 'profiles/test')
   await mkdir(dir, { recursive: true })
@@ -182,4 +184,51 @@ it('blocks a disabled direct or routed model request while other providers proce
   expect(next).not.toHaveBeenCalled()
   await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { ...request, provider: 'other' }, next))
   expect(next).toHaveBeenCalledOnce()
+})
+
+
+it.each(['zcode', 'antigravity', 'sb'] as const)('uses externally managed %s without owning its lifecycle', async (id) => {
+  const f = await fixture()
+  f.config.externalProxies = [id]
+  const external = createServer((_req, res) => {
+    if (id === 'zcode') res.setHeader('x-dsh-proxy-service', 'zcode-proxy')
+    res.end(JSON.stringify({ service: id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy' }))
+  })
+  f.config[id === 'zcode' ? 'zcodePort' : id === 'antigravity' ? 'antigravityPort' : 'sbPort'] = await listen(external)
+  onTestFinished(() => close(external))
+  const service = await f.mount()
+  expect((await service.list()).find(row => row.id === id)).toMatchObject({ available: true, status: 'external' })
+  await service.setEnabled(id, true)
+  const next = vi.fn(async function* (): AsyncGenerator<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } })
+  const request: GenerateOptions = { provider: id === 'zcode' ? 'zcode-direct' : id, model: 'fixture', messages: [] }
+  expect(await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', request, next))).toMatchObject([{ type: 'finish', reason: { kind: 'stop' } }])
+  await service.setEnabled(id, false)
+  next.mockClear()
+  expect(await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', request, next))).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: 'proxy-server/disabled' } } }])
+  expect(next).not.toHaveBeenCalled()
+  await f.ctx.fiber.dispose()
+  expect(external.listening).toBe(true)
+})
+
+it('rejects an externally configured ZCode listener without its integration identity', async () => {
+  const f = await fixture()
+  f.config.externalProxies = ['zcode']
+  const external = createServer((_req, res) => { res.writeHead(401); res.end('{}') })
+  f.config.zcodePort = await listen(external)
+  onTestFinished(() => close(external))
+  const service = await f.mount()
+  expect((await service.list()).find(row => row.id === 'zcode')).toMatchObject({ available: false, status: 'port-in-use' })
+  await expect(service.setEnabled('zcode', true)).rejects.toThrow('managed externally')
+  expect(external.listening).toBe(true)
+})
+
+it('reports an unavailable external service without trying the local installation', async () => {
+  const f = await fixture()
+  f.config.externalProxies = ['zcode']
+  const reservation = createServer()
+  f.config.zcodePort = await listen(reservation)
+  await close(reservation)
+  const service = await f.mount()
+  await expect(service.setEnabled('zcode', true)).rejects.toThrow('managed externally')
+  expect((await service.list()).find(row => row.id === 'zcode')).toMatchObject({ available: false, status: 'stopped' })
 })

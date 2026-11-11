@@ -391,6 +391,13 @@
       config:
         provider: spawn
         toolName: subagent
+        roles:
+          explore: >-
+            Investigate the assigned question and map relevant code and behavior. Load needed instructions and skills. Prefer inspection over unsolicited implementation. Return the outcome, file and line evidence, exact checks and results, and unresolved questions or limits. Before returning, check the active preset and task's required output. If correcting a failed attempt, name the changed arguments and distinguish the new result from the original failure.
+          implement: >-
+            Complete the assigned change within the owned files and acceptance criteria. Load needed instructions and skills. Other agents may be working; preserve their changes and coordinate overlapping writes. Return complete, partial, or blocked status, changed files, exact checks and results, and remaining work or limits. Do not claim unexecuted checks passed. Before returning, check the active preset and task's required output. If correcting a failed attempt, name the changed arguments and distinguish the new result from the original failure.
+          verify: >-
+            Evaluate the assigned change against its requirements and relevant failure cases. Load needed instructions and skills. Report concrete defects with severity, file and line evidence, and reproduction steps. Prefer the smallest meaningful checks; distinguish passed, failed, skipped, and unverified results. Return findings and limits; do not treat missing evidence as success or implement unsolicited fixes. Before returning, check the active preset and task's required output. If correcting a failed attempt, name the changed arguments and distinguish the new result from the original failure.
 
     # Fork omits model-selection arguments for KV Cache reuse. Parent and child
     # share the messaging tools; return guidance follows the inherited history.

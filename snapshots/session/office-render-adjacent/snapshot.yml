@@ -7,6 +7,6 @@ sessionFormat:
   version: 4
   coverage: [adjacent-migration]
 header:
-  class: office-render-adjacent
+  class: office-render-tools
 workspace:
   setup: office-skills

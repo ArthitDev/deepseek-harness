@@ -69,6 +69,8 @@ Linux 普通进程和终端进程即使在 bootstrap 消费启动请求前被取
 
 ### 可能出错的地方
 
+普通启动在进程启动 syscall 上以 `ENOENT` 或 `ENOTDIR` 失败后，提供方检查请求的工作目录。确认路径不存在或不是目录时，`done` 以 [`SubprocessWorkingDirectoryError`](../subprocess/README.zh.md#what-can-go-wrong) reject，并将原始失败保留为 `cause`。目录存在、检查无定论、精确的取消原因或无关失败均保留原始错误。启动成功不会增加目录检查，启动失败绝不重试。此观察可能与文件系统变化竞争；终端分配保留原有错误。
+
 无法解析的可执行文件会明确报出稳定错误。当 spawn 或提供方故障使 direct outcome 无法产生时，`done` 会 reject；该 rejection 不能证明 target 是否已经开始执行。若所选 owner 无法再证明其范围为空，`waitForExit()` 会 reject，清理仍会尝试终止。越过保留尾部的读取是 `lossy` 的，并在 spill 文件存在时指向它。fallback 进程组或已观察终端 session 可能遗漏在观察前逃逸的后代——见下文限制。
 
 -----

@@ -3211,7 +3211,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'delete\') async delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>',
-        description: 'Permanently delete one stored Session: workspace accounting is forgotten, the stored history is removed, and the Session working directory is kept. A Session with a live Agent refuses; stop it (or archive it with stop) first. Unknown ids refuse as not-found.',
+        description: 'Permanently delete one stored Session: workspace accounting is forgotten, the stored history is removed, and the Session working directory is kept. An idle API-owned Agent is disposed before storage deletion. Active work and Agents owned by another capability refuse. Unknown ids refuse as not-found.',
         parameters: [{ name: 'request', description: 'Session identity to delete.' }, { name: 'signal', description: 'cancellation observed before the storage commit.' }],
         returns: 'confirmation after durable deletion and list removal.',
       },
@@ -4384,7 +4384,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async assemble(context: AssembleContext = {}): Promise<PromptAssembly>',
-        description: 'Assemble global and scoped providers, detach tool parameters, apply canonical ordering, then run the presentation waterfall. Scoped sections and variables shadow globals. The waterfall\'s text is authoritative except that an effective complete section is restored afterwards as the sole prompt section; tool declarations stay provider-owned.',
+        description: 'Assemble global and scoped providers, detach tool parameters, apply canonical ordering, then run the presentation waterfall. Scoped sections and variables shadow globals. The waterfall\'s text is authoritative except that an effective complete section is restored afterwards as the sole contributed prompt section. The fixed external-content policy is prepended afterwards when enabled; tool declarations stay provider-owned.',
         parameters: [{ name: 'context', description: 'the optional scope, step tool set, and plugin-defined assembly fields.' }],
         returns: 'the post-waterfall assembly with ordered tool declarations and any complete prompt enforced.',
       },
@@ -5830,7 +5830,7 @@ export const EVENT_API: readonly EventApiEntry[] = [
     mode: 'waterfall',
     signature: '\'system-prompt/assemble\'(this: Scoped<SystemPrompt>, assembly: PromptPresentation, context: AssembleContext, next: () => Promise<PromptPresentation>): Promise<PromptPresentation>',
     summary: 'Presentation waterfall over assembled sections, contexts, and variables.',
-    description: 'Presentation waterfall over assembled sections, contexts, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope\'s assemblies. The returned text is authoritative; tool declarations remain provider-owned. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope\'s system prompt.',
+    description: 'Presentation waterfall over assembled sections, contexts, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope\'s assemblies. The returned text is authoritative; tool declarations remain provider-owned. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope\'s contributed prompt. The fixed external-content policy is prepended afterwards when enabled.',
     parameters: [{ name: 'assembly', description: 'the mutable assembly built from registered providers.' }, { name: 'context', description: 'the caller\'s per-assembly context.' }],
   },
   {

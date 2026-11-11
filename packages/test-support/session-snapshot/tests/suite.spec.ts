@@ -1083,6 +1083,19 @@ describe('stabilizeFixtureMessageIds', () => {
 })
 
 describe('refreshFixtureReplacements', () => {
+  it('stabilizes Windows cwd values quoted inside error text without losing the diagnostic', () => {
+    const cwd = String.raw`C:\Users\tester\Temp\snapshot-run`
+    const log = (path: string): string => [
+      JSON.stringify({ type: 'session', id: 'same', createdAt: 1, cwd: path }),
+      JSON.stringify({ type: 'tool/result', data: { text: `workdir ${JSON.stringify(path + '/missing')} does not exist` } }),
+      '',
+    ].join('\n')
+    const fresh = log(cwd)
+    const existing = log('{{cwd}}')
+    const replacements = refreshFixtureReplacements([{ id: 'same', createdAt: 1, content: fresh }], [existing])
+    expect(stabilizeRefreshLog(fresh, existing, replacements, { cwd, sessionIds: ['same'] })).toBe(existing)
+  })
+
   it('maps fresh ids and cwd values to the existing fixture values, skipping non-replacements', () => {
     const log = (content: string): HarvestedLog => ({ id: 'diagnostic', createdAt: 1, content })
     const logs = [

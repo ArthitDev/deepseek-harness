@@ -122,6 +122,7 @@ function cwdSpellings(ctx: NormalizeContext): string[] {
     .filter(spelling => spelling.startsWith('/') && !spelling.startsWith('/private/'))
     .map(spelling => `/private${spelling}`)
   return [...new Set([...spellings, ...macAliases])]
+    .flatMap(spelling => [spelling, JSON.stringify(spelling).slice(1, -1)])
     .sort((left, right) => right.length - left.length)
 }
 

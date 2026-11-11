@@ -39,7 +39,7 @@ export interface Config {
    * text shadows the deployment suffix away; interpolation is strict.
    */
   suffix?: string
-  /** Make the prefix the complete system prompt, suppressing the suffix and every other section. */
+  /** Replace contributed prompt sections with the prefix; an enabled external-content policy remains. */
   complete?: boolean
   /** Suppress dynamic runtime-context snapshots for this persona's agent scope. */
   includeRuntimeContext?: boolean

@@ -830,6 +830,14 @@ export function refreshFixtureReplacements(logs: HarvestedLog[], fixtures: strin
       const from = fresh?.[field]
       const to = existing?.[field]
       if (typeof from === 'string' && typeof to === 'string' && from.length > 0 && from !== to) {
+        if (field === 'cwd') {
+          const escapedFrom = JSON.stringify(from).slice(1, -1)
+          const escapedTo = JSON.stringify(to).slice(1, -1)
+          if (escapedFrom !== from) {
+            replacements.push({ from: JSON.stringify(escapedFrom).slice(1, -1), to: JSON.stringify(escapedTo).slice(1, -1) })
+            replacements.push({ from: escapedFrom, to: escapedTo })
+          }
+        }
         replacements.push({ from, to })
       }
     }

@@ -32,7 +32,9 @@ kind: "package-reference"
 
 可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`、`antigravity`、`sb`/`sb-proxy`。模型前缀 `zcode/`、`antigravity/` 和 `sb/` 也会选择对应代理。其他模型路由保持委托行为。
 
-ZCode 需要 Bun、已构建的 worker bundle，以及 `ZCODE_DIR` 或 `third-party/zcode-api` 中已有的 `config.yaml`。三个代理都要求 `PATH` 中存在 Bun；Antigravity 和 SB 通过 `bun --no-env-file` 运行内置 JavaScript，保留 Host 传入的环境，不额外加载 `.env` 文件。Harness Host 仍使用 Node.js。服务不创建凭据，不执行登录、OAuth 设置或上游模型请求。设置失败和缺失的本地配置会报告给操作者。
+`externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode`、`antigravity` 或 `sb`。Harness 验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
+
+对于由 Harness 管理的代理，ZCode 需要 Bun、已构建的 worker bundle，以及 `ZCODE_DIR` 或 `third-party/zcode-api` 中已有的 `config.yaml`。三个代理都要求 `PATH` 中存在 Bun；Antigravity 和 SB 通过 `bun --no-env-file` 运行内置 JavaScript，保留 Host 传入的环境，不额外加载 `.env` 文件。Harness Host 仍使用 Node.js。服务不创建凭据，不执行登录、OAuth 设置或上游模型请求。设置失败和缺失的本地配置会报告给操作者。
 
 <a id="further-exploration"></a>
 ## 进一步探索
@@ -63,7 +65,7 @@ ZCode 需要 Bun、已构建的 worker bundle，以及 `ZCODE_DIR` 或 `third-pa
 <a id="known-limitations-and-deferred-work"></a>
 
 - 通过配置的提供方 id 和模型前缀识别路由，不检查任意提供方的 base URL。
-- ZCode 仅对由此 Host 启动的子进程使用 `/v1/models` 返回 HTTP 200/401 判断就绪。由于此检出目录没有 ZCode 的唯一健康端点，非本 Host 拥有的 ZCode 监听进程显示为 `port-in-use`，既不复用也不停止。
+- 未在 `externalProxies` 中明确声明的非本 Host 拥有的 ZCode 监听进程仍显示为 `port-in-use`，既不复用也不停止。集成身份响应头仅标识部署，不授权模型请求，也不证明上游账号配额。
 - 代理配置和认证必须已存在。此页面不能安装缺失的 ZCode 源码。
 - 通用插件配置修改会影响后续请求路由；需要立即停止受管进程时使用 `setEnabled`。
 - 受管启动路径相对于检出目录；打包安装需要在安装根目录提供代理脚本。

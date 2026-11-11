@@ -946,8 +946,8 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 /**
  * Permanently delete one stored Session: workspace accounting is forgotten,
  * the stored history is removed, and the Session working directory is kept.
- * A Session with a live Agent refuses; stop it (or archive it with stop)
- * first. Unknown ids refuse as not-found.
+ * An idle API-owned Agent is disposed before storage deletion. Active work
+ * and Agents owned by another capability refuse. Unknown ids refuse as not-found.
  * @param request - Session identity to delete.
  * @param signal - cancellation observed before the storage commit.
  * @returns confirmation after durable deletion and list removal.

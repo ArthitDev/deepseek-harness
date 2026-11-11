@@ -78,6 +78,8 @@ Retained historical scenarios keep their canonical Session files unchanged and s
 
 Headless/ACP and SDK adapters compare raw catalog child-creation times with harvested child headers before normalization. Refresh preserves the chosen child header time in every matching catalog entry, including inherited copies, so retained header clocks cannot diverge from freshly written catalog clocks. Committed historical inconsistencies remain unchanged migration-refusal evidence; normalizing their clocks does not establish successful migration.
 
+Generated cwd normalization covers raw paths and JSON-quoted paths embedded in text, including Windows backslashes. A longer path segment sharing the same prefix remains unchanged during normalization. Refresh write-back retains both serialized spellings before replacing the generated cwd in the header.
+
 ### Record, replay, and refresh
 
 Refresh normalizes each complete Session log before reusing volatile fields, so job ids retain the same references in registration events, tool output, and later tool calls.

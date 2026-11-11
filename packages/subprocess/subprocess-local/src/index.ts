@@ -51,6 +51,7 @@ import { createProcessInspector } from './process-inspector.ts'
 import type { ProcessInspector } from './process-inspector.ts'
 import { LocalTerminalHandle } from './terminal.ts'
 import { prepareShellActivity } from './shell-activity.ts'
+import { rejectWithWorkingDirectory } from './working-directory-error.ts'
 
 const requireNodePty = createLazyRequire<typeof NodePty>('node-pty', import.meta.url)
 
@@ -211,6 +212,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
       handle = bindManagedProcess(spec, launch, binding)
       if (linuxScope !== undefined) this.watchLinuxScopeStart(handle.done, linuxScope.generation)
     }
+    handle = { ...handle, done: handle.done.catch((error: unknown) => rejectWithWorkingDirectory(error, spec.cwd, spec.signal)) }
     this.live.add(handle)
     const control = handle.control
     if (control !== undefined) {

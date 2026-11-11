@@ -1,0 +1,10 @@
+version: 1
+scenario: subagent-task-role
+profile: headless
+composition: subagent-task-role
+recording: authored
+header:
+  class: subagent-task-role
+  pin: true
+  childSystemPrompts: [1]
+  childToolSchemas: [1]

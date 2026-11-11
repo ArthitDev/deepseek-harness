@@ -48,6 +48,7 @@ Load the subagent service, an in-process or remote backend, and this tool; then 
 | `toolName` | `subagent` | Model-facing tool name; distinct for every loaded instance |
 | `modelSelection` | `false` | Expose optional child route fields; requires provider `agentOptions` support |
 | `modelDiscovery` | `false` | Register `list_subagent_models`; enable on one instance per tool scope |
+| `roles` | unset | Role-name to child-instructions map; exposes optional `role` without changing the child composition or route |
 | `agentOptions` | — | Configured child `provider`, `model`, adapter-owned `reasoningEffort`, and positive `maxTokens` defaults; requires provider `agentOptions` support and overlays any provider-owned route defaults |
 | `agentPreset` | — | Default independent child preset id; requires in-process spawn |
 | `allowedAgentPresets` | — | Non-empty preset-id allowlist exposed as the model's optional `agent_preset` enum; must include `agentPreset` when both are set |
@@ -71,6 +72,14 @@ Set `agentPreset` to give every child an independent preset by default. Set `all
 Duplicate or empty preset ids fail at load. The selected preset is resolved when a call starts the child; an unknown or unloadable preset returns an errored tool result without starting a child. Creating a parent Agent or switching its preset does not resolve child references. Without either selection field, the tool does not require the preset service. An omitted model choice uses the configured `agentPreset`, or joins the parent's current preset revision when no default is configured. Any explicit id mounts the currently available revision, even when it matches the parent's id.
 
 Compose persona and tools in the [preset plugin list](../../preset/agent-preset-registry/README.md). Tool configuration containing `persona` or `toolFilter` fails at load with a migration error. Local children use the shared [preset restoration rules](../subagent/README.md#restoring-child-composition).
+
+### Selecting a task role
+
+Shipped role guidance asks the child to check the active preset and task's required output before returning. When correcting a failed attempt, it asks the child to name changed arguments and distinguish the new result from the original failure. These are reporting instructions, not runtime enforcement or a guarantee of model compliance.
+
+Configure `roles` to expose optional task guidance independently of `agent_preset`. For example, `roles: { explore: 'Inspect the assigned files and return evidence and limits.' }` lets a call supply `role: explore`. The shared base and shipped Web spawn tools offer `explore`, `implement`, and `verify`; fork remains unchanged. Presets that replace the spawn tool's configuration must include `roles` to offer these choices. Role selection neither changes the child preset, model, tools, permissions, nor requires delegation.
+
+The parent supplies the goal, required context and skills, owned files, acceptance checks, and constraints in `prompt`. A selected role becomes a separate text block before that unchanged task, so it is logged with the child's input and survives ordinary resume and compaction handling. Omission adds nothing; an unconfigured role fails before startup. Empty maps, names, or instructions fail at load. Role instructions are advisory and do not provide filesystem isolation or guarantee truthful completion reports. The parent reviews results and checks evidence before integration.
 
 ### Selecting a child LLM
 
@@ -204,6 +213,20 @@ One short contribution per capped tool joins the user-role runtime-context snaps
 #### KV Cache effect
 
 Depth changes do not alter the system prompt or tool schemas. Updated runtime context appends after existing history; the provider still enforces the cap if the model attempts delegation.
+
+### Task roles
+
+#### What the model sees
+
+Configured role names and instructions appear in the optional `role` parameter. Only the selected role's instructions precede the child's unchanged task.
+
+#### Token effect
+
+Role names and instructions add fixed schema text to parent requests. Omitting `role` adds no child context.
+
+#### KV Cache effect
+
+Role configuration is prefix-stable until edited. Selecting a role appends task text without changing the child's system prompt or tools.
 
 ### Start result
 

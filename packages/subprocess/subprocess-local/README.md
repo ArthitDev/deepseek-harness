@@ -69,6 +69,8 @@ Linux ordinary and terminal cancellation preserves the observed termination sign
 
 ### What can go wrong
 
+After an ordinary start fails with `ENOENT` or `ENOTDIR` on a process-start syscall, the provider inspects the requested working directory. A confirmed missing or non-directory path rejects `done` with [`SubprocessWorkingDirectoryError`](../subprocess/README.md#what-can-go-wrong), retaining the original failure as `cause`. An existing directory, inconclusive inspection, exact cancellation reason, or unrelated failure preserves the original error. Successful starts add no directory inspection, and failed starts are never retried. This observation can race with filesystem changes; terminal allocation keeps its existing errors.
+
 An executable that cannot be resolved fails loud with a stable error. `done` rejects when spawn or provider failure prevents a direct outcome, and that rejection does not prove whether target execution began. `waitForExit()` rejects if the selected owner can no longer prove its range empty, and cleanup still attempts termination. A read past the retained tail is `lossy` and points at the spill file when one exists. A fallback process group or observed terminal session can miss a descendant that escapes before observation — see the limitations below.
 
 -----

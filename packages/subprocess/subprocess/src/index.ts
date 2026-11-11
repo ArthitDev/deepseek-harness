@@ -175,3 +175,23 @@ export class SubprocessExecutableNotFoundError extends Error {
     this.name = 'SubprocessExecutableNotFoundError'
   }
 }
+
+/** A local start failure followed by confirmation that its working directory is unusable. */
+export class SubprocessWorkingDirectoryError extends Error {
+  /** Stable classification; the original OS code remains on cause. */
+  readonly code = 'INVALID_WORKDIR'
+
+  /**
+   * @param workdir - requested working directory.
+   * @param reason - directory state observed after the start failure.
+   * @param options - original start failure retained as the cause.
+   */
+  constructor(
+    public readonly workdir: string,
+    public readonly reason: 'missing' | 'not-directory',
+    options: ErrorOptions,
+  ) {
+    super(`Cannot start process: workdir ${JSON.stringify(workdir)} ${reason === 'missing' ? 'does not exist' : 'is not a directory'}. Set workdir to an existing directory before retrying.`, options)
+    this.name = 'SubprocessWorkingDirectoryError'
+  }
+}

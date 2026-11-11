@@ -53,6 +53,8 @@ export interface Config {
   zcodeProviders: string[]
   /** Provider ids routed through Antigravity. */
   antigravityProviders: string[]
+  /** Proxies run by an external service manager; Harness probes but never spawns or stops them. */
+  externalProxies: ProxyId[]
   /** Provider ids routed through SB transport. */
   sbProviders: string[]
   /** Maximum time in milliseconds to wait for a managed proxy to become healthy. */
@@ -86,14 +88,15 @@ async function listening(port: number): Promise<boolean> {
 }
 
 /** Validate sidecar identity without reading model output or authentication state. */
-async function healthy(server: Descriptor, ownedZcode = false): Promise<boolean> {
-  // ZCode has no unique health identity; generic HTTP status cannot identify an unowned listener.
-  if (server.id === 'zcode' && !ownedZcode) return false
+async function healthy(server: Descriptor, ownedZcode = false, external = false): Promise<boolean> {
+  // External ZCode must identify this integration; a generic 200/401 is insufficient.
+  if (server.id === 'zcode' && !ownedZcode && !external) return false
   return new Promise((complete) => {
     const request = get({ hostname: '127.0.0.1', port: server.port, path: server.id === 'zcode' ? '/v1/models' : '/health', signal: AbortSignal.timeout(1000) }, (response) => {
       if (server.id === 'zcode') {
         response.resume()
-        complete(response.statusCode === 401 || response.statusCode === 200)
+        complete((response.statusCode === 401 || response.statusCode === 200)
+          && (!external || response.headers['x-dsh-proxy-service'] === 'zcode-proxy'))
         return
       }
       let body = ''
@@ -126,6 +129,7 @@ export default class ProxyServers extends TypertRemoteService {
     zcodeProviders: z.array(z.string()).default(['zcode-direct']),
     antigravityProviders: z.array(z.string()).default(['antigravity']),
     sbProviders: z.array(z.string()).default(['sb', 'sb-proxy']),
+    externalProxies: z.array(z.union(['zcode', 'antigravity', 'sb'] as const)).default([]),
     startupTimeoutMs: z.number().step(1).min(100).default(15_000),
   })
   private readonly servers: Descriptor[]
@@ -163,12 +167,17 @@ export default class ProxyServers extends TypertRemoteService {
    */
   @Remote
   async list(): Promise<ProxyServerRow[]> {
-    return Promise.all(this.servers.map(async server => ({
-      id: server.id, name: server.name, endpoint: `http://127.0.0.1:${server.port}/v1`,
-      enabled: server.enabled.get(), available: server.files.every(file => existsSync(file)), providers: server.providers,
-      status: await healthy(server, this.owned.has(server.id)) ? this.owned.has(server.id) ? 'running' : 'external'
-        : await listening(server.port) ? 'port-in-use' : 'stopped',
-    })))
+    return Promise.all(this.servers.map(async (server) => {
+      const external = this.config.externalProxies.includes(server.id)
+      const ready = await healthy(server, this.owned.has(server.id), external)
+      return {
+        id: server.id, name: server.name, endpoint: `http://127.0.0.1:${server.port}/v1`,
+        enabled: server.enabled.get(), available: external ? ready : server.files.every(file => existsSync(file)),
+        providers: server.providers,
+        status: ready ? this.owned.has(server.id) ? 'running' : 'external'
+          : await listening(server.port) ? 'port-in-use' : 'stopped',
+      }
+    }))
   }
 
   /** Persist usage and start or stop the selected proxy. Other proxies and external processes remain untouched.
@@ -231,7 +240,11 @@ export default class ProxyServers extends TypertRemoteService {
   }
 
   private async start(server: Descriptor): Promise<void> {
-    if (await healthy(server, this.owned.has(server.id))) return
+    const external = this.config.externalProxies.includes(server.id)
+    if (await healthy(server, this.owned.has(server.id), external)) return
+    if (external) {
+      throw new RemoteError('proxy-server/start-failed', `${server.name} is managed externally; start or repair its service`, { id: server.id })
+    }
     if (this.owned.has(server.id)) {
       throw new RemoteError('proxy-server/start-failed', `${server.name} child is not ready; turn it off before retrying`, { id: server.id })
     }

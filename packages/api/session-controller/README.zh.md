@@ -29,6 +29,8 @@ kind: "package-reference"
 
 提示重试按首次已提交入队记录中的请求标识去重，消息被领取或删除后仍然有效。异步附件准备结束后再次检查，因此并发重试只接受一条输入。接受确认入队，不代表执行或完成。
 
+`session.cancel` 停止当前轮次并保留 Agent，以便继续对话。`session.delete` 对本控制器创建、恢复或 fork 的空闲 Agent 执行 dispose（资源释放），等待其写入句柄关闭后才删除存储的历史。Session 仍有活动任务或 Agent 由其他能力持有时，以 `session/agent-busy` 拒绝；dispose 失败时保留历史和工作区成员关系。同一标识的创建、恢复和删除操作串行执行。删除保留工作目录。
+
 控制器通过可选服务方法 `agentPresets.presetForSession(session)` 读取 Session 已记录的预设。null 结果表示未记录预设；服务缺席表示控制器无法获知预设身份。
 
 历史页与 follow opening 快照为每个持久 Session 事件携带一条 `{ type: 'event', event: SessionWireEvent }` record。Client 把每条已接受 record 保留为一个持久 `SessionEventLikeEntry`；Assistant token 边界保留在 `assistant/message` 或 `assistant/attempt` 的紧凑流内。工具参数、结果内容、失败信息和 `tool/result.data.meta` 原样通过；控制器不解析工具定义、不运行展示转换器，也不附加 UI 数据。

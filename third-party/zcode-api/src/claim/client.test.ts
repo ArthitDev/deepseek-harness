@@ -1,0 +1,370 @@
+/**
+ * Tests for `src/claim/client.ts` — mock fetch asserts request shape (URL,
+ * query params, headers incl. captcha/version/platform) and canned responses
+ * verify preview parsing and the claim biz-code failure mapping.
+ */
+import { describe, it, expect, mock } from "bun:test";
+import { createClaimClient } from "./client.js";
+import type { ClaimFailureKind } from "./types.js";
+
+function makeMockFetch(impl: (req: Request, init?: RequestInit) => Promise<Response>): typeof fetch {
+  return mock((url: string | URL | Request, init?: RequestInit) => {
+    const req = new Request(typeof url === "string" ? url : url.toString(), init);
+    return impl(req, init);
+  }) as unknown as typeof fetch;
+}
+
+function jsonResp(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
+
+const PREVIEW_BODY = {
+  code: 0,
+  data: {
+    plans: [
+      {
+        plan_id: "weekend-free-1024",
+        name: "Weekend Free",
+        description: "weekend trial",
+        priority: 5,
+        starts_at: 1783000000,
+        ends_at: 1783200000,
+        entitlements: [
+          {
+            entitlement_id: "ent-1",
+            show_name: "GLM-5.2",
+            meter: "token",
+            unit_type: "tokens",
+            capabilities: ["chat"],
+            grant_units: 100000,
+            period: "daily",
+            priority: 1,
+            effective_at: 1783000000,
+          },
+          { no_id: "dropped" },
+        ],
+      },
+      { name: "no plan_id — dropped" },
+    ],
+  },
+};
+
+describe("createClaimClient — getPreviews", () => {
+  it("fetches preview with app_version + platform query and parses plans/entitlements", async () => {
+    let capturedUrl = "";
+    const fetchImpl = makeMockFetch((req) => {
+      capturedUrl = req.url;
+      return Promise.resolve(jsonResp(PREVIEW_BODY));
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai/", jwt: "jwt-1", appVersion: "3.11.2", platform: "win32-x64", fetchImpl });
+
+    const plans = await client.getPreviews();
+
+    expect(capturedUrl).toBe("https://zcode.z.ai/api/v1/zcode-plan/billing/preview?app_version=3.11.2&platform=win32-x64");
+    expect(plans).toHaveLength(1);
+    const p = plans[0];
+    expect(p.planId).toBe("weekend-free-1024");
+    expect(p.name).toBe("Weekend Free");
+    expect(p.priority).toBe(5);
+    expect(p.startsAt).toBe(1783000000);
+    expect(p.endsAt).toBe(1783200000);
+    expect(p.entitlements).toHaveLength(1);
+    expect(p.entitlements[0]).toEqual({
+      entitlementId: "ent-1",
+      showName: "GLM-5.2",
+      meter: "token",
+      unitType: "tokens",
+      capabilities: ["chat"],
+      grantUnits: 100000,
+      period: "daily",
+      priority: 1,
+      effectiveAt: 1783000000,
+    });
+  });
+
+  it("sends Authorization only when jwt provided", async () => {
+    const auths: (string | null)[] = [];
+    const fetchImpl = makeMockFetch((req) => {
+      auths.push(req.headers.get("authorization"));
+      return Promise.resolve(jsonResp(PREVIEW_BODY));
+    });
+    const withJwt = createClaimClient({ origin: "https://zcode.z.ai", jwt: "jwt-1", appVersion: "3.11.2", platform: "win32-x64", fetchImpl });
+    await withJwt.getPreviews();
+    const anon = createClaimClient({ origin: "https://zcode.z.ai", appVersion: "3.11.2", platform: "win32-x64", fetchImpl });
+    await anon.getPreviews();
+    expect(auths[0]).toBe("Bearer jwt-1");
+    expect(auths[1]).toBeNull();
+  });
+
+  it("throws on non-zero biz code and missing data", async () => {
+    const fetchImpl = makeMockFetch(() => Promise.resolve(jsonResp({ code: 1002, msg: "campaign ended" })));
+    const client = createClaimClient({ origin: "https://zcode.z.ai", appVersion: "3.11.2", platform: "win32-x64", fetchImpl });
+    await expect(client.getPreviews()).rejects.toThrow("1002");
+    const fetchNoData = makeMockFetch(() => Promise.resolve(jsonResp({ code: 0 })));
+    const client2 = createClaimClient({ origin: "https://zcode.z.ai", appVersion: "3.11.2", platform: "win32-x64", fetchImpl: fetchNoData });
+    await expect(client2.getPreviews()).rejects.toThrow("preview failed");
+  });
+});
+
+describe("createClaimClient — minimal claim-plane header set (3.12.3 verbatim)", () => {
+  it("preview sends Authorization ONLY — no identity bundle, no UA, no version/platform headers", async () => {
+    const seen: Array<{ path: string; auth: string | null; ua: string | null; version: string | null; platform: string | null }> = [];
+    const fetchImpl = makeMockFetch((req) => {
+      seen.push({
+        path: new URL(req.url).pathname,
+        auth: req.headers.get("authorization"),
+        ua: req.headers.get("user-agent"),
+        version: req.headers.get("x-zcode-app-version"),
+        platform: req.headers.get("x-platform"),
+      });
+      return Promise.resolve(jsonResp(PREVIEW_BODY));
+    });
+    const client = createClaimClient({
+      origin: "https://zcode.z.ai",
+      jwt: "jwt-1",
+      appVersion: "3.12.3",
+      platform: "win32-x64",
+      fetchImpl,
+    });
+
+    await client.getPreviews();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].path).toBe("/api/v1/zcode-plan/billing/preview");
+    expect(seen[0].auth).toBe("Bearer jwt-1");
+    expect(seen[0].ua).toBeNull();
+    expect(seen[0].version).toBeNull();
+    expect(seen[0].platform).toBeNull();
+  });
+
+  it("claim sends exactly the bundle's 6 headers (Authorization, Content-Type, captcha param, [region], version, platform)", async () => {
+    let req: Request | undefined;
+    let sentHeaders: Record<string, string> | undefined;
+    const fetchImpl = makeMockFetch((r, init) => {
+      req = r;
+      sentHeaders = init?.headers as Record<string, string>;
+      return Promise.resolve(jsonResp({ code: 0, data: { plan: { plan_id: "weekend-free-1024", starts_at: 1, ends_at: 2 } } }));
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai", jwt: "jwt-1", appVersion: "3.12.3", platform: "win32-x64", fetchImpl });
+
+    await client.claim("weekend-free-1024", { verifyParam: "cap-param", region: "cn-hangzhou" });
+
+    expect(new URL(req!.url).pathname).toBe("/api/v1/zcode-plan/billing/claim");
+    expect(req!.headers.get("authorization")).toBe("Bearer jwt-1");
+    expect(req!.headers.get("content-type")).toBe("application/json");
+    expect(req!.headers.get("x-aliyun-captcha-verify-param")).toBe("cap-param");
+    expect(req!.headers.get("x-aliyun-captcha-verify-region")).toBe("cn-hangzhou");
+    expect(req!.headers.get("x-zcode-app-version")).toBe("3.12.3");
+    expect(req!.headers.get("x-platform")).toBe("win32-x64");
+    // Nothing else rides along — no UA, no referer, no identity bundle.
+    expect(req!.headers.get("user-agent")).toBeNull();
+    expect(req!.headers.get("http-referer")).toBeNull();
+    expect(req!.headers.get("x-device-mid")).toBeNull();
+    expect(req!.headers.get("x-zcode-agent")).toBeNull();
+    // Wire-order contract, pinned on the pre-Headers Record (Bun's Headers
+    // re-normalizes key order).
+    expect(Object.keys(sentHeaders!)).toEqual([
+      "Authorization",
+      "Content-Type",
+      "X-Aliyun-Captcha-Verify-Param",
+      "X-Aliyun-Captcha-Verify-Region",
+      "X-ZCode-App-Version",
+      "X-Platform",
+    ]);
+  });
+
+  it("claim without a captcha token omits both captcha headers (3.16.3 switch off)", async () => {
+    let req: Request | undefined;
+    let sentHeaders: Record<string, string> | undefined;
+    const fetchImpl = makeMockFetch((r, init) => {
+      req = r;
+      sentHeaders = init?.headers as Record<string, string>;
+      return Promise.resolve(jsonResp({ code: 0, data: { plan: { plan_id: "weekend-free-1024" } } }));
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai", jwt: "jwt-1", appVersion: "3.16.3", platform: "win32-x64", fetchImpl });
+
+    await client.claim("weekend-free-1024");
+
+    expect(req!.headers.get("authorization")).toBe("Bearer jwt-1");
+    expect(req!.headers.get("content-type")).toBe("application/json");
+    expect(req!.headers.get("x-aliyun-captcha-verify-param")).toBeNull();
+    expect(req!.headers.get("x-aliyun-captcha-verify-region")).toBeNull();
+    expect(req!.headers.get("x-zcode-app-version")).toBe("3.16.3");
+    expect(req!.headers.get("x-platform")).toBe("win32-x64");
+    // The captcha pair vanishes from its slot; everything else keeps its
+    // position (asserted on the pre-Headers Record — Bun's Headers
+    // re-normalizes key order).
+    expect(Object.keys(sentHeaders!)).toEqual(["Authorization", "Content-Type", "X-ZCode-App-Version", "X-Platform"]);
+  });
+});
+
+describe("createClaimClient — campaign-gated X-Device-Mid deviation (0828/0918)", () => {
+  it("preview appends X-Device-Mid after Authorization when deviceMid provided", async () => {
+    const seen: Array<{ auth: string | null; mid: string | null; keys: string[] }> = [];
+    const fetchImpl = makeMockFetch((req) => {
+      seen.push({ auth: req.headers.get("authorization"), mid: req.headers.get("x-device-mid"), keys: [...req.headers.keys()] });
+      return Promise.resolve(jsonResp(PREVIEW_BODY));
+    });
+    const client = createClaimClient({
+      origin: "https://zcode.z.ai",
+      jwt: "jwt-1",
+      appVersion: "3.12.3",
+      platform: "win32-x64",
+      deviceMid: "0cd664d3-08fb-49c6-ac89-1eab3e630e78",
+      fetchImpl,
+    });
+    await client.getPreviews();
+
+    expect(seen[0].auth).toBe("Bearer jwt-1");
+    expect(seen[0].mid).toBe("0cd664d3-08fb-49c6-ac89-1eab3e630e78");
+    expect(seen[0].keys).toEqual(["authorization", "x-device-mid"]);
+
+    const anon = createClaimClient({
+      origin: "https://zcode.z.ai",
+      appVersion: "3.12.3",
+      platform: "win32-x64",
+      deviceMid: "0cd664d3-08fb-49c6-ac89-1eab3e630e78",
+      fetchImpl,
+    });
+    await anon.getPreviews();
+    expect(seen[1].auth).toBeNull();
+    expect(seen[1].keys).toEqual(["x-device-mid"]);
+  });
+
+  it("claim sends the bundle's 6 headers plus X-Device-Mid when deviceMid provided", async () => {
+    const seen: { keys: string[]; mid: string | null }[] = [];
+    const fetchImpl = makeMockFetch((req) => {
+      seen.push({ keys: [...req.headers.keys()], mid: req.headers.get("x-device-mid") });
+      return Promise.resolve(jsonResp({ code: 0, data: { plan: { plan_id: "p1" } } }));
+    });
+    const client = createClaimClient({
+      origin: "https://zcode.z.ai",
+      jwt: "jwt-1",
+      appVersion: "3.12.3",
+      platform: "win32-x64",
+      deviceMid: "0cd664d3-08fb-49c6-ac89-1eab3e630e78",
+      fetchImpl,
+    });
+    await client.claim("p1", { verifyParam: "cap", region: "sgp" });
+
+    expect(seen[0].mid).toBe("0cd664d3-08fb-49c6-ac89-1eab3e630e78");
+    // Bun's Headers iterates sorted, not insertion-ordered — assert the exact
+    // header set (wire order is enforced by the object literal in client.ts).
+    expect(seen[0].keys).toEqual([
+      "authorization",
+      "content-type",
+      "x-aliyun-captcha-verify-param",
+      "x-aliyun-captcha-verify-region",
+      "x-device-mid",
+      "x-platform",
+      "x-zcode-app-version",
+    ]);
+  });
+
+  it("blank deviceMid is treated as absent", async () => {
+    const fetchImpl = makeMockFetch((req) => {
+      expect(req.headers.get("x-device-mid")).toBeNull();
+      return Promise.resolve(jsonResp(PREVIEW_BODY));
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai", jwt: "j", appVersion: "3.12.3", platform: "p", deviceMid: "  ", fetchImpl });
+    await client.getPreviews();
+  });
+});
+
+describe("createClaimClient — claim", () => {
+  function capture(req: Request) {
+    return {
+      url: req.url,
+      auth: req.headers.get("authorization"),
+      captchaParam: req.headers.get("x-aliyun-captcha-verify-param"),
+      captchaRegion: req.headers.get("x-aliyun-captcha-verify-region"),
+      appVersion: req.headers.get("x-zcode-app-version"),
+      platform: req.headers.get("x-platform"),
+      contentType: req.headers.get("content-type"),
+    };
+  }
+
+  it("POSTs plan_id with jwt + captcha + version + platform headers", async () => {
+    let cap: ReturnType<typeof capture> | undefined;
+    let body = "";
+    const fetchImpl = makeMockFetch(async (req) => {
+      cap = capture(req);
+      body = await req.text();
+      return jsonResp({ code: 0, data: { plan: { starts_at: 1783000000, ends_at: 1783200000 } } });
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai", jwt: "jwt-1", appVersion: "3.11.2", platform: "linux-x64", fetchImpl });
+
+    const out = await client.claim("weekend-free-1024", { verifyParam: "cap-token", region: "cn-hangzhou" });
+
+    expect(cap!.url).toBe("https://zcode.z.ai/api/v1/zcode-plan/billing/claim");
+    expect(cap!.auth).toBe("Bearer jwt-1");
+    expect(cap!.captchaParam).toBe("cap-token");
+    expect(cap!.captchaRegion).toBe("cn-hangzhou");
+    expect(cap!.appVersion).toBe("3.11.2");
+    expect(cap!.platform).toBe("linux-x64");
+    expect(cap!.contentType).toBe("application/json");
+    expect(JSON.parse(body)).toEqual({ plan_id: "weekend-free-1024" });
+    expect(out).toEqual({ ok: true, planId: "weekend-free-1024", startsAt: 1783000000, endsAt: 1783200000 });
+  });
+
+  it("omits region header when region missing/empty", async () => {
+    let region: string | null = "sentinel";
+    const fetchImpl = makeMockFetch((req) => {
+      region = req.headers.get("x-aliyun-captcha-verify-region");
+      return Promise.resolve(jsonResp({ code: 0, data: { plan: {} } }));
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai", jwt: "jwt-1", appVersion: "3.11.2", platform: "win32-x64", fetchImpl });
+    await client.claim("p1", { verifyParam: "t" });
+    expect(region).toBeNull();
+  });
+
+  it("maps biz codes to failure kinds and surfaces failureEndsAt", async () => {
+    const cases: Array<[number, ClaimFailureKind]> = [
+      [1001, "not_found"],
+      [1002, "unavailable"],
+      [1003, "already_claimed"],
+      [1004, "ineligible"],
+      [1005, "quota_exhausted"],
+      [3001, "invalid_request"],
+      [3007, "captcha"],
+      [9999, "unknown"],
+    ];
+    for (const [code, kind] of cases) {
+      const fetchImpl = makeMockFetch(() =>
+        Promise.resolve(jsonResp({ code, msg: `biz ${code}`, data: { plan: { ends_at: 1783100000 } } })),
+      );
+      const client = createClaimClient({ origin: "https://zcode.z.ai", jwt: "jwt-1", appVersion: "3.11.2", platform: "win32-x64", fetchImpl });
+      const out = await client.claim("p1", { verifyParam: "t" });
+      expect(out.ok).toBe(false);
+      if (!out.ok) {
+        expect(out.failureKind).toBe(kind);
+        expect(out.code).toBe(code);
+        expect(out.failureEndsAt).toBe(1783100000);
+      }
+    }
+  });
+
+  it("derives http_error / login_required from HTTP status without biz code", async () => {
+    const fetch500 = makeMockFetch(() => Promise.resolve(jsonResp({ msg: "boom" }, 500)));
+    const c1 = createClaimClient({ origin: "https://zcode.z.ai", jwt: "j", appVersion: "3.11.2", platform: "p", fetchImpl: fetch500 });
+    const out1 = await c1.claim("p1", { verifyParam: "t" });
+    expect(out1.ok).toBe(false);
+    if (!out1.ok) expect(out1.failureKind).toBe("http_error");
+
+    const fetch401 = makeMockFetch(() => Promise.resolve(new Response("", { status: 401 })));
+    const c2 = createClaimClient({ origin: "https://zcode.z.ai", jwt: "j", appVersion: "3.11.2", platform: "p", fetchImpl: fetch401 });
+    const out2 = await c2.claim("p1", { verifyParam: "t" });
+    expect(out2.ok).toBe(false);
+    if (!out2.ok) expect(out2.failureKind).toBe("login_required");
+  });
+
+  it("returns login_required without HTTP call when jwt missing", async () => {
+    const fetchImpl = makeMockFetch(() => {
+      throw new Error("should not be called");
+    });
+    const client = createClaimClient({ origin: "https://zcode.z.ai", appVersion: "3.11.2", platform: "p", fetchImpl });
+    const out = await client.claim("p1", { verifyParam: "t" });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.failureKind).toBe("login_required");
+  });
+});

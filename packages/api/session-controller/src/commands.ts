@@ -176,6 +176,9 @@ export class SessionCommandController {
             : { reasoningEffort: ReasoningEffortId(request.reasoningEffort) }),
         }
         await this.ctx.llm.resolveCallConfig(selected)
+        if (this.ctx.agents.get(agent.id) !== agent) {
+          throw new RemoteError('session/not-found', `session "${agent.id}" was disposed during model selection`, { sessionId: agent.id })
+        }
         agent.model.select(selected)
         void this.ctx.agentDefaultModel.saveSelection(selected).catch((error: unknown) => {
           this.ctx.logger.warn(
@@ -276,7 +279,7 @@ export class SessionCommandController {
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
       const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
-      await this.ctx.agents.create({
+      this.agents.remember(await this.ctx.agents.create({
         sessionId: childId,
         seed,
         inheritedEventCount: SessionLogOffset(boundary + 1),
@@ -289,7 +292,7 @@ export class SessionCommandController {
         },
         agentOptions: { provider, model },
         setup: composition.setup,
-      })
+      }))
     } catch (error) {
       throw new RemoteError(
         'gateway/internal',

@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, AgentOptions, AgentSetup } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentSetup } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
@@ -116,6 +116,7 @@ export function apiSessionSubagentOwnershipError(sessionId: SessionId): ApiSessi
 export class ApiSessionAgentController {
   private readonly resumes = new Map<SessionId, Promise<Agent>>()
   private readonly claims = new Map<SessionId, Promise<void>>()
+  private readonly handles = new Map<SessionId, AgentHandle>()
   private readonly imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
   /** @param ctx - Host context carrying Agent, model, persistence, and Typert services. */
@@ -126,6 +127,9 @@ export class ApiSessionAgentController {
    */
   initialize(): void {
     const ctx = this.ctx
+    ctx.on('agent/disposed', ({ agent }) => {
+      if (this.handles.get(agent.id)?.agent === agent) this.handles.delete(agent.id)
+    }, { global: true })
     ctx.typert.lookups.configure('agent', async (sessionId: SessionId) => {
       const found = await this.resolveAgent(sessionId)
       if ('error' in found) throw found.error
@@ -165,6 +169,7 @@ export class ApiSessionAgentController {
     sessionId: SessionId,
     observation?: SessionObservation,
   ): Promise<ApiSessionAgentResult> {
+    await this.claims.get(sessionId)
     const live = this.liveAgent(sessionId)
     if (live !== undefined) return live
     const attached = this.ctx.sessions.get(sessionId)
@@ -174,7 +179,8 @@ export class ApiSessionAgentController {
 
     let resume = this.resumes.get(sessionId)
     if (resume === undefined) {
-      resume = this.resume(sessionId, observation).finally(() => { this.resumes.delete(sessionId) })
+      resume = this.inOrder(sessionId, () => this.resume(sessionId, observation))
+        .finally(() => { this.resumes.delete(sessionId) })
       this.resumes.set(sessionId, resume)
     }
     try {
@@ -230,6 +236,33 @@ export class ApiSessionAgentController {
     const named = request.sessionId
     if (named === undefined) return this.created(await this.createMinted(request.cwd, await this.composeAgent(request.agentPreset)))
     return this.inOrder(named, async () => this.created(await this.claim(named, request)))
+  }
+
+  /**
+   * Release an idle API-owned Agent before a serialized storage deletion.
+   * Active work and Agents owned by another capability refuse without disposal.
+   * @param sessionId - Session whose live writer must be released.
+   * @param signal - cancellation checked before disposal and storage deletion.
+   * @param operation - deletion performed after the writer has fully closed.
+   * @returns the storage operation's result.
+   */
+  deleteSession<Value>(sessionId: SessionId, signal: AbortSignal, operation: () => Promise<Value>): Promise<Value> {
+    return this.inOrder(sessionId, async () => {
+      signal.throwIfAborted()
+      const activity = await this.ctx.waterfall('workspace/session-activity', { sessionId }, () => Promise.resolve([]))
+      signal.throwIfAborted()
+      const agent = this.ctx.agents.get(sessionId)
+      const handle = this.handles.get(sessionId)
+      if (activity.length > 0 || (agent !== undefined
+        && (agent.status !== 'idle' || handle?.agent !== agent || hasApiSessionSubagentOwner(agent.session)))) {
+        throw new RemoteError('session/agent-busy', `session "${sessionId}" has active or externally owned work; stop it before deleting`, {
+          reason: 'stop active work before deleting the Session',
+        })
+      }
+      if (agent !== undefined && handle !== undefined) await handle.dispose()
+      signal.throwIfAborted()
+      return operation()
+    })
   }
 
   /**
@@ -310,11 +343,11 @@ export class ApiSessionAgentController {
     if (published !== undefined && hasApiSessionSubagentOwner(published)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
-    return (await this.ctx.agents.resume({
+    return this.remember(await this.ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: this.agentOptions(),
       setup: composition.setup,
-    })).agent
+    }))
   }
 
   private async inOrder<Value>(sessionId: SessionId, operation: () => Promise<Value>): Promise<Value> {
@@ -364,11 +397,11 @@ export class ApiSessionAgentController {
     if (!reusable) return this.createMinted(request.cwd, composition)
     this.assertPresetApplicable(sessionId, request.agentPreset)
     try {
-      return (await this.ctx.agents.resume({
+      return this.remember(await this.ctx.agents.resume({
         resumeSessionId: sessionId,
         agentOptions: this.agentOptions(),
         setup: this.reuseSetup(composition),
-      })).agent
+      }))
     } catch (error: unknown) {
       if (error instanceof ApiSessionStartedSinceObserved) return this.createMinted(request.cwd, composition)
       if (!(error instanceof Error) || error.name !== 'SessionAlreadyOwnedError') throw error
@@ -439,7 +472,7 @@ export class ApiSessionAgentController {
     } catch (error: unknown) {
       throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
     }
-    return (await this.ctx.agents.create({
+    return this.remember(await this.ctx.agents.create({
       sessionId,
       agentOptions: this.agentOptions(),
       meta: {
@@ -447,7 +480,17 @@ export class ApiSessionAgentController {
         ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }),
       },
       setup: composition.setup,
-    })).agent
+    }))
+  }
+
+  /**
+   * Retain disposal authority for an Agent created or resumed by this API.
+   * @param handle - owned factory result, including forked Agents.
+   * @returns the Agent whose writer this controller may release on deletion.
+   */
+  remember(handle: AgentHandle): Agent {
+    this.handles.set(handle.agent.id, handle)
+    return handle.agent
   }
 
   private agentOptions(): AgentOptions {

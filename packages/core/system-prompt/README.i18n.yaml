@@ -18,11 +18,14 @@
   en: 7bea567207cd7e00
   zh: ffc050b05f07ba7f
 /deepseek-ai-dsh-system-prompt/use-this-package/configure-the-prompt:
-  en: 87e28893e6cf58d7
-  zh: 06f476b38c4d2038
+  en: 8b9cf2deb6bd5bb4
+  zh: 16ea814217cc292a
+/deepseek-ai-dsh-system-prompt/use-this-package/external-content-trust:
+  en: 2f3f7ffb72914bfb
+  zh: a5857019a71f0ab5
 /deepseek-ai-dsh-system-prompt/use-this-package/contribute-a-prompt-section:
-  en: ef415fcd9e1cf8bb
-  zh: 6ad4df288f91bdb1
+  en: 6d29b3c858a34853
+  zh: 4a97a65d1d2107ee
 /deepseek-ai-dsh-system-prompt/use-this-package/contribute-a-prompt-variable:
   en: b3e4c9b4ced59488
   zh: d80c791e72bd5821
@@ -57,14 +60,14 @@
   en: cf78b9dd5596495f
   zh: bd44560f8c2435e8
 /deepseek-ai-dsh-system-prompt/model-experience/system-prompt/what-the-model-sees:
-  en: 622e83de7772dc1f
-  zh: 7b3c54f08a317e93
+  en: 3e05a21d30857010
+  zh: ae3c1be860f970ea
 /deepseek-ai-dsh-system-prompt/model-experience/system-prompt/what-the-model-sees/harness-identity:
   en: 40effd71cb503319
   zh: 9969356237a4f398
 /deepseek-ai-dsh-system-prompt/model-experience/system-prompt/token-effect:
-  en: 29722e212137deaa
-  zh: 92cd0f1a16b10315
+  en: 7bef62db085c9365
+  zh: b32a6bcda0238ad7
 /deepseek-ai-dsh-system-prompt/model-experience/system-prompt/kv-cache-effect:
   en: 52fa5a522891ec6b
   zh: 5c5c18359aaaf3db

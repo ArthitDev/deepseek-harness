@@ -1,0 +1,61 @@
+- id: agent-instructions
+  disabled: true
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    watch: false
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+
+- insert:
+    - id: cwd-probe
+      name: '../../../packages/test-support/session-snapshot/tests/fixtures/cwd-probe.ts'
+    - id: subagent-model-selection-settings
+      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
+      config:
+        default: parent
+    - id: preset-parent
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: parent
+        name: Parent
+        description: Headless parent tools.
+        plugins: []
+    - id: preset-reviewer
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: reviewer
+        name: Reviewer
+        description: File review.
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: You are a file reviewer. Inspect the requested files and report your findings.
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-subagent
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: spawn
+              toolName: reviewer_delegate
+              allowedAgentPresets: [reviewer]
+    - id: parent-agent-preset
+      name: '../../../packages/test-support/session-snapshot/tests/fixtures/parent-agent-preset.ts'
+      config:
+        presets: [parent, reviewer, parent, reviewer, parent]
+
+- id: tool-subagent
+  name: '@deepseek-ai/dsh-tool-subagent'
+  inject: [agentPresets]
+  config:
+    provider: spawn
+    toolName: subagent
+    maxDepth: 1
+    allowedAgentPresets: [reviewer]
+    roles:
+      verify: Evaluate the assigned change against its requirements and relevant failure cases. Load needed instructions and skills. Report concrete defects with severity, file and line evidence, and reproduction steps. Prefer the smallest meaningful checks; distinguish passed, failed, skipped, and unverified results. Return findings and limits; do not treat missing evidence as success or implement unsolicited fixes. Before returning, check the active preset and task's required output. If correcting a failed attempt, name the changed arguments and distinguish the new result from the original failure.

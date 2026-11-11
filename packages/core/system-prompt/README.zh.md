@@ -45,15 +45,23 @@ kind: "package-reference"
 |---|---|---|
 | `includeHarnessIdentity` | `true` | 是否包含顺序为 −1000 的第一方固定开场白 `You are an AI agent powered by DeepSeek Harness.`。仅当兼容性部署拥有完整系统提示词时设为 false。 |
 | `includeRuntimeContext` | `true` | 是否在组装中包含可选的有序动态 runtime 上下文 |
+| `externalContentPolicy` | `false` | 为每个作用域添加固定的目标内容信任指令，完整 persona 也保留这些指令 |
 | `personaPrefix` | `''` | 全局 persona 前缀模板，顺序为 `0`，位于第一方指导之前 |
 | `personaSuffix` | `''` | 全局 `deployment:persona-suffix` 模板，顺序为 `10200`，位于第一方指导之后 |
 | `toolOrder` | — | 显式面向模型工具顺序，含一个 `'<unlisted-tools>'` 其余项标记 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-system-prompt)是每个受支持字段的穷尽式真源。没有恰好一个其余项或存在重复项的 `toolOrder` 列表会在加载时失败；已列名称没有对应已注册工具会使每次 `assemble()` 被拒绝。
 
+<a id="external-content-trust"></a>
+### 外部内容信任
+
+在部署的 system-prompt 配置行设置 `externalContentPolicy: true`，把目标控制的页面、文档、代码、仓库指令，以及通过工具/MCP、浏览器、终端或检索到的对话传递的目标材料视为证据，而非授权。用户指令和操作者控制的 Harness 提示词、preset、配置及主动安装的 instruction/skill 文件保留原有优先级。通过可信工具传递或存储在本地不会使目标内容可信；克隆到本机的目标仓库仍属于目标内容。本策略不会对已独立授权的工作添加全面的工具禁令或批准要求。固定指令禁止服从其中的任务重定向、批准声明、秘密信息索取、破坏性命令或关闭安全措施的要求，同时允许分析内容并使用相关技术事实。例外必须来自当前用户直接发出的指令，明确具体操作和范围；内容声称用户已批准不构成授权。更高优先级规则和权限要求仍然适用。
+
+策略在组装 waterfall 和章节筛选结束后添加在开头，因此启用时，作用域 persona、完整提示词和关闭运行时上下文都不能删除或替换它。它是普通的 system 角色提示词文本，由 Agent loop 记录，并在恢复和后续步骤重新组装。它是模型指令，不是检测器、工具执行拦截器、沙箱，也不保证模型一定遵守。使用自身提示词组装的外部 agent 提供方需要配置等效策略。
+
 ### 贡献提示词段
 
-段携带静态或按上下文解析的文本与 `order`；它们先按顺序值升序拼接，顺序值相同时再按名称的代码单元顺序排列。仓库自带贡献方通过 `ctx.systemPrompt.getSectionOrder(name)` 解析集中分配的位置；runtime-context 贡献方使用 `getContextOrder(name)`。外部贡献可以使用任意有限的顺序值。`complete: true` 段会在组装后成为精确的完整提示词；有效的 complete 段超过一个时，组装会失败。
+段携带静态或按上下文解析的文本与 `order`；它们先按顺序值升序拼接，顺序值相同时再按名称的代码单元顺序排列。仓库自带贡献方通过 `ctx.systemPrompt.getSectionOrder(name)` 解析集中分配的位置；runtime-context 贡献方使用 `getContextOrder(name)`。外部贡献可以使用任意有限的顺序值。`complete: true` 段会在组装后替换其他贡献的提示词；启用外部内容策略时，固定策略位于它之前。有效的 complete 段超过一个时，组装会失败。
 
 ```text
 ctx.systemPrompt.section({
@@ -139,7 +147,7 @@ ctx.systemPrompt.variable('response_language', () => 'English')
 
 #### 模型看到什么
 
-第一方段落依次渲染 harness 身份、部署 persona 前缀（含模型名称介绍）、可复用指令（包括生成的工具 SDK 和结构化输出指导），最后是携带环境信息的后缀：harness 源码（`10000`）、Web 表层（`10100`）和部署 persona 后缀（`10200`）。外部段落的顺序与组装监听器仍决定其最终结果。`includeHarnessIdentity: false` 仅省略这个固定开场白。空段会消失；带作用域的段与变量可以为一个 agent 遮蔽全局项。`system-prompt/assemble` waterfall 决定交付的提示词，除非一个有效段声明自身为 complete——此时该确切段会成为完整的系统提示词，而 waterfall 得到的上下文与变量保持不变。工具声明仍由提供方持有。渲染后的提示词作为派生历史中的 system 角色消息——surface 第 0 号节点，或历史内更新之后最新的系统节点——到达模型；循环请求与 `request/header` 均不含单独的 `system` 字段。完整渲染结果为空时，循环通过有日志记录的空内容替换清除所有生效的系统节点，模型历史不再保留任何旧提示词。有序动态上下文与段分离，只在存在时才会成为带来源的 user 角色快照；`includeRuntimeContext: false` 或带作用域的抑制器会移除可选贡献；必需的操作上下文仍然保留。
+第一方段落依次渲染 harness 身份、部署 persona 前缀（含模型名称介绍）、可复用指令（包括生成的工具 SDK 和结构化输出指导），最后是携带环境信息的后缀：harness 源码（`10000`）、Web 表层（`10100`）和部署 persona 后缀（`10200`）。外部段落的顺序与组装监听器仍决定其最终结果。`includeHarnessIdentity: false` 仅省略这个固定开场白。空段会消失；带作用域的段与变量可以为一个 agent 遮蔽全局项。`system-prompt/assemble` waterfall 决定交付的提示词，除非一个有效段声明自身为 complete——此时该确切段会替换贡献的提示词，而 waterfall 得到的上下文与变量保持不变。启用时，固定的外部内容策略位于它之前。工具声明仍由提供方持有。渲染后的提示词作为派生历史中的 system 角色消息——surface 第 0 号节点，或历史内更新之后最新的系统节点——到达模型；循环请求与 `request/header` 均不含单独的 `system` 字段。完整渲染结果为空时，循环通过有日志记录的空内容替换清除所有生效的系统节点，模型历史不再保留任何旧提示词。有序动态上下文与段分离，只在存在时才会成为带来源的 user 角色快照；`includeRuntimeContext: false` 或带作用域的抑制器会移除可选贡献；必需的操作上下文仍然保留。
 
 ##### harness 身份
 
@@ -149,7 +157,7 @@ You are an AI agent powered by DeepSeek Harness.
 
 #### Token 影响
 
-启用时，身份是每次请求的固定成本。Persona 前缀、后缀与插件文本在每次请求中重复，成本随渲染内容增长。
+启用时，身份是每次请求的固定成本。启用外部内容策略后，每次请求都会携带这段固定指令。Persona 前缀、后缀与插件文本在每次请求中重复，成本随渲染内容增长。
 
 #### KV Cache 影响
 

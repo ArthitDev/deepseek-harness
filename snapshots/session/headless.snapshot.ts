@@ -1525,6 +1525,16 @@ describe('headless recorded-session snapshots', () => {
               expect(log).toContain('# Office task routing')
             }
             if (scenario.name === 'advanced-toolchain') verifyAdvancedToolchain(actualLogs)
+            if (scenario.name === 'subagent-task-role') {
+              expect(actualLogs).toHaveLength(2)
+              const child = parseSessionLog(actualLogs[1]!.content)
+              const results = child.flatMap(event => event.type === 'tool/result' ? [event.data.message] : [])
+              expect(results).toHaveLength(1)
+              expect(results[0]).toMatchObject({ toolCallId: 'call_cwd_probe', isError: true })
+              expect(results[0]!.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n'))
+                .toContain('does not exist. Set workdir to an existing directory before retrying.')
+              expect(finalTextFromSession(actualLogs[1]!.content)).toBe('CHILD_OK')
+            }
             if (scenario.name === 'subagent-depth-two-rejection') {
               expect(actualLogs).toHaveLength(3)
               const leaf = actualLogs[2]!

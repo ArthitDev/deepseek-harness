@@ -18,14 +18,17 @@
   en: 93f1701f5209ecb5
   zh: 6310fd012400aead
 /deepseek-ai-dsh-tool-subagent/use-this-package/minimal-configuration:
-  en: 1a23808ca32b8f2d
-  zh: e637a35220da0564
+  en: 262ef8be08bf7c99
+  zh: 919f0acf29f08bdd
 /deepseek-ai-dsh-tool-subagent/use-this-package/managed-delegation:
   en: 31e50585cfd7e747
   zh: 643d9a9e3643cf55
 /deepseek-ai-dsh-tool-subagent/use-this-package/selecting-a-child-preset:
   en: e28a206c65151ec0
   zh: 1372242076549ca4
+/deepseek-ai-dsh-tool-subagent/use-this-package/selecting-a-task-role:
+  en: 56c9c760ea49ad71
+  zh: 1ce72dadc2382d43
 /deepseek-ai-dsh-tool-subagent/use-this-package/selecting-a-child-llm:
   en: fb47e667c543dfc6
   zh: fa450e808dd5dc7f
@@ -107,6 +110,18 @@
 /deepseek-ai-dsh-tool-subagent/model-experience/runtime-depth-context/kv-cache-effect:
   en: 9e6e8bc993992908
   zh: 4de1e9d85ab3bfca
+/deepseek-ai-dsh-tool-subagent/model-experience/task-roles:
+  en: 2cef36f580e7d9cd
+  zh: cd19a3e64966eb09
+/deepseek-ai-dsh-tool-subagent/model-experience/task-roles/what-the-model-sees:
+  en: 80432954e0c97f89
+  zh: af16b5aaacd85bad
+/deepseek-ai-dsh-tool-subagent/model-experience/task-roles/token-effect:
+  en: 07371e9918ba1ce9
+  zh: 5a302ab4de115d19
+/deepseek-ai-dsh-tool-subagent/model-experience/task-roles/kv-cache-effect:
+  en: 41fcc80a66105e13
+  zh: 76845fd1f060deef
 /deepseek-ai-dsh-tool-subagent/model-experience/start-result:
   en: 45854c8f4da73af7
   zh: 7a9803ca8c03c40f

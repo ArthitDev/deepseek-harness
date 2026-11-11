@@ -6,6 +6,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { EXTERNAL_CONTENT_POLICY } from './external-content-policy.ts'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@deepseek-ai/dsh-scope'
 import type { ContextSnapshotSection, ToolSchema } from '@deepseek-ai/dsh-llm'
@@ -23,7 +24,8 @@ declare module '@deepseek-ai/cordis' {
      * A supplied signal controls only this explicit assembly request and must not
      * be retained to control later turns. A registered complete section is
      * restored after this waterfall, so listeners cannot add to or replace
-     * that scope's system prompt.
+     * that scope's contributed prompt. The fixed external-content policy is
+     * prepended afterwards when enabled.
      * @param assembly - the mutable assembly built from registered providers.
      * @param context - the caller's per-assembly context.
      * @mode waterfall
@@ -70,6 +72,7 @@ export interface PromptSection {
    * Treat this contribution as the complete system prompt. Assembly still
    * runs the cooperative waterfall so tools, contexts, and variables can be
    * resolved, then restores this exact section as the sole prompt section.
+   * The fixed external-content policy still precedes it when enabled.
    * More than one effective complete section makes assembly fail.
    */
   readonly complete?: boolean
@@ -266,6 +269,8 @@ export interface Config {
   includeHarnessIdentity?: boolean
   /** Include optional runtime-context snapshots in model history (default true); required context remains. */
   includeRuntimeContext?: boolean
+  /** Prepend fixed external-content trust rules, including with complete personas (default false). */
+  externalContentPolicy?: boolean
   /**
    * Deployment-wide persona prefix template before first-party guidance. A scoped section named
    * `deployment:persona-prefix` shadows it; `{{variable}}` references are strict.
@@ -460,6 +465,7 @@ export class SystemPrompt extends Service {
   static Config: z<Config> = z.object({
     includeHarnessIdentity: z.boolean().default(true),
     includeRuntimeContext: z.boolean().default(true),
+    externalContentPolicy: z.boolean().default(false),
     personaPrefix: z.string().default(''),
     personaSuffix: z.string().default(''),
     // Preserve omission because an explicit empty order lacks the rest marker.
@@ -471,10 +477,12 @@ export class SystemPrompt extends Service {
     () => { this.ctx.emit('system-prompt/change') },
   )
   private readonly toolOrder: string[] | undefined
+  private readonly externalContentPolicy: boolean
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'systemPrompt')
     this.toolOrder = validateToolOrder(config.toolOrder)
+    this.externalContentPolicy = config.externalContentPolicy ?? false
     // Keep harness-owned openers independent of the selected loop plugin.
     if (config.includeHarnessIdentity ?? true) {
       this.section({
@@ -669,7 +677,8 @@ export class SystemPrompt extends Service {
    * canonical ordering, then run the presentation waterfall. Scoped sections
    * and variables shadow globals. The waterfall's text is authoritative except
    * that an effective complete section is restored afterwards as the sole
-   * prompt section; tool declarations stay provider-owned.
+   * contributed prompt section. The fixed external-content policy is prepended
+   * afterwards when enabled; tool declarations stay provider-owned.
    * @param context - the optional scope, step tool set, and plugin-defined assembly fields.
    * @returns the post-waterfall assembly with ordered tool declarations and any complete prompt enforced.
    */
@@ -756,12 +765,18 @@ export class SystemPrompt extends Service {
       scopeTarget(this, scope), 'system-prompt/assemble', assembly, context,
       () => Promise.resolve(assembly),
     )
-    if (completeSection === undefined && !runtimeContextSuppressed) return { ...transformed, tools }
+    if (completeSection === undefined && !runtimeContextSuppressed && !this.externalContentPolicy) return { ...transformed, tools }
     const requiredContexts = new Set([...contextByName.values()].filter(entry => entry.required === true).map(entry => entry.name))
     return {
       ...transformed,
       tools,
-      sections: completeSection === undefined ? transformed.sections : [completeSection],
+      sections: this.externalContentPolicy
+        ? [
+          { name: 'harness:external-content-policy', text: EXTERNAL_CONTENT_POLICY, interpolate: false },
+          ...(completeSection === undefined ? transformed.sections : [completeSection])
+            .filter(section => section.name !== 'harness:external-content-policy'),
+        ]
+        : completeSection === undefined ? transformed.sections : [completeSection],
       contexts: runtimeContextSuppressed ? transformed.contexts.filter(entry => requiredContexts.has(entry.name)) : transformed.contexts,
     }
   }

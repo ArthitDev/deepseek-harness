@@ -1,0 +1,9 @@
+version: 1
+scenario: external-content-policy
+profile: headless
+composition: external-content-policy
+recording: authored
+permission: workspace-write
+header:
+  class: external-content-policy
+  pin: true

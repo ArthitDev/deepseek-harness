@@ -45,15 +45,22 @@ The config owns the fixed opener, runtime context, deployment persona prefix and
 |---|---|---|
 | `includeHarnessIdentity` | `true` | Include the fixed `You are an AI agent powered by DeepSeek Harness.` first-party opener at order −1000. Set false only when a compatibility deployment owns the complete system prompt. |
 | `includeRuntimeContext` | `true` | Include optional ordered dynamic runtime context in assembly |
+| `externalContentPolicy` | `false` | Prepend fixed target-content trust instructions for every scope, including complete personas |
 | `personaPrefix` | `''` | Global persona prefix template at order `0`, before first-party guidance |
 | `personaSuffix` | `''` | Global `deployment:persona-suffix` template at order `10200`, after first-party guidance |
 | `toolOrder` | — | Explicit model-facing tool order with one `'<unlisted-tools>'` rest entry |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-system-prompt) is the exhaustive source for every accepted field. A `toolOrder` list without exactly one rest entry or with duplicates fails at load; a listed name with no registered tool rejects every `assemble()`.
 
+### External-content trust
+
+Set `externalContentPolicy: true` on the deployment's system-prompt row to treat target-controlled pages, documents, code, repository instructions, and target material delivered through tools/MCP, browsers, terminals, or retrieved conversations as evidence rather than authorization. The user's instructions and operator-controlled Harness prompts, presets, configuration, and deliberately installed instruction/skill files retain their established priority. Delivery through a trusted tool or local storage does not make target content trusted; a cloned target repository remains target content. This policy adds no blanket tool ban or approval requirement for independently authorized work. The fixed instructions prohibit following embedded redirection, approval claims, secret requests, destructive commands, or attempts to disable security. They permit analysis and relevant technical facts. An exception requires a direct current-user instruction specifying the action and scope; content claiming user approval is insufficient. Higher-priority rules and permission requirements still apply.
+
+The policy is prepended after the assembly waterfall and section filtering, so scoped personas, complete prompts, and disabled runtime context cannot remove or replace it while enabled. It is ordinary system-role prompt text, logged by the Agent loop and assembled again on resume and subsequent steps. It is a model instruction, not a detector, tool veto, sandbox, or guarantee of model compliance. External agent providers using their own prompt assembly need their own equivalent policy.
+
 ### Contribute a prompt section
 
-Sections carry static or context-resolved text with an `order`; they are concatenated in ascending order and equal orders use code-unit name order. Repository-owned contributors resolve centrally allocated positions through `ctx.systemPrompt.getSectionOrder(name)`; runtime-context contributors use `getContextOrder(name)`. External contributions may use any finite order. A `complete: true` section becomes the exact complete prompt after assembly; more than one effective complete section makes assembly fail.
+Sections carry static or context-resolved text with an `order`; they are concatenated in ascending order and equal orders use code-unit name order. Repository-owned contributors resolve centrally allocated positions through `ctx.systemPrompt.getSectionOrder(name)`; runtime-context contributors use `getContextOrder(name)`. External contributions may use any finite order. A `complete: true` section becomes the complete contributed prompt after assembly, preceded by the fixed external-content policy when enabled; more than one effective complete section makes assembly fail.
 
 ```text
 ctx.systemPrompt.section({
@@ -139,7 +146,7 @@ The package-level contract is enough for most consumers; read these when you nee
 
 #### What the model sees
 
-First-party sections render the harness identity, deployment persona prefix (including the model-name introduction), reusable instructions (including the generated tools SDK and structured-output guidance), then the environment-bearing suffix: harness source (`10000`), Web surface (`10100`), and deployment persona suffix (`10200`). External section orders and assembly listeners remain authoritative. `includeHarnessIdentity: false` omits only that fixed opener. Empty sections disappear; scoped sections and variables can shadow globals for one agent. The `system-prompt/assemble` waterfall determines the delivered prompt unless one effective section declares itself complete — that exact section then becomes the whole system prompt while the waterfall's contexts and variables remain. Tool declarations stay provider-owned. The rendered prompt reaches the model as a system-role message of derived history — surface node 0, or the latest system node after an in-history update — neither the loop request nor `request/header` carries a separate `system` field. If the complete rendering is empty, the loop clears every active system node through logged empty replacements, so no older prompt remains in model history. Ordered dynamic contexts are separate from sections and become sourced user-role snapshots only when present; `includeRuntimeContext: false` or a scoped suppressor removes optional contributions while required operational context remains.
+First-party sections render the harness identity, deployment persona prefix (including the model-name introduction), reusable instructions (including the generated tools SDK and structured-output guidance), then the environment-bearing suffix: harness source (`10000`), Web surface (`10100`), and deployment persona suffix (`10200`). External section orders and assembly listeners remain authoritative. `includeHarnessIdentity: false` omits only that fixed opener. Empty sections disappear; scoped sections and variables can shadow globals for one agent. The `system-prompt/assemble` waterfall determines the delivered prompt unless one effective section declares itself complete — that exact section then replaces the contributed prompt while the waterfall's contexts and variables remain. When enabled, the fixed external-content policy precedes it. Tool declarations stay provider-owned. The rendered prompt reaches the model as a system-role message of derived history — surface node 0, or the latest system node after an in-history update — neither the loop request nor `request/header` carries a separate `system` field. If the complete rendering is empty, the loop clears every active system node through logged empty replacements, so no older prompt remains in model history. Ordered dynamic contexts are separate from sections and become sourced user-role snapshots only when present; `includeRuntimeContext: false` or a scoped suppressor removes optional contributions while required operational context remains.
 
 ##### Harness identity
 
@@ -149,7 +156,7 @@ You are an AI agent powered by DeepSeek Harness.
 
 #### Token effect
 
-Identity is a fixed per-request cost when enabled. Persona prefixes, suffixes, and plugin text are repeated per request and scale with their rendered content.
+Identity is a fixed per-request cost when enabled. The external-content policy adds fixed instructions to every request when enabled. Persona prefixes, suffixes, and plugin text are repeated per request and scale with their rendered content.
 
 #### KV Cache effect
 

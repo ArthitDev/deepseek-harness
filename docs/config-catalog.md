@@ -2766,7 +2766,7 @@ export interface Config {
    * text shadows the deployment suffix away; interpolation is strict.
    */
   suffix?: string
-  /** Make the prefix the complete system prompt, suppressing the suffix and every other section. */
+  /** Replace contributed prompt sections with the prefix; an enabled external-content policy remains. */
   complete?: boolean
   /** Suppress dynamic runtime-context snapshots for this persona's agent scope. */
   includeRuntimeContext?: boolean
@@ -2957,11 +2957,16 @@ export interface Config {
   zcodeProviders: string[]
   /** Provider ids routed through Antigravity. */
   antigravityProviders: string[]
+  /** Proxies run by an external service manager; Harness probes but never spawns or stops them. */
+  externalProxies: ProxyId[]
   /** Provider ids routed through SB transport. */
   sbProviders: string[]
   /** Maximum time in milliseconds to wait for a managed proxy to become healthy. */
   startupTimeoutMs: number
 }
+
+/** Embedded proxies supported by this checkout. */
+export type ProxyId = 'zcode' | 'antigravity' | 'sb'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-proxy-server -->
 
@@ -4172,7 +4177,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-system-prompt`
 
-- `source`: [`packages/core/system-prompt/src/index.ts:264`](../packages/core/system-prompt/src/index.ts)
+- `source`: [`packages/core/system-prompt/src/index.ts:267`](../packages/core/system-prompt/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.personaPrefix} for its contract). */
@@ -4181,6 +4186,8 @@ export interface Config {
   includeHarnessIdentity?: boolean
   /** Include optional runtime-context snapshots in model history (default true); required context remains. */
   includeRuntimeContext?: boolean
+  /** Prepend fixed external-content trust rules, including with complete personas (default false). */
+  externalContentPolicy?: boolean
   /**
    * Deployment-wide persona prefix template before first-party guidance. A scoped section named
    * `deployment:persona-prefix` shadows it; `{{variable}}` references are strict.
@@ -4758,6 +4765,11 @@ export interface Config extends PresetSelectionConfig {
    * enable model selection. Discovery is removed when this instance unloads.
    */
   modelDiscovery?: boolean
+  /**
+   * Optional task roles exposed through `role`; omission leaves the task unchanged.
+   * Values are child instructions, not tool or model restrictions.
+   */
+  roles?: Record<string, string> | undefined
   /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */

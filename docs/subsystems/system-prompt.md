@@ -67,6 +67,7 @@ interface PromptSection {
    * Treat this contribution as the complete system prompt. Assembly still
    * runs the cooperative waterfall so tools, contexts, and variables can be
    * resolved, then restores this exact section as the sole prompt section.
+   * The fixed external-content policy still precedes it when enabled.
    * More than one effective complete section makes assembly fail.
    */
   readonly complete?: boolean
@@ -213,7 +214,8 @@ refreshContext(assembly: PromptAssembly, context: AssembleContext = {}): PromptA
  * canonical ordering, then run the presentation waterfall. Scoped sections
  * and variables shadow globals. The waterfall's text is authoritative except
  * that an effective complete section is restored afterwards as the sole
- * prompt section; tool declarations stay provider-owned.
+ * contributed prompt section. The fixed external-content policy is prepended
+ * afterwards when enabled; tool declarations stay provider-owned.
  * @param context - the optional scope, step tool set, and plugin-defined assembly fields.
  * @returns the post-waterfall assembly with ordered tool declarations and any complete prompt enforced.
  */
@@ -230,7 +232,7 @@ Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-
 
 #### `system-prompt/assemble` — waterfall
 
-Presentation waterfall over assembled sections, contexts, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope's assemblies. The returned text is authoritative; tool declarations remain provider-owned. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope's system prompt.
+Presentation waterfall over assembled sections, contexts, and variables. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners receive only that scope's assemblies. The returned text is authoritative; tool declarations remain provider-owned. A supplied signal controls only this explicit assembly request and must not be retained to control later turns. A registered complete section is restored after this waterfall, so listeners cannot add to or replace that scope's contributed prompt. The fixed external-content policy is prepended afterwards when enabled.
 
 ```ts cordis-catalog
 /**
@@ -240,7 +242,8 @@ Presentation waterfall over assembled sections, contexts, and variables. Scope-f
  * A supplied signal controls only this explicit assembly request and must not
  * be retained to control later turns. A registered complete section is
  * restored after this waterfall, so listeners cannot add to or replace
- * that scope's system prompt.
+ * that scope's contributed prompt. The fixed external-content policy is
+ * prepended afterwards when enabled.
  * @param assembly - the mutable assembly built from registered providers.
  * @param context - the caller's per-assembly context.
  * @mode waterfall

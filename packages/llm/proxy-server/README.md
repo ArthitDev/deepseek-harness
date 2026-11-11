@@ -32,7 +32,9 @@ Only children started by this service are stopped, through their live process ha
 
 The volatile `zcodeEnabled`, `antigravityEnabled`, and `sbEnabled` fields hold independent preferences. Ports default to `ZCODE_PORT` or 18080, `ANTIGRAVITY_PORT` or 18877, and `SB_PORT` or 18899. `startupTimeoutMs` defaults to 15000. Provider lists default to `zcode-direct`, `antigravity`, and `sb`/`sb-proxy`, respectively. Matching model prefixes `zcode/`, `antigravity/`, and `sb/` also select the corresponding proxy. Other model routes delegate unchanged.
 
-ZCode requires Bun, its prepared worker bundle, and an existing `config.yaml` under `ZCODE_DIR` or `third-party/zcode-api`. All three proxies require Bun on `PATH`; Antigravity and SB run their bundled JavaScript with `bun --no-env-file`, preserving the Host-provided environment without loading additional `.env` files. The Harness Host stays on Node.js. This service neither creates credentials nor performs login, OAuth setup, or upstream model requests. Settings failures and missing setup are reported to the operator.
+`externalProxies` defaults to an empty list. Add `zcode`, `antigravity`, or `sb` when another service manager, such as Docker Compose, owns that proxy. Harness verifies readiness, reports `external`, and never starts or stops it; usage switches still block new matching model requests. An unavailable external service returns a startup failure instead of falling back to a local process. External ZCode must return `x-dsh-proxy-service: zcode-proxy` from `/v1/models`; a generic HTTP 200/401 is insufficient. External services do not require local proxy source files.
+
+For proxies managed by Harness, ZCode requires Bun, its prepared worker bundle, and an existing `config.yaml` under `ZCODE_DIR` or `third-party/zcode-api`. All three proxies require Bun on `PATH`; Antigravity and SB run their bundled JavaScript with `bun --no-env-file`, preserving the Host-provided environment without loading additional `.env` files. The Harness Host stays on Node.js. This service neither creates credentials nor performs login, OAuth setup, or upstream model requests. Settings failures and missing setup are reported to the operator.
 
 <a id="further-exploration"></a>
 ## Further Exploration
@@ -63,7 +65,7 @@ The service does not rewrite model-request prefixes or add cache content. Upstre
 <a id="known-limitations-and-deferred-work"></a>
 
 - Configured provider ids and model prefixes identify routes; arbitrary provider base URLs are not inspected.
-- ZCode readiness uses HTTP 200/401 from `/v1/models` only for a child started by this Host. An unowned ZCode listener is reported as `port-in-use` and is never reused or stopped because this checkout has no unique ZCode health endpoint.
+- Without an explicit `externalProxies` declaration, an unowned ZCode listener remains `port-in-use` and is never reused or stopped. The integration identity header identifies a deployment; it does not authorize model requests or prove upstream account quota.
 - Proxy configuration and authentication must already exist. A missing ZCode checkout cannot be installed from this page.
 - Changes through generic plugin configuration affect subsequent request routing; use `setEnabled` to also stop a managed process immediately.
 - Managed launch paths are checkout-relative; packaged installations need their proxy scripts supplied at the installation root.
