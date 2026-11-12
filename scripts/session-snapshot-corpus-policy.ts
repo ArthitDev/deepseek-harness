@@ -22,8 +22,8 @@ export interface SnapshotCorpusGenerationSummary {
 }
 
 const RETAINED_BASELINE_VERSION = 3
-// Includes native and PTC Office recordings that retain removed tools.
-const MAX_RETAINED_ROLES = 13
+// Includes native/PTC retired Office tools and the fixed V4→V5 migration input.
+const MAX_RETAINED_ROLES = 14
 const REQUIRED_V0_COVERAGE = new Set([
   'multi-hop',
   'packed-row',

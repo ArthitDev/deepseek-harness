@@ -554,7 +554,7 @@
   height: 18px;
   border-bottom: 1px solid var(--dsh-tree-line);
   border-left: 1px solid var(--dsh-tree-line);
-  border-bottom-left-radius: 8px;
+  border-bottom-left-radius: var(--dsw-radius-sm);
   pointer-events: none;
 }
 
@@ -588,7 +588,7 @@
   height: 34px;
   gap: 6px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   padding: 0 8px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
@@ -641,7 +641,8 @@
 
 .machineCount {
   min-width: 20px;
-  border-radius: 10px;
+  border-radius: 999px;
+  corner-shape: round;
   padding: 1px 6px;
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-tertiary);
@@ -731,6 +732,7 @@
   width: 3px;
   height: 3px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsh-tree-line);
 }
 

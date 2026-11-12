@@ -8,6 +8,7 @@ import {
   assertPersistedSessionVersion,
   assertSessionFixtureVersion,
   defineAcpSnapshotSuite,
+  snapshotHeaderSidecar,
   latestPersistedSessionPaths,
   parsePersistedSessionFilename,
   parseSessionFixtureName,
@@ -65,6 +66,24 @@ const AGENT = {
 }
 
 const REPLAY_DIR = fileURLToPath(new URL('./fixtures/suite', import.meta.url))
+
+it('selects Windows header sidecars only on Windows and keeps shared pins as fallback', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-header-sidecar-'))
+  try {
+    for (const filename of ['system-prompt.expected.md', 'tool-schemas.expected.json']) {
+      const canonical = join(directory, filename)
+      const windows = join(directory, filename.replace('.expected.', '.windows.expected.'))
+      writeFileSync(canonical, 'shared')
+      expect(snapshotHeaderSidecar(directory, filename, 'win32')).toBe(canonical)
+      writeFileSync(windows, 'windows')
+      expect(snapshotHeaderSidecar(directory, filename, 'win32')).toBe(windows)
+      expect(snapshotHeaderSidecar(directory, filename, 'linux')).toBe(canonical)
+      expect(snapshotHeaderSidecar(directory, filename, 'darwin')).toBe(canonical)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 function stabilize(
   fresh: string,

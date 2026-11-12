@@ -89,6 +89,7 @@ export {
 } from './session-files.ts'
 export {
   formatSystemPromptSnapshot,
+  snapshotHeaderSidecar,
   formatToolSchemasSnapshot,
   fixtureContext,
   headerChangeCount,

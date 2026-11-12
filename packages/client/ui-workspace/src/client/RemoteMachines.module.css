@@ -45,7 +45,7 @@
   gap: 12px;
   padding: 14px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 14px;
+  border-radius: var(--dsw-radius-xl);
 }
 
 .cardIcon {
@@ -54,7 +54,7 @@
   width: 34px;
   height: 34px;
   flex: none;
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-sm);
   color: var(--dsw-alias-state-business-primary);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent);
 }
@@ -100,7 +100,7 @@
 .empty {
   padding: 28px;
   border: 1px dashed var(--dsw-alias-border-l3);
-  border-radius: 14px;
+  border-radius: var(--dsw-radius-xl);
   color: var(--dsw-alias-label-tertiary);
   text-align: center;
 }
@@ -133,7 +133,7 @@
   width: 100%;
   padding: 9px 11px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 9px;
+  border-radius: var(--dsw-radius-md);
   outline: none;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -170,7 +170,7 @@
   display: block;
   overflow-wrap: anywhere;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-mono, monospace);
@@ -229,7 +229,7 @@
 
 .agentMode:focus-visible,
 .control:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
@@ -244,7 +244,7 @@
 }
 
 .modeMenuIcon[data-agent-mode='blue'] {
-  color: var(--dsw-static-blue-450);
+  color: var(--dsw-alias-label-primary-bluish);
 }
 
 .modeMenuIcon[data-agent-mode='red'] {
@@ -256,7 +256,7 @@
 }
 
 .modeMenuIcon[data-agent-mode='dead'] {
-  color: #c084fc;
+  color: var(--dsw-alias-state-done-primary);
 }
 
 .modeLoading {
@@ -336,15 +336,17 @@
 .existing button {
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   text-align: left;
   cursor: pointer;
 }
 
-.existing button:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .existing button:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 
@@ -352,5 +354,5 @@
 .control > svg:last-child, .agentMode > svg:last-child, .authTrigger > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
 .control > svg:first-child, .agentMode > svg:first-child { flex: none; }
 .authTrigger { width: 100%; padding: 9px 40px 9px 11px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; text-align: left; cursor: pointer; }
-.authTrigger:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+.authTrigger:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
 .authTrigger span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

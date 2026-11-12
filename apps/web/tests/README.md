@@ -14,6 +14,14 @@ On Linux, `--with-deps` installs dependencies through the system package manager
 
 Ordinary scenarios begin with no registered Workspace or Session and a durable marker recording a removed default Workspace, so explicit folder-selection scenarios retain control of their cwd. `launchWebScaffold({ firstUse: true })` leaves initialization eligible for startup scenarios.
 
+The scaffold's temporary workspace contains an empty `.git` directory to bound project instruction and skill discovery. It is a discovery marker, not an initialized Git repository. Together with isolated host skill roots, it keeps ancestor repository instructions and skills out of replays while preserving workspace-local discovery.
+
+The Windows ACL diagnosis skill remains user-invocable in the scaffold but is excluded from the model catalog so shared recordings have the same skill catalog across platforms. The Windows sandbox remains active, and production skill invocation policies are unchanged.
+
+Header pins normally use `system-prompt.expected.md` and `tool-schemas.expected.json`. Scenarios with native shell differences can additionally own `system-prompt.windows.expected.md` and `tool-schemas.windows.expected.json`; Windows compares and refreshes those files when present, while other hosts retain the default pins. Both variants compare the complete prompt and schemas.
+
+[The standalone string editor scenario](standalone-string-editor.e2e.ts) selects a separate Windows recording because the native backend reports partial file sandbox enforcement. Both platform recordings keep the complete tool result, including the Windows warning, and verify the created file against the same expected workspace contents.
+
 Same-day message goldens use the shared `WEB_FIXTURE_TIME`: seeded transcripts pass it as `createdAt` and pin the browser calendar with `pinBrowserClock`; scenarios that submit live messages also use `pinHostClock` and restore it after teardown. These clocks advance with real elapsed time while keeping native timers intact, so midnight does not change a scenario's date labels.
 
 Every scenario requires the whole client composition to activate. The product boot only warns about inactive entries outside its required list, but the `watchConsole` tripwire, the [real-host smoke](smoke-real.e2e.ts), and the [assembled jsdom boot](assembled-boot.ts) treat a `web boot: warning` as a failure. No scenario option relaxes this: an inactive plugin in a product composition is a defect to fix.

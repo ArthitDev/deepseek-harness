@@ -106,6 +106,7 @@ The seam is built on one separation: the service owns process coordinates and li
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: abstract `SubprocessRuntime`, `ctx.subprocess` registration, the shared `scrubbedParentEnv` scrub |
 | [`src/types.ts`](src/types.ts) | Vocabulary: spawn spec, stdio modes, handles, readers, outcomes, `DSH_*` namespace |
+| [`src/error.ts`](src/error.ts) | `SubprocessError`, its closed code list, and spawn-rejection classification |
 
 ### Data model and flow
 

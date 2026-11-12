@@ -262,6 +262,7 @@ export function apply(ctx: ClientContext): void {
     load: () => section.load(),
     view: (id: string) => section.view(id),
     closeView: () => { section.closeView() },
+    create: (from, id, name, content) => section.create(from, id, name, content),
     write: (id: string, content: string) => section.write(id, content),
     remove: (id: string) => section.remove(id),
     ...creatorDraft === undefined ? {} : { startCreatorDraft: creatorDraft },

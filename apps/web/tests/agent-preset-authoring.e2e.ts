@@ -1,4 +1,4 @@
-/** The preset settings page selects a preset and shows what it declares; creating one starts a Creator-mode task. */
+/** The preset settings page supports direct authoring alongside the Creator-mode task entry. */
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
@@ -27,14 +27,15 @@ describe('web e2e: preset roster guidance', () => {
   }, 120_000)
   afterAll(async () => { await browser?.close(); await scaffold?.close() })
 
-  it('shows the shipped roster with mode help and a read-only view, and no editing actions', async () => {
+  it('shows the shipped roster with direct creation, copying, mode help and a read-only view', async () => {
     onTestFailed(() => saveFailureShot(page, 'preset-roster-section'))
     await expect.poll(() => page.locator('[data-agent-preset-id]').count()).toBe(4)
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(join(EXPECTED, 'section.expected.md'), snapshot, mode)
     expect(snapshot).toContain('让 Agent 帮我创建预设模式')
     expect(snapshot).toContain('查看配置: 标准模式')
-    expect(snapshot).not.toContain('复制预设')
+    expect(snapshot).toContain('复制预设: 标准模式')
+    expect(snapshot).toContain('创建预设')
     expect(snapshot).not.toContain('编辑插件')
     expect(snapshot).not.toContain('打开目录')
     expect(snapshot).not.toContain('删除')

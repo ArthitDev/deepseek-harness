@@ -2,7 +2,8 @@
 import type { ReactNode } from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  Button, IconBrowseOutlineRegular, IconPlusOutlineRegular, Modal, Switch, Tag, Tooltip,
+  Button, IconBrowseOutlineRegular, IconCopyOutlineRegular, IconEditOutlineRegular,
+  IconPlusOutlineRegular, IconTrashOutlineRegular, Modal, Switch, Tag, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -10,6 +11,7 @@ import type { AgentPresetSectionState } from './section-store.ts'
 import { isBuiltInPreset, presetDisplayText } from './locales.ts'
 import { requiresCodingTools, type AgentPresetPreferences } from './settings-store.ts'
 import { PresetGuideDialog, presetGuide, trapPresetReaderTab, type PresetGuidePage } from './PresetGuideDialog.tsx'
+import { PresetCreateDialog } from './PresetCreateDialog.tsx'
 import css from './AgentPresetSection.module.css'
 
 /** Settings actions and their shared controller state. */
@@ -28,6 +30,8 @@ export interface AgentPresetSectionInjected {
   view: (id: string) => Promise<void>
   /** Close the read-only viewer. */
   closeView: () => void
+  /** Create a distinct preset without changing its source or the selected default. */
+  create: (from: string, id: string, name: string, content: string) => Promise<boolean>
   /** Store a profile-owned preset's composition; false keeps its draft visible. */
   write: (id: string, content: string) => Promise<boolean>
   /** Remove a profile-owned preset after explicit confirmation. */
@@ -70,7 +74,7 @@ function CardDescription({ text }: { text: string }): ReactNode {
  * @returns The preset settings section.
  */
 export function AgentPresetSection({
-  useAgentPresetSection, load, view, closeView, write, remove, makeDefault, startCreatorDraft,
+  useAgentPresetSection, load, view, closeView, create, write, remove, makeDefault, startCreatorDraft,
   close: closeSettings, useDeveloperTools, usePresetPreferences, setShowBuiltInPresets, t,
 }: AgentPresetSectionProps) {
   const state = useAgentPresetSection(value => value)
@@ -78,6 +82,7 @@ export function AgentPresetSection({
   const preferences = usePresetPreferences(value => value)
   const showBuiltIns = preferences.value?.showBuiltInPresets ?? true
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [creating, setCreating] = useState<'createPreset' | 'copyPreset' | null>(null)
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
   const [guide, setGuide] = useState<{
     content: NonNullable<ReturnType<typeof presetGuide>>
@@ -88,10 +93,12 @@ export function AgentPresetSection({
   useEffect(() => { void load() }, [load])
   useLayoutEffect(() => { closeViewOnUnmount.current = closeView }, [closeView])
   useEffect(() => () => { closeViewOnUnmount.current() }, [])
-  const closeViewer = () => { if (!state.saving) { closeView(); viewTrigger.current?.focus() } }
+  const closeViewer = () => { if (!state.saving) { closeView(); setCreating(null); viewTrigger.current?.focus() } }
   const viewed = state.view
   const viewedRow = viewed === null ? undefined : state.rows.find(row => row.id === viewed.id)
   const viewedTitle = viewed === null ? '' : viewedRow === undefined ? viewed.title : presetDisplayText(viewedRow, t).name
+  const createSource = state.rows.find(row => row.isDefault && row.broken === undefined)
+    ?? state.rows.find(row => row.broken === undefined)
   // Creator mode authors presets in conversation; it needs the flow to land a
   // session in and the self-referential preset on the roster.
   const creator = startCreatorDraft !== undefined && state.rows.some(row => row.id === 'cordis') ? startCreatorDraft : undefined
@@ -124,8 +131,9 @@ export function AgentPresetSection({
       if (builtIn && !showBuiltIns) return null
       const rows = state.rows.filter(row => isBuiltInPreset(row) === builtIn
         && (developerTools || !requiresCodingTools(row)))
+      const canCreate = !builtIn && state.authorable === true && createSource !== undefined
       const entry = builtIn ? null : creatorButton
-      if (rows.length === 0 && entry === null) return null
+      if (rows.length === 0 && entry === null && !canCreate) return null
       return <section key={String(builtIn)} className={css.group}>
         <h3 className={css.groupHead}>{t(builtIn ? 'builtInGroup' : 'customGroup')}</h3>
         {rows.length === 0 ? null : <ul className={css.cards}>
@@ -164,26 +172,47 @@ export function AgentPresetSection({
                   <Button variant="ghost" className={css.helpButton} aria-label={`${t('howToUse')}: ${display.name}`}
                     onClick={() => { setGuide({ content: help, page: 'usage' }) }}>{t('howToUse')}</Button>
                 </div>}
+                {state.authorable !== true ? null : <Tooltip label={t('copyPreset')} side="top" portal disabled={state.saving}>
+                  <button type="button" className={css.iconButton} disabled={state.saving}
+                    aria-label={`${t('copyPreset')}: ${display.name}`} onClick={(event) => {
+                      viewTrigger.current = event.currentTarget; setCreating('copyPreset'); setEditingId(null); void view(row.id)
+                    }}><IconCopyOutlineRegular /></button>
+                </Tooltip>}
                 {state.authorable === true && row.trust === 'user' ? <>
-                  <Button variant="ghost" size="sm" disabled={state.saving} aria-label={`${t('edit')}: ${display.name}`}
-                    onClick={(event) => { viewTrigger.current = event.currentTarget; setEditingId(row.id); void view(row.id) }}>{t('edit')}</Button>
-                  <Button variant="ghost" size="sm" disabled={state.saving} aria-label={`${t('deletePreset')}: ${display.name}`}
-                    onClick={() => { setDeleting({ id: row.id, name: display.name }) }}>{t('deletePreset')}</Button>
+                  <Tooltip label={t('edit')} side="top" portal disabled={state.saving}>
+                    <button type="button" className={css.iconButton} disabled={state.saving} aria-label={`${t('edit')}: ${display.name}`}
+                      onClick={(event) => {
+                        viewTrigger.current = event.currentTarget; setCreating(null); setEditingId(row.id); void view(row.id)
+                      }}><IconEditOutlineRegular /></button>
+                  </Tooltip>
+                  <Tooltip label={t('deletePreset')} side="top" portal disabled={state.saving}>
+                    <button type="button" className={css.iconButton} disabled={state.saving} aria-label={`${t('deletePreset')}: ${display.name}`}
+                      onClick={() => { setDeleting({ id: row.id, name: display.name }) }}><IconTrashOutlineRegular /></button>
+                  </Tooltip>
                 </> : null}
-                <button type="button" className={css.iconButton} data-tip={t('view')} aria-label={`${t('view')}: ${display.name}`}
-                  disabled={state.saving}
-                  onClick={(event) => { viewTrigger.current = event.currentTarget; setEditingId(null); void view(row.id) }}>
-                  <IconBrowseOutlineRegular />
-                </button>
+                <Tooltip label={t('view')} side="top" portal disabled={state.saving}>
+                  <button type="button" className={css.iconButton} aria-label={`${t('view')}: ${display.name}`}
+                    disabled={state.saving}
+                    onClick={(event) => {
+                      viewTrigger.current = event.currentTarget; setCreating(null); setEditingId(null); void view(row.id)
+                    }}><IconBrowseOutlineRegular /></button>
+                </Tooltip>
               </div>
             </li>
           })}
         </ul>}
+        {!canCreate ? null : <Button variant="outline" disabled={state.saving} icon={<IconPlusOutlineRegular size={16} />} onClick={(event) => {
+          viewTrigger.current = event.currentTarget; setCreating('createPreset'); setEditingId(null); void view(createSource.id)
+        }}>{t('createPreset')}</Button>}
         {entry}
       </section>
     })}
     {guide === null ? null : <PresetGuideDialog guide={guide.content} initialPage={guide.page} t={t} onClose={() => { setGuide(null) }} />}
-    {viewed !== null && editingId === viewed.id ? <PresetEditor key={viewed.id}
+    {viewed !== null && creating !== null ? <PresetCreateDialog key={viewed.id}
+      title={t(creating)} source={viewedTitle} content={viewed.content} saving={state.saving} error={state.error} t={t}
+      onClose={closeViewer} onSave={async (id, name, content) => {
+        if (await create(viewed.id, id, name, content)) closeViewer()
+      }} /> : viewed !== null && editingId === viewed.id ? <PresetEditor key={viewed.id}
       content={viewed.content} title={`${t('edit')} · ${viewedTitle}`} saving={state.saving} error={state.error} t={t}
       onClose={closeViewer} onSave={async (content) => {
         if (await write(viewed.id, content)) { closeView(); viewTrigger.current?.focus() }

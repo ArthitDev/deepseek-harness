@@ -71,6 +71,20 @@ export class AgentPresetSectionController {
   /** Close the viewer. */
   closeView(): void { this.viewRequest++; this.set({ view: null }) }
 
+  /** Create a distinct profile preset from the displayed source and edited composition.
+   * @param from Source preset id.
+   * @param id New preset id.
+   * @param name Display name; empty uses the id.
+   * @param content Complete composition YAML.
+   * @returns Whether the Host accepted creation.
+   */
+  async create(from: string, id: string, name: string, content: string): Promise<boolean> {
+    return await this.save(async () => {
+      const result = await this.ctx.remote.agentPresets.create(from, id.trim(), name.trim() || undefined, content)
+      return result.ok ? undefined : result.error.message
+    })
+  }
+
   /** Store a user preset's complete composition; retain the editor on failure.
    * @param id Preset to update.
    * @param content Complete composition YAML.

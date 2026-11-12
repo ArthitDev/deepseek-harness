@@ -2,7 +2,7 @@
 
 [English](testing.md) | 中文
 
-本文说明本仓库的分层测试方式，以及保持绿色测试套件有意义的规则。命令见根目录 [AGENTS.md](../AGENTS.md)；相关 Agent Note 承载设计动机。
+测试层级与执行规则。命令见 [AGENTS.md](../AGENTS.md)。
 
 ## 层级
 
@@ -14,7 +14,7 @@
 - **快照**（`pnpm run test:snapshot`）：顶层场景数值最高的已录制 parent generation 同时提供用户输入和模型回放，并作为持久化结果的预期值。parent 文件名是 `session[.vN].jsonl`；child 角色使用 `session.<ordinal>[.vN].jsonl`；v0 省略 `.v0`，正版本必须使用小写 `.vN`，且每个文件名必须与其 header 一致。进程级场景都通过 `dsh` 启动：headless 负责一次性行为，SDK 负责持久控制，ACP 负责自动化协议行为，Web 在同一 Session 旁保留浏览器与 ARIA 证据。`snapshot.yml` 声明 profile、组合与请求头类别、录制策略、例外回放或输入元数据以及 workspace 事实。带类型的 token 保留父子身份关系；只有请求头 pin 拥有 prompt/schema sidecar。变更 workspace 的场景会独立比较完整的 `workspace.expected/` 目录，record 与 refresh 绝不改写该目录。当模型 transcript（文本记录）变化时使用 `test:snapshot:record`，回放输入仍有效时使用 `test:snapshot:refresh`；请审查所有结果差异。
 - **Web 浏览器快照**（`pnpm run test:web`；必需的 Linux PR（Pull Request）门禁）：命令先构建插件 CSS，再用 Chromium 比较 `snapshots/web/` 下全部会话驱动输出和 `apps/web/tests/expected/` 下全部纯 UI 输出；模型与推理强度选择场景还在 WebKit 中运行。CI 强制只读的 `DSH_SNAPSHOT=replay`；record/refresh 留在本地，每处 diff 都须评审（[web 车道](../.agents/notes/implemented/testing/2026-07-24-web-gui-browser-e2e-lane.zh.md)、[CI 说明](../scripts/run-web-snapshots.ts)）。
 
-Session fixture 保留 header 与 payload，但省略正文 seq/time envelope；replay 会合成这些 envelope。Replay、record 与 refresh 会选择每个 parent/child 角色的最高 generation。当前 fixture 在文件名与 header 中使用[写入格式](session-format-status.zh.md)，每个事件一行，并嵌入紧凑 Assistant stream。历史 fixture 保留其已发布表示；显式 `sessionFormat` 所有者保留迁移覆盖。按照[格式版本实操手册](cookbook/adding-a-session-format-version.zh.md#snapshot-successors)添加后继代际，不改动前代。
+[快照 harness](../packages/test-support/session-snapshot/README.zh.md) 负责 fixture 存储、代际选择及有数量限制的历史覆盖。新录制使用[写入格式](session-format-status.zh.md)。按照[格式版本实操手册](cookbook/adding-a-session-format-version.zh.md#snapshot-successors)添加后继代际，不改动前代。
 
 ## spec 如何被执行
 

@@ -20,6 +20,12 @@ export type AgentPresetSettingsKey =
   | 'deletePreset'
   | 'confirmDelete'
   | 'composition'
+  | 'createPreset'
+  | 'copyPreset'
+  | 'presetName'
+  | 'presetId'
+  | 'presetIdHint'
+  | 'basedOn'
   | 'presetStandardName'
   | 'presetStandardDescription'
   | 'presetPtcName'
@@ -49,6 +55,9 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   edit: 'Edit preset', save: 'Save', cancel: 'Cancel', deletePreset: 'Delete preset',
   confirmDelete: 'Delete "{name}"? Existing sessions keep their current preset. This cannot be undone.',
   composition: 'Composition (YAML)',
+  createPreset: 'Create preset', copyPreset: 'Copy preset', presetName: 'Display name', presetId: 'Preset ID',
+  presetIdHint: 'Use lowercase letters, digits, and hyphens. Choose a new ID to keep the original preset.',
+  basedOn: 'Starting configuration: {name}',
   sectionIntro: 'Choose the agent’s tools and how it works. Use Standard mode for everyday tasks, or Creator mode to add capabilities to DSH.',
 
   seatHint: 'Choose the agent preset for your new task',
@@ -98,6 +107,9 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   edit: '编辑预设', save: '保存', cancel: '取消', deletePreset: '删除预设',
   confirmDelete: '删除「{name}」？已有会话保留当前预设，此操作无法撤销。',
   composition: '配置（YAML）',
+  createPreset: '创建预设', copyPreset: '复制预设', presetName: '显示名称', presetId: '预设 ID',
+  presetIdHint: '使用小写字母、数字和连字符。选择新 ID 以保留原预设。',
+  basedOn: '初始配置：{name}',
   sectionIntro: '选择 Agent 的工具和工作方式。日常任务用「标准模式」，扩展 DSH 的能力用「创造模式」。',
 
   seatHint: '选择新任务使用的 Agent 预设',
@@ -149,6 +161,9 @@ export const ja = {
   edit: 'プリセットを編集', save: '保存', cancel: 'キャンセル', deletePreset: 'プリセットを削除',
   confirmDelete: '「{name}」を削除しますか？既存のセッションは現在のプリセットを保持します。この操作は取り消せません。',
   composition: '構成（YAML）',
+  createPreset: 'プリセットを作成', copyPreset: 'プリセットを複製', presetName: '表示名', presetId: 'プリセット ID',
+  presetIdHint: '小文字の英字、数字、ハイフンを使用してください。元のプリセットを残すには新しい ID を指定します。',
+  basedOn: '初期構成: {name}',
   'customGroup': 'カスタム',
   'sectionIntro': 'エージェントのツールと動作を選択します。日々のタスクには標準モードを、DSH に機能を追加するにはクリエイターモードを使用してください。',
   'seatHint': '新しいタスクで使用するエージェントプリセットを選択',
@@ -186,6 +201,9 @@ export const es = {
   edit: 'Editar preajuste', save: 'Guardar', cancel: 'Cancelar', deletePreset: 'Eliminar preajuste',
   confirmDelete: '¿Eliminar «{name}»? Las sesiones existentes conservan su preajuste actual. Esta acción no se puede deshacer.',
   composition: 'Configuración (YAML)',
+  createPreset: 'Crear preajuste', copyPreset: 'Copiar preajuste', presetName: 'Nombre visible', presetId: 'ID del preajuste',
+  presetIdHint: 'Use letras minúsculas, números y guiones. Elija un ID nuevo para conservar el preajuste original.',
+  basedOn: 'Configuración inicial: {name}',
   sectionIntro: 'Elija las herramientas del agente y cómo funciona. Utilice el modo Estándar para las tareas diarias o el modo Creador para agregar capacidades a DSH.',
 
   seatHint: 'Elija el agente preestablecido para su nueva tarea',
@@ -235,6 +253,9 @@ export const fr = {
   edit: 'Modifier le préréglage', save: 'Enregistrer', cancel: 'Annuler', deletePreset: 'Supprimer le préréglage',
   confirmDelete: 'Supprimer « {name} » ? Les sessions existantes conservent leur préréglage actuel. Cette action est irréversible.',
   composition: 'Configuration (YAML)',
+  createPreset: 'Créer un préréglage', copyPreset: 'Copier le préréglage', presetName: 'Nom affiché', presetId: 'ID du préréglage',
+  presetIdHint: 'Utilisez des lettres minuscules, des chiffres et des tirets. Choisissez un nouvel ID pour conserver l’original.',
+  basedOn: 'Configuration initiale : {name}',
   sectionIntro: 'Choisissez les outils de l’agent et son fonctionnement. Utilisez le mode Standard pour les tâches quotidiennes ou le mode Créateur pour ajouter des fonctionnalités à DSH.',
 
   seatHint: "Choisissez le préréglage d'agent pour votre nouvelle tâche",
@@ -284,6 +305,9 @@ export const de = {
   edit: 'Voreinstellung bearbeiten', save: 'Speichern', cancel: 'Abbrechen', deletePreset: 'Voreinstellung löschen',
   confirmDelete: '„{name}“ löschen? Bestehende Sitzungen behalten ihre aktuelle Voreinstellung. Dies kann nicht rückgängig gemacht werden.',
   composition: 'Konfiguration (YAML)',
+  createPreset: 'Voreinstellung erstellen', copyPreset: 'Voreinstellung kopieren', presetName: 'Anzeigename', presetId: 'Voreinstellungs-ID',
+  presetIdHint: 'Kleinbuchstaben, Ziffern und Bindestriche verwenden. Eine neue ID behält das Original bei.',
+  basedOn: 'Ausgangskonfiguration: {name}',
   sectionIntro: 'Wählen Sie die Tools des Agenten und deren Funktionsweise aus. Verwenden Sie den Standardmodus für alltägliche Aufgaben oder den Creator-Modus, um DSH Funktionen hinzuzufügen.',
 
   seatHint: 'Wählen Sie die Agentenvoreinstellung für Ihre neue Aufgabe',
@@ -333,6 +357,9 @@ export const ru = {
   edit: 'Изменить пресет', save: 'Сохранить', cancel: 'Отмена', deletePreset: 'Удалить пресет',
   confirmDelete: 'Удалить «{name}»? Текущие сеансы сохранят свой пресет. Это действие нельзя отменить.',
   composition: 'Конфигурация (YAML)',
+  createPreset: 'Создать пресет', copyPreset: 'Копировать пресет', presetName: 'Отображаемое имя', presetId: 'ID пресета',
+  presetIdHint: 'Используйте строчные латинские буквы, цифры и дефисы. Новый ID сохраняет исходный пресет.',
+  basedOn: 'Начальная конфигурация: {name}',
   sectionIntro: 'Выбирайте инструменты агента и то, как они работают. Используйте стандартный режим для повседневных задач или режим Creator, чтобы расширить возможности DSH.',
 
   seatHint: 'Выберите предустановку агента для вашей новой задачи',
@@ -382,6 +409,9 @@ export const pt = {
   edit: 'Editar predefinição', save: 'Guardar', cancel: 'Cancelar', deletePreset: 'Eliminar predefinição',
   confirmDelete: 'Eliminar «{name}»? As sessões existentes mantêm a predefinição atual. Esta ação não pode ser anulada.',
   composition: 'Configuração (YAML)',
+  createPreset: 'Criar predefinição', copyPreset: 'Copiar predefinição', presetName: 'Nome de exibição', presetId: 'ID da predefinição',
+  presetIdHint: 'Use letras minúsculas, números e hífens. Escolha um novo ID para manter a predefinição original.',
+  basedOn: 'Configuração inicial: {name}',
   sectionIntro: 'Escolha as ferramentas do agente e como funciona. Use o modo Padrão para tarefas diárias ou o modo Criador para adicionar recursos ao DSH.',
 
   seatHint: 'Escolha a predefinição de agente para sua nova tarefa',

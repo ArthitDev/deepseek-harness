@@ -33,8 +33,6 @@ export const de = {
   'more': 'Mehr',
   'collapse': 'Einklappen',
   'expand': 'Ausklappen',
-  'subtitle.expand': 'Beschreibung für {name} ausklappen',
-  'subtitle.collapse': 'Beschreibung für {name} einklappen',
   'back': 'Zurück',
   'brand.localBuild': 'Shield Break Pentest',
   'workspace.defaultName': 'Standardarbeitsbereich',

@@ -1,0 +1,11 @@
+version: 1
+scenario: optional-string-editor-windows
+profile: web
+composition: web-ptc-string-editor-windows
+recording: authored
+platform: pwsh
+header:
+  class: web-ptc-string-editor-windows
+  pin: true
+workspace:
+  final: true

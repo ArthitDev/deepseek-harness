@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-将插件配置保存到当前 profile 的 patch 并立即应用。写入在改动磁盘前验证完整候选值，并与 profile 更改及 HMR 串行执行。无效值和更高层覆盖不会改动文件。
+将插件配置保存到所属的持久 patch 并立即应用。若 home 层存在 config 覆盖项或条目由 home 插入，就编辑共享 home patch；否则写入当前 profile patch。写入在改动磁盘前验证完整候选值，并与 profile 更改及 HMR 串行执行。无效值和命令行覆盖不会改动文件。
 
 ## 目录
 
@@ -38,9 +38,9 @@ kind: "package-reference"
 <details>
 <summary>实现内部细节——点击展开</summary>
 
-[编辑器](src/index.ts) 在派生候选配置前应用外部更改，与其他 profile 操作共同锁定 profile manifest，并原子替换配置覆盖项。它保留替换值以外的 YAML 注释和 `!!js` 表达式。应用失败时恢复之前的文档并重新加载之前的 patch。
+[编辑器](src/index.ts) 在派生候选配置前应用外部更改，锁定 profile manifest 和共享 home patch，并原子替换所属的配置覆盖项。它保留替换值以外的 YAML 注释和 `!!js` 表达式。应用失败时恢复之前的文档并重新加载之前的 patch。
 
-读取配置时，没有 profile config 覆盖项的条目共用一次组合结果。有覆盖项的条目分别组合，仅移除自身的覆盖项；profile 插入的条目和其他条目的覆盖项仍然生效。返回的配置为独立副本，组合结果不跨读取缓存。
+读取配置时，没有持久 config 覆盖项的条目共用一次组合结果。有覆盖项的条目分别组合，仅移除所属层的覆盖项；较低层、插入条目和其他条目的覆盖项仍然生效。返回的配置为独立副本，组合结果不跨读取缓存。
 
 </details>
 
@@ -64,8 +64,8 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 编辑写入当前 profile patch。Home patch 和命令行 overlay 参与优先级解析，但不作为写入目标。
-- 完整配置覆盖保留普通字段，但会在 profile 层固定其当前原始值。
+- Home 配置编辑影响使用该共享条目的所有 profile。命令行 overlay 永不作为写入目标。原生文档编辑器仍打开当前 profile patch。
+- 完整配置覆盖保留普通字段，但会在所属层固定其当前原始值。
 - 仅可编辑 profile 根 Include 拥有且可唯一定位的条目。
 
 <a id="dev-note"></a>

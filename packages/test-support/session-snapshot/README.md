@@ -96,9 +96,15 @@ A pin owns its generated `system-prompt.expected.md` or `tool-schemas.expected.j
 
 ### Platform and composition variants
 
+ACP and SDK primary-header comparisons and refreshes select an existing `system-prompt.windows.expected.md` or `tool-schemas.windows.expected.json` on Windows; other hosts and missing Windows sidecars use the canonical shared file. Canonical fixture guards continue validating the shared pins. The SDK text-turn composition keeps Windows ACL diagnosis user-invocable while excluding it from the model catalog, so the shared recording retains the same skill inventory.
+
+The Markdown wrapping check retains three exact raw runtime policy blocks in the Creator and Windows string-editor prompt pins, including Windows sidecars. Other paragraphs, modified blocks and identical text outside those owners still follow the prose rule; snapshot replay independently compares the complete prompt.
+
 A scenario requiring a non-Windows host declares `posixOnly`, which skips its run test on Windows while the fixture guards keep covering its committed files everywhere; a scenario whose composition needs a usable `pwsh` declares `pwshOnly`. `workspaceParent` moves the generated child cwd outside the platform temp directory when temporary-directory grants are themselves under test; a scenario's committed `workspace/` is copied into that child first, then `prepareWorkspace` runs against the generated cwd before the agent starts. Default generated workspaces are stored in session fixtures as `{{cwd}}`, so platform temp roots and random basenames do not affect recordings. Headless manifests use `workspace.parent: outside-temp` when the Session workspace grant itself is under test. The adapter allocates beside the platform temp root when its parent is writable and outside system temporary grants, otherwise under home, and rejects any generated cwd already covered by automatic temporary write grants.
 
 ### What can go wrong
+
+ACP workspaces have an owned parent `.git` marker that stops instruction and skill discovery before the host's ancestor directories. The marker stays outside the scenario cwd and its workspace oracle. SDK replay workspaces use the same isolation; fixture cwd substitution preserves JSON escaping and validates the hydrated log before launch.
 
 - **A durable wait times out** — `waitForTurnStart`, `waitForTurnEnd`, `waitForSubagentTurnEnd`, `waitForGoalPhase`, `waitForInboxMessage`, `waitForTitleAfterTurnEnd`, and `waitForEventAfterTurnEnd` identify the session or child and deadline even when the first log harvest exceeds that deadline. Child waits also name the requested turn. All retain the underlying failure as the error cause. `waitForTurnStart` rejects malformed turn records immediately.
 - **A fixture guard rejects the committed files** — orphan scenario dirs, missing files, multiple pins for one header class, duplicate sidecar content, unscrubbed prompt text or tool schemas, a `request/header` with no preceding `system/message`, and malformed pinning headers all fail the suite before comparisons run.

@@ -141,15 +141,15 @@ describe('recorded-session corpus policy', () => {
     }))
     // The bound is count-based, so the passing arrangement keeps the historical
     // total at the maximum by scaling the v0 block to the adjacent-set size.
-    const v0AtBound = 9 - (adjacent.length - 2)
+    const v0AtBound = 10 - (adjacent.length - 2)
     expect(assertSnapshotCorpusPolicy([
       baseline, current,
       { ...completeV0, selectedVersions: Array<number>(v0AtBound).fill(0) }, ...adjacent, ...retiredOffice,
-    ]).retainedRoles).toBe(13)
+    ]).retainedRoles).toBe(14)
     expect(() => assertSnapshotCorpusPolicy([
       baseline, current,
       { ...completeV0, selectedVersions: Array<number>(v0AtBound + 1).fill(0) }, ...adjacent, ...retiredOffice,
-    ])).toThrow(`Session corpus retains ${String(14)} historical roles; maximum is 13`)
+    ])).toThrow(`Session corpus retains ${String(15)} historical roles; maximum is 14`)
     expect(() => assertSnapshotCorpusPolicy([
       { ...baseline, selectedVersions: [3] }, completeV0, ...adjacent,
     ])).toThrow(`Session corpus requires a baseline/current majority; baseline=1, current=0, retained=${1 + adjacent.length}`)

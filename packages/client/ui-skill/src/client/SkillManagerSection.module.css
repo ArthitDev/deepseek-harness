@@ -64,7 +64,7 @@
   flex: 1 1 260px;
   height: 36px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   padding: 0 12px;
   outline: none;
   background: var(--dsw-alias-bg-layer-1);
@@ -79,7 +79,7 @@
 .terminal {
   overflow: hidden;
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-2);
   font-family: var(--ds-font-family-code);
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
@@ -127,7 +127,7 @@
 
 .terminalActions button {
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 5px;
+  border-radius: var(--dsw-radius-xs);
   padding: 2px 6px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
@@ -155,7 +155,7 @@
   height: 320px;
   max-height: 50vh;
   margin: 0;
-  border-radius: 7px;
+  border-radius: var(--dsw-radius-sm);
   padding: 10px;
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-secondary);
@@ -193,7 +193,7 @@
 
 .terminalPrompt kbd {
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 5px;
+  border-radius: var(--dsw-radius-xs);
   padding: 1px 5px;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
@@ -210,7 +210,7 @@
   display: block;
   overflow: auto;
   max-height: 180px;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   padding: 10px;
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-secondary);
@@ -240,7 +240,7 @@
   justify-content: center;
   height: 36px;
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 18px;
+  border-radius: var(--dsw-radius-md);
   padding: 0 14px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
@@ -285,7 +285,7 @@
   justify-content: space-between;
   gap: 12px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-lg);
   padding: 10px 12px;
 }
 
@@ -331,16 +331,18 @@
 .removeSkill {
   width: 30px;
   height: 30px !important;
-  border-radius: 8px !important;
+  border-radius: var(--dsw-radius-sm) !important;
   padding: 0 !important;
   color: var(--dsw-alias-label-tertiary) !important;
 }
 
-.removeSkill:hover:not(:disabled),
-.removeConfirm:hover:not(:disabled) {
-  border-color: var(--dsw-alias-state-error-primary);
-  background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-state-error-primary) !important;
+@media (hover: hover) {
+  .removeSkill:hover:not(:disabled),
+  .removeConfirm:hover:not(:disabled) {
+    border-color: var(--dsw-alias-state-error-primary);
+    background: var(--dsw-alias-interactive-bg-hover-danger);
+    color: var(--dsw-alias-state-error-primary) !important;
+  }
 }
 
 .removeConfirm:not(:disabled) {
@@ -350,7 +352,7 @@
 
 .error,
 .notice {
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   padding: 8px 10px;
   font-size: 12px;
   line-height: 18px;

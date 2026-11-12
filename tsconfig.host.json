@@ -8,6 +8,14 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "snapshots/session/headless.snapshot.ts",
+    "apps/web/tests/reasoning-spacing.e2e.ts",
+    "apps/web/tests/cua-run-code.e2e.ts",
+    "apps/web/tests/standard-dsh-doc.e2e.ts",
+    "apps/web/tests/creator-persona.e2e.ts",
+    "apps/web/tests/composer-paste-routing.e2e.ts",
+    "apps/web/tests/window-drag-inheritance.e2e.ts",
+    "packages/experimental/cua-windows/native/generate-protocol.ts",
     "packages/*/*/tests/**/*.ts",    "packages/client/ui-sidebar-documentpreview/tests/excel-drawing-fixture.ts",
     "packages/client/ui-sidebar-documentpreview/tests/excel-fixture.ts",
     "packages/client/ui-sidebar-documentpreview/tests/excel-opc-fixture.ts",
@@ -340,12 +348,11 @@
     { "path": "./packages/experimental/cua/tsconfig.host.json" },
     { "path": "./packages/experimental/cua-bundle" },
     { "path": "./packages/experimental/cua-macos" },
+    { "path": "./packages/experimental/cua-windows" },
     { "path": "./packages/client/ui-sidebar-documentpreview/tsconfig.host.json" },
     { "path": "./packages/client/ui-sidebar-browser/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.host.json" },
-    { "path": "./packages/document/office-to-pdf" },
-    { "path": "./packages/api/account-controller" },
-    { "path": "./packages/credentials/deepseek-account-platform" },
+    { "path": "./packages/document/office-kit" },
     { "path": "./packages/credentials/deepseek-account" },
     { "path": "./packages/client/ui-deliverables/tsconfig.host.json" },
     { "path": "./vendor/cosmokit" },
@@ -359,6 +366,7 @@
     { "path": "./packages/boot/hmr" },
     { "path": "./vendor/logger-console" },
     { "path": "./packages/util/brand" },
+    { "path": "./packages/util/error" },
     { "path": "./packages/util/package-manifest" },
     { "path": "./packages/util/plugin-detail" },
     { "path": "./packages/util/plugin-market-index" },
@@ -366,6 +374,7 @@
     { "path": "./packages/util/launch-environment" },
     { "path": "./packages/util/lazy-require" },
     { "path": "./packages/util/native-command" },
+    { "path": "./packages/util/ripgrep" },
     { "path": "./packages/util/home-paths" },
     { "path": "./packages/client/ui-plugin-manager/tsconfig.host.json" },
     { "path": "./packages/client/ui-trajectory/tsconfig.host.json" },
@@ -491,6 +500,7 @@
     { "path": "./packages/shell/tool-bash-persistent" },
     { "path": "./packages/shell/tool-pwsh-persistent" },
     { "path": "./packages/experimental/tool-terminal" },
+    { "path": "./packages/experimental/terminal-panel" },
     { "path": "./packages/ptc-runtime/ptc-runtime" },
     { "path": "./packages/experimental/ptc-runtime-python" },
     { "path": "./packages/ptc-runtime/ptc-runtime-node" },
@@ -629,6 +639,7 @@
     { "path": "./packages/session/session-format-v4-to-v5" },
     { "path": "./packages/web/web-search-exa" },
     { "path": "./packages/web/web-search-perplexity" },
-    { "path": "./packages/llm/proxy-server" }
+    { "path": "./packages/llm/proxy-server" },
+    { "path": "./packages/document/tool-office" }
   ]
 }

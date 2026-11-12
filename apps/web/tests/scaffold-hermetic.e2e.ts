@@ -19,12 +19,15 @@ Ambient host state.
 `)
 }
 
-it('isolates replay skill discovery from every ambient host root', async () => {
+it('isolates replay skill discovery from host roots and ancestor repositories while keeping workspace skills', async () => {
   const ambient = await mkdtemp(join(tmpdir(), 'dsh-web-ambient-skills-'))
   const dshHome = join(ambient, 'dsh-home')
   const agentsHome = join(ambient, 'agents-home')
   const bundled = join(ambient, 'bundled')
   await Promise.all([
+    mkdir(join(ambient, '.git')),
+    writeFile(join(ambient, 'AGENTS.md'), 'Ambient ancestor instructions must not enter replay.\n'),
+    writeSkill(join(ambient, '.agents', 'skills'), 'ambient-ancestor'),
     writeSkill(join(dshHome, 'skills'), 'ambient-dsh'),
     writeSkill(join(agentsHome, 'skills'), 'ambient-agents'),
     writeSkill(bundled, 'ambient-bundled'),
@@ -33,6 +36,8 @@ it('isolates replay skill discovery from every ambient host root', async () => {
   const originalDshHome = process.env.DSH_HOME
   const originalAgentsHome = process.env.DSH_AGENTS_HOME
   const originalBundled = process.env.DSH_BUNDLED_SKILL_DIR
+  const originalTemp = Object.fromEntries(['TMPDIR', 'TEMP', 'TMP'].map(key => [key, process.env[key]]))
+  Object.assign(process.env, { TMPDIR: ambient, TEMP: ambient, TMP: ambient })
   process.env.DSH_HOME = dshHome
   process.env.DSH_AGENTS_HOME = agentsHome
   process.env.DSH_BUNDLED_SKILL_DIR = bundled
@@ -40,6 +45,7 @@ it('isolates replay skill discovery from every ambient host root', async () => {
   try {
     scaffold = await launchWebScaffold()
     const ctx = scaffold.ctx
+    await writeSkill(join(scaffold.workspaceCwd, '.agents', 'skills'), 'workspace-owned')
     // Local skill discovery belongs to the agent's preset LAYER of the host
     // registry, so the roots under test are only reachable through a composed
     // agent's view — the same scope the `skills/list` Remote resolves for a
@@ -51,10 +57,22 @@ it('isolates replay skill discovery from every ambient host root', async () => {
     try {
       const skills = ctx.get('skills')
       if (skills === undefined) throw new Error('the composition mounts no skill registry')
-      const names = (await skills.list({ cwd: scaffold.workspaceCwd, scope: handle.agent })).map(skill => skill.name)
+      const catalog = await skills.list({ cwd: scaffold.workspaceCwd, scope: handle.agent })
+      const names = catalog.map(skill => skill.name)
       expect(names).not.toContain('ambient-dsh')
       expect(names).not.toContain('ambient-agents')
       expect(names).not.toContain('ambient-bundled')
+      expect(names).not.toContain('ambient-ancestor')
+      expect(names).toContain('workspace-owned')
+      const aclDiagnosis = await skills.get('diagnose-windows-sandbox-acl', { scope: handle.agent })
+      if (process.platform === 'win32') {
+        expect(aclDiagnosis?.invocation).toEqual({ modelInvocable: false, userInvocable: true })
+        expect(aclDiagnosis?.content).toContain('Windows')
+        expect(catalog.filter(skill => skill.invocation.modelInvocable).map(skill => skill.name))
+          .not.toContain('diagnose-windows-sandbox-acl')
+      } else {
+        expect(aclDiagnosis).toBeUndefined()
+      }
     } finally {
       await handle.dispose()
     }
@@ -68,6 +86,10 @@ it('isolates replay skill discovery from every ambient host root', async () => {
       else process.env.DSH_AGENTS_HOME = originalAgentsHome
       if (originalBundled === undefined) delete process.env.DSH_BUNDLED_SKILL_DIR
       else process.env.DSH_BUNDLED_SKILL_DIR = originalBundled
+      for (const [key, value] of Object.entries(originalTemp)) {
+        if (value === undefined) Reflect.deleteProperty(process.env, key)
+        else process.env[key] = value
+      }
       await rm(ambient, { recursive: true, force: true })
     }
   }

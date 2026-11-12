@@ -223,7 +223,7 @@
    single darwin rule carries the drag over its own box — below the top strip
    (40–100px: the strip's 52px foot with the row's -12px tuck). The brand rides
    that box (SidebarRoot renders the wordmark as a plain span there, so the
-   global interactive no-drag rule never subtracts it; only the local-build
+   drag-row controls rule never subtracts it; only the local-build
    fallbacks opt out through .copyVersion); the dedicated New
    Session button below keeps the pointer and keyboard paths. Safe as a drag
    source: it precedes the sidebar's overlay slots in document order, so their
@@ -280,7 +280,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 24px;
+  height: 32px;
   min-width: 0;
 }
 
@@ -299,12 +299,17 @@
   background: center / contain no-repeat var(--dsh-agent-logo, url('/new-logo.png'));
 }
 
+.brandMark .localBrandLogo {
+  width: 32px;
+  height: 32px;
+}
+
 .brandName {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  height: 24px;
+  height: 32px;
   font-size: 18px;
   font-weight: 600;
   line-height: 24px;
@@ -324,7 +329,7 @@
   align-items: flex-start;
   justify-content: center;
   gap: 1px;
-  height: 24px;
+  height: 32px;
   white-space: nowrap;
 }
 
@@ -337,8 +342,8 @@
 }
 
 .localBuildTitle {
-  font-size: 12px;
-  line-height: 13px;
+  font-size: 14px;
+  line-height: 16px;
   letter-spacing: 0;
 }
 
@@ -411,15 +416,16 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: 10px;
+  height: 12px;
   padding: 0 3px;
   border-radius: 2px;
   color: var(--dsw-alias-label-primary-inverted);
   background: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 500;
-  line-height: 10px;
+  line-height: 12px;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -456,24 +462,14 @@
 
 /* macOS: the themed elevated fill reads as a foreign slab on the vibrancy
    sidebar; a white wash sits in the glass like native macOS sidebar
-   controls. Dark keeps the same white ink at lower alpha. */
+   controls; the glass tokens lower its alpha in dark mode. */
 :global([data-platform='darwin']) :where(.root:not([role='dialog'])) .newSession {
-  background: rgb(255 255 255 / 0.55);
+  background: var(--dsw-specific-sidebar-glass-fill);
 }
 
 @media (hover: hover) {
   :global([data-platform='darwin']) :where(.root:not([role='dialog'])) .newSession:hover {
-    background: rgb(255 255 255 / 0.3);
-  }
-}
-
-:global([data-platform='darwin']) :global([data-ds-dark-theme]) :where(.root:not([role='dialog'])) .newSession {
-  background: rgb(255 255 255 / 0.15);
-}
-
-@media (hover: hover) {
-  :global([data-platform='darwin']) :global([data-ds-dark-theme]) :where(.root:not([role='dialog'])) .newSession:hover {
-    background: rgb(255 255 255 / 0.2);
+    background: var(--dsw-specific-sidebar-glass-hover);
   }
 }
 
@@ -491,6 +487,16 @@
 @media (hover: hover) {
   .collapsed .newSession:hover {
     background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+:global([data-platform='darwin']) :where(.root:not([role='dialog'])).collapsed .newSession {
+  background: var(--dsw-specific-sidebar-glass-collapsed-fill);
+}
+
+@media (hover: hover) {
+  :global([data-platform='darwin']) :where(.root:not([role='dialog'])).collapsed .newSession:hover {
+    background: var(--dsw-specific-sidebar-glass-collapsed-hover);
   }
 }
 

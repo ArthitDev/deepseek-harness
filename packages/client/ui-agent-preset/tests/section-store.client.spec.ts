@@ -15,6 +15,9 @@ function fixture() {
     })),
     read: vi.fn(async (id: string) => ({ ok: true as const, value: { agentPreset: id, name: 'Standard', content: '- name: fs\n' } })),
     write: vi.fn(async (_id: string, _content: string) => ({ ok: true as const, value: undefined })),
+    create: vi.fn(async (_from: string, _id: string, _name: string | undefined, _content: string) => ({
+      ok: true as const, value: undefined,
+    })),
     deletePreset: vi.fn(async (_id: string) => ({ ok: true as const, value: undefined })),
   }, settings: {
     update: vi.fn(async (_ns: string, _patch: { selectedDefault: string }, _revision?: number) => ({ ok: true as const, value: {} })),
@@ -26,6 +29,18 @@ function fixture() {
 }
 
 describe('the preset roster', () => {
+  it('creates a new identity with the full source composition and leaves default settings untouched', async () => {
+    const { controller, remote, state } = fixture()
+    const content = '- name: probe\n  disabled: !!js false\n'
+    expect(await controller.create('standard', ' my-copy ', ' My copy ', content)).toBe(true)
+    expect(remote.agentPresets.create).toHaveBeenCalledWith('standard', 'my-copy', 'My copy', content)
+    expect(remote.settings.update).not.toHaveBeenCalled()
+    expect(state()).toMatchObject({ saving: false, error: null })
+    remote.agentPresets.create.mockResolvedValueOnce({ ok: false, error: { message: 'Preset already exists' } } as never)
+    expect(await controller.create('standard', 'my-copy', '', content)).toBe(false)
+    expect(remote.agentPresets.create).toHaveBeenLastCalledWith('standard', 'my-copy', undefined, content)
+    expect(state()).toMatchObject({ saving: false, error: 'Preset already exists' })
+  })
   it('publishes authoring capability, saves compositions and retains rows on refused deletion', async () => {
     const { controller, remote, state } = fixture()
     remote.agentPresets.list.mockResolvedValueOnce({ ok: true, value: { authorable: true, presets: [{ id: 'mine', trust: 'user', isDefault: true }] } })
@@ -47,6 +62,8 @@ describe('the preset roster', () => {
     const pending = Promise.withResolvers<Awaited<ReturnType<typeof remote.agentPresets.write>>>()
     remote.agentPresets.write.mockImplementationOnce(() => pending.promise)
     const save = controller.write('mine', '[]\n')
+    expect(await controller.create('standard', 'mine', 'Mine', '[]\n')).toBe(false)
+    expect(remote.agentPresets.create).not.toHaveBeenCalled()
     expect(await controller.remove('mine')).toBe(false)
     expect(remote.agentPresets.deletePreset).not.toHaveBeenCalled()
     pending.resolve({ ok: true, value: undefined })

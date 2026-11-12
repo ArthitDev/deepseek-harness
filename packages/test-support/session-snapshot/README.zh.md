@@ -96,9 +96,15 @@ Headless/ACP 与 SDK 适配器在规范化之前，将原始目录中的子创�
 
 ### 平台与组合变体
 
+ACP 和 SDK 的主会话请求头比较及刷新在 Windows 上选择已有的 `system-prompt.windows.expected.md` 或 `tool-schemas.windows.expected.json`；其他主机及缺少 Windows 伴随文件时使用规范共享文件。规范 fixture 保护继续验证共享 pin。SDK text-turn 组合保留 Windows ACL 诊断的用户调用能力，同时将其排除在模型目录之外，使共享录制保留相同的 skill 清单。
+
+Markdown 换行检查保留 Creator 与 Windows string-editor 提示词 pin 中三个内容完全匹配的原始运行时策略块，包括 Windows 伴随文件。其他段落、修改后的策略块及这些所有者之外的相同文本仍遵守正文规则；快照回放另行比较完整提示词。
+
 需要非 Windows 主机的场景声明 `posixOnly`，在 Windows 上跳过运行测试，但 fixture 保护仍在所有平台覆盖其已提交文件；组合需要可用 `pwsh` 的场景声明 `pwshOnly`。当临时目录授权自身待测时，`workspaceParent` 将生成子级 cwd 移出平台临时区域；场景签入的 `workspace/` 会先复制到该子级，随后 `prepareWorkspace` 在 agent 启动前针对生成 cwd 运行。默认生成的 workspace 在会话 fixture 中存储为 `{{cwd}}`，使平台临时根目录与随机 basename 不影响录制。headless manifest 在测试 Session workspace 授权本身时使用 `workspace.parent: outside-temp`。适配器在父目录可写且位于系统临时授权之外时，于平台临时根目录旁分配目录，否则使用 home，并拒绝已被自动临时写授权覆盖的生成 cwd。
 
 ### 可能出什么问题
+
+ACP workspace 的自有父目录包含 `.git` 标记，阻止指令和 skill 发现继续读取宿主机祖先目录。该标记位于场景 cwd 及其 workspace 预期结果之外。SDK 回放 workspace 使用相同隔离方式；fixture 的 cwd 替换保留 JSON 转义，并在启动前验证替换后的日志。
 
 - **持久记录等待超时**——即使首次日志收集就超过期限，`waitForTurnStart`、`waitForTurnEnd`、`waitForSubagentTurnEnd`、`waitForGoalPhase`、`waitForInboxMessage`、`waitForTitleAfterTurnEnd` 和 `waitForEventAfterTurnEnd` 也会指出会话或子会话及等待期限。子会话等待还会指出目标轮次。这些等待都通过错误的 cause 保留底层失败。`waitForTurnStart` 会立即拒绝格式错误的轮次记录。
 - **fixture 保护拒绝已提交文件**——遗留场景目录、缺失文件、一个 header 类别包含多个 pin、重复的伴随文件内容、未擦除的提示文本或工具 schema、没有前置 `system/message` 的 `request/header`，以及格式错误的 pin header 都会在比较运行前使套件失败。

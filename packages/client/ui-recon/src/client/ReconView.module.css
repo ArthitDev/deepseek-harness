@@ -122,11 +122,11 @@
 }
 
 .loadingRingTrack {
-  stroke: color-mix(in srgb, var(--dsh-agent-accent, #ff5263) 18%, transparent);
+  stroke: color-mix(in srgb, var(--dsh-agent-accent, var(--dsw-alias-state-business-primary)) 18%, transparent);
 }
 
 .loadingRingArc {
-  stroke: var(--dsh-agent-accent, #ff5263);
+  stroke: var(--dsh-agent-accent, var(--dsw-alias-state-business-primary));
   stroke-dasharray: 32 68;
   stroke-linecap: round;
 }
@@ -138,14 +138,14 @@
   corner-shape: round;
   clip-path: circle(50%);
   background: var(--dsh-agent-logo, url('/new-logo.png')) center / contain no-repeat;
-  filter: drop-shadow(0 0 12px var(--dsh-agent-glow, rgb(255 51 71 / 70%)));
+  filter: drop-shadow(0 0 12px var(--dsh-agent-glow, color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, transparent)));
   animation: recon-logo-pulse 1.4s ease-in-out infinite;
 }
 
 .loadingMarkCompact .loadingLogo {
   width: 16px;
   height: 16px;
-  filter: drop-shadow(0 0 2px var(--dsh-agent-glow, rgb(255 51 71 / 70%)));
+  filter: drop-shadow(0 0 2px var(--dsh-agent-glow, color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, transparent)));
 }
 
 .loadingText {

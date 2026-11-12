@@ -102,7 +102,8 @@
   content: '';
   position: absolute;
   inset: -2px;
-  border-radius: inherit;
+  border-radius: 50%;
+  corner-shape: round;
   background: conic-gradient(
     var(--dsh-boot-brand) var(--dsh-boot-arc, 72deg),
     transparent 0

@@ -46,7 +46,7 @@ describe('running subagents in the status bar', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent: first, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     tui.start()
     try {
       expect(await renderScreen(tui)).toContain('📚 Wiki')
@@ -79,7 +79,7 @@ describe('running subagents in the status bar', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent: first, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     const stopAnimation = vi.spyOn(StatusBar.prototype, 'stop')
     const emit = (parent: Agent, event: 'subagent/start' | 'subagent/end', runId: string, ancestors: readonly string[] = []): void => {
       ctx.events.emit({
@@ -165,7 +165,7 @@ describe('Agent Debug subagent lifecycle', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent: parent, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent: parent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     tui.start()
     const runId = SubagentRunId('debug-run')
     const scoped = { [Context.filter]: () => true }
@@ -241,7 +241,7 @@ describe('exit and resume hints', () => {
       start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
       clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
       setProgress: vi.fn(), setProgramStatus: vi.fn() })
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     tui.start()
     try {
       screen.replaying = true
@@ -353,7 +353,7 @@ describe('exit and resume hints', () => {
       clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
       setProgress: vi.fn(), setProgramStatus: vi.fn() })
     const screen = new ChatScreen({ ctx, tui, agent,
-      config: historyLimit === undefined ? {} : { historyLimit }, onQuit: vi.fn() })
+      config: { cwd: join(tmpdir(), 'deepseek-harness'), ...(historyLimit === undefined ? {} : { historyLimit }) }, onQuit: vi.fn() })
     const createView = vi.spyOn(await import('../src/ui/views.ts'), 'createView')
     tui.start()
     try {
@@ -402,7 +402,7 @@ describe('exit and resume hints', () => {
       start: vi.fn(), stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(), hideCursor: vi.fn(), showCursor: vi.fn(),
       clearLine: vi.fn(), clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(),
       setProgress: vi.fn(), setProgramStatus: vi.fn() })
-    const screen = new ChatScreen({ ctx, tui, agent: first, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent: first, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     tui.start()
     try {
       await screen.switchAgent(resumed)
@@ -456,7 +456,7 @@ describe('exit and resume hints', () => {
       clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     })
     const screen = new ChatScreen({
-      ctx, tui, agent: first, config: {}, onQuit: vi.fn(),
+      ctx, tui, agent: first, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn(),
       onAgentSwitch: () => switched.at(-1)?.resolve(true),
     })
     tui.start()
@@ -517,7 +517,7 @@ describe('exit and resume hints', () => {
       clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     })
     const onQuit = vi.fn()
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit })
     const followup = vi.spyOn(agent, 'followup')
     const cancel = vi.spyOn(agent, 'cancel')
     const show = vi.spyOn(tui, 'showOverlay')
@@ -591,7 +591,7 @@ describe('exit and resume hints', () => {
     }
     const tui = new TuiAltScreen(terminal)
     const onQuit = vi.fn()
-    const screen = new ChatScreen({ ctx, tui, agent: original, config: {}, onQuit })
+    const screen = new ChatScreen({ ctx, tui, agent: original, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit })
     tui.start()
     try {
       await screen.switchAgent(resumed)
@@ -623,7 +623,7 @@ describe('exit and resume hints', () => {
     }
     const tui = new TuiAltScreen(terminal)
     const onQuit = vi.fn()
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit })
     try {
       screen.submit('/exit')
       expect(onQuit).toHaveBeenCalledExactlyOnceWith(undefined)
@@ -926,7 +926,7 @@ describe('/clear transcript', () => {
         clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
       }
       const tui = new TuiAltScreen(terminal)
-      const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+      const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
       tui.start()
       try {
         const system = createSystemMessage('PRESET_SENTINEL')
@@ -1106,7 +1106,7 @@ describe('the split-pane shell', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     const draft = (command: unknown, shell = 'win') => ctx.tools.execute({ calls: [{ type: 'tool-call', id: ToolCallId('draft-call'), name: 'shell_draft', arguments: JSON.stringify({ command, shell }) }], signal: new AbortController().signal, agent }).then(batch => batch.results[0]!.result)
     const schemas = (scope = agent) => ctx.tools.schemas(scope).map(tool => tool.name)
     const input = (data: string): void => { start.mock.calls[0]?.[0](data) }
@@ -1189,7 +1189,7 @@ describe('the split-pane shell', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     tui.start()
     try {
       expect(await renderScreen(tui)).toContain('Agent Debug')
@@ -1365,7 +1365,7 @@ describe('the split-pane shell', () => {
       clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
     }
     const tui = new TuiAltScreen(terminal)
-    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
     tui.start()
     try {
       screen.submit('/shell win')

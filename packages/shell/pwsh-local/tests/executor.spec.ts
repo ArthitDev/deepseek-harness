@@ -536,7 +536,9 @@ describe.skipIf(!hasPwsh)('PwshLocalExecutor.run', () => {
 
   it('rejects on spawn failure (bad workdir)', async () => {
     const { bash } = await setup()
-    await expect(run(bash, bash.resolve({ command: 'Write-Output ok', workdir: '/nonexistent-dsh' }))).rejects.toThrow(/ENOENT/)
+    await expect(run(bash, bash.resolve({ command: 'Write-Output ok', workdir: '/nonexistent-dsh' }))).rejects.toMatchObject({
+      code: 'INVALID_WORKDIR', workdir: '/nonexistent-dsh', reason: 'missing',
+    })
   })
 
   it('resolve() carries stdin/env/dshEnv onto the spec, and run() threads them to the command', async () => {

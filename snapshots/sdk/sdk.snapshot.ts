@@ -38,6 +38,7 @@ import {
   scrubSessionSnapshot,
   scrubSystemPrompts,
   sessionFixtureName,
+  snapshotHeaderSidecar,
   systemPromptPrecedesRequests,
   sessionFixtureNames,
   sessionHeaderVersion,
@@ -451,7 +452,9 @@ async function hydrateReplayFixtures(scenario: CorpusScenario, cwd: string): Pro
   await mkdir(root, { recursive: true })
   return Promise.all((await fixtureFiles(scenario)).map(async (source) => {
     const destination = join(root, basename(source))
-    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', cwd))
+    const hydrated = (await readFile(source, 'utf8')).replaceAll('{{cwd}}', JSON.stringify(cwd).slice(1, -1))
+    parseSessionLog(hydrated)
+    await writeFile(destination, hydrated)
     return destination
   }))
 }
@@ -750,7 +753,9 @@ async function runScenario(scenario: CorpusScenario): Promise<{
   cwd: string
   modelRequests: JsonObject[]
 }> {
-  const workspaceParent = await realpath(tmpdir())
+  const workspaceRoot = await realpath(await mkdtemp(join(tmpdir(), 'sdk-snapshot-root-')))
+  await mkdir(join(workspaceRoot, '.git'))
+  const workspaceParent = workspaceRoot
   let workspacePrefix = `sdk-snapshot-${scenario.name}-`
   const fixedWidthCwd = scenario.name === 'minimal-image-compaction' || scenario.name === 'manual-compact'
   if (fixedWidthCwd) {
@@ -801,7 +806,10 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     ignoredRootEntries: RUNTIME_WORKSPACE_ENTRIES,
   })
   const [parentFixture, ...childFixtures] = replayFixtures
-  const actions = sdkActions(primaryFixture, assertions.replayStandaloneCommands === true)
+  const recordedActions = sdkActions(primaryFixture, assertions.replayStandaloneCommands === true)
+  const actions = scenario.name === 'serial-created'
+    ? recordedActions.filter(action => action.kind === 'turn' && action.content !== undefined)
+    : recordedActions
   const resumeReplayFile = scenario.name === 'session-resume' && !recording
     ? join(patchRoot, 'resume-replay.json') : undefined
   const prepareTurnReplay = async (turn: number): Promise<void> => {
@@ -1008,6 +1016,7 @@ async function runScenario(scenario: CorpusScenario): Promise<{
           })
         }
         if (scenario.manifest.environment?.DSH_SNAPSHOT_FEEDBACK === '1') {
+          expect(result.finishReason, JSON.stringify(result.events.filter(event => event.type === 'turn/end'))).toBe('completed')
           const feedback = result.events.filter(event => event.type.startsWith('feedback/'))
           expect(feedback.map(event => event.type)).toEqual([
             'feedback/record', 'feedback/record', 'feedback/message-put', 'feedback/message-put', 'feedback/message-delete',
@@ -1019,6 +1028,9 @@ async function runScenario(scenario: CorpusScenario): Promise<{
           event => event.type === 'turn/end' && (event.data as JsonObject | undefined)?.turn === action.turn,
           observe,
         )
+      }
+      if (scenario.name === 'serial-created') {
+        await harness.client.request('session/wait', { sessionId })
       }
       for (const type of postActionEventTypes(primaryFixture)) {
         await waitForRootEvent(subscription, sessionId, event => event.type === type, observe)
@@ -1043,7 +1055,7 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     return { results, notifications, observedMethods, logs, initialWorkspace, finalWorkspace, cwd, modelRequests }
   } finally {
     await harness.close()
-    await rm(cwd, { recursive: true, force: true })
+    await rm(workspaceRoot, { recursive: true, force: true })
   }
 }
 
@@ -1073,13 +1085,13 @@ async function writeHeaderSidecars(
     const schemas = normalizedToolSchemas(primary.content, ctx)
     if (scenario.manifest.header.systemPromptSource === undefined) {
       await writeFile(
-        join(scenario.dir, 'system-prompt.expected.md'),
+        snapshotHeaderSidecar(scenario.dir, 'system-prompt.expected.md'),
         formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)),
       )
     }
     if (scenario.manifest.header.toolSchemasSource === undefined) {
       await writeFile(
-        join(scenario.dir, 'tool-schemas.expected.json'),
+        snapshotHeaderSidecar(scenario.dir, 'tool-schemas.expected.json'),
         formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)),
       )
     }
@@ -1121,8 +1133,8 @@ async function verifyHeaders(
   })
   const promptOwner = sourceScenario(pin, pin.manifest.header.systemPromptSource)
   const schemaOwner = sourceScenario(pin, pin.manifest.header.toolSchemasSource)
-  const prompt = await readFile(join(promptOwner.dir, 'system-prompt.expected.md'), 'utf8')
-  const schemas = parseToolSchemasSnapshot(await readFile(join(schemaOwner.dir, 'tool-schemas.expected.json'), 'utf8'))
+  const prompt = await readFile(snapshotHeaderSidecar(promptOwner.dir, 'system-prompt.expected.md'), 'utf8')
+  const schemas = parseToolSchemasSnapshot(await readFile(snapshotHeaderSidecar(schemaOwner.dir, 'tool-schemas.expected.json'), 'utf8'))
   const schemaSets = [schemas.initial, ...schemas.changes]
   const reconstructed = pinned.map((header, index) => restorePinnedToolSchemas(
     header,
@@ -1224,7 +1236,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         expect((first.tools as JsonObject[]).map(tool => tool.name)).toEqual(expect.arrayContaining([
           'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update',
         ]))
-        expect(JSON.stringify(first.messages)).toContain('shared task board')
+        expect(JSON.stringify(first.messages)).toContain('Agent Teams is available in this session.')
         expect(events.filter(event => event.type === 'team/task').map(event => event.data.task))
           .toEqual([expect.objectContaining({ subject: 'Configured Team', status: 'pending' })])
         expect(events.filter(event => event.type === 'tool/result').map(event => event.data.message.isError))
@@ -1236,7 +1248,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         expect(JSON.stringify(childResults)).toContain('Configured Team')
         for (const request of modelRequests) {
           expect((request.tools as JsonObject[]).map(tool => tool.name)).toContain('team_task_list')
-          expect(JSON.stringify(request.messages)).toContain('shared task board')
+          expect(JSON.stringify(request.messages)).toContain('Agent Teams is available in this session.')
         }
       }
       if (scenario.name === 'command-attachments') {
@@ -1754,6 +1766,11 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       }
       if (scenario.name === 'serial-created') {
         expect(observedMethods.has('subagent.started')).toBe(false)
+        const turns = parseSessionLog(ordered[0]!.content).filter(event => event.type === 'turn/end')
+        expect(turns.map(event => event.data.reason)).toEqual([
+          { kind: 'aborted', reason: { kind: 'user' } },
+          { kind: 'completed' },
+        ])
       }
       if (ordered.length > 1 && assertions.dshSdkChild === undefined) {
         expect(observedMethods.has('subagent.started')).toBe(true)

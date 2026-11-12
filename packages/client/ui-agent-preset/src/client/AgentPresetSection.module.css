@@ -76,11 +76,10 @@
 }
 
 /* The default preset reads as selected exactly like the Appearance cubes:
-   platform fill + the bluish-400 border (static token — the bluish-400 step
-   has no alias-layer name). */
+   platform fill + the selected border. */
 .cardActive {
   background: var(--dsw-alias-bg-module-platform);
-  border-color: var(--dsw-static-neutral-bluish-400);
+  border-color: var(--dsw-alias-border-selected);
 }
 
 /* Mode selection is off, not the preset itself: mute only the selectable
@@ -312,8 +311,6 @@
   }
 }
 
-/* Icon-only actions: the label rides `data-tip` so the row stays quiet until
-   someone reaches for it. */
 .iconButton {
   position: relative;
   appearance: none;
@@ -328,7 +325,7 @@
 }
 
 @media (hover: hover) {
-  .iconButton:hover {
+  .iconButton:hover:not(:disabled) {
     background: var(--dsw-alias-bg-layer-1);
     color: var(--dsw-alias-label-primary);
   }
@@ -339,32 +336,9 @@
   outline-offset: -1px;
 }
 
-.iconButton::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 8px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-bg-layer-3);
-  font-size: 11px;
-  line-height: 17px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .12s;
-}
-
-.iconButton:focus-visible::after {
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  .iconButton:hover::after {
-    opacity: 1;
-  }
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .dialog {
@@ -401,6 +375,16 @@
   gap: 8px;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
+}
+
+.createFields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.createFields .intro {
+  color: var(--dsw-alias-label-secondary);
 }
 
 .editor {

@@ -34,18 +34,23 @@ async function bench() {
   runtime.ctx.provide('shortcuts', { register: () => () => {}, catalog: createSnapshotStore([]) })
   runtime.ctx.provide('uiConversation', {})
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
-  runtime.ctx.provide('remote.remoteMachines', {
+  const remoteMachines = {
     list: vi.fn(async () => ({ ok: true as const, value: { machines: [] } })),
     save: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
     deleteMachine: vi.fn(async () => ({ ok: true as const, value: { removed: true } })),
     probe: vi.fn(async () => ({ ok: true as const, value: { fingerprint: 'sha256:test', trusted: true, platform: 'linux' } })),
     trust: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
-  } as never)
+  }
   runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}), setTheme: vi.fn() } as never)
+  const modeForm = {
+    ...createSnapshotStore({ status: 'ready' as const, value: { mode: 'red' as const }, writable: true, revision: 0, base: {}, user: {} }),
+    set: vi.fn(async () => true),
+  }
+  runtime.ctx.provide('configForms', { get: () => modeForm } as never)
   runtime.releaseWorkspaceSource()
   const directoryPicker = {}
   const { remote } = runtime
-  remote.provideNamespaces({ directoryPicker })
+  remote.provideNamespaces({ remoteMachines, directoryPicker })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

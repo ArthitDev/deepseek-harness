@@ -2,7 +2,9 @@
   "name": "@deepseek-ai/dsh-remote-machines",
   "description": "Saved SSH machines and the shared remote execution transport",
   "version": "0.2.2-rc.1",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
@@ -12,11 +14,26 @@
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
-    "./types": { "types": "./lib/types/types.d.ts", "default": "./lib/types/types.js" },
-    "./path": { "types": "./lib/types/path.d.ts", "default": "./lib/path.js" },
-    "./typert": { "types": "./lib/typert.host.d.ts", "default": "./lib/typert.host.js" },
-    "./remote": { "types": "./lib/typert.remote-client.d.ts", "default": "./lib/typert.remote-client.js" },
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./path": {
+      "types": "./lib/types/path.d.ts",
+      "default": "./lib/path.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -28,9 +45,14 @@
     "lib/typert.host.js",
     "lib/typert.host.d.ts",
     "lib/typert.remote-client.js",
-    "lib/typert.remote-client.d.ts"
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
   ],
-  "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-fs": "workspace:*",
@@ -55,6 +77,8 @@
     "@types/ssh2": "1.15.5"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/cordis-plugin-loader": { "optional": true }
+    "@deepseek-ai/cordis-plugin-loader": {
+      "optional": true
+    }
   }
 }

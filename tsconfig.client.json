@@ -382,6 +382,7 @@
     },
     {
       "path": "./packages/client/ui-proxy-server"
-    }
+    },
+    { "path": "./packages/client/ui-account-notifications" }
   ]
 }

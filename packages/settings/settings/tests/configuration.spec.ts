@@ -36,14 +36,49 @@ it('isolates instances, hides ordinary fields, rejects invalid edits, and redact
   expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'first')!.value).toEqual({ count: 2, list: [] })
 })
 
-it('refuses an edit shadowed by a higher home layer', async () => {
-  const { ctx, home, profile } = await fixture()
-  writeFileSync(join(home, 'cordis.patch.yml'), JSON.stringify([{ id: 'default-model', config: { provider: 'test', model: 'home' } }]))
+it('edits the owning home layer and restores its inherited profile value on reset', async () => {
+  const { ctx, home, profile, start } = await fixture()
+  const path = join(home, 'cordis.patch.yml')
+  writeFileSync(profile.patchPath, JSON.stringify([{ id: 'default-model', config: { provider: 'test', model: 'profile' } }]))
+  writeFileSync(path, '# shared configuration\n' + JSON.stringify([
+    { id: 'default-model', config: { provider: 'test', model: 'home' } },
+    { id: 'first', config: { ordinary: 'fixed', count: 6 } },
+  ]))
+  await ctx.fiber.dispose()
+  const active = await start()
+  const descriptor = active.settings.describe().find(row => row.ns === 'default-model')!
+  expect(descriptor.user).toEqual({ provider: 'test', model: 'home' })
+  expect(descriptor.base).toEqual({ provider: 'test', model: 'profile' })
   const before = readFileSync(profile.patchPath, 'utf8')
-  await expect(ctx.settings.update('default-model', { model: 'profile' })).rejects.toThrow('overridden')
+  await active.settings.update('default-model', { model: 'edited' })
   expect(readFileSync(profile.patchPath, 'utf8')).toBe(before)
-  expect(ctx.agentDefaultModel.currentSelection().model).toBe('home')
+  expect(readFileSync(path, 'utf8')).toContain('# shared configuration')
+  expect(parse(readFileSync(path, 'utf8'))).toContainEqual({ id: 'first', config: { ordinary: 'fixed', count: 6 } })
+  expect(active.agentDefaultModel.currentSelection().model).toBe('edited')
+  await active.fiber.dispose()
+  const restored = await start()
+  expect(restored.agentDefaultModel.currentSelection().model).toBe('edited')
+  await restored.settings.replace('default-model', {})
+  expect(restored.agentDefaultModel.currentSelection().model).toBe('profile')
+  expect(readFileSync(profile.patchPath, 'utf8')).toBe(before)
+  expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'first', config: { ordinary: 'fixed', count: 6 } }])
 }, 15_000)
+
+it('refuses command-line config overrides without changing home or profile patches', async () => {
+  const { ctx, home, profile, start } = await fixture({
+    overlays: [{ id: 'default-model', config: { provider: 'test', model: 'overlay' } }],
+  })
+  await ctx.fiber.dispose()
+  const path = join(home, 'cordis.patch.yml')
+  writeFileSync(path, JSON.stringify([{ id: 'default-model', config: { provider: 'test', model: 'home' } }]))
+  const restored = await start()
+  const beforeProfile = readFileSync(profile.patchPath, 'utf8')
+  const beforeHome = readFileSync(path, 'utf8')
+  await expect(restored.settings.update('default-model', { model: 'edited' })).rejects.toThrow('overridden')
+  expect(readFileSync(profile.patchPath, 'utf8')).toBe(beforeProfile)
+  expect(readFileSync(path, 'utf8')).toBe(beforeHome)
+  expect(restored.agentDefaultModel.currentSelection().model).toBe('overlay')
+})
 
 it('serializes concurrent writes and refuses stale revisions after external changes', async () => {
   const { ctx, profile } = await fixture()

@@ -106,6 +106,7 @@ const output = handle.collected.stdout?.readFrom(0)
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：抽象 `SubprocessRuntime`、`ctx.subprocess` 注册、共享的 `scrubbedParentEnv` 清除 |
 | [`src/types.ts`](src/types.ts) | 词汇：spawn spec、stdio 模式、句柄、读取器、结果、`DSH_*` 命名空间 |
+| [`src/error.ts`](src/error.ts) | `SubprocessError`、其封闭 code 列表与 spawn reject 分类 |
 
 ### 数据模型与流程
 

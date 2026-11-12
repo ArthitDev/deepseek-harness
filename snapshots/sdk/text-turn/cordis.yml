@@ -27,6 +27,8 @@
     maxDepth: 1
 
 - insert:
+    - id: snapshot-portable-skill-catalog
+      name: '../../../packages/test-support/session-snapshot/tests/fixtures/portable-skill-catalog.mjs'
     - id: snapshot-message-feedback
       name: '@deepseek-ai/dsh-message-feedback'
       disabled: !!js "process.env.DSH_SNAPSHOT_FEEDBACK !== '1'"

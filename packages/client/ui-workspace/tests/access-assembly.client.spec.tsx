@@ -4,8 +4,8 @@
  *
  * Hand-built row props spread allow-all access Hooks, so they cannot show that the browsing region
  * reads the Hooks a page actually binds. This spec replaces the runtime's allow-all access row with the
- * remote-access snapshot owner itself and renders the real slot tree, so the global and Workspace
- * access Hooks are the renderer's bindings over one non-owner snapshot.
+ * remote-access snapshot owner itself and renders the real slot tree, so the Workspace access Hooks
+ * are the renderer's bindings over one non-owner snapshot.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, screen } from '@testing-library/react'
@@ -55,16 +55,21 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
   runtime.ctx.provide('shortcuts', { register: () => () => {}, catalog: createSnapshotStore([]) })
   runtime.ctx.provide('uiConversation', {})
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
-  runtime.ctx.provide('remote.remoteMachines', {
+  const remoteMachines = {
     list: vi.fn(async () => ({ ok: true as const, value: { machines: [] } })),
     save: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
     deleteMachine: vi.fn(async () => ({ ok: true as const, value: { removed: true } })),
     probe: vi.fn(async () => ({ ok: true as const, value: { fingerprint: 'sha256:test', trusted: true, platform: 'linux' } })),
     trust: vi.fn(async () => ({ ok: true as const, value: { machine: {} } })),
-  } as never)
+  }
   runtime.ctx.provide('theme', { overrideTokens: vi.fn(() => () => {}), setTheme: vi.fn() } as never)
+  const modeForm = {
+    ...createSnapshotStore({ status: 'ready' as const, value: { mode: 'red' as const }, writable: true, revision: 0, base: {}, user: {} }),
+    set: vi.fn(async () => true),
+  }
+  runtime.ctx.provide('configForms', { get: () => modeForm } as never)
   runtime.releaseWorkspaceSource()
-  runtime.remote.provideNamespaces({ directoryPicker: {} })
+  runtime.remote.provideNamespaces({ remoteMachines, directoryPicker: {} })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
@@ -139,7 +144,7 @@ describe('Workspace header actions under the page access snapshot', () => {
     }
   })
 
-  it('asks the global resource before the Ungrouped header offers New Session', async () => {
+  it('never offers New Session on the Ungrouped header, even under a global grant', async () => {
     const access = new ClientAccessState({ type: 'baseline', owner: false, grants: [] })
     const runtime = await bench(access, { ungroupedSession: 'loose' as SessionId })
     try {
@@ -149,7 +154,7 @@ describe('Workspace header actions under the page access snapshot', () => {
       act(() => {
         access.update({ type: 'upsert', grant: { resource: { kind: 'global' }, actions: ['session/create'] } })
       })
-      expect(screen.getByRole('button', { name: '在“未分组”中新建会话' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: '在“未分组”中新建会话' })).toBeNull()
     } finally {
       await runtime.dispose()
     }

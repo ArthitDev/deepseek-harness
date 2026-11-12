@@ -11,7 +11,10 @@ import {
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
-const DIR = fileURLToPath(new URL('../../../snapshots/web/optional-string-editor', import.meta.url))
+// Windows retains the real partial-enforcement disclosure in its own recorded Session.
+const DIR = fileURLToPath(new URL(process.platform === 'win32'
+  ? '../../../snapshots/web/optional-string-editor-windows'
+  : '../../../snapshots/web/optional-string-editor', import.meta.url))
 const FIXTURE = join(DIR, 'session.v4.jsonl')
 const MODE = webSnapshotMode()
 

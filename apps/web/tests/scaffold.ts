@@ -11,11 +11,12 @@
 // rewrites goldens). A first-run option keeps the real adapter mounted while
 // masking its credential, without making a model call.
 //
-// Composition divergences from `dsh web`, all deliberate, all via include
-// patches after the shipped bundle layers, over the SAME tree (never a
-// second yml): temp persistenceRoot; host-level skill roots confined to the
-// temp workspace while project skill discovery remains real; agent-instructions
-// disabled (recorded fixtures must not embed this repo's AGENTS.md);
+// Composition divergences from `dsh web`, all deliberate, over the SAME tree
+// (never a second yml): temp persistenceRoot; host-level skill roots confined to the
+// temp workspace while project skill discovery remains real; a workspace .git
+// marker bounds preset-local instruction/skill discovery, and host-level
+// agent-instructions is disabled (fixtures must not embed host instructions);
+// Windows ACL diagnosis remains user-invocable but outside the shared model catalog;
 // session-title-llm disabled (its fire-and-forget title call would race the
 // loop for the session's replay cursor); webserver pinned to port 0 with the
 // built dist; ordinary keyless modes disable both direct adapters and fill the open
@@ -556,6 +557,8 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   Object.assign(process.env, skillRootEnvironment)
   let persistenceRoot: string
   try {
+    // A temp directory can sit inside the developer's repository or home checkout.
+    await mkdir(join(workspaceCwd, '.git'))
     persistenceRoot = await mkdtemp(join(tmpdir(), 'dsh-web-e2e-sessions-'))
   } catch (error) {
     const failures: unknown[] = [error]
@@ -846,6 +849,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     await mountRootInclude(ctx, rootConfig, readProfilePatches('dsh', profileContext))
     await ctx.loader.await()
     await auditStartupEntries(ctx, 'web e2e scaffold')
+    // Shared replay fixtures exclude platform-specific repair instructions, not the real sandbox.
+    const aclDiagnosis = await ctx.skills.get('diagnose-windows-sandbox-acl')
+    if (aclDiagnosis !== undefined) {
+      ctx.skills.register({ ...aclDiagnosis, invocation: { modelInvocable: false, userInvocable: true } })
+    }
     if (options.developerTools !== undefined) {
       await ctx.settings.update('ui-settings', { enabled: options.developerTools })
     }
@@ -1263,8 +1271,12 @@ async function assertReplaySession(
     .split(webUrl).join('{{webUrl}}')
   const prompts = normalizedSystemPrompts(actual, actualContext).map(normalizePrompt)
   const schemas = normalizedToolSchemas(actual, actualContext)
-  const promptPath = join(fixtureDir, 'system-prompt.expected.md')
-  const schemaPath = join(fixtureDir, 'tool-schemas.expected.json')
+  const windowsPromptPath = join(fixtureDir, 'system-prompt.windows.expected.md')
+  const windowsSchemaPath = join(fixtureDir, 'tool-schemas.windows.expected.json')
+  const promptPath = process.platform === 'win32' && existsSync(windowsPromptPath)
+    ? windowsPromptPath : join(fixtureDir, 'system-prompt.expected.md')
+  const schemaPath = process.platform === 'win32' && existsSync(windowsSchemaPath)
+    ? windowsSchemaPath : join(fixtureDir, 'tool-schemas.expected.json')
   const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
   const schemaSnapshot = formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1))
   if (mode === 'refresh') {

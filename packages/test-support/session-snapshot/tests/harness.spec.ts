@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } f
 import * as fsPromises from 'node:fs/promises'
 import { once } from 'node:events'
 import { tmpdir } from 'node:os'
-import { delimiter, join, relative, sep } from 'node:path'
+import { delimiter, dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, describe, expect, it, vi, type TestContext } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
@@ -667,20 +667,32 @@ describe('runScenario', () => {
     expect(result.rawStdout).toContain('workspace:committed.txt,runtime.txt')
   })
 
-  it('creates the generated workspace under an explicit parent', { timeout: 20_000 }, async () => {
+  it('bounds ancestor discovery in an owned parent outside the scenario workspace', { timeout: 20_000 }, async () => {
     const { fixtureFile } = await scenario({})
     const workspaceParent = await mkdtemp(join(tmpdir(), 'acp-snap-parent-'))
     tempDirs.push(workspaceParent)
 
     const result = await runScenario(
       { steps: boot },
-      { agent: AGENT, mode: 'replay', fixtureFile, workspaceParent },
+      {
+        agent: AGENT,
+        mode: 'replay',
+        fixtureFile,
+        workspaceParent,
+        prepareWorkspace: async (cwd) => {
+          expect(await readdir(dirname(cwd))).toEqual(['.git', 'workspace'])
+          expect(await readdir(cwd)).toEqual([])
+          expect(await readdir(workspaceParent)).not.toContain('.git')
+        },
+      },
     )
 
     const child = relative(workspaceParent, result.cwd)
     expect(child).not.toBe('')
     expect(child).not.toBe('..')
     expect(child.startsWith(`..${sep}`)).toBe(false)
+    await expect(readdir(dirname(result.cwd))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readdir(workspaceParent)).toEqual([])
   })
 
   it('promptAndCancel waits for the durable turn start, cancels, and settles the prompt', { timeout: 20_000 }, async () => {

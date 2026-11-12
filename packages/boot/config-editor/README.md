@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Save plugin configuration in the active profile’s patch and apply it immediately. Writes validate the complete candidate before touching disk and serialize with profile changes and HMR. Invalid values and higher-layer overrides leave the file unchanged.
+Save plugin configuration in its owning persistent patch and apply it immediately. A home config override or home-inserted entry is edited in the shared home patch; otherwise edits target the active profile patch. Writes validate the complete candidate before touching disk and serialize with profile changes and HMR. Invalid values and command-line overrides leave the file unchanged.
 
 ## Table of Contents
 
@@ -38,9 +38,9 @@ Use [settings](../../settings/settings/README.md) for forms restricted to live f
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [editor](src/index.ts) reconciles external changes before deriving a candidate, locks the profile manifest alongside other profile operations, and atomically replaces its config override. It preserves YAML comments and `!!js` expressions outside replaced values. A failed reconciliation restores the prior document and reloads the prior patches.
+The [editor](src/index.ts) reconciles external changes before deriving a candidate, locks the profile manifest and shared home patch, and atomically replaces the owning config override. It preserves YAML comments and `!!js` expressions outside replaced values. A failed reconciliation restores the prior document and reloads the prior patches.
 
-Configuration reads share one composition for entries without profile config overrides. Overridden entries are composed separately with only their own override removed; profile inserts and other entries' overrides remain effective. Returned configs are detached, and compositions are not cached between reads.
+Configuration reads share one composition for entries without persistent config overrides. Overridden entries are composed separately with only the owning layer's override removed; lower layers, inserts and other entries' overrides remain effective. Returned configs are detached, and compositions are not cached between reads.
 
 </details>
 
@@ -64,8 +64,8 @@ Consumers that change request prefixes determine cache effects.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Edits target the active profile patch. Home patches and command-line overlays are read for precedence but are not write targets.
-- A complete config override preserves ordinary fields but pins their current raw values at the profile layer.
+- Home config edits affect every profile that uses that shared entry. Command-line overlays are never write targets. The native document editor still opens the active profile patch.
+- A complete config override preserves ordinary fields but pins their current raw values at the owning layer.
 - Only uniquely addressed entries owned by the profile’s root Include are editable.
 
 <a id="dev-note"></a>

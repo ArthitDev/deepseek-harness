@@ -14,6 +14,14 @@ pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps 
 
 普通场景以没有已登记 Workspace 或 Session、但持久化标记记录默认 Workspace 已被删除的状态启动，使显式文件夹选择场景自行决定 cwd。`launchWebScaffold({ firstUse: true })` 保留初始化资格，供启动场景使用。
 
+scaffold 的临时工作区包含一个空的 `.git` 目录，用于限定项目指令与技能的发现范围。它只是发现标记，不是已初始化的 Git 仓库。该标记与隔离的主机技能根目录一起，防止回放读取祖先仓库的指令和技能，同时保留工作区内的发现能力。
+
+Windows ACL 诊断技能在 scaffold 中仍可由用户调用，但不进入模型技能目录，使各平台共享录制具有相同的技能目录。Windows 沙箱保持启用，生产环境的技能调用策略不变。
+
+请求头固定值通常使用 `system-prompt.expected.md` 和 `tool-schemas.expected.json`。原生 shell 存在差异的场景还可拥有 `system-prompt.windows.expected.md` 和 `tool-schemas.windows.expected.json`；这些文件存在时，Windows 比较并刷新它们，其他主机继续使用默认固定值。两种变体都比较完整的提示词与 schema。
+
+[独立字符串编辑器场景](standalone-string-editor.e2e.ts)选择单独的 Windows 录制，因为原生后端报告文件沙箱仅部分执行。两个平台的录制均保留完整工具结果，包括 Windows 警告，并根据相同的预期工作区内容验证创建的文件。
+
 当天消息的 golden 使用共享的 `WEB_FIXTURE_TIME`：预置会话将它传为 `createdAt`，并通过 `pinBrowserClock` 固定浏览器日期；提交实时消息的场景还使用 `pinHostClock`，在清理后恢复。固定后的时钟随真实耗时前进，保留原生定时器，因此跨午夜不会改变场景的日期标签。
 
 每个场景都要求整个客户端组合全部激活。产品启动只对必需名单外的未激活 entry 告警，但 `watchConsole` 绊线、[真实 Host 冒烟](smoke-real.e2e.ts)与[组装 jsdom 启动](assembled-boot.ts)把 `web boot: warning` 视为失败。没有任何场景选项放宽这一点：产品组合中出现未激活插件就是需要修复的缺陷。

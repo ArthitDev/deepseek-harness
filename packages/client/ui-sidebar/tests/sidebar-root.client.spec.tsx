@@ -265,13 +265,13 @@ describe('SidebarRoot shell', () => {
     />)
 
     expect(screen.getByText('Shield Break Pentest')).toBeTruthy()
-    expect(screen.getByText('1.2.3-rc.4-0123456-dirty')).toBeTruthy()
+    expect(screen.getByText('1.2.3-rc.4-0123456-dirty-pentest')).toBeTruthy()
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
   it.each([
-    [{ DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3'],
-    [{ DSH_CLIENT_COMMIT_HASH: 'abcdef0', DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-abcdef0'],
+    [{ DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-pentest'],
+    [{ DSH_CLIENT_COMMIT_HASH: 'abcdef0', DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-abcdef0-pentest'],
   ])('omits unavailable build-version suffixes from %j', (environment, expected) => {
     for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value)
     render(<SidebarRoot
@@ -321,16 +321,16 @@ describe('SidebarRoot shell', () => {
 
     const copiedToasts = () => screen.queryAllByRole('alert').map(toast => toast.textContent)
     await act(async () => { fireEvent.click(screen.getByText('Shield Break Pentest')) })
-    expect(writeText).toHaveBeenLastCalledWith('1.2.3-abcdef0')
+    expect(writeText).toHaveBeenLastCalledWith('1.2.3-abcdef0-pentest')
     expect(copiedToasts()).toEqual(['Version copied'])
     // The brand itself keeps its title and version.
     expect(screen.getByText('Shield Break Pentest')).toBeTruthy()
-    expect(screen.getByText('1.2.3-abcdef0')).toBeTruthy()
+    expect(screen.getByText('1.2.3-abcdef0-pentest')).toBeTruthy()
     act(() => { vi.advanceTimersByTime(4000) })
     expect(copiedToasts()).toEqual([])
 
     // A refused write claims no success.
-    await act(async () => { fireEvent.click(screen.getByText('1.2.3-abcdef0')) })
+    await act(async () => { fireEvent.click(screen.getByText('1.2.3-abcdef0-pentest')) })
     expect(copiedToasts()).toEqual([])
 
     // The fallback mark copies too, and its click still reaches document.
@@ -457,7 +457,7 @@ it('keeps the macOS sidebar toggle in its top strip', () => {
   fireEvent.click(screen.getByRole('button', { name: en['toggle.collapse'] }))
   expect(shell.toggleSidebar).toHaveBeenCalledOnce()
   // The brand stays part of the logo row's window-drag surface: no button
-  // role (the global no-drag rule would subtract it); only the dedicated
+  // role (the drag-row controls rule would subtract it); only the dedicated
   // New Session capsule starts a session.
   expect(screen.getAllByRole('button', { name: 'New session' })).toHaveLength(1)
   expect(screen.getByTestId('custom-brand-mark')).toBeTruthy()

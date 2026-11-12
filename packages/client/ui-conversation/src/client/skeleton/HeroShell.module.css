@@ -56,11 +56,11 @@
   box-sizing: content-box;
   width: 0;
   overflow: hidden;
-  border-right: 4px solid var(--dsh-agent-accent, #ff5263);
+  border-right: 4px solid var(--dsh-agent-accent, var(--dsw-alias-state-business-primary));
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
   filter: drop-shadow(
-    0 0 5px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
+    0 0 5px color-mix(in srgb, var(--dsh-agent-glow, var(--dsw-alias-state-business-primary)) 55%, transparent)
   );
   animation:
     hero-title-type 6s steps(24, end) 300ms forwards,
@@ -93,13 +93,13 @@
 @keyframes hero-logo-pulse {
   0%, 100% {
     filter: drop-shadow(
-      0 0 7px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 35%, transparent)
+      0 0 7px color-mix(in srgb, var(--dsh-agent-glow, var(--dsw-alias-state-business-primary)) 35%, transparent)
     );
   }
 
   50% {
     filter: drop-shadow(
-      0 0 14px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 72%, transparent)
+      0 0 14px color-mix(in srgb, var(--dsh-agent-glow, var(--dsw-alias-state-business-primary)) 72%, transparent)
     );
   }
 }
@@ -236,7 +236,7 @@
   .fishHitbox {
     animation: none;
     filter: drop-shadow(
-      0 0 10px color-mix(in srgb, var(--dsh-agent-glow, #ff3347) 55%, transparent)
+      0 0 10px color-mix(in srgb, var(--dsh-agent-glow, var(--dsw-alias-state-business-primary)) 55%, transparent)
     );
   }
 

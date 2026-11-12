@@ -57,6 +57,20 @@ const SYSTEM_PROMPT_SNAPSHOT = 'system-prompt.expected.md'
 /** The structured tool-schema snapshot beside its owning header pin. */
 const TOOL_SCHEMAS_SNAPSHOT = 'tool-schemas.expected.json'
 
+/**
+ * Select an existing Windows header sidecar, otherwise the canonical shared sidecar.
+ * @param directory - Owning scenario directory.
+ * @param filename - Canonical header sidecar filename containing `.expected.`.
+ * @param platform - Host platform; defaults to the running process.
+ * @returns The selected absolute or directory-relative sidecar path.
+ */
+export function snapshotHeaderSidecar(
+  directory: string, filename: string, platform: NodeJS.Platform = process.platform,
+): string {
+  const windows = join(directory, filename.replace('.expected.', '.windows.expected.'))
+  return platform === 'win32' && existsSync(windows) ? windows : join(directory, filename)
+}
+
 /** Return the dedicated tool-schema sidecar for one child fixture index. */
 function childToolSchemasSnapshot(index: number): string {
   return `tool-schemas.${index}.expected.json`
@@ -1422,7 +1436,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
             /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
             const promptSource = promptSourceByClass.get(classOf(scenario)) ?? scenario
-            const promptPath = join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT)
+            const promptPath = snapshotHeaderSidecar(join(snapshotsDir, promptSource.name), SYSTEM_PROMPT_SNAPSHOT)
             claimSharedSnapshot(promptClaims, promptPath, scenario.name, promptSnapshot)
             await writeFile(promptPath, promptSnapshot)
 
@@ -1435,7 +1449,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             )
             /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
             const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? scenario
-            const schemaPath = join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT)
+            const schemaPath = snapshotHeaderSidecar(join(snapshotsDir, schemaSource.name), TOOL_SCHEMAS_SNAPSHOT)
             claimSharedSnapshot(schemaClaims, schemaPath, scenario.name, toolSchemasSnapshot)
             await writeFile(schemaPath, toolSchemasSnapshot)
           }
@@ -1509,7 +1523,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         const pinnedFixture = await readFile(join(pinningDir, pinningFixtureFile as string), 'utf8')
         const pinned = pinningHeaderPayloads(pinnedFixture, fixtureContext(pinnedFixture))
         const promptSnapshot = await readFile(
-          join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT),
+          snapshotHeaderSidecar(join(snapshotsDir, promptSource.name), SYSTEM_PROMPT_SNAPSHOT),
           'utf8',
         )
         const initialPromptSnapshot = initialSystemPromptSnapshot(promptSnapshot)
@@ -1518,7 +1532,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         expect(parseSystemPromptSnapshot(promptSnapshot).changes.length, `the prompt source (${promptSource.name}) has an unexpected system prompt change count`)
           .toBe(pinningScenario.expectedPromptChanges ?? 0)
         const toolSchemasSnapshot = await readFile(
-          join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT),
+          snapshotHeaderSidecar(join(snapshotsDir, schemaSource.name), TOOL_SCHEMAS_SNAPSHOT),
           'utf8',
         )
         const toolSchemas = parseToolSchemasSnapshot(toolSchemasSnapshot)

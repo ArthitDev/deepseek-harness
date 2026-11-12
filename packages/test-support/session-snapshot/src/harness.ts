@@ -16,7 +16,7 @@
  * @module @deepseek-ai/dsh-session-snapshot/harness
  */
 
-import { cp, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { existsSync, realpathSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -246,8 +246,8 @@ export function snapshotSpillRoot(
  * @returns The captured stdout/stderr, session id, generated cwd, and harvested logs.
  */
 export async function runScenario(input: InputScript, opts: RunOptions): Promise<RunResult> {
-  const cwd = await mkdtemp(join(opts.workspaceParent ?? tmpdir(), 'acp-snap-cwd-'))
-  const cwdAliases = [...new Set([realpathSync(cwd), realpathSync.native(cwd)])]
+  const workspaceRoot = await mkdtemp(join(opts.workspaceParent ?? tmpdir(), 'acp-snap-cwd-'))
+  const cwd = join(workspaceRoot, 'workspace')
   const sessionsRoot = await mkdtemp(join(tmpdir(), 'acp-snap-sessions-'))
   let spillRoot: string | undefined
   // Everything past the temp-dir creation is followed by failure-safe cleanup,
@@ -256,6 +256,10 @@ export async function runScenario(input: InputScript, opts: RunOptions): Promise
   let sessionId: string | undefined
   let sessionLogs: HarvestedLog[] = []
   const outcome = await (async (): Promise<RunResult> => {
+    // Bound ancestor discovery without putting a synthetic repository in the scenario's cwd.
+    await mkdir(join(workspaceRoot, '.git'))
+    await mkdir(cwd)
+    const cwdAliases = [...new Set([realpathSync(cwd), realpathSync.native(cwd)])]
     spillRoot = await mkdtemp(join(tmpdir(), 'acp-snap-spill-'))
     // Seed the workspace if the scenario ships one (a file the agent reads/edits).
     // Copied into the generated cwd so the agent's bash tools see it; the expected outputs
@@ -390,7 +394,7 @@ export async function runScenario(input: InputScript, opts: RunOptions): Promise
   }
   /* v8 ignore next 1 -- launch itself can only throw on a defensive synchronous spawn API failure */
   await cleanup(() => launched?.close('SIGKILL') ?? Promise.resolve())
-  await cleanup(() => rm(cwd, { recursive: true, force: true }))
+  await cleanup(() => rm(workspaceRoot, { recursive: true, force: true }))
   await cleanup(() => rm(sessionsRoot, { recursive: true, force: true }))
   const allocatedSpillRoot = spillRoot
   if (allocatedSpillRoot !== undefined) await cleanup(() => rm(allocatedSpillRoot, { recursive: true, force: true }))

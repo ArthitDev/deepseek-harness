@@ -9,6 +9,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
 import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
+import { recordKeyFor } from '../src/auth.ts'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
@@ -61,7 +62,7 @@ describe('login flows in a real composition', () => {
 
     // Zero routes configured: signing in is what makes a route worth adding,
     // so the offer cannot wait for a profile to name the provider.
-    const codex = ctx.authorization.describe(LlmPiAi.recordKeyFor('openai-codex'))
+    const codex = ctx.authorization.describe(recordKeyFor('openai-codex'))
     expect(codex?.methods.map(method => method.id)).toEqual(['oauth'])
   })
 
@@ -76,6 +77,39 @@ describe('login flows in a real composition', () => {
 })
 
 describe('request-level dynamic profiles', () => {
+  it('preserves an endpoint expression while editing models and rejects a non-string expression result', async () => {
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+    vi.stubEnv('PI_DYNAMIC_ENDPOINT', server.url)
+    vi.stubEnv('PI_DYNAMIC_KEY', 'fixture-key')
+    const ctx = new Context()
+    cleanups.push(async () => { await ctx.fiber.dispose() })
+    await ctx.plugin(LlmRuntime)
+    const endpoint = { __jsExpr: 'process.env.PI_DYNAMIC_ENDPOINT' }
+    const configuration = await liveConfig(ctx, LlmPiAi, { providers: { 'zcode-direct': {
+      api: 'openai-completions', apiKeyEnv: 'PI_DYNAMIC_KEY', baseURL: endpoint,
+      models: [{ id: 'glm-5.3', name: 'Original' }],
+    } } })
+    const fiber = configuration.entry.fiber
+
+    await configuration.update({ providers: { 'zcode-direct': {
+      models: [{ id: 'glm-5.3', name: 'Edited' }],
+    } } })
+    expect(configuration.entry.fiber === fiber).toBe(true)
+    expect(configuration.entry.options.config).toMatchObject({ providers: { 'zcode-direct': { baseURL: endpoint } } })
+    expect(await ctx.llm.listModels('zcode-direct')).toContainEqual(expect.objectContaining({ id: 'glm-5.3', name: 'Edited' }))
+    const result = await assemble(ctx, { provider: 'zcode-direct', model: 'glm-5.3', messages: [] })
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+
+    const before: unknown = structuredClone(configuration.entry.options.config)
+    await expect(configuration.update({ providers: { 'zcode-direct': {
+      baseURL: { __jsExpr: '({ invalid: true })' },
+    } } })).rejects.toThrow(/baseURL.*expected string/)
+    expect(configuration.entry.options.config).toEqual(before)
+    const retained = await assemble(ctx, { provider: 'zcode-direct', model: 'glm-5.3', messages: [] })
+    expect(retained.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(server.requests).toHaveLength(2)
+  })
+
   it('keeps stored catalog failures editable while isolating requests and validating changed providers', async () => {
     vi.stubEnv('PI_DYNAMIC_KEY', '')
     const dir = await home()

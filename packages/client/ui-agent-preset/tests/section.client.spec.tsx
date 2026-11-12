@@ -21,8 +21,10 @@ function view(partial: Partial<AgentPresetSectionState> = {}, startCreatorDraft?
     saving: false, rows: [{ id: 'standard', isDefault: true, trust: 'system' },
       { id: 'mine', name: 'Mine', isDefault: false, trust: 'user' }],
     view: null, ...partial })
-  const actions = { load: vi.fn(async () => {}), view: vi.fn(async () => {}), closeView: vi.fn(), makeDefault: vi.fn(async () => {}),
-    close: vi.fn(), setShowBuiltInPresets: vi.fn(async () => {}), write: vi.fn(async () => true), remove: vi.fn(async () => true) }
+  const actions = { load: vi.fn(async () => {}), view: vi.fn(async () => {}),
+    closeView: vi.fn(() => { store.set({ ...store.getSnapshot(), view: null }) }), makeDefault: vi.fn(async () => {}),
+    close: vi.fn(), setShowBuiltInPresets: vi.fn(async () => {}), create: vi.fn(async () => true),
+    write: vi.fn(async () => true), remove: vi.fn(async () => true) }
   const props: AgentPresetSectionProps = { ...actions,
     ...(startCreatorDraft === undefined ? {} : { startCreatorDraft }),
     usePanelInfo: unusedHook, useSessions: unusedHook, useSessionStatus: unusedHook, useSessionRetainInfo: unusedHook,
@@ -42,6 +44,74 @@ function rowFor(id: string): HTMLElement {
   if (row === null) throw new Error(`no card for ${id}`)
   return row
 }
+
+it('keeps card actions icon-only, named for assistive technology and disabled during saves', () => {
+  const actions = view({ authorable: true })
+  const buttons = [en.copyPreset, en.edit, en.deletePreset, en.view].map(label =>
+    within(rowFor('mine')).getByRole<HTMLButtonElement>('button', { name: `${label}: Mine` }))
+  for (const button of buttons) expect(button.textContent).toBe('')
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), saving: true }) })
+  for (const button of buttons) expect(button.disabled).toBe(true)
+})
+
+it('creates a preset directly without Creator mode, retaining its identity and YAML after a refused save', async () => {
+  const actions = view({ authorable: true })
+  const trigger = screen.getByRole('button', { name: en.createPreset })
+  fireEvent.click(trigger)
+  expect(actions.view).toHaveBeenCalledWith('standard')
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), view: { id: 'standard', title: 'standard', content: '[]\n' } }) })
+  const dialog = screen.getByRole('dialog', { name: en.createPreset })
+  const name = within(dialog).getByRole<HTMLInputElement>('textbox', { name: en.presetName })
+  const id = within(dialog).getByRole<HTMLInputElement>('textbox', { name: en.presetId })
+  const composition = within(dialog).getByRole<HTMLTextAreaElement>('textbox', { name: en.composition })
+  expect(document.activeElement).toBe(name)
+  expect(within(dialog).getByRole<HTMLButtonElement>('button', { name: en.save }).disabled).toBe(true)
+  fireEvent.change(name, { target: { value: 'My custom agent' } })
+  fireEvent.change(id, { target: { value: 'custom-agent' } })
+  fireEvent.change(composition, { target: { value: 'invalid YAML draft' } })
+  actions.create.mockResolvedValueOnce(false)
+  fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
+  await waitFor(() => { expect(actions.create).toHaveBeenCalledWith('standard', 'custom-agent', 'My custom agent', 'invalid YAML draft') })
+  expect(name.value).toBe('My custom agent')
+  expect(id.value).toBe('custom-agent')
+  expect(composition.value).toBe('invalid YAML draft')
+  expect(actions.closeView).not.toHaveBeenCalled()
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), saving: true, error: 'Invalid composition' }) })
+  expect(within(dialog).getByRole('alert').textContent).toBe('Invalid composition')
+  fireEvent.keyDown(id, { key: 'Escape' })
+  expect(actions.closeView).not.toHaveBeenCalled()
+  expect(id.disabled).toBe(true)
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), saving: false }) })
+  fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
+  await waitFor(() => { expect(actions.closeView).toHaveBeenCalledOnce() })
+  expect(actions.makeDefault).not.toHaveBeenCalled()
+})
+
+it.each(['standard', 'mine'])('copies %s into a distinct name and id without changing its composition or the default', async (source) => {
+  const actions = view({ authorable: true })
+  const label = source === 'standard' ? en.presetStandardName : 'Mine'
+  const trigger = within(rowFor(source)).getByRole('button', { name: `${en.copyPreset}: ${label}` })
+  trigger.focus()
+  fireEvent.click(trigger)
+  expect(actions.view).toHaveBeenCalledWith(source)
+  const content = '- name: probe\n  disabled: !!js false\n'
+  act(() => { actions.store.set({ ...actions.store.getSnapshot(), view: { id: source, title: label, content } }) })
+  const dialog = screen.getByRole('dialog', { name: en.copyPreset })
+  fireEvent.change(within(dialog).getByRole('textbox', { name: en.presetName }), { target: { value: 'สำเนาของฉัน' } })
+  fireEvent.change(within(dialog).getByRole('textbox', { name: en.presetId }), { target: { value: 'my-copy' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
+  await waitFor(() => { expect(actions.create).toHaveBeenCalledWith(source, 'my-copy', 'สำเนาของฉัน', content) })
+  expect(actions.makeDefault).not.toHaveBeenCalled()
+  expect(actions.write).not.toHaveBeenCalled()
+  expect(document.activeElement).toBe(trigger)
+})
+
+it('hides direct creation and copying when the profile cannot author presets', () => {
+  view({ authorable: false })
+  expect(screen.queryByRole('button', { name: en.createPreset })).toBeNull()
+  expect(screen.queryByRole('button', { name: /^Copy preset:/ })).toBeNull()
+})
+
 it('offers editing only for profile-owned presets and keeps a draft after a refused save', async () => {
   const actions = view({ authorable: true })
   expect(within(rowFor('standard')).queryByRole('button', { name: `${en.edit}: ${en.presetStandardName}` })).toBeNull()
