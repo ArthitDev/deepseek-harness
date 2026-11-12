@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write scripts/kali/README.md
+/:
+  en: d2624c5c282a271f
+  zh: 58df96bef3e5ad85
+/kali-cli-image:
+  en: c9c20eb23f0eb947
+  zh: f6a06dd55e07355e
+/kali-cli-image/summary:
+  en: c2b169366e0c4753
+  zh: d4bf9ac736d124fb
+/kali-cli-image/table-of-contents:
+  en: 0911545e056c31eb
+  zh: 12a5f7fd4a02b977
+/kali-cli-image/build-and-verify:
+  en: 6c049656aa024b4f
+  zh: ffa6ea72c4390829
+/kali-cli-image/deployment-and-migration:
+  en: 5cbaaa9b89c6e21f
+  zh: 572db27d3c1e509e
+/kali-cli-image/runtime-package-operations:
+  en: 8ecfafeedf89ee6d
+  zh: 3ba7ceec508bfeb3
+/kali-cli-image/implementation:
+  en: da38dc3a5cc4bdbb
+  zh: 79699148d99a4255
+/kali-cli-image/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269
