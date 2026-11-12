@@ -165,7 +165,7 @@ describe('session.delete writer lifecycle', () => {
     })
     const save = vi.spyOn(ctx.agentDefaultModel, 'saveSelection')
     const selection = controller.selectModel({ sessionId, ...selected }).then(
-      value => ({ value }), error => ({ error }),
+      value => ({ value }), (error: unknown) => ({ error }),
     )
     try {
       await Promise.race([entered.promise, selection.then(() => { throw new Error('selection settled before validation') })])

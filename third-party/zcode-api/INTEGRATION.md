@@ -48,6 +48,8 @@ Keep `config.yaml`, `.env*`, logs, and `node_modules` out of Git. Generated work
 
 ## Source and verification
 
+Runtime setup installs production dependencies only. Before running source tests or the Harness root lint, install the locked development dependencies from this directory with `bun --no-env-file install --frozen-lockfile --ignore-scripts`. Use a development environment (`NODE_ENV` unset or `development`); it installs `@types/bun` and its `bun-types` dependency. This command does not configure an account or start the proxy.
+
 [UPSTREAM.json](UPSTREAM.json) pins the upstream version and revision and records local changes. This snapshot includes the server source, tests, dependency manifest, lockfile, worker build script, and upstream config example. Android packaging files are not included.
 
 ```sh
