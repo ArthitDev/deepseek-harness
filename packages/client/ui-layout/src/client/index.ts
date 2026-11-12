@@ -94,6 +94,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * Session binding and remains mounted across main-panel navigation.
      */
     'shell.bottom': { kind: 'single'; scope: 'root' }
+    /** Additive status contributions beside the retained bottom content. */
+    'shell.status': { kind: 'list'; scope: 'root' }
     /**
      * Frame-wide floating layer, above every column and outside their scroll
      * containers. Deliberately generic and unowned by any feature: a badge, a
@@ -197,6 +199,7 @@ export function apply(ctx: ClientContext): void {
         'main': { kind: 'keyed', scope: 'root' },
         'rightbar': { kind: 'single', scope: 'root' },
         'shell.bottom': { kind: 'single', scope: 'root' },
+        'shell.status': { kind: 'list', scope: 'root' },
         'shell.overlay': { kind: 'list', scope: 'root' },
         'shell.leading': { kind: 'single', scope: 'root' },
       },

@@ -454,6 +454,8 @@ export interface StatusBarData {
   teamMode?: TeamMode
   /** Wiki discovery is callable by the current agent. */
   wikiAvailable?: boolean
+  /** Host HTTPS route verification; absent when the service is not mounted. */
+  vpn?: import('@deepseek-ai/dsh-host-vpn-status/types').VpnStatusSnapshot
   /** Read-only execution status of the configured Kali backend. */
   kali?: import('../core/kali-status.js').KaliStatus
   /** Jev tool availability, local switch state, and provider-reported session cost. */
@@ -528,6 +530,14 @@ export class StatusBar extends Loader {
     if (data.wikiAvailable === true) parts.push(chalk.green('📚 Wiki'))
     if (data.kali !== undefined) {
       parts.push((data.kali === 'ready' ? chalk.green : data.kali === 'checking' ? chalk.yellow : chalk.red)(`Kali ${data.kali}`))
+    }
+    if (data.vpn !== undefined) {
+      const fresh = data.vpn.validUntil !== null && Date.now() < data.vpn.validUntil
+      const state = data.vpn.state === 'verified' && !fresh ? 'unknown' : data.vpn.state
+      const checked = data.vpn.checkedAt === null ? '' : ' · ' + new Date(data.vpn.checkedAt).toISOString().slice(11, 19) + 'Z'
+      parts.push((state === 'verified' ? chalk.green : chalk.yellow)(
+        'VPN ' + state + (state === 'verified' && data.vpn.evidence !== null ? ' (' + data.vpn.evidence + ')' : '') + checked + ' · Host HTTPS',
+      ))
     }
     if (data.jev !== undefined) {
       const label = data.jev.state === 'unavailable' ? 'Jev unavailable' : `Jev ${data.jev.state.toUpperCase()}`

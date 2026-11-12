@@ -673,3 +673,11 @@
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
         default: standard
+
+- insert:
+    - id: vpn-status
+      name: '@deepseek-ai/dsh-host-vpn-status'
+
+- insert:
+    - id: ui-vpn-status
+      name: '@deepseek-ai/dsh-client-ui-vpn-status'

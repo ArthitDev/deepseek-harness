@@ -18,6 +18,7 @@
     "scripts"
   ],
   "exclude": [
+    "tests/vpn-status.e2e.ts",
     "tests/sidebar-drawer.e2e.ts",
     "tests/creation-recommendations.e2e.ts",
     "tests/plugin-recommendations.e2e.ts",

@@ -29,6 +29,7 @@ import sessionReferencesRemote from '@deepseek-ai/dsh-session-reference/remote'
 import subagentsRemote from '@deepseek-ai/dsh-subagent/remote'
 import sessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
 import jobRemote from '@deepseek-ai/dsh-api-job-controller/remote'
+import vpnStatusRemote from '@deepseek-ai/dsh-host-vpn-status/remote'
 import workspaceRemote from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import terminalRemote from '@deepseek-ai/dsh-api-terminal-controller/remote'
 import workspaceFilesRemote from '@deepseek-ai/dsh-api-workspace-files/remote'
@@ -213,7 +214,8 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       toolResultsRemote,
       messageFeedbackRemote, sessionFeedbackRemote,
       fileUploadsRemote, sessionReferencesRemote,
-      permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
+      permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, vpnStatusRemote,
+      workspaceRemote, workspaceFilesRemote, terminalRemote,
       officeKitRemote, userQuestionsRemote, webRemote,
       pentestRunsRemote, pentestLoopRemote, reconRunsRemote, remoteMachinesRemote, proxyServersRemote,
     ]) {

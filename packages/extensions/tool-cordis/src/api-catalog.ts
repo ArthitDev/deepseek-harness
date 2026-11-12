@@ -5069,6 +5069,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'vpnStatus',
+    summary: 'Owns one non-overlapping external check and a bounded-lifetime cached result.',
+    description: 'Owns one non-overlapping external check and a bounded-lifetime cached result.',
+    methods: [
+      {
+        signature: '@Remote(\'read\') read(signal?: AbortSignal): VpnStatusSnapshot',
+        description: 'Read cached verification only; never triggers network I/O.',
+        parameters: [{ name: 'signal', description: 'optional Remote carrier cancellation; this synchronous cache read performs no I/O.' }],
+        returns: 'current sample, or unknown after its expiry.',
+      },
+    ],
+  },
+  {
     key: 'web',
     summary: 'The web access service.',
     description: 'The web access service. Registered as `ctx.web` (one instance per context) and exposed to Clients as the `web` Remote namespace (`listProviders`).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',
@@ -11234,6 +11247,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ViewerPluginPolicy',
     declaration: 'export interface ViewerPluginPolicy {\n    readonly plugin: string;\n    readonly mode: \'all\' | \'none\' | \'selected\';\n    readonly endpoints?: readonly string[];\n}',
+  },
+  {
+    name: 'VpnStatusSnapshot',
+    declaration: 'export interface VpnStatusSnapshot {\n    readonly state: \'checking\' | \'verified\' | \'unverified\' | \'unknown\';\n    readonly evidence: \'mullvad\' | \'expected-exit\' | null;\n    readonly checkedAt: number | null;\n    readonly validUntil: number | null;\n}',
   },
   {
     name: 'WebBootBatch',

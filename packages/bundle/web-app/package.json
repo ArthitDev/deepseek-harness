@@ -215,7 +215,9 @@
     "@deepseek-ai/dsh-client-ui-sidebar-exec": "workspace:*",
     "@deepseek-ai/dsh-client-ui-pentest-runs": "workspace:*",
     "@deepseek-ai/dsh-proxy-server": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-proxy-server": "workspace:*"
+    "@deepseek-ai/dsh-client-ui-proxy-server": "workspace:*",
+    "@deepseek-ai/dsh-host-vpn-status": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-vpn-status": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

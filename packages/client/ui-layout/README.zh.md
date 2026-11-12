@@ -37,6 +37,8 @@ kind: "package-reference"
 
 root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用方控制自身高度与显隐；三列按该高度缩短，空内容不预留空间。切换主面板时保留底部组件。列宽拖拽手柄止于底部内容上方，`shell.overlay` 仍覆盖整个框架。默认组合不占用此 slot。
 
+根作用域列表槽 `shell.status` 在相同的底部容器内追加状态内容，位于保留的单占位 `shell.bottom` 内容之后。状态插件负责高度与换行，并在主面板切换时保持挂载。
+
 <a id="window-chrome-seat"></a>
 ### 窗口 chrome 座
 

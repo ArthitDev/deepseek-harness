@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record for vpn-status.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/subsystems/vpn-status.md
+/vpn-status:
+  en: 1c439cc2c7c3a889
+  zh: 5f8140d2e97f8257

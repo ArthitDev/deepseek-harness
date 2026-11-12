@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-13-sampled-vpn-egress.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-13-sampled-vpn-egress.md
+/agent-note-sampled-host-vpn-egress:
+  en: 1da43d9e427bdfc5
+  zh: 9e151e6b8606912b
+/agent-note-sampled-host-vpn-egress/problem:
+  en: c00bcb71da200c0a
+  zh: b8f6e543fad77042
+/agent-note-sampled-host-vpn-egress/decision:
+  en: 72b87564527acd37
+  zh: 4b12828951fab3fe
+/agent-note-sampled-host-vpn-egress/rationale:
+  en: 44320dde2dfa0e73
+  zh: 1701859eca3af710
+/agent-note-sampled-host-vpn-egress/alternatives-considered:
+  en: 8dd95fb9c906788a
+  zh: 6d8f6badf341ddb9
+/agent-note-sampled-host-vpn-egress/consequences:
+  en: 64e665e8b4b97929
+  zh: fa92322a299632c9
+/agent-note-sampled-host-vpn-egress/verification:
+  en: 7daa23aebc1b9880
+  zh: 5db08fb22e620f77

@@ -198,3 +198,7 @@
 
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
+
+- insert:
+    - id: vpn-status
+      name: '@deepseek-ai/dsh-host-vpn-status'

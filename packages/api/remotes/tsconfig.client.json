@@ -120,6 +120,7 @@
     },
     {
       "path": "../../llm/proxy-server"
-    }
+    },
+    { "path": "../../host/vpn-status" }
   ]
 }

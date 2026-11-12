@@ -223,6 +223,7 @@ describe('AppFrame', () => {
     expect(getByTestId('sidebar-content')).toBeTruthy()
     expect(getByTestId('rightbar-content')).toBeTruthy()
     expect(getByTestId('shell.bottom-content').parentElement?.hasAttribute('data-shell-bottom')).toBe(true)
+    expect(getByTestId('shell.status-content').parentElement).toBe(getByTestId('shell.bottom-content').parentElement)
     expect(tracks(frame)).toEqual([280, 0])
   })
 

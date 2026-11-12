@@ -108,6 +108,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'vpnStatus',
+    pkg: 'host-vpn-status',
+    title: 'Sampled Host VPN status',
+    mode: 'service',
+    consumers: ['client-ui-vpn-status', 'pi-tui'],
+    note: 'Owns opt-in HTTPS egress checks and a shared expiring cache for Web and TUI status displays.',
+  },
+  {
     key: 'actionCards',
     pkg: 'action-cards',
     title: 'Optional action cards',

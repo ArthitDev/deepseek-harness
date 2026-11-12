@@ -8,6 +8,7 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/web/tests/vpn-status.e2e.ts",
     "snapshots/session/headless.snapshot.ts",
     "apps/web/tests/reasoning-spacing.e2e.ts",
     "apps/web/tests/cua-run-code.e2e.ts",
@@ -640,6 +641,7 @@
     { "path": "./packages/web/web-search-exa" },
     { "path": "./packages/web/web-search-perplexity" },
     { "path": "./packages/llm/proxy-server" },
-    { "path": "./packages/document/tool-office" }
+    { "path": "./packages/document/tool-office" },
+    { "path": "./packages/host/vpn-status" }
   ]
 }

@@ -7,6 +7,20 @@ import { TEAM_MODE_OPTIONS } from '../src/core/team-mode.ts'
 afterEach(() => { vi.useRealTimers() })
 
 describe('status bar animation', () => {
+  it('shows sampled VPN evidence and timestamp, then removes expired verification', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1700000000000)
+    const bar = new StatusBar(new TuiAltScreen(new ProcessTerminal()))
+    try {
+      bar.update({ vpn: { state: 'verified', evidence: 'mullvad', checkedAt: Date.now(), validUntil: Date.now() + 1000 } })
+      expect(stripVTControlCharacters(bar.render(80).join('\n'))).toContain('VPN verified (mullvad) · 22:13:20Z')
+      expect(stripVTControlCharacters(bar.render(30).join('\n'))).toMatchSnapshot()
+      vi.advanceTimersByTime(1000)
+      expect(stripVTControlCharacters(bar.render(80).join('\n'))).toContain('VPN unknown')
+      expect(stripVTControlCharacters(bar.render(80).join('\n'))).not.toContain('mullvad')
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { bar.stop() }
+  })
   it.each(['checking', 'ready', 'unavailable'] as const)('shows Kali %s as static text alongside Wiki and Jev', (state) => {
     vi.useFakeTimers()
     const bar = new StatusBar(new TuiAltScreen(new ProcessTerminal()))

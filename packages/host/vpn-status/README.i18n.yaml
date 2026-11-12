@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/host/vpn-status/README.md
+/:
+  en: 5849fd18d42ba145
+  zh: 0e3b391d26240e71
+/deepseek-ai-dsh-host-vpn-status:
+  en: 078be9ef93356f54
+  zh: fd011f9d691fb521
+/deepseek-ai-dsh-host-vpn-status/summary:
+  en: b8acba661ccec60a
+  zh: e467817d05369f1c
+/deepseek-ai-dsh-host-vpn-status/table-of-contents:
+  en: 73bf9d2f705fceff
+  zh: a7325ea14a8e6a91
+/deepseek-ai-dsh-host-vpn-status/configuration:
+  en: 120d04c72ab5155b
+  zh: 514c4e8bc9b4fb66
+/deepseek-ai-dsh-host-vpn-status/dev-note:
+  en: 57abb2eb933903aa
+  zh: c0615a1f52213f2f
+/deepseek-ai-dsh-host-vpn-status/model-experience:
+  en: 65aed0570f26a446
+  zh: f66579fc4d3ef7de
+/deepseek-ai-dsh-host-vpn-status/model-experience/kv-cache-effect:
+  en: 6c998870b285bc99
+  zh: 8dfbf9c57ef5d173
+/deepseek-ai-dsh-host-vpn-status/known-limitations-and-deferred-work:
+  en: 1c63b3821342f5bd
+  zh: 96e577a76d0c52af

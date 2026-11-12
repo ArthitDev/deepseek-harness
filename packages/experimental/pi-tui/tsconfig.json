@@ -28,6 +28,7 @@
     { "path": "../../fs/tool-fs-search" },
     { "path": "../../skill/skill" },
     { "path": "../../skill/tool-skill" },
-    { "path": "../../subagent/subagent" }
+    { "path": "../../subagent/subagent" },
+    { "path": "../../host/vpn-status" }
   ]
 }

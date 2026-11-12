@@ -17,3 +17,9 @@ exports[`status bar animation > shows Kali unavailable as static text alongside 
 Kali unavailable · ◈ Jev ON
 ◌ normal"
 `;
+
+exports[`status bar animation > shows sampled VPN evidence and timestamp, then removes expired verification 1`] = `
+"⧉ Shield Break
+VPN verified (mullvad) · 22...
+◌ normal"
+`;

@@ -68,6 +68,7 @@ import { buildRecap } from '../core/recap.js'
 import { inspectSubagent } from './subagent-viewer.js'
 import { osc52Encode } from '../core/clipboard.js'
 import { readGitState, type GitState } from '../core/git.js'
+import type {} from '@deepseek-ai/dsh-host-vpn-status'
 import { watchKaliStatus, type KaliStatus } from '../core/kali-status.js'
 import { buildSearchIndex } from '../core/search.js'
 import {
@@ -614,6 +615,11 @@ export class ChatScreen {
       return undefined
     })
 
+    this.ctx.effect(() => {
+      const timer = setInterval(() => { if (!this.disposed) this.sync(false) }, 15000)
+      timer.unref()
+      return () => { clearInterval(timer) }
+    })
     this.showBanner()
     this.ctx.events.on('tools/change', () => { this.sync(false) }, { global: true })
     this.tui.terminal.setTitle(`Shield Break TUI · ${this.currentPresetId() ?? 'no preset'} · ${basename(this.cwd)}`)
@@ -4099,6 +4105,7 @@ export class ChatScreen {
       .some(tool => isJevTool(tool.name)) ?? false
     const jevCost = this.cachedJevCost
     this.updateQueueBanner()
+    const vpn = this.ctx.get('vpnStatus')?.read()
     const status: StatusBarData = {
       model: route.model,
       working: this.isBusy(),
@@ -4116,6 +4123,7 @@ export class ChatScreen {
       },
       wikiAvailable: this.ctx.get('tools')?.get('knowledge_list', this.agent) !== undefined,
       kali: this.kaliStatus,
+      ...(vpn !== undefined ? { vpn } : {}),
       ...(planActive !== undefined ? { planActive } : {}),
       ...(goalPhase !== undefined ? { goalPhase } : {}),
       ...(contextPct !== undefined ? { contextPct } : {}),

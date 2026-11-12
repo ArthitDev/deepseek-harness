@@ -26,6 +26,7 @@ The packages play the host roles; each package README owns its contract and conf
 
 | Package | Role | ctx key |
 |---|---|---|
+| [`vpn-status/`](vpn-status/README.md) | Host HTTPS egress verification cache | `ctx.vpnStatus` |
 | [`webserver/`](webserver/README.md) | Browser HTTP server: named routes, upgrades, index taps, and the fallback seat | `ctx.webServer` |
 | [`frontend-static/`](frontend-static/README.md) | SPA dist server on the webserver fallback seat | consumes `ctx.webServer` |
 | [`directory-picker/`](directory-picker/README.md) | Workspace-directory picking seam: capability contract and error vocabulary | `ctx.directoryPicker` |
@@ -43,6 +44,7 @@ The packages play the host roles; each package README owns its contract and conf
 
 Start with the subsystem references for the transport and the workspace records, then the layering decision behind the Web client.
 
+- [VPN status](../../docs/subsystems/vpn-status.md) — the sampled Host egress service.
 - [HTTP server subsystem](../../docs/subsystems/web-server.md) — the webserver's routes, matching order, and config.
 - [Workspace subsystem](../../docs/subsystems/workspace.md) — the workspace records the directory picker feeds.
 - [Web config-tree boot and transport layering](../boot/app-boot/README.md) — ownership of the Web transport layers.

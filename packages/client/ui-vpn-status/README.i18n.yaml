@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-vpn-status/README.md
+/:
+  en: 7d8be97416e0a756
+  zh: 56b2491f84f13fbe
+/deepseek-ai-dsh-client-ui-vpn-status:
+  en: 8823aa39dd5b9439
+  zh: bf927f4bbb0e9ec1
+/deepseek-ai-dsh-client-ui-vpn-status/summary:
+  en: 56c6adf4dcf2bb8b
+  zh: e46b9b77e7f1f4db
+/deepseek-ai-dsh-client-ui-vpn-status/table-of-contents:
+  en: 638dd73bc5b9dc7a
+  zh: e5384c0f30343c36
+/deepseek-ai-dsh-client-ui-vpn-status/dev-note:
+  en: 57abb2eb933903aa
+  zh: c0615a1f52213f2f
+/deepseek-ai-dsh-client-ui-vpn-status/model-experience:
+  en: 551ceccf1a9365e3
+  zh: 0fcdec2bd2e4ca95
+/deepseek-ai-dsh-client-ui-vpn-status/model-experience/kv-cache-effect:
+  en: 6c998870b285bc99
+  zh: 8dfbf9c57ef5d173
+/deepseek-ai-dsh-client-ui-vpn-status/known-limitations-and-deferred-work:
+  en: 545e8b7b757ff764
+  zh: c0437781d1112259

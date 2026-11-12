@@ -1,0 +1,14 @@
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-text-secondary);
+  background: var(--dsw-alias-bg-base);
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+}
+.verified { color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, var(--dsw-alias-text-primary)); }
+.pending { color: var(--dsw-alias-text-primary); }

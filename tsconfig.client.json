@@ -383,6 +383,7 @@
     {
       "path": "./packages/client/ui-proxy-server"
     },
-    { "path": "./packages/client/ui-account-notifications" }
+    { "path": "./packages/client/ui-account-notifications" },
+    { "path": "./packages/client/ui-vpn-status" }
   ]
 }

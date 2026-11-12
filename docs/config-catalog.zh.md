@@ -1969,6 +1969,28 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-product-telemetry-otel -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-host-vpn-status -->
+<a id="deepseek-aidsh-host-vpn-status"></a>
+
+## `@deepseek-ai/dsh-host-vpn-status`
+
+- `source`: [`packages/host/vpn-status/src/index.ts:10`](../packages/host/vpn-status/src/index.ts)
+
+```ts config-catalog
+/** Deployment-specific probe policy; disabled by default to avoid unsolicited third-party requests. */
+export interface Config {
+  /** Opt in to public HTTPS egress observation. */
+  enabled: boolean
+  /** Delay between settled checks, in milliseconds; at least one minute. */
+  intervalMs: number
+  /** Whole HTTPS request deadline, in milliseconds. */
+  timeoutMs: number
+  /** Known VPN exit addresses or CIDRs for providers without official attestation. */
+  expectedExitCidrs: string[]
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-vpn-status -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-host-webserver -->
 <a id="deepseek-aidsh-host-webserver"></a>
 
@@ -5550,6 +5572,7 @@ export interface Config {
 | `@deepseek-ai/dsh-client-ui-subagent` | — | [`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-tool` | — | [`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-user-questions` | — | [`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-vpn-status` | — | [`packages/client/ui-vpn-status/src/index.ts`](../packages/client/ui-vpn-status/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-web-search-mode` | — | [`packages/client/ui-web-search-mode/src/index.ts`](../packages/client/ui-web-search-mode/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-workflow-run` | — | [`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-workspace` | — | [`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts) |

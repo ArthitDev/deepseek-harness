@@ -26,6 +26,7 @@ kind: "package-group"
 
 | 包 | 职责 | ctx 键 |
 |---|---|---|
+| [`vpn-status/`](vpn-status/README.zh.md) | 宿主 HTTPS 出口验证缓存 | `ctx.vpnStatus` |
 | [`webserver/`](webserver/README.zh.md) | 浏览器 HTTP 服务器：具名路由、upgrade、index 转换与回退席位 | `ctx.webServer` |
 | [`frontend-static/`](frontend-static/README.zh.md) | 占据 webserver 回退席位的 SPA dist 服务器 | 消费 `ctx.webServer` |
 | [`directory-picker/`](directory-picker/README.zh.md) | 工作区目录选择 seam：能力约定与错误词汇 | `ctx.directoryPicker` |
@@ -43,6 +44,7 @@ kind: "package-group"
 
 先从传输与工作区记录的子系统参考读起，再看 Web Client 背后的分层决策。
 
+- [VPN 状态](../../docs/subsystems/vpn-status.zh.md)——宿主出口采样服务。
 - [HTTP 服务器子系统](../../docs/subsystems/web-server.zh.md)——webserver 的路由、匹配顺序与配置。
 - [工作区子系统](../../docs/subsystems/workspace.zh.md)——目录选择器所喂给的工作区记录。
 - [Web 配置树启动与传输分层](../boot/app-boot/README.zh.md)——Web 传输各层的所有权。

@@ -37,6 +37,8 @@ Global panels occupy the root-scoped `main` keyed slot; `conversation` is the re
 
 The single root-scoped `shell.bottom` slot spans the full width below the three columns. Its occupant controls its own height and visibility; the columns shrink by that height, and empty content reserves no space. Main-panel navigation preserves the bottom component. Column resize handles stop above it, while `shell.overlay` covers the whole frame. The default composition leaves this slot empty.
 
+The root-scoped list slot `shell.status` renders additive status contributions in the same bottom container, after the retained single-occupant `shell.bottom` content. Status plugins own their height and wrapping and survive main-panel navigation.
+
 <a id="window-chrome-seat"></a>
 ### Window-chrome seat
 

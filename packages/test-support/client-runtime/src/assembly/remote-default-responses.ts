@@ -36,6 +36,8 @@ export const remoteDefaultResponses: RemoteTable = {
     'credentials/describe': ok({}),
     // ui-settings-web-search page provider options at apply and on `connection/reset`.
     'web/listProviders': ok({ search: [], fetch: [] }),
+    // ui-vpn-status reads the disabled Host probe cache at boot.
+    'vpnStatus/read': ok({ state: 'unknown', evidence: null, checkedAt: null, validUntil: null }),
     // ui-permission-presets `PermissionCatalogDirectory` on its first read for a connection generation.
     'permissionPresets/catalog': ok({ options: [] }),
     // ui-settings-account refreshes details after a stored-grant snapshot.
