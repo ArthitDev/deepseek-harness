@@ -20,7 +20,7 @@ The Windows ACL diagnosis skill remains user-invocable in the scaffold but is ex
 
 Header pins normally use `system-prompt.expected.md` and `tool-schemas.expected.json`. Scenarios with native shell differences can additionally own `system-prompt.windows.expected.md` and `tool-schemas.windows.expected.json`; Windows compares and refreshes those files when present, while other hosts retain the default pins. Both variants compare the complete prompt and schemas.
 
-[The standalone string editor scenario](standalone-string-editor.e2e.ts) selects a separate Windows recording because the native backend reports partial file sandbox enforcement. Both platform recordings keep the complete tool result, including the Windows warning, and verify the created file against the same expected workspace contents.
+[The standalone string editor scenario](standalone-string-editor.e2e.ts) selects separate recordings for Windows partial enforcement, Linux older-ABI Landlock partial enforcement, and full enforcement. Linux selection probes the production sandbox chain, so usable bubblewrap takes precedence over Landlock. Every recording compares the complete tool result, including the backend's partial-enforcement warnings, and verifies the created file against the same expected workspace contents. An unavailable sandbox still fails the scenario.
 
 Same-day message goldens use the shared `WEB_FIXTURE_TIME`: seeded transcripts pass it as `createdAt` and pin the browser calendar with `pinBrowserClock`; scenarios that submit live messages also use `pinHostClock` and restore it after teardown. These clocks advance with real elapsed time while keeping native timers intact, so midnight does not change a scenario's date labels.
 

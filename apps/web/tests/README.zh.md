@@ -20,7 +20,7 @@ Windows ACL 诊断技能在 scaffold 中仍可由用户调用，但不进入模�
 
 请求头固定值通常使用 `system-prompt.expected.md` 和 `tool-schemas.expected.json`。原生 shell 存在差异的场景还可拥有 `system-prompt.windows.expected.md` 和 `tool-schemas.windows.expected.json`；这些文件存在时，Windows 比较并刷新它们，其他主机继续使用默认固定值。两种变体都比较完整的提示词与 schema。
 
-[独立字符串编辑器场景](standalone-string-editor.e2e.ts)选择单独的 Windows 录制，因为原生后端报告文件沙箱仅部分执行。两个平台的录制均保留完整工具结果，包括 Windows 警告，并根据相同的预期工作区内容验证创建的文件。
+[独立字符串编辑器场景](standalone-string-editor.e2e.ts)分别选择 Windows 部分执行、Linux 旧 ABI Landlock 部分执行和完整执行的录制。Linux 选择会探测生产沙箱链，因此可用的 bubblewrap 优先于 Landlock。每份录制均比较完整工具结果，包括后端的部分执行警告，并根据相同的预期工作区内容验证创建的文件。沙箱不可用时，场景仍然失败。
 
 当天消息的 golden 使用共享的 `WEB_FIXTURE_TIME`：预置会话将它传为 `createdAt`，并通过 `pinBrowserClock` 固定浏览器日期；提交实时消息的场景还使用 `pinHostClock`，在清理后恢复。固定后的时钟随真实耗时前进，保留原生定时器，因此跨午夜不会改变场景的日期标签。
 

@@ -10,7 +10,11 @@ const blocks = prompt.split(/\r?\n\r?\n/).filter(block =>
 
 it('retains exactly three literal runtime blocks at their owning prompt pins', () => {
   expect(blocks).toHaveLength(3)
-  for (const file of [owner, owner.replace('.expected.', '.windows.expected.'), owner.replace('creator-persona', 'optional-string-editor-windows')]) {
+  for (const file of [
+    owner, owner.replace('.expected.', '.windows.expected.'),
+    owner.replace('creator-persona', 'optional-string-editor-windows'),
+    owner.replace('creator-persona', 'optional-string-editor-landlock-partial'),
+  ]) {
     expect(hardWrappedProse(file, blocks.join('\n\n'))).toEqual([])
     expect(hardWrappedProse(file.replaceAll('/', '\\'), blocks.join('\r\n\r\n').replaceAll(/(?<!\r)\n/g, '\r\n'))).toEqual([])
   }

@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import type {} from '@deepseek-ai/dsh-tools'
 import {
   assertFinalWorkspaceSnapshot, assertFixtureInventory, captureExpandedTurnProcessAria, compareOrRefreshGolden,
@@ -11,20 +13,30 @@ import {
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
-// Windows retains the real partial-enforcement disclosure in its own recorded Session.
-const DIR = fileURLToPath(new URL(process.platform === 'win32'
-  ? '../../../snapshots/web/optional-string-editor-windows'
-  : '../../../snapshots/web/optional-string-editor', import.meta.url))
-const FIXTURE = join(DIR, 'session.v4.jsonl')
 const MODE = webSnapshotMode()
 
 describe('web snapshot: standalone string editor through PTC', () => {
+  let dir: string
+  let fixture: string
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
 
   beforeAll(async () => {
+    let scenario = 'optional-string-editor'
+    if (process.platform === 'win32') scenario += '-windows'
+    else if (process.platform === 'linux') {
+      // Probe the production chain: usable bwrap takes precedence over older-ABI Landlock.
+      const ctx = new Context()
+      try {
+        await ctx.plugin(LocalSandboxProvider, {})
+        const confined = await ctx.sandbox.confine(['true'], { mode: 'workspace-write', workspaceRoot: process.cwd() })
+        if (confined.enforcement === 'partial') scenario += '-landlock-partial'
+      } finally { await ctx.fiber.dispose() }
+    }
+    dir = fileURLToPath(new URL(`../../../snapshots/web/${scenario}`, import.meta.url))
+    fixture = join(dir, 'session.v5.jsonl')
     scaffold = await launchWebScaffold({
       developerTools: true,
       extraOverlayPath: [
@@ -33,7 +45,7 @@ describe('web snapshot: standalone string editor through PTC', () => {
       ],
       profile: { packages: [] },
       compareReplaySession: true,
-      ...(MODE === 'record' ? {} : { replayFixture: FIXTURE }),
+      ...(MODE === 'record' ? {} : { replayFixture: fixture }),
     })
     expect(scaffold.ctx.tools.schemas().some(tool => tool.name === 'str_replace_editor')).toBe(true)
     browser = await chromium.launch()
@@ -53,7 +65,7 @@ describe('web snapshot: standalone string editor through PTC', () => {
 
   it('executes the explicitly composed SDK tool, persists its subcall, and verifies the created file', async () => {
     onTestFailed(() => saveFailureShot(page, 'optional-string-editor'))
-    const prompts = fixtureUserPrompts(await readFile(await selectedSessionFixture(FIXTURE), 'utf8'))
+    const prompts = fixtureUserPrompts(await readFile(await selectedSessionFixture(fixture), 'utf8'))
     expect(prompts).toHaveLength(1)
     const settled = scaffold.whenTurnSettled()
     const input = page.locator('[data-composer-input]').first()
@@ -74,18 +86,18 @@ describe('web snapshot: standalone string editor through PTC', () => {
     const cwd = agent.session.header.cwd
     if (cwd === undefined) throw new Error('Standalone editor Session has no working directory')
     expect(await readFile(join(cwd, 'edited.txt'), 'utf8')).toBe('PTC_EDITOR_OK\n')
-    await assertFinalWorkspaceSnapshot(DIR, cwd)
+    await assertFinalWorkspaceSnapshot(dir, cwd)
     await expect.poll(() => page.getByText('DONE', { exact: true }).count()).toBeGreaterThanOrEqual(1)
-    if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
-    else await compareOrRefreshGolden(join(DIR, 'ui.expected.md'),
+    if (MODE === 'record') await recordFixture(scaffold, sessionId, fixture)
+    else await compareOrRefreshGolden(join(dir, 'ui.expected.md'),
       await captureExpandedTurnProcessAria(page, '[data-chat-flow]', scaffold.workspaceCwd), MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   })
 
   it.skipIf(MODE !== 'replay')('keeps the owned fixture artifacts closed', async () => {
-    await assertFixtureInventory(DIR, [
-      'session.v4.jsonl', 'system-prompt.expected.md', 'tool-schemas.expected.json', 'ui.expected.md', 'workspace.expected',
+    await assertFixtureInventory(dir, [
+      'session.v5.jsonl', 'system-prompt.expected.md', 'tool-schemas.expected.json', 'ui.expected.md', 'workspace.expected',
     ])
   })
 })

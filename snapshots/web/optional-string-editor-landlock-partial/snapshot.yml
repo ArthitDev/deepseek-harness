@@ -1,0 +1,11 @@
+version: 1
+scenario: optional-string-editor-landlock-partial
+profile: web
+composition: web-ptc-string-editor-landlock-partial
+recording: authored
+platform: posix
+header:
+  class: web-ptc-string-editor-landlock-partial
+  pin: true
+workspace:
+  final: true

@@ -77,7 +77,7 @@ export function hardWrappedProse(file: string, source: string): Violation[] {
       const { start, end } = node.position
       if (end.line > start.line) {
         const raw = lines.slice(start.line - 1, end.line).join('\n')
-        const literalOwner = /^snapshots\/web\/(creator-persona|optional-string-editor-windows)\/system-prompt(?:\.windows)?\.expected\.md$/.test(file.replaceAll('\\', '/'))
+        const literalOwner = /^snapshots\/web\/(creator-persona|optional-string-editor-windows|optional-string-editor-landlock-partial)\/system-prompt(?:\.windows)?\.expected\.md$/.test(file.replaceAll('\\', '/'))
         if (literalOwner && LITERAL_PROMPT_BLOCKS.has(raw)) return false
         const firstLine = lines[start.line - 1] ?? ''
         out.push({ file, line: start.line, text: firstLine.trim() })
