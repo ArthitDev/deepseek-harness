@@ -2,12 +2,12 @@
 /**
  * SB Arsenal — Direct Kali tool dispatch. No MCP server, no .bat, no middleman.
  *
- * Maps HexStrike's 150 tool names → direct Kali WSL shell commands.
+ * Maps HexStrike tool names to the current host's configured Kali backend.
  * Integrates with: SB Proxy v6, harness executor, or standalone CLI.
  *
  * Kali execution policy:
- *   - Every command runs as root: `wsl -d kali-linux -u root` (distro default
- *     user is unprivileged; never add sudo on top).
+ *   - Windows uses explicit WSL Kali root; Linux uses $DSH_HOME/kali-shell.
+ *     Commands run as root inside Kali, not on the host.
  *   - Commands launch directly; WSL starts the distro when needed.
  *   - Only a structured WSL launch error before Bash starts the command can
  *     trigger a readiness check and one retry. Tool failures are not replayed.
@@ -35,9 +35,11 @@
  *   const result = await arsenal.dispatch('nmap_scan', { target: '10.10.10.5', ports: '22,80,443' });
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { kaliInvocation, toKaliPath } = require('./sb-kali.cjs');
 
 // ═══════════════════════════════════════════════════════════════
 // SHELL HELPERS — quote every user-supplied value before interpolation
@@ -45,13 +47,6 @@ const fs = require('fs');
 
 /** Single-quote a value for bash -c (safe against spaces, quotes, $(), backticks). */
 const q = (v) => "'" + String(v ?? '').replace(/'/g, `'\\''`) + "'";
-
-/** Windows path → WSL path (E:\x\y → /mnt/e/x/y). */
-function toKaliPath(p) {
-  const full = path.resolve(String(p));
-  const drive = full[0].toLowerCase();
-  return `/mnt/${drive}/${full.slice(3).replace(/\\/g, "/")}`;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // TOOL DEFINITIONS — maps to Kali WSL commands
@@ -394,7 +389,8 @@ let activeRunDir = null;
 function ensureKali() {
   for (const timeout of [90000, 120000]) {
     try {
-      execSync("wsl -d kali-linux -u root -- true", { timeout, stdio: "pipe", windowsHide: true });
+      const { command, args } = kaliInvocation('true');
+      execFileSync(command, args, { timeout, stdio: "pipe", windowsHide: true });
       return true;
     } catch { /* cold boot may exceed the first window; retry once */ }
   }
@@ -411,7 +407,7 @@ function getRunDir() {
 }
 
 /**
- * Run one command in Kali WSL as root. Resolves { success, output, stdout,
+ * Run one command in the configured Kali backend as root. Resolves { success, output, stdout,
  * stderr, exitCode, elapsedMs, commandStarted }; never rejects.
  */
 function runInKali(command, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -419,7 +415,10 @@ function runInKali(command, timeoutMs = DEFAULT_TIMEOUT_MS) {
     const started = Date.now();
     // The private stderr marker prevents replay after the tool has started.
     const script = "printf '\\036DSH_ARSENAL_STARTED\\037' >&2\n" + command;
-    const proc = spawn("wsl", ["-d", "kali-linux", "-u", "root", "--", "bash", "-c", script], {
+    let launch;
+    try { launch = kaliInvocation(script); }
+    catch (error) { resolve({ success: false, output: error.message, error: error.message, elapsedMs: Date.now() - started, commandStarted: false }); return; }
+    const proc = spawn(launch.command, launch.args, {
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
       timeout: timeoutMs,
@@ -471,7 +470,7 @@ async function dispatch(toolName, params = {}) {
   const timeoutMs = parseInt(params.exec_timeout, 10) || DEFAULT_TIMEOUT_MS;
   let result = await runInKali(command, timeoutMs);
 
-  if (!result.success && !result.commandStarted && WSL_FAIL.test(
+  if (os.platform() === 'win32' && !result.success && !result.commandStarted && WSL_FAIL.test(
     [result.stdout, result.stderr, result.error].filter(Boolean).join('\n').replace(/\0/g, ''),
   )) {
     if (ensureKali()) result = await runInKali(command, timeoutMs);

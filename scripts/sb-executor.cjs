@@ -2,7 +2,7 @@
 /**
  * SB Executor v1 — Execution Engine for SB Harness
  *
- * Takes LLM-generated code, routes to correct environment (Kali WSL / Windows pwsh),
+ * Takes LLM-generated code, routes to the current host or its Kali backend,
  * executes with operator confirmation gate, captures output, feeds back to LLM.
  *
  * Integrates: sb-proxy.js → LLM → sb-executor → run → output → LLM analyze → loop
@@ -13,7 +13,9 @@
  *   --dry-run     Extract + classify code but never execute
  */
 
-const { spawn, execSync } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
+const os = require('os');
+const { kaliInvocation, toKaliPath } = require('./sb-kali.cjs');
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -149,13 +151,13 @@ function classifyEnvironment(code, language) {
   if (language === "bash") kaliScore += 3;
   if (language === "powershell") winScore += 5;
   if (language === "python") {
-    if (/import socket|import subprocess|import threading/.test(joined)) winScore += 1;
+    if (os.platform() === 'win32' && /import socket|import subprocess|import threading/.test(joined)) winScore += 1;
     if (/import scapy|import nmap|from pwn/.test(joined)) kaliScore += 3;
   }
 
   if (winScore > kaliScore) return "windows";
   if (kaliScore > winScore) return "kali";
-  return "windows"; // default — Python on Windows works for most RAT components
+  return os.platform() === 'win32' ? 'windows' : 'linux';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -164,7 +166,8 @@ function classifyEnvironment(code, language) {
 
 async function bootKali() {
   try {
-    execSync(`wsl -d ${CONFIG.kaliDistro} -u root -- true`, { timeout: 60000, stdio: "pipe", windowsHide: true });
+    const { command, args } = kaliInvocation('true', CONFIG.kaliDistro);
+    execFileSync(command, args, { timeout: 60000, stdio: "pipe", windowsHide: true });
     return true;
   } catch {
     return false;
@@ -187,45 +190,41 @@ async function execute(block, options = {}) {
   if (env === "kali") {
     const booted = await bootKali();
     if (!booted) {
-      return { success: false, error: "Kali WSL failed to boot", output: "" };
+      return { success: false, error: "Configured Kali backend is unavailable", output: "" };
     }
-    const wslPath = `/mnt/e/Prompt-Jail/exec-workspace/${filename}`;
+    const kaliPath = "'" + toKaliPath(filepath).replace(/'/g, "'\\''") + "'";
+    let script;
     if (block.language === "bash") {
-      cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `chmod +x '${wslPath}' && bash '${wslPath}'`];
+      script = `bash ${kaliPath}`;
     } else if (block.language === "python") {
-      cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `python3 '${wslPath}'`];
+      script = `python3 ${kaliPath}`;
     } else if (block.language === "c") {
-      cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c",
-        `gcc -o '${wslPath}.out' '${wslPath}' -lpthread -lm && '${wslPath}.out'`];
+      script = `gcc -o ${kaliPath}.out ${kaliPath} -lpthread -lm && ${kaliPath}.out`;
     } else if (block.language === "cpp") {
-      cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c",
-        `g++ -o '${wslPath}.out' '${wslPath}' -lpthread -lm && '${wslPath}.out'`];
+      script = `g++ -o ${kaliPath}.out ${kaliPath} -lpthread -lm && ${kaliPath}.out`;
     } else {
-      cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `cat '${wslPath}' | bash`];
+      script = `bash ${kaliPath}`;
     }
+    ({ command: cmd, args } = kaliInvocation(script, CONFIG.kaliDistro));
     cwdOption = { cwd: CONFIG.workspace };
   } else {
-    // Windows
+    // Native host commands.
     if (block.language === "powershell") {
       cmd = "pwsh";
       args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath];
     } else if (block.language === "python") {
-      cmd = "python";
+      cmd = os.platform() === 'win32' ? 'python' : 'python3';
       args = [filepath];
     } else if (block.language === "javascript") {
       cmd = "node";
       args = [filepath];
     } else if (block.language === "bash") {
-      // Bash uses the configured Kali distro and explicit root user.
-      cmd = "wsl";
-      args = ["-d", CONFIG.kaliDistro, "-u", "root", "--", "bash", "-c", `cat /mnt/e/Prompt-Jail/exec-workspace/${filename} | bash`];
+      if (os.platform() === 'win32') {
+        const kaliPath = "'" + toKaliPath(filepath).replace(/'/g, "'\\''") + "'";
+        ({ command: cmd, args } = kaliInvocation(`bash ${kaliPath}`, CONFIG.kaliDistro));
+      } else { cmd = '/bin/bash'; args = [filepath]; }
     } else {
-      return { success: false, error: `Language ${block.language} not runnable on Windows directly`, output: "" };
+      return { success: false, error: `Language ${block.language} not runnable directly on ${os.platform()}`, output: "" };
     }
     cwdOption = { cwd: CONFIG.workspace };
   }

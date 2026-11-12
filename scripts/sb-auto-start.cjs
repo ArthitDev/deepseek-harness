@@ -19,7 +19,8 @@
  *   const { startDaemon, stopDaemon } = require('./sb-auto-start.cjs')
  */
 
-const { spawn, spawnSync, execSync } = require("child_process");
+const { spawn, spawnSync, execSync, execFileSync } = require("child_process");
+const { kaliInvocation } = require('./sb-kali.cjs');
 const { createHash, randomBytes } = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -101,23 +102,11 @@ function detectEnvironment() {
   // Detect backend (try common ports)
   env.backendUrl = process.env.SB_BACKEND || "http://127.0.0.1:20128";
 
-  // Detect Kali WSL
-  if (env.platform === "win32") {
-    try {
-      execSync("wsl -d kali-linux -u root -- true", { timeout: 5000, stdio: "pipe", windowsHide: true });
-      env.kaliAvailable = true;
-    } catch {
-      env.kaliAvailable = false;
-    }
-  } else if (env.platform === "linux") {
-    // On Linux, check if nmap/sqlmap are directly available
-    try {
-      execSync("which nmap", { timeout: 3000, stdio: "pipe", windowsHide: true });
-      env.kaliAvailable = true; // tools available natively
-    } catch {
-      env.kaliAvailable = false;
-    }
-  }
+  try {
+    const { command, args } = kaliInvocation('. /etc/os-release && [ "$ID" = kali ] && [ "$(id -u)" = 0 ]');
+    execFileSync(command, args, { timeout: 5000, stdio: 'pipe', windowsHide: true });
+    env.kaliAvailable = true;
+  } catch { env.kaliAvailable = false; }
 
   return env;
 }
