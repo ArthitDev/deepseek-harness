@@ -123,6 +123,8 @@ Files 模式通过 `maxRequestFilesBytes` 与 `maxImagesPerRequest` 限制保留
 
 提供方插件负责目录可用性：API key 路由在能解析到 API key 时提供配置中的 `models`，在官方端点上且 `models` 为内置目录时改为提供官方模型列表；账号路由在登录时提供账号的模型列表（见 [API key](../llm-deepseek-api-key/README.zh.md) 与[账号](../llm-deepseek-account/README.zh.md)提供方）。传输层提供内置目录、目录条目字段的 schema 和能力解析，以及两条路由共用的列表机制：`requestModelListing`、按凭据区分的 `ModelListingCache`（由 `createModelListingCache` 持有，负责自动刷新、通知与插件清理），以及带客户端版本门控和列表角标的 `resolveListedCatalog` 与 `refuseListedModel`；`catalogModelInfo` 把列表角标附到公布的条目上。角标文字拒绝控制字符、Unicode 行分隔符、双向控制符及仅由空白或默认可忽略字符组成的字符串，组合 emoji 仍有效。提供方还可以提供 `connect(signal)`：在提供方自己的工作（例如加载目录）完成后，为精确模型查询和预备调用解析连接；以及 `admit(connection, model)`：在网络请求之前拒绝某个模型。
 
+模型列表刷新成功时使用提供方的 debug 日志记录器，不直接写入 stdout 或 stderr。列表加载失败和目录告警仍写入 stderr。
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -11,7 +11,7 @@ import type { DeepSeekAdapterOptions, DeepSeekConnectionOptions } from './types.
 import { ModelListingCache, type ListingCacheDependencies } from './listing-cache.ts'
 
 /**
- * Own a route's listing refreshes, stderr diagnostics, and catalog-change notifications.
+ * Own a route's listing refreshes, debug success logs, stderr warnings, and catalog-change notifications.
  * @param ctx - provider plugin lifetime.
  * @param owner - plugin name used in diagnostics.
  * @param provider - route whose catalog changes.
@@ -26,8 +26,8 @@ export function createModelListingCache(
   const cache = new ModelListingCache({
     ...dependencies,
     now: () => Date.now(),
-    // ACP reserves stdout for protocol messages, including during successful catalog loads.
-    info: (message) => { console.error(tag, message) },
+    // Successful background discovery must not write over an interactive terminal or protocol stream.
+    info: (message) => { ctx.logger.debug(`${owner}: ${message}`) },
     warn: (message) => { console.warn(tag, message) },
     changed: () => { ctx.emit('llm/models-updated', provider) },
   })

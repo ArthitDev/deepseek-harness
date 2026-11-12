@@ -22,7 +22,7 @@ function jsonRpcFrames(launched: LaunchedAcpTestAgent): Record<string, unknown>[
   return frames
 }
 
-it('keeps account model-listing diagnostics on stderr during API-key session creation', async () => {
+it('keeps successful account model listings off both console streams while preserving warnings', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'dsh-acp-stdout-'))
   const token = 'acp-catalog-fixture-token'
   const requests: Array<{ method: string | undefined; path: string | undefined; token: string | string[] | undefined }> = []
@@ -95,7 +95,7 @@ it('keeps account model-listing diagnostics on stderr during API-key session cre
     const frames = launched.rawStdout().trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     expect(frames.length).toBeGreaterThanOrEqual(3)
     for (const frame of frames) expect(frame).toMatchObject({ jsonrpc: '2.0' })
-    expect(launched.stderr()).toContain(`[llm-deepseek-account] model listing from ${origin}/models loaded 2 model(s), skipped 0 row(s)`)
+    expect(launched.stderr()).not.toContain('loaded 2 model(s), skipped 0 row(s)')
     expect(launched.stderr()).toContain('[llm-deepseek-account] model "deepseek-v4-pro" declares no api_capabilities.anthropic_messages')
     expect(launched.stderr()).not.toContain(token)
   } finally {
