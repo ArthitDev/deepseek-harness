@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write mcp-servers/reverse_shell/README.md
+/reverse-shell-mcp:
+  en: 24b9d310bccff9f6
+  zh: 61b2652f5d8cf92c
+/reverse-shell-mcp/tools:
+  en: 9dcba21b79e0afd4
+  zh: df7ca61fbcb1857b
+/reverse-shell-mcp/requirements:
+  en: c77611037ab9d098
+  zh: e8701558f6cfb88d
+/reverse-shell-mcp/setup-in-cyberstrikeai:
+  en: 31ba939a874278ea
+  zh: bc486bfbe1030086
+/reverse-shell-mcp/run-locally-optional:
+  en: f748526d96e52000
+  zh: b3680ccf49ed1a0e
+/reverse-shell-mcp/security:
+  en: de9756ac0457f6d1
+  zh: 9c84ecbe174e1bce
