@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write mcp-servers/reverse_shell/README.md
 /reverse-shell-mcp:
-  en: 24b9d310bccff9f6
-  zh: 61b2652f5d8cf92c
+  en: bb40f8b4bbc2c362
+  zh: 2c9671f59eef1682
 /reverse-shell-mcp/tools:
   en: 9dcba21b79e0afd4
   zh: df7ca61fbcb1857b

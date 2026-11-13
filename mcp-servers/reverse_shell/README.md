@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Add **reverse shell** capability to CyberStrikeAI via External MCP: start/stop a TCP listener and run commands on connected targets—no backend code changes required.
 
+For Harness dependencies, source licenses and deployment restrictions, see [Optional security-tool sources](../README.md).
+
 ## Tools
 
 | Tool | Description |

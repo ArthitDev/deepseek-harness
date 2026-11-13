@@ -1,0 +1,41 @@
+[
+  {
+    "repository": "https://github.com/AIPentest/CyberStrikeAI",
+    "revision": "02ec1afcb9725f4fe44240f0918c59aefa18a7e7",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "sourcePath": "LICENSE",
+        "localPath": "reverse_shell/LICENSE",
+        "sha256": "c5e886b33279f16172f906d2ec7fb23425b816c8a63b684159daa77628256f76"
+      },
+      {
+        "sourcePath": "mcp-servers/reverse_shell/mcp_reverse_shell.py",
+        "localPath": "reverse_shell/mcp_reverse_shell.py",
+        "sha256": "70658f25771157767200569b706e8c414903a535a8546059718fe2a48267cc82"
+      }
+    ]
+  },
+  {
+    "repository": "https://github.com/samugit83/redamon",
+    "revision": "442debbf95ff6f4cace7f9f8e134780aa3eb7d60",
+    "license": "MIT",
+    "files": [
+      {
+        "sourcePath": "LICENSE",
+        "localPath": "redamon/LICENSE",
+        "sha256": "6282db0e4a6b629dff7d1a722b8b8e9a770f6c0ba71f2e283d0c47a7f46632bb"
+      },
+      {
+        "sourcePath": "mcp/servers/metasploit_server.py",
+        "localPath": "redamon/metasploit_server.py",
+        "sha256": "967c2b37dfde87b66c7efecbf62a37da8d66071896826c79516ac5a83a403b13"
+      },
+      {
+        "sourcePath": "mcp/servers/terminal_server.py",
+        "localPath": "redamon/terminal_server.py",
+        "sha256": "bfa69e0ff4fe394f4534ee3e51d1ea5ec2548824addaf892a37936d1fc764200"
+      }
+    ]
+  }
+]

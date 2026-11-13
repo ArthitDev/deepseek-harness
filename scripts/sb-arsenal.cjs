@@ -4,6 +4,9 @@
  *
  * Maps HexStrike tool names to the current host's configured Kali backend.
  * Integrates with: SB Proxy v6, harness executor, or standalone CLI.
+ * Parameters such as additional_args are trusted Bash fragments, not an argv
+ * interface. Callers authorize shell execution; never pass untrusted content.
+ * Optional source attribution and runtime limits: mcp-servers/README.md.
  *
  * Kali execution policy:
  *   - Windows uses explicit WSL Kali root; Linux uses $DSH_HOME/kali-shell.
@@ -42,7 +45,7 @@ const os = require('os');
 const { kaliInvocation, toKaliPath } = require('./sb-kali.cjs');
 
 // ═══════════════════════════════════════════════════════════════
-// SHELL HELPERS — quote every user-supplied value before interpolation
+// SHELL HELPERS — scalar quoting; option fragments require trusted callers
 // ═══════════════════════════════════════════════════════════════
 
 /** Single-quote a value for bash -c (safe against spaces, quotes, $(), backticks). */
@@ -335,6 +338,123 @@ const TOOLS = {
     desc: "Nmap through proxy chain",
     params: ["target", "ports"],
     build: (p) => `proxychains nmap -sT -Pn ${p.ports ? "-p " + p.ports : ""} ${q(p.target)} 2>/dev/null`,
+  },
+  // ── ADDED from CyberStrikeAI tools/ (2026-11) ──────────────
+  "dalfox_xss": {
+    desc: "XSS vulnerability scanner and parameter analyzer",
+    params: ["url", "additional_args"],
+    build: (p) => `dalfox url ${q(p.url)} ${p.additional_args || "--no-color --silence"} 2>/dev/null | head -50`,
+  },
+  "arjun_params": {
+    desc: "Discover hidden HTTP parameters",
+    params: ["url", "wordlist"],
+    build: (p) => `arjun -u ${q(p.url)} ${p.wordlist ? "-w " + q(p.wordlist) : ""} --stable 2>/dev/null | head -40`,
+  },
+  "paramspider_extract": {
+    desc: "Extract parameters from web archives",
+    params: ["domain"],
+    build: (p) => `paramspider -d ${q(p.domain)} 2>/dev/null | head -50`,
+  },
+  "x8_params": {
+    desc: "Hidden parameter discovery via differential response",
+    params: ["url", "wordlist"],
+    build: (p) => `x8 -u ${q(p.url)} -w ${q(p.wordlist || "/usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt")} 2>/dev/null | head -40`,
+  },
+  "graphql_scan": {
+    desc: "GraphQL endpoint discovery and introspection probe",
+    params: ["target"],
+    build: (p) => `for ep in graphql graphiql v1/graphql api/graphql; do curl -s -m 5 -o /dev/null -w "%{http_code} /$ep\n" ${q(p.target)}/$ep; done | grep -v 404`,
+  },
+  "dotdotpwn_traversal": {
+    desc: "Traffic-based LFI/traversal fuzzer (HTTP/FTP/SMB)",
+    params: ["target", "module", "additional_args"],
+    build: (p) => `dotdotpwn -m ${q(p.module || "http")} -h ${q(p.target)} ${p.additional_args || "-d 30 -f /etc/passwd"} 2>/dev/null | head -40`,
+  },
+  "fscan_intranet": {
+    desc: "One-stop intranet scanner: hosts, ports, services, weak creds",
+    params: ["target_cidr", "additional_args"],
+    build: (p) => `fscan -h ${q(p.target_cidr)} ${p.additional_args || "-nopoc"} 2>/dev/null | head -80`,
+  },
+  "jwt_analyzer": {
+    desc: "JWT decode and algorithm attack (jwt_tool)",
+    params: ["token", "mode"],
+    build: (p) => `jwt_tool ${q(p.token)} ${p.mode ? "-X " + q(p.mode) : ""} 2>/dev/null`,
+  },
+  "hash_length_extension": {
+    desc: "Hash length extension attack (MD5/SHA1/SHA256)",
+    params: ["signature", "data", "append", "keylen", "algo"],
+    build: (p) => `hash_extender -s ${q(p.signature)} -d ${q(p.data)} -a ${q(p.append)} -l ${q(p.keylen || 16)} -f ${q(p.algo || "sha256")} 2>/dev/null`,
+  },
+  "linpeas_enum": {
+    desc: "Linux privilege escalation enumeration (run on target)",
+    params: ["additional_args"],
+    build: (p) => `linpeas -a ${p.additional_args || ""} 2>/dev/null | head -100`,
+  },
+  "checksec_binary": {
+    desc: "Check binary protections (NX/PIE/RELRO/canary)",
+    params: ["file"],
+    build: (p) => `checksec --file=${q(p.file)} 2>/dev/null`,
+  },
+  "ropper_gadgets": {
+    desc: "ROP gadget search in binary",
+    params: ["file", "search"],
+    build: (p) => `ropper --file ${q(p.file)} ${p.search ? "--search " + q(p.search) : ""} 2>/dev/null | head -50`,
+  },
+  "one_gadget_find": {
+    desc: "Find execve('/bin/sh') one-gadgets in libc",
+    params: ["libc_path"],
+    build: (p) => `one_gadget ${q(p.libc_path)} 2>/dev/null | head -40`,
+  },
+  "pacu_aws": {
+    desc: "AWS exploitation framework (needs credentials)",
+    params: ["additional_args"],
+    build: (p) => `pacu ${p.additional_args || ""} 2>/dev/null | head -40`,
+  },
+  "scoutsuite_audit": {
+    desc: "Multi-cloud security audit (AWS/Azure/GCP)",
+    params: ["provider", "profile"],
+    build: (p) => `scout.py ${q(p.provider || "aws")} ${p.profile ? "--profile " + q(p.profile) : ""} --report-dir /tmp/scout-report 2>/dev/null | tail -20`,
+  },
+  "kube_hunter": {
+    desc: "Kubernetes cluster vulnerability hunter",
+    params: ["target_cidr", "additional_args"],
+    build: (p) => `kube-hunter ${p.target_cidr ? "--remote " + q(p.target_cidr) : "--active"} ${p.additional_args || ""} 2>/dev/null | head -60`,
+  },
+  "trivy_scan": {
+    desc: "Container/image/filesystem vulnerability scanner",
+    params: ["target", "additional_args"],
+    build: (p) => `trivy ${p.additional_args || "image --severity HIGH,CRITICAL"} ${q(p.target)} 2>/dev/null | head -60`,
+  },
+  "shodan_search": {
+    desc: "Shodan internet-wide search (needs API key)",
+    params: ["query"],
+    build: (p) => `shodan search ${q(p.query)} --limit 20 2>/dev/null`,
+  },
+  "virustotal_search": {
+    desc: "VirusTotal lookup (needs API key)",
+    params: ["query"],
+    build: (p) => `vt search ${q(p.query)} --limit 20 2>/dev/null`,
+  },
+  "zsteg_stego": {
+    desc: "PNG/BMP LSB steganography detection",
+    params: ["file"],
+    build: (p) => `zsteg ${q(p.file)} 2>/dev/null | head -40`,
+  },
+  "foremost_carve": {
+    desc: "File carving from images/dumps",
+    params: ["file", "output_dir"],
+    build: (p) => `mkdir -p ${p.output_dir ? q(p.output_dir) : "/tmp/foremost-out"}; foremost -i ${q(p.file)} -o ${p.output_dir ? q(p.output_dir) : "/tmp/foremost-out"} 2>/dev/null; ls ${p.output_dir ? q(p.output_dir) : "/tmp/foremost-out"} 2>/dev/null`,
+  },
+  // ── ADDED from RedAmon scanners/ (2026-11) ─────────────────
+  "trufflehog_scan": {
+    desc: "Secret scanning across git repos, filesystems, docker images",
+    params: ["target", "additional_args"],
+    build: (p) => `trufflehog ${p.additional_args || "filesystem"} ${q(p.target)} --only-verified 2>/dev/null | head -40`,
+  },
+  "baddns_scan": {
+    desc: "BADDNS: subdomain takeover, dangling CNAME, zone poisoning checks",
+    params: ["domain", "module", "additional_args"],
+    build: (p) => `baddns ${p.module ? "-m " + q(p.module) + " " : ""}${p.additional_args || "-s"} ${q(p.domain)} 2>/dev/null | head -40`,
   },
 };
 
