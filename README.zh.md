@@ -30,6 +30,17 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 [Jev 设置与使用指南](docs/user/guide/jev.zh.md)介绍固定版本的 Linux 运行时、服务账户凭据、共享配置、建议工作流和实际调用验证提示词。Jev 由部署配置启用；新检出的仓库不会安装它，也不会继承服务器的私有设置。调用消耗所配置 TypeSafe 账户的配额，并可能产生费用。语义工具与浏览器或原生自动化路由彼此独立。
 
+<a id="server-workspace-and-vpn"></a>
+### 服务器工作区与 VPN
+
+仅经 VPN 访问互联网是管理员管理的 Linux 部署策略。新检出的仓库不会创建 VPN 网络命名空间、防火墙、systemd 服务或 Kali broker。VPN 状态指示器显示缓存的流量验证结果；它不强制路由，也不会在隧道失效时阻止流量。
+
+在已配置 VPN 的服务器上，为 Web 服务和 TUI 启动器的临时服务应用相同的文件系统策略。正常工作区访问可使用 `ProtectSystem=no`、`ProtectHome=no` 和空的 `ReadWritePaths=` 覆盖项。保留非 root 服务身份、空 capabilities、`NoNewPrivileges=yes`、VPN 网络命名空间、宿主机控制套接字隔离和受限 Kali broker。启动器、防火墙规则和服务策略须由管理员拥有，且 Harness 不可写入。应用设置 `danger-full-access` 和审批 `never` 不会覆盖 Linux 权限或只读挂载；扩大的文件系统访问仍受服务账户现有权限约束。
+
+为 Web 和 TUI 配置同一个绝对路径的、服务可写的[侦察证据目录](packages/pentest/recon-engine/README.zh.md#use-this-package)，例如 `/var/lib/dsh-harness/.dsh/recon`。替换插件配置时保留其他字段。不同的 `HOME` 或 `DSH_HOME` 可能选择不同的私有配置文件。仅更新源码不会安装这些宿主机设置，也不会迁移现有证据。
+
+激活前，备份受影响的宿主机和 profile 文件及其所有权和权限，等待活动轮次和后台任务完成，并以实际服务账户验证文件创建和证据读取。验证 Harness 与 Kali 的真实 IPv4/IPv6 VPN 出口，再确认防火墙拒绝直接上行连接；仅接口绑定错误不能证明连接被拒绝。检查失败时恢复备份。仅重启受影响的 Web 服务，并重新打开已有 TUI 会话以接收 systemd 挂载策略变更。检查期间保持现用 VPN 运行；完整的隧道断开演练需要单独的维护窗口。
+
 <a id="run"></a>
 
 ## 运行

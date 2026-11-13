@@ -30,6 +30,17 @@ Optional Jev integration gives Web, TUI and headless agents twelve semantic tool
 
 The [Jev setup and usage guide](docs/user/guide/jev.md) describes the pinned Linux runtime, service-account credentials, shared profile configuration, suggested workflow and a real-call verification prompt. Jev is enabled by deployment configuration; a fresh checkout does not install it or inherit a server's private setup. Calls consume the configured TypeSafe account's quota and may incur charges. Semantic tools are separate from browser/native automation routing.
 
+<a id="server-workspace-and-vpn"></a>
+### Server workspace and VPN
+
+VPN-only Internet access is an administrator-managed Linux deployment policy. A fresh checkout does not create the VPN namespace, firewall, systemd services or Kali broker. The VPN status indicator reports cached traffic verification; it does not enforce routing or block traffic when the tunnel fails.
+
+On an already provisioned VPN server, apply the same filesystem policy to the Web service and the TUI launcher's transient services. Normal workspace access can use `ProtectSystem=no`, `ProtectHome=no` and an empty `ReadWritePaths=` override. Retain the non-root service identity, empty capabilities, `NoNewPrivileges=yes`, VPN network namespace, private host-control sockets and restricted Kali broker. Keep launchers, firewall rules and service policy administrator-owned and unwritable by Harness. The application settings `danger-full-access` and approval `never` do not override Linux permissions or read-only mounts; broader filesystem access follows the service account's existing permissions.
+
+Configure Web and TUI with the same absolute, service-writable [recon evidence directory](packages/pentest/recon-engine/README.md#use-this-package), such as `/var/lib/dsh-harness/.dsh/recon`. Preserve the other fields when replacing a plugin's configuration. A different `HOME` or `DSH_HOME` can select different private configuration files. Source updates alone do not install these host settings or migrate existing evidence.
+
+Before activation, back up affected host/profile files with their ownership and modes, wait for active turns/jobs to finish, and verify file creation and evidence reads as the actual service account. Verify real IPv4/IPv6 VPN egress for Harness and Kali, then confirm that a direct uplink connection is rejected by the firewall; interface binding errors alone are not evidence of rejection. Restore the backup if checks fail. Restart only the affected Web service and reopen existing TUI sessions to receive systemd mount-policy changes. Keep the live VPN running during these checks; a full tunnel-loss drill requires a separate maintenance window.
+
 ## Run
 
 ### Run from `npm`
