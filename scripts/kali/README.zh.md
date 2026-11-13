@@ -32,6 +32,8 @@ node scripts/kali/verify.mjs dsh-kali-cli:portable-20261112
 
 需要在线就绪检查时，通过部署配置的 Kali 后端运行 `/usr/local/libexec/dsh-kali/check.sh online`。该命令严格报告软件包索引更新错误，并下载小型 `hello` 软件包而不安装。运维人员必须另外验证部署的 VPN 路由和 broker；离线镜像检查无法证明这两项正确。
 
+ZAP 和 Nuclei 通过现有 Harness Terminal 运行；[web-agent-scanning](web-agent/SKILL.md) 说明计划、JSON 证据和浏览器交接。将该技能目录复制到已配置的 Harness 技能根目录即可被发现。在 Kali 中，从挂载的检出目录运行 `node scripts/kali/web-agent/smoke.mjs`，验证仅回环访问的测试页面、两种报告格式、无效计划拒绝和超时处理。检查保留证据目录，不扫描外部目标。使用 `nuclei -ut -ud /opt/dsh-nuclei-templates </dev/null` 单独更新官方 Nuclei 模板，并验证实际 YAML 文件和模板有效性；仅更新程序退出码为 0 不足以确认就绪。镜像软件包列表提供扫描器，不包含模板目录。
+
 <a id="deployment-and-migration"></a>
 
 ## 部署与迁移

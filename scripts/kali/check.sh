@@ -33,7 +33,7 @@ nmap_caps=$(dpkg-query -L nmap | while IFS= read -r file; do
     if [ -f "$file" ]; then getcap "$file"; fi
 done)
 [ -z "$nmap_caps" ] || fail 'nmap has file capabilities outside the runtime bounding set'
-for tool in nmap sqlmap nuclei gobuster ffuf hydra whatweb redis-cli mysql psql feroxbuster httpx katana rustc cargo rustfmt cargo-clippy go node python3 uv uvx; do
+for tool in nmap sqlmap nuclei zaproxy java gobuster ffuf hydra whatweb redis-cli mysql psql feroxbuster httpx katana rustc cargo rustfmt cargo-clippy go node python3 uv uvx; do
     command -v "$tool" >/dev/null || fail "command missing: $tool"
 done
 nmap --version >/dev/null

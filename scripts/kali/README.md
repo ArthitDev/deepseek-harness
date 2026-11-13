@@ -32,6 +32,8 @@ The verifier creates disposable containers without networking or host mounts. It
 
 For an online readiness check, run `/usr/local/libexec/dsh-kali/check.sh online` through the deployment's configured Kali backend. This updates package indexes with strict error reporting and downloads the small `hello` package without installing it. The operator must verify the deployment's VPN route and broker separately; an offline image check cannot establish either.
 
+ZAP and Nuclei run through the existing Harness Terminal; [web-agent-scanning](web-agent/SKILL.md) describes plans, JSON evidence and browser handoff. Copy that skill directory into the configured Harness skill root to make it discoverable. Inside Kali, run `node scripts/kali/web-agent/smoke.mjs` from the mounted checkout to verify a loopback-only fixture, both report formats, invalid-plan rejection and timeout handling. The check retains its evidence directory and does not scan external targets. Update the official Nuclei templates separately with `nuclei -ut -ud /opt/dsh-nuclei-templates </dev/null` and verify actual YAML files and template validation; updater exit 0 alone is insufficient. The image package list supplies the scanner, not the template catalog.
+
 <a id="deployment-and-migration"></a>
 
 ## Deployment and migration
