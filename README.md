@@ -24,6 +24,12 @@ Use Shield Break only for lawful purposes and authorized security testing. Users
 
 Before using the security-testing features, review the [pentest lab authorization template](docs/pentest-lab-authorization-template.md) and the [Kali WSL guide](docs/user/guide/kali-wsl.md).
 
+### Jev evidence review
+
+Optional Jev integration gives Web, TUI and headless agents twelve semantic tools through the existing MCP bridge. Use it to classify and rank recon observations, verify findings against evidence, and review proposed changes. Jev does not replace deterministic scans, target-scope guards or VPN traffic checks.
+
+The [Jev setup and usage guide](docs/user/guide/jev.md) describes the pinned Linux runtime, service-account credentials, shared profile configuration, suggested workflow and a real-call verification prompt. Jev is enabled by deployment configuration; a fresh checkout does not install it or inherit a server's private setup. Calls consume the configured TypeSafe account's quota and may incur charges. Semantic tools are separate from browser/native automation routing.
+
 ## Run
 
 ### Run from `npm`

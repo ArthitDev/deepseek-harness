@@ -24,6 +24,12 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 使用安全测试功能前，请先阅读[渗透测试实验室授权模板](docs/pentest-lab-authorization-template.zh.md)与 [Kali WSL 指南](docs/user/guide/kali-wsl.zh.md)。
 
+### Jev 证据审查
+
+可选的 Jev 集成通过现有 MCP 桥接器为 Web、TUI 和无头 agent 提供十二个语义工具。可用它对侦察观察结果分类和排序、依据证据核验发现，以及审查拟议变更。Jev 不替代确定性扫描、目标范围守卫或 VPN 流量检查。
+
+[Jev 设置与使用指南](docs/user/guide/jev.zh.md)介绍固定版本的 Linux 运行时、服务账户凭据、共享配置、建议工作流和实际调用验证提示词。Jev 由部署配置启用；新检出的仓库不会安装它，也不会继承服务器的私有设置。调用消耗所配置 TypeSafe 账户的配额，并可能产生费用。语义工具与浏览器或原生自动化路由彼此独立。
+
 <a id="run"></a>
 
 ## 运行

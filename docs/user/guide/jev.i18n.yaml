@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for jev.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/jev.md
+/use-jev-to-review-evidence:
+  en: a2c0659d45252bcb
+  zh: b6d634307f9efdaf
+/use-jev-to-review-evidence/summary:
+  en: a686ffd149980a83
+  zh: 9556c1ee1bb46c8f
+/use-jev-to-review-evidence/table-of-contents:
+  en: 2bfc6816421df191
+  zh: 2945f462deedbfb0
+/use-jev-to-review-evidence/configure-a-linux-host:
+  en: 0a128b5514fe058b
+  zh: 58276065e4ac165f
+/use-jev-to-review-evidence/choose-when-to-call-jev:
+  en: 03d868ecaa6a19e8
+  zh: 136591428469fdb8
+/use-jev-to-review-evidence/verify-and-recover:
+  en: 6a182bf15489b5d2
+  zh: cd762e2f0563ce9e
+/use-jev-to-review-evidence/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269
