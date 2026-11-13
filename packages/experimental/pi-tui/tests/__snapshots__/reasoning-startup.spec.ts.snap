@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`restored reasoning effort through Loader and the real request loop > recovers supported without selecting the model again > catalog model name with unchanged request route 1`] = `
+{
+  "banner": "model: Qwen3.8-27B-Uncensored",
+  "selection": {
+    "model": "GLM-DeepSeek-Flash-Combo",
+    "provider": "combo",
+    "reasoningEffort": "high",
+  },
+  "status": "🤖 Qwen3.8-27B-Uncensored",
+}
+`;

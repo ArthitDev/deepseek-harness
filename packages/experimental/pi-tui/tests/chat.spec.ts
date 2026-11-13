@@ -643,6 +643,7 @@ describe('/new model selection', () => {
     ctx.provide('llm', {
       listProviders: () => [{ id: selected.provider }],
       listModels: async () => [{ id: selected.model, provider: selected.provider }],
+      resolveModelInfo: async (provider: string, model: string) => ({ provider, id: model, name: model }),
       resolveCallConfig: async () => selected,
     })
     const makeAgent = (id: SessionId, options = startup): Agent => fixtureAgent(ctx, ctx.sessions.create(id), options)
@@ -695,6 +696,7 @@ describe('preset switches with conversation history', () => {
     ctx.provide('agentDefaultModel', { currentSelection: () => saved, saveSelection: async (route: typeof saved) => { saved = route } })
     ctx.provide('llm', {
       listProviders: () => [{ id: 'mock' }], listModels: async () => [{ id: 'new-model', provider: 'mock' }],
+      resolveModelInfo: async (provider: string, model: string) => ({ provider, id: model, name: model }),
       resolveCallConfig: async (route: typeof oldRoute) => route,
     })
     const mounted = new WeakMap<Context, string>()

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { stripVTControlCharacters } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
-import { ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { TuiAltScreen, type Terminal } from '@earendil-works/pi-tui'
 import { listAllModels, pickModel, type LlmRuntimeLike } from '../src/ui/model-picker.ts'
@@ -39,6 +40,7 @@ describe('model catalog labels in TUI', () => {
     vi.mocked(pickFromListWithSearch).mockResolvedValueOnce('gateway\0openai/test-model')
     const selected = await pickModel(tui, llm, undefined, { provider: 'gateway', model: 'openai/test-model' })
     expect(selected).toEqual({ provider: 'gateway', model: 'openai/test-model' })
+    expect(vi.mocked(pickFromListWithSearch).mock.lastCall?.[1].body).toBe('current: Friendly Model (gateway)')
     expect(vi.mocked(pickFromListWithSearch).mock.lastCall?.[1].items).toEqual([{
       value: 'gateway\0openai/test-model',
       label: '✓ Friendly Model (My gateway)',
@@ -68,14 +70,84 @@ describe('model catalog labels in TUI', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     const resolveCallConfig = vi.fn(async (config: LlmCallConfig) => config)
-    ctx.provide('llm', { ...llm, resolveCallConfig })
+    ctx.provide('llm', { ...llm, resolveCallConfig,
+      resolveModelInfo: async (provider: string, model: string) => ({ provider, id: model, name: 'Friendly Model' }),
+    })
     const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('model-label')))
     const tui = new TuiAltScreen(terminal())
     const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
     try {
       screen.submit(`/model ${query}`)
       await vi.waitFor(() => { expect(resolveCallConfig).toHaveBeenCalledWith({ provider: 'gateway', model: 'openai/test-model' }) })
+      tui.start()
+      tui.renderNow()
+      const visible = stripVTControlCharacters(tui.getScreenLines().join('\n'))
+      expect(visible).toContain('🤖 Friendly Model')
+      expect(visible).toContain('model → Friendly Model (gateway)')
     } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
+  it.each([false, true])('shows the configured name, with metadata failure %s falling back to the id', async (fails) => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const route = { provider: 'epit-local', model: 'gemma4-26b-a4b-uncensored' }
+    const resolveModelInfo = vi.fn(async () => {
+      if (fails) throw new Error('catalog unavailable')
+      return { provider: route.provider, id: route.model, name: 'Qwen3.8-27B-Uncensored' }
+    })
+    ctx.provide('llm', { ...llm, resolveModelInfo })
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('configured-model-name')), route)
+    const select = vi.spyOn(agent.model, 'select')
+    const tui = new TuiAltScreen(terminal())
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    try {
+      await screen.ready()
+      tui.start()
+      tui.renderNow()
+      const visible = stripVTControlCharacters(tui.getScreenLines().join('\n'))
+      const name = fails ? route.model : 'Qwen3.8-27B-Uncensored'
+      expect(visible).toContain(`model: ${name}`)
+      expect(visible).toContain(`🤖 ${name}`)
+      expect(select).toHaveBeenCalledExactlyOnceWith(route)
+      screen.handleEvent(agent.session.append('turn/start', { turn: 1 }))
+      tui.renderNow()
+      tui.renderNow()
+      expect(resolveModelInfo).toHaveBeenCalledOnce()
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+
+  it('ignores a late startup label after selecting another model', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const startup = { provider: 'epit-local', model: 'gemma4-26b-a4b-uncensored' }
+    const pending = Promise.withResolvers<LlmResolvedModelInfo>()
+    const resolveCallConfig = vi.fn(async (config: LlmCallConfig) => config)
+    ctx.provide('llm', { ...llm, resolveCallConfig,
+      resolveModelInfo: async (provider: string, model: string) => model === startup.model
+        ? pending.promise : { provider, id: model, name: 'Friendly Model' },
+    })
+    const agent = fixtureAgent(ctx, ctx.sessions.create(SessionId('late-model-label')), startup)
+    const select = vi.spyOn(agent.model, 'select')
+    const tui = new TuiAltScreen(terminal())
+    const screen = new ChatScreen({ ctx, tui, agent, config: {}, onQuit: vi.fn() })
+    const ready = screen.ready()
+    try {
+      screen.submit('/model gateway/openai/test-model')
+      await vi.waitFor(() => { expect(select).toHaveBeenLastCalledWith({ provider: 'gateway', model: 'openai/test-model' }) })
+      pending.resolve({ provider: startup.provider, id: startup.model, name: 'Qwen3.8-27B-Uncensored' })
+      await ready
+      tui.start()
+      tui.renderNow()
+      const visible = stripVTControlCharacters(tui.getScreenLines().join('\n'))
+      expect(visible).toContain('model: Friendly Model')
+      expect(visible).toContain('🤖 Friendly Model')
+      expect(visible).not.toContain('Qwen3.8-27B-Uncensored')
+    } finally {
+      pending.resolve({ provider: startup.provider, id: startup.model, name: 'Qwen3.8-27B-Uncensored' })
+      await ready
+      tui.stop()
+      await ctx.fiber.dispose()
+    }
   })
 })
 

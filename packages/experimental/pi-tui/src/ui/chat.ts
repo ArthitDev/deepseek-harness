@@ -288,8 +288,9 @@ export class ChatScreen {
   private disposeMcpPolicy: (() => void) | undefined
   private disposeSkillsPolicy: (() => void) | undefined
   private disposeToolRestriction: (() => void) | undefined
-  /** Settles once the seeded reasoning effort has been validated against its adapter. */
+  /** Settles once the seeded model label and reasoning effort have been resolved. */
   private seedValidation: Promise<void> | undefined
+  private readonly modelNames = new Map<string, string>()
   private disposeJobs: (() => void) | undefined
   private agentsOverlayOpen = false
   private contextOverlayOpen = false
@@ -407,7 +408,7 @@ export class ChatScreen {
 
     this.seedSelection()
     this.disposeSelection = this.installSelection()
-    this.seedValidation = this.validateSeededEffort()
+    this.seedValidation = this.validateSeededModel()
     this.disposeMcpPolicy = this.installMcpPolicy()
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
@@ -727,7 +728,7 @@ export class ChatScreen {
     return installModelSelection(this.agent.ctx)
   }
 
-  /** Settles once the visible agent's seeded reasoning effort has been validated. */
+  /** Settles once the selected model's label and reasoning capability have been resolved. */
   async ready(): Promise<void> {
     await this.seedValidation
   }
@@ -735,14 +736,26 @@ export class ChatScreen {
   /**
    * 0.2.2 rejects a request whose effort the adapter does not advertise, so the
    * seeded effort is checked against the model and dropped before a turn uses it.
+   * Catalog labels remain UI-only; unavailable labels fall back to the route id.
    */
-  private async validateSeededEffort(): Promise<void> {
+  private async validateSeededModel(): Promise<void> {
     const agent = this.agent
     const selected = this.selection.current
-    if (selected?.reasoningEffort === undefined) return
+    if (selected === undefined) return
     const llm = this.llm()
     if (llm === undefined) return
-    const info = await llm.resolveModelInfo(selected.provider, selected.model)
+    let info: LlmResolvedModelInfo
+    try { info = await llm.resolveModelInfo(selected.provider, selected.model) }
+    catch (error) {
+      if (selected.reasoningEffort !== undefined) throw error
+      // A missing label does not invalidate a route with no explicit effort.
+      return
+    }
+    this.modelNames.set(`${selected.provider}\u0000${selected.model}`, info.name)
+    if (this.disposed || this.agent !== agent || this.selection.current !== selected) return
+    this.showBanner()
+    this.sync(false)
+    if (selected.reasoningEffort === undefined) return
     if (info.reasoning?.efforts.some(level => level.id === selected.reasoningEffort)) return
     const bare = { provider: selected.provider, model: selected.model }
     this.selection.current = bare
@@ -908,14 +921,14 @@ export class ChatScreen {
     this.handledMarkerSeq = undefined
     this.expandedToolId = undefined
     this.expandedAll = false
-    this.showBanner()
     if (this.workingLoader !== undefined) {
       this.workingLoader.stop()
       this.workingLoader = undefined
     }
     this.seedSelection()
+    this.showBanner()
     this.disposeSelection = this.installSelection()
-    this.seedValidation = this.validateSeededEffort()
+    this.seedValidation = this.validateSeededModel()
     this.disposeMcpPolicy = this.installMcpPolicy()
     this.disposeSkillsPolicy = this.installSkillsPolicy()
     this.listenStream()
@@ -966,16 +979,15 @@ export class ChatScreen {
   showBanner(): void {
     const route = this.currentRoute()
     const preset = this.currentPresetId()
-    pushNotice(
-      this.model,
-      buildBanner({
-        ...(this.config.version !== undefined ? { version: this.config.version } : {}),
-        cwd: basename(this.cwd),
-        ...(preset !== undefined ? { preset } : {}),
-        model: route.model,
-      }),
-      'banner',
-    )
+    const text = buildBanner({
+      ...(this.config.version !== undefined ? { version: this.config.version } : {}),
+      cwd: basename(this.cwd),
+      ...(preset !== undefined ? { preset } : {}),
+      model: this.modelName(route),
+    })
+    const banner = this.model.items.find(item => item.notice === 'banner')
+    if (banner === undefined) pushNotice(this.model, text, 'banner')
+    else banner.text = text
   }
 
   /**
@@ -1535,6 +1547,10 @@ export class ChatScreen {
     if (current?.reasoningEffort !== undefined) return current.reasoningEffort
     if (current !== undefined && (current.provider !== this.model.route?.provider || current.model !== this.model.route.model)) return
     return this.model.effort
+  }
+
+  private modelName(route: ModelRoute): string {
+    return this.modelNames.get(`${route.provider}\u0000${route.model}`) ?? route.model
   }
 
   /** The mounted preset of the visible agent, shared by the banner and status bar. */
@@ -2274,8 +2290,8 @@ export class ChatScreen {
     if (llm === undefined) return
     try {
       const previousEffort = this.selection.current?.reasoningEffort
-      const info = previousEffort === undefined ? undefined : await llm.resolveModelInfo(route.provider, route.model)
-      const retainedEffort = info?.reasoning?.efforts.some(effort => effort.id === previousEffort) ? previousEffort : undefined
+      const info = await llm.resolveModelInfo(route.provider, route.model)
+      const retainedEffort = info.reasoning?.efforts.some(effort => effort.id === previousEffort) ? previousEffort : undefined
       const resolved = await llm.resolveCallConfig({
         provider: route.provider,
         model: route.model,
@@ -2289,6 +2305,7 @@ export class ChatScreen {
           : {}),
       }
       this.agent.model.select(this.selection.current)
+      this.modelNames.set(`${route.provider}\u0000${route.model}`, info.name)
       // Write the shared default too (grok rationale: the web host's outer
       // waterfall fallback chain reads it, so a stale selection can't
       // overwrite this one).
@@ -2300,7 +2317,8 @@ export class ChatScreen {
       }
       // Follow the new model's preset without replacing the conversation.
       await this.followModelPreset(resolved.provider, resolved.model)
-      this.pushNotice(`model → ${resolved.model} (${resolved.provider}) · from the next step`)
+      this.showBanner()
+      this.pushNotice(`model → ${this.modelName(resolved)} (${resolved.provider}) · from the next step`)
       this.sync()
     } catch (error) {
       this.pushNotice(
@@ -4107,7 +4125,7 @@ export class ChatScreen {
     this.updateQueueBanner()
     const vpn = this.ctx.get('vpnStatus')?.read()
     const status: StatusBarData = {
-      model: route.model,
+      model: this.modelName(route),
       working: this.isBusy(),
       ...(effort !== undefined ? { effort } : {}),
       sessionId: String(this.agent.session.id),

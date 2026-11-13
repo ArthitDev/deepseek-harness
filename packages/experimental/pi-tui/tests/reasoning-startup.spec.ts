@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
@@ -18,12 +19,13 @@ vi.mock('../src/core/git.ts', () => ({ readGitState: async () => undefined }))
 
 const route = { provider: 'combo', model: 'GLM-DeepSeek-Flash-Combo' }
 const high = { ...route, reasoningEffort: ReasoningEffortId('high') }
+const displayName = 'Qwen3.8-27B-Uncensored'
 
 class RecordingAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
   constructor(private readonly supported: boolean) { super() }
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
-    return Promise.resolve({ provider, id: model, name: model,
+    return Promise.resolve({ provider, id: model, name: displayName,
       ...this.supported ? { reasoning: { efforts: [{ id: ReasoningEffortId('high'), name: 'High' }] } } : {},
     })
   }
@@ -70,6 +72,18 @@ describe('restored reasoning effort through Loader and the real request loop', (
       // 0.2.2 rejects a request whose effort the adapter does not advertise, so
       // the seeded effort is validated (and dropped) before the first turn.
       await screen.ready()
+      tui.start()
+      tui.renderNow()
+      const visible = stripVTControlCharacters(tui.getScreenLines().join('\n'))
+      expect(visible).toContain(`model: ${displayName}`)
+      expect(visible).toContain(`🤖 ${displayName}`)
+      if (source === 'supported') {
+        expect({
+          banner: visible.split('\n').find(line => line.includes('model: '))?.trim().split(' · ')[0],
+          status: visible.match(/🤖 \S+/)?.[0],
+          selection: first.model.current(),
+        }).toMatchSnapshot('catalog model name with unchanged request route')
+      }
       for (const text of ['first task', 'continue']) {
         screen.submit(text)
         await first.whenIdle()
@@ -79,6 +93,8 @@ describe('restored reasoning effort through Loader and the real request loop', (
       switched.session.append('request/header', { header: { config: high }, reason: 'initial' })
       await screen.switchAgent(switched)
       await screen.ready()
+      tui.renderNow()
+      expect(stripVTControlCharacters(tui.getScreenLines().join('\n'))).toContain(`🤖 ${displayName}`)
       screen.submit('continue after switching session')
       await switched.whenIdle()
       expect(adapter.requests).toHaveLength(3)

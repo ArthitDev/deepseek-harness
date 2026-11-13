@@ -102,9 +102,11 @@ export async function pickModel(
 ): Promise<ModelRoute | undefined> {
   const routes = await listAllModels(llm, profileContexts)
   if (routes.length === 0) return undefined
+  const currentModel = current === undefined ? undefined
+    : routes.find(route => route.provider === current.provider && route.model === current.model)
   const picked = await pickFromListWithSearch(tui, {
     title: 'Select model',
-    ...(current !== undefined ? { body: `current: ${current.model} (${current.provider})` } : {}),
+    ...(current !== undefined ? { body: `current: ${currentModel?.name ?? current.model} (${current.provider})` } : {}),
     items: routes.map((route, index) => toItem(route, current, index)),
   })
   return picked === undefined ? undefined : parseRoute(picked)
