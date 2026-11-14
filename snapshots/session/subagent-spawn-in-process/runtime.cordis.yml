@@ -16,6 +16,4 @@
 
 - id: subagent
   config:
-    localAgentPolicy:
-      provider: deepseek-official
-      model: deepseek-v4-flash
+    inheritParentPreset: true

@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-无需挂载，也无需配置。`dsh` 启动器会在第一个插件加载之前，为每个 profile 解析并安装策略，因此导出了 `HTTPS_PROXY` 的用户在所有位置都会走代理。本包是库而非插件，因为传输策略每个进程只有一个答案：没有第二个实现可替换，也没有比进程更窄的作用域可赋予。
+环境路由无需挂载。`dsh` 启动器会在第一个插件加载之前，为每个 profile 解析并安装策略，因此导出了 `HTTPS_PROXY` 的用户会通过它路由 fetch 流量。本库还为 [`proxy-servers.routeAllModels`](../../llm/proxy-server/README.zh.md#configuration) 提供由明确拥有方管理的模型调用作用域；普通调用方保留启动器策略。
 
 ### 编写新的出站调用
 
@@ -39,6 +39,9 @@ kind: "package-reference"
 | 接受自有代理 URL 的 SDK | `proxyRouteFor(url)`，把 `route.proxy` 传进去 |
 | 由你自己构造环境的 spawn | 把 `proxyEnvironmentForChild()` 应用到该 spawn（`undefined` 表示删除） |
 | 必须连到自带 fixture（测试前置数据）服务器的 harness | 把 `clearedProxyEnv()` 应用到该 spawn |
+| 模型路由拥有方 | `installModelProxyDispatcher(endpoint)`，在每次迭代器操作中进入 `run()`，注销监听器后等待 `dispose()` |
+
+模型作用域通过 SB 隧道转发 HTTP 和 HTTPS，不改变请求字节或 TLS 验证。`modelProxyEndpointForCall()` 为使用自身 HTTP agent 的 SDK 提供当前端点；作用域外返回 `undefined`。不相关的异步调用链保留原有 dispatcher。嵌套安装按逆序销毁。可用性与回退决策由 proxy-server 拥有方负责；本库从不重试。
 
 `proxyRouteFor` 给出的不只是答案，还有该答案所假定的传输：走代理的那一支携带着此刻正按该策略路由的 dispatcher。若调用方先读策略、再自建传输，卸载就可能落在两次读取之间，把请求发往其分支从未放行的去处。
 
@@ -75,7 +78,8 @@ loopback 始终被绕过——`localhost`、整个 `127.0.0.0/8` 段、`::1`、`
 |---|---|
 | `src/policy.ts` | 解析与绕过匹配；诊断只点名变量，从不带出它的值。不引入任何传输实现，因此在没有 undici 的环境中仍可加载。 |
 | `src/install.ts` | 全局 dispatcher、生效策略记录、路由与子进程环境。动态引入 undici。 |
-| `src/index.ts` | 本包的对外接口：五个函数与两个类型。 |
+| `src/index.ts` | 公共环境路由与模型作用域辅助函数。 |
+| `src/model-routing.ts` | 由拥有方管理的 CONNECT 路由与 dispatcher 恢复。 |
 
 ### 绕过匹配
 

@@ -1,12 +1,14 @@
 #!/usr/bin/env -S bun --no-env-file
 // Checkout-local OpenAI transport. It never imports the legacy prompt or execution pipeline.
 const http = require('node:http');
+const net = require('node:net');
 const https = require('node:https');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { performance } = require('node:perf_hooks');
+const { randomBytes, timingSafeEqual } = require('node:crypto');
 
 const SERVICE = 'dsh-sb-transport';
 const home = path.resolve(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'));
@@ -42,10 +44,17 @@ function headers(source) {
 }
 
 function serve() {
+  const tokenFile = path.join(home, 'run', 'sb-connect.key');
+  fs.mkdirSync(path.dirname(tokenFile), { recursive: true, mode: 0o700 });
+  try { fs.writeFileSync(tokenFile, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); }
+  catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const token = fs.readFileSync(tokenFile, 'utf8');
+  if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('Invalid SB CONNECT credential file; repair the runtime-owned key');
+  const authorization = Buffer.from(`Basic ${Buffer.from(`dsh:${token}`).toString('base64')}`);
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ service: SERVICE, mode: 'passthrough', pid: process.pid,
+      res.end(JSON.stringify({ service: SERVICE, mode: 'passthrough', supportsConnect: true, pid: process.pid,
         backend: backend.href, port: server.address().port }));
       return;
     }
@@ -92,6 +101,42 @@ function serve() {
       });
       upstream.end(Buffer.concat(chunks));
     });
+  });
+  server.on('connect', (req, client, head) => {
+    const supplied = Buffer.from(req.headers['proxy-authorization'] || '');
+    if (supplied.length !== authorization.length || !timingSafeEqual(supplied, authorization)) {
+      client.end('HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="dsh-sb-transport"\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    if (!/^(?:\[[0-9a-fA-F:]+\]|[^\s/:?#@]+):\d+$/.test(req.url)) {
+      client.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    let target;
+    try { target = new URL(`http://${req.url}`); }
+    catch { client.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); return; }
+    const targetPort = Number(req.url.match(/:(\d+)$/)[1]);
+    if (targetPort < 1 || targetPort > 65535) {
+      client.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    const upstream = net.connect({ host: target.hostname.replace(/^\[|\]$/g, ''), port: targetPort });
+    let connected = false;
+    upstream.once('connect', () => {
+      connected = true;
+      client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      if (head.length) upstream.write(head);
+      client.pipe(upstream);
+      upstream.pipe(client);
+    });
+    upstream.setTimeout(timeout, () => upstream.destroy(new Error('Tunnel idle timeout')));
+    upstream.once('error', () => {
+      if (connected) client.destroy();
+      else client.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n');
+    });
+    client.once('error', () => upstream.destroy());
+    client.once('close', () => upstream.destroy());
+    upstream.once('close', () => { if (connected && !upstream.readableEnded) client.destroy(); });
   });
   server.on('error', error => { console.error(error.message); process.exitCode = 1; });
   server.listen(port, '127.0.0.1', () => console.log(`SB transport listening on http://127.0.0.1:${server.address().port}`));

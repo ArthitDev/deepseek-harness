@@ -25,7 +25,7 @@ Use this package to apply one outbound HTTP proxy policy to Harness requests tha
 <a id="use-this-package"></a>
 ## Use this package
 
-Nothing to mount, and nothing to configure. The `dsh` launcher resolves and installs the policy for every profile before the first plugin loads, so a user who exports `HTTPS_PROXY` is proxied everywhere. This is a library rather than a plugin because transport policy has one answer per process: there is no second implementation to swap and no scope narrower than the process to give one.
+Nothing to mount for ambient routing. The `dsh` launcher resolves and installs the policy for every profile before the first plugin loads, so a user who exports `HTTPS_PROXY` routes fetch traffic through it. This library also supplies an explicitly owned model-call scope for [`proxy-servers.routeAllModels`](../../llm/proxy-server/README.md#configuration); ordinary callers keep the launcher's policy.
 
 ### Writing a new outbound call
 
@@ -39,6 +39,9 @@ Plain `fetch()` is proxied, and so is any SDK that reaches `globalThis.fetch` â€
 | An SDK that takes a proxy URL of its own | `proxyRouteFor(url)`, and pass `route.proxy` |
 | A spawn whose environment you build yourself | apply `proxyEnvironmentForChild()` to it (`undefined` means remove) |
 | A harness that must reach its own fixture server | apply `clearedProxyEnv()` to the spawn |
+| The model-routing owner | `installModelProxyDispatcher(endpoint)`, enter `run()` for each iterator operation, and await `dispose()` after unregistering the listener |
+
+The model scope tunnels HTTP and HTTPS through SB without changing request bytes or TLS verification. `modelProxyEndpointForCall()` exposes the active endpoint to SDKs with their own HTTP agents; outside the scope it returns `undefined`. Unrelated async chains retain the previous dispatcher. Dispose nested installations in reverse order. Availability and fallback decisions belong to the proxy-server owner; this library never retries.
 
 `proxyRouteFor` answers with the transport that answer assumed, not just the answer: its proxied arm carries the dispatcher already routing by this policy. A caller that read the policy and then built its own transport could have an unmount land between the two and send the request somewhere its branch never cleared.
 
@@ -75,7 +78,8 @@ A proxy value the package cannot use â€” a SOCKS or PAC URL, an unparseable stri
 |---|---|
 | `src/policy.ts` | Resolution and bypass matching; a diagnostic names the variable, never its value. Imports no transport, so it stays loadable where undici is absent. |
 | `src/install.ts` | The global dispatcher, the active-policy record, the route, and the child environment. Imports undici dynamically. |
-| `src/index.ts` | The package face: five functions and two types. |
+| `src/index.ts` | Public ambient-routing and model-scope helpers. |
+| `src/model-routing.ts` | Owner-scoped CONNECT routing and dispatcher restoration. |
 
 ### Bypass matching
 

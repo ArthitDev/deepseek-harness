@@ -69,7 +69,10 @@ kind: "package-reference"
 
 根的名称始终为 `lead`。后代的完整名称是从根开始、以斜杠分隔的名称路径，不带 `lead/` 前缀，例如 `reviewer` 或 `reviewer/checker`；同级唯一的各段使完整名称在整棵树中唯一。`SubagentActivation.name` 和 `listDescendants()` 行的 `path` 字段携带完整名称。目录条目没有名称的子级及其下所有后代使用 Session id 作为名称。`namesOf(agent)` 报告在线成员及其创建者的名称。`resolveName(caller, name, signal)` 为 `lead` 或完整名称返回 Session id，只读取路径上的目录。树中不存在的其他文本原样作为 Session id 返回，因为单个词元可能就是 Session id；斜杠路径不可能是 Session id，因此指向无成员的路径以 `AGENT_NAME_NOT_FOUND` 失败。解析不授予权限：消息、中断和任务分配会对解析出的 Session id 进行授权。
 
+<a id="child-presets"></a>
 ### 子级 preset
+
+设置 `inheritParentPreset: true`，可要求本地子级使用父方 preset，而不固定提供方或模型。冲突的 preset、缺失的父方组装及外部后端会被拒绝；后续每一步和冷恢复都会检查继承的 preset。新子级保留调用方所选模型，包括覆盖 fork 历史；冷恢复保留已保存的模型。默认值为 `false`。如需模型传输优先走代理并在不可用时直连回退，请单独启用 [`proxy-servers.routeAllModels`](../../llm/proxy-server/README.zh.md#configuration)，并省略 `localAgentPolicy`。
 
 进程内 spawn 接受独立的 `agentPreset`；fork 与外部后端拒绝此选项。省略选择时，本地子级加入父方当前的 preset 代际。显式 id 挂载当前可用代际，即使该 id 与父方相同。通过 [`dsh-tool-subagent`](../tool-subagent/README.zh.md#selecting-a-child-preset) 配置模型可选项，并在 [preset 组装](../../preset/agent-preset-registry/README.zh.md)中配置 persona 与工具。冷恢复保留历史子级 descriptor 记录的 persona 和工具限制。
 

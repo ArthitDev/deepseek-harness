@@ -31,6 +31,8 @@ kind: "package-reference"
 
 ### 何时选择
 
+启用 [`proxy-servers.routeAllModels`](../proxy-server/README.zh.md#configuration) 时，适配器保留所选模型和凭据。Fetch 提供方使用其作用域内的 CONNECT 传输；Bedrock 接收覆盖环境 `NO_PROXY` 的单次调用代理变量，Codex Responses 使用 SSE 以避免未代理的 WebSocket。作用域外保留已配置的传输选择。
+
 当同一组合服务多个提供方、某条路由需要 pi-ai 目录默认值并修正少数字段、或必须通过自有端点与协议到达手工声明网关时，选择本适配器。当部署不需要其他提供方时，选择 `dsh-llm-deepseek` 直连 DeepSeek 路由。两个适配器可以同时挂载，因为它们的路由名不冲突；注册其他适配器已拥有的路由会导致插件加载失败。
 
 ### 配置提供方路由

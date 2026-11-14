@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it, onTestFinished } from 'vitest'
+import { ProxyAgent, fetch as undiciFetch } from 'undici'
 
 type Kind = 'sb' | 'antigravity'
 const scripts: Record<Kind, string> = {
@@ -71,8 +72,35 @@ async function fixture(kind: Kind, handler: (request: IncomingMessage, response:
     body: JSON.stringify({ model: 'gemini-2.5-flash', messages: [{ role: 'user', content: 'ทดสอบ' }], stream }),
     signal: signal ?? null,
   })
-  return { endpoint, post }
+  return { endpoint, base, post, home }
 }
+
+it.each(['/v1/messages', '/v1beta/models/gemini:streamGenerateContent'])('SB CONNECT preserves %s and the selected request', async (path) => {
+  const f = await fixture('sb', (request, response) => {
+    let body = ''
+    request.on('data', (chunk) => { body += String(chunk) })
+    request.on('end', () => response.end(JSON.stringify({ path: request.url, auth: request.headers.authorization, body })))
+  })
+  const authenticated = new URL(f.endpoint)
+  authenticated.username = 'dsh'
+  authenticated.password = await readFile(join(f.home, 'run/sb-connect.key'), 'utf8')
+  const proxy = new ProxyAgent({ uri: authenticated.href, proxyTunnel: true })
+  onTestFinished(() => proxy.destroy())
+  const body = JSON.stringify({ model: 'unchanged-model', prompt: 'unchanged prompt' })
+  const response = await undiciFetch(f.base + path, { dispatcher: proxy, method: 'POST', headers: { authorization: 'Bearer fixture' }, body })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({ path, auth: 'Bearer fixture', body })
+  expect(await (await fetch(f.endpoint + '/health')).json()).toMatchObject({ supportsConnect: true })
+})
+
+it('SB rejects CONNECT without the runtime credential before reaching a target', async () => {
+  let reached = 0
+  const f = await fixture('sb', (_req, response) => { reached++; response.end('unexpected') })
+  const proxy = new ProxyAgent({ uri: f.endpoint, proxyTunnel: true })
+  onTestFinished(() => proxy.destroy())
+  await expect(undiciFetch(f.base, { dispatcher: proxy })).rejects.toThrow()
+  expect(reached).toBe(0)
+})
 
 it('SB preserves request bytes, paths, caller authorization and JSON responses under Bun', async () => {
   const f = await fixture('sb', (request, response) => {

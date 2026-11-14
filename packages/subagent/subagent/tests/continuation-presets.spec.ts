@@ -40,6 +40,7 @@ afterEach(async () => {
 async function setup(
   script: ConstructorParameters<typeof MockAdapter>[0] = [textResponse('done'), textResponse('continued'), textResponse('done again')],
   localAgentPolicy?: { provider: string; model: string },
+  inheritParentPreset = false,
 ) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-continuation-presets-'))
   roots.push(root)
@@ -61,7 +62,7 @@ async function setup(
     }))
   }
   await mountWorkingDirectoryFixture(ctx)
-  await ctx.plugin(SubagentRuntime, { localAgentPolicy })
+  await ctx.plugin(SubagentRuntime, { localAgentPolicy, inheritParentPreset })
   const spawn = await ctx.plugin(SubagentSpawn, { providerName: 'separate' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   const adapter = new MockAdapter(script)
@@ -105,6 +106,26 @@ function continueChild(ctx: Context, childId: SessionId) {
 
 describe('deployment local agent policy', () => {
   const policy = { provider: 'sb-proxy', model: 'proxy-model' }
+
+  it.each(['separate', 'fork'])('inherits the preset for %s without fixing the model route', async (provider) => {
+    const { ctx, parent } = await setup([], undefined, true)
+    const selected = new MockAdapter([textResponse('selected model completed'), textResponse('selected model resumed')])
+    ctx.llm.registerAdapter(['selected'], selected)
+    parkParent(ctx, parent)
+    const run = await ctx.subagents.startActivation({ ...startSpec(parent, undefined, provider),
+      agentOptions: { provider: 'selected', model: 'other-model' } })
+    expect((await run.result).stopReason).toBe('completed')
+    expect(selected.requests).toHaveLength(1)
+    expect(selected.requests[0]).toMatchObject({ provider: 'selected', model: 'other-model' })
+    const session = await settled(ctx, run.childId)
+    expect(session.meta.agentPreset).toBe('coding')
+    await continueChild(ctx, run.childId)
+    await settled(ctx, run.childId)
+    expect(selected.requests).toHaveLength(2)
+    expect(selected.requests[1]).toMatchObject({ provider: 'selected', model: 'other-model' })
+    await expect(ctx.subagents.startActivation(startSpec(parent, 'reviewing', provider)))
+      .rejects.toMatchObject({ code: provider === 'fork' ? 'UNSUPPORTED_CAPABILITY' : 'DELEGATION_POLICY_DENIED' })
+  })
 
   it.each(['separate', 'fork'])('routes %s through the proxy with the parent prompt, including cold resume', async (provider) => {
     const { ctx, parent, adapter } = await setup([textResponse('parent done')], policy)

@@ -3056,11 +3056,15 @@ export interface Config {
 
 - `inject`: `profileContext` · `settings`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/proxy-server/src/index.ts:39`](../packages/llm/proxy-server/src/index.ts)
+- `source`: [`packages/llm/proxy-server/src/index.ts:40`](../packages/llm/proxy-server/src/index.ts)
 
 ```ts config-catalog
 /** Live usage switches and deployment-specific ports, routes and startup deadline. */
 export interface Config {
+  /** Route all model streams through SB CONNECT, falling back before dispatch if unavailable. */
+  routeAllModels: boolean
+  /** Deadline in milliseconds for a local SB CONNECT capability probe. */
+  routingProbeTimeoutMs: number
   /** Permit new model requests to use ZCode Direct. */
   zcodeEnabled: Volatile<boolean>
   /** Permit new model requests to use Antigravity. */
@@ -4105,6 +4109,8 @@ export interface Config {
   maxActiveSubagents: Volatile<number>
   /** Default delegation depth for tools without an explicit limit; defaults to 1. */
   maxDepth: Volatile<number>
+  /** Require local children to inherit the parent preset while retaining normal model selection; defaults to false. */
+  inheritParentPreset: boolean
   /** When set, require local children to share the parent preset and use this fixed LLM route; omission preserves provider behavior. */
   localAgentPolicy?: {
     /** Required LLM adapter provider for every child request. */

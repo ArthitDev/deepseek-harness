@@ -36,6 +36,14 @@ The volatile `zcodeEnabled`, `antigravityEnabled`, and `sbEnabled` fields hold i
 
 For proxies managed by Harness, ZCode requires Bun, its prepared worker bundle, and an existing `config.yaml` under `ZCODE_DIR` or `third-party/zcode-api`. All three proxies require Bun on `PATH`; Antigravity and SB run their bundled JavaScript with `bun --no-env-file`, preserving the Host-provided environment without loading additional `.env` files. The Harness Host stays on Node.js. This service neither creates credentials nor performs login, OAuth setup, or upstream model requests. Settings failures and missing setup are reported to the operator.
 
+### Proxy-first routing for every model
+
+CONNECT requires a 256-bit runtime credential stored in `$DSH_HOME/run/sb-connect.key`, created exclusively with owner-only file permissions. Main and child calls share it; managed SB receives the same Harness home. It never enters provider authorization or prompt text. An external SB service must use that home too. Keep the key private and restart Harness and SB together after rotating it.
+
+Set `routeAllModels: true` to tunnel main-agent and local subagent model streams through SB on `sbPort`, preserving the selected provider, model, URL, authorization, and payload. The default is `false`. SB must identify itself at `/health` with `supportsConnect: true`; Harness starts or probes it through the same lifecycle manager. `routingProbeTimeoutMs` bounds the capability probe and defaults to 1000. This mode works on Windows and Linux.
+
+When SB cannot start, is disabled, or fails its local probe, that call uses the original provider transport under the existing network policy. VPN enforcement remains independent and must still permit egress. A provider HTTP error or a stream that fails after dispatch never triggers a direct replay. If SB disappears after its successful probe, the current attempt fails; the next attempt probes again. Bedrock receives a per-call proxy environment, and Codex Responses uses SSE while routing is active. Other fetches retain their ambient dispatcher. External agent processes are outside this process's model transport; use [subagent preset inheritance](../../subagent/subagent/README.md#child-presets) to require local children.
+
 <a id="further-exploration"></a>
 ## Further Exploration
 
@@ -64,7 +72,7 @@ The service does not rewrite model-request prefixes or add cache content. Upstre
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Configured provider ids and model prefixes identify routes; arbitrary provider base URLs are not inspected.
+- With `routeAllModels: false`, configured provider ids and model prefixes identify routes; arbitrary provider base URLs are not inspected.
 - Without an explicit `externalProxies` declaration, an unowned ZCode listener remains `port-in-use` and is never reused or stopped. The integration identity header identifies a deployment; it does not authorize model requests or prove upstream account quota.
 - Proxy configuration and authentication must already exist. A missing ZCode checkout cannot be installed from this page.
 - Changes through generic plugin configuration affect subsequent request routing; use `setEnabled` to also stop a managed process immediately.

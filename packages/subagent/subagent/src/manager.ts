@@ -160,12 +160,14 @@ export class SubagentManager {
    * @param host - descriptor reads and lifecycle publication owned by the service.
    * @param maxActiveSubagents - the current configured child capacity.
    * @param localAgentPolicy - fixed local route and parent-preset requirement; omission preserves independent selection.
+   * @param inheritParentPreset - require the parent preset without fixing the child's model route.
    */
   constructor(
     private readonly ctx: Context,
     private readonly host: SubagentHost,
     private readonly maxActiveSubagents: () => number,
     private readonly localAgentPolicy?: Readonly<NonNullable<Config['localAgentPolicy']>>,
+    private readonly inheritParentPreset = false,
   ) {
     // Drain managed instances before Cordis releases their owning scope.
     const scope = ctx.plugin(function activationOwner() {})
@@ -341,19 +343,20 @@ export class SubagentManager {
       // Snapshot before any await: invalid descriptor JSON rejects the call
       // before a child exists, and the detached value is what reaches the log.
       const policy = this.localAgentPolicy
-      if (policy !== undefined) {
+      const inheritPreset = policy !== undefined || this.inheritParentPreset
+      if (inheritPreset) {
         const preset = parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
         if (preset === undefined || spec.agentPreset !== undefined && spec.agentPreset !== preset) {
           throw new SubagentError('subagents must inherit the parent agent preset', 'DELEGATION_POLICY_DENIED')
         }
-        if (spec.agentOptions?.provider !== undefined && spec.agentOptions.provider !== policy.provider
-          || spec.agentOptions?.model !== undefined && spec.agentOptions.model !== policy.model) {
+        if (policy !== undefined && (spec.agentOptions?.provider !== undefined && spec.agentOptions.provider !== policy.provider
+          || spec.agentOptions?.model !== undefined && spec.agentOptions.model !== policy.model)) {
           throw new SubagentError('subagents must use the deployment LLM route', 'DELEGATION_POLICY_DENIED')
         }
       }
       const agentOptions = resolveChildAgentOptions(parent, policy === undefined
         ? spec.agentOptions : { ...spec.agentOptions, ...policy }, childDepth)
-      const agentPreset = policy === undefined ? spec.agentPreset : undefined
+      const agentPreset = inheritPreset ? undefined : spec.agentPreset
       const meta = childSessionMeta(parent, childDepth, false, agentPreset)
       const agentProvider = agentOptions.provider
       const agentModel = agentOptions.model
@@ -858,7 +861,7 @@ export class SubagentManager {
         }
         if (inputs.composition.agentPreset === undefined) await applyChildComposition(childCtx, create?.parent, inputs.composition)
         const policy = this.localAgentPolicy
-        if (policy !== undefined) {
+        if (policy !== undefined || this.inheritParentPreset) {
           const preset = create?.meta.agentPreset ?? root.ctx.get('agentPresets')?.composedPreset(root.ctx)
           const assertPreset = (): void => {
             if (preset === undefined || childCtx.get('agentPresets')?.composedPreset(childCtx) !== preset
@@ -868,11 +871,16 @@ export class SubagentManager {
           }
           assertPreset()
           // Fork seeds and resumed selection events otherwise override creation options.
-          child.model.select({ ...policy, ...inputs.agentOptions.reasoningEffort === undefined
-            ? {} : { reasoningEffort: inputs.agentOptions.reasoningEffort } })
+          if (policy !== undefined) {
+            child.model.select({ ...policy, ...inputs.agentOptions.reasoningEffort === undefined
+              ? {} : { reasoningEffort: inputs.agentOptions.reasoningEffort } })
+          } else if (create !== undefined && inputs.agentOptions.provider !== undefined && inputs.agentOptions.model !== undefined) {
+            child.model.select({ provider: inputs.agentOptions.provider, model: inputs.agentOptions.model,
+              ...inputs.agentOptions.reasoningEffort === undefined ? {} : { reasoningEffort: inputs.agentOptions.reasoningEffort } })
+          }
           childCtx.on('agent/pre-step', ({ modelSelection }, next) => {
             assertPreset()
-            if (modelSelection.provider !== policy.provider || modelSelection.model !== policy.model) {
+            if (policy !== undefined && (modelSelection.provider !== policy.provider || modelSelection.model !== policy.model)) {
               throw new SubagentError('subagents must use the deployment LLM route', 'DELEGATION_POLICY_DENIED')
             }
             return next()

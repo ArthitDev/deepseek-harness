@@ -44,6 +44,7 @@ import {
   LlmError,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
+import { modelProxyEndpointForCall } from '@deepseek-ai/dsh-http-proxy'
 import type {
   GenerateOptions,
   ImageAttachmentAccess,
@@ -472,8 +473,13 @@ export class PiAiAdapter extends LlmAdapter {
       const { context, digest } = bindThinkingToPrefix(converted, model.api, prefixDigests, manualThinking, (count) => {
         this.config.onThinkingOmitted?.({ provider: options.provider, model: options.model, count })
       })
+      const proxy = await modelProxyEndpointForCall()
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
+        ...proxy === undefined ? {} : model.api === 'bedrock-converse-stream' ? {
+          env: { http_proxy: proxy, HTTP_PROXY: proxy, https_proxy: proxy, HTTPS_PROXY: proxy,
+            all_proxy: proxy, ALL_PROXY: proxy, no_proxy: ' ', NO_PROXY: ' ' },
+        } : model.api === 'openai-codex-responses' ? { transport: 'sse' as const } : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

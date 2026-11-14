@@ -31,6 +31,8 @@ The adapter accepts the LLM service's [request-only user inputs](../llm/README.m
 
 ### When to choose it
 
+When [`proxy-servers.routeAllModels`](../proxy-server/README.md#configuration) is active, the adapter preserves the selected model and credentials. Fetch providers use its scoped CONNECT transport; Bedrock receives per-call proxy variables that override ambient `NO_PROXY`, and Codex Responses uses SSE to avoid an unproxied WebSocket. Outside that scope, configured transport choices remain unchanged.
+
 Choose this adapter when the same composition serves several providers, when a route needs pi-ai's catalog defaults with a few fields corrected, or when a hand-declared gateway must be reached through its own endpoint and protocol. Choose `dsh-llm-deepseek` for the direct DeepSeek route when the deployment needs no other provider. Both adapters can be mounted together because their route names do not collide; registering a route another adapter already owns fails plugin loading.
 
 ### Configure provider routes

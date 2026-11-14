@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { copyFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer, type Server } from 'node:http'
@@ -29,6 +29,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'dsh-proxy-test-'))
   onTestFinished(() => rm(root, { recursive: true, force: true }))
   const config = {
+    routeAllModels: false,
     zcodeEnabled: true, antigravityEnabled: true, sbEnabled: true,
     zcodePort: 1, antigravityPort: 2, sbPort: 3, zcodeProviders: ['zcode-direct'],
     antigravityProviders: ['antigravity'], sbProviders: ['sb'], startupTimeoutMs: 1000,
@@ -53,7 +54,7 @@ async function fixture() {
     await mkdir(join(root, 'scripts'), { recursive: true })
     const script = id === 'sb' ? 'scripts/sb-transport.cjs' : 'packages/experimental/pi-tui/tools/antigravity-proxy/antigravity_proxy.mjs'
     await mkdir(join(root, script, '..'), { recursive: true })
-    await writeFile(join(root, script), `import http from 'node:http';http.createServer((req,res)=>res.end(JSON.stringify({service:'${id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy'}',runtime:process.versions.bun?'bun':'node'}))).listen(Number(process.env.${id === 'sb' ? 'SB_PORT' : 'ANTIGRAVITY_PORT'}),'127.0.0.1')`)
+    await writeFile(join(root, script), `import http from 'node:http';http.createServer((req,res)=>res.end(JSON.stringify({service:'${id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy'}',runtime:process.versions.bun?'bun':'node',customHome:process.env.DSH_HOME}))).listen(Number(process.env.${id === 'sb' ? 'SB_PORT' : 'ANTIGRAVITY_PORT'}),'127.0.0.1')`)
   }
   const mount = async () => {
     await writeFile(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
@@ -89,6 +90,24 @@ it('reads the three proxies without starting one, and records independent usage 
   expect((await (await f.mount()).list()).map(row => row.enabled)).toEqual([false, true, true])
 })
 
+it('authenticates managed SB routing with a custom Harness home', async () => {
+  const f = await fixture()
+  f.config.routeAllModels = true
+  await f.prepareSidecar()
+  await copyFile(new URL('../../../../scripts/sb-transport.cjs', import.meta.url), join(f.root, 'scripts/sb-transport.cjs'))
+  const target = createServer((_request, response) => response.end('custom home CONNECT succeeded'))
+  const port = await listen(target)
+  onTestFinished(() => close(target))
+  await f.mount()
+  let answer = ''
+  await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { provider: 'other', model: 'selected-model', messages: [] }, async function* (): AsyncGenerator<StreamChunk> {
+    answer = await (await fetch(`http://127.0.0.1:${port}/model`)).text()
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }))
+  expect(answer).toBe('custom home CONNECT succeeded')
+  expect((await f.ctx.proxyServers.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'running' })
+})
+
 it('leaves an external proxy running after disable and distinguishes occupied ports', async () => {
   const f = await fixture()
   const external = createServer((_req, res) => { res.end(JSON.stringify({ service: 'antigravity-proxy' })) })
@@ -114,7 +133,9 @@ it.each(['sb', 'antigravity'] as const)('starts %s with Bun, serializes repeated
   expect((await service.list()).find(row => row.id === id)).toMatchObject({ status: 'running' })
   const health: unknown = await (await fetch(`http://127.0.0.1:${f.config[`${id}Port`]}/health`)).json()
   expect(health).toMatchObject({ runtime: 'bun' })
-  expect(health).toMatchSnapshot()
+  if (id === 'sb') expect(health).toMatchObject({ customHome: f.root })
+  const { customHome: _customHome, ...stable } = health as { customHome?: string; runtime: string; service: string }
+  expect(stable).toMatchSnapshot()
   await service.setEnabled(id, false)
   expect((await service.list()).find(row => row.id === id)).toMatchObject({ status: 'stopped', enabled: false })
   await service.setEnabled(id, true)

@@ -5,7 +5,7 @@ import { get } from 'node:http'
 import { connect } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import type { Context, Volatile } from '@deepseek-ai/cordis'
+import { Service, type Context, type Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Remote, RemoteError, remoteErrorOf, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
@@ -14,6 +14,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { ProxyId, ProxyServerRow } from './types.ts'
+import { installModelRouting } from './startup.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -37,6 +38,10 @@ declare module '@deepseek-ai/cordis' {
 
 /** Live usage switches and deployment-specific ports, routes and startup deadline. */
 export interface Config {
+  /** Route all model streams through SB CONNECT, falling back before dispatch if unavailable. */
+  routeAllModels: boolean
+  /** Deadline in milliseconds for a local SB CONNECT capability probe. */
+  routingProbeTimeoutMs: number
   /** Permit new model requests to use ZCode Direct. */
   zcodeEnabled: Volatile<boolean>
   /** Permit new model requests to use Antigravity. */
@@ -120,6 +125,8 @@ async function healthy(server: Descriptor, ownedZcode = false, external = false)
 export default class ProxyServers extends TypertRemoteService {
   static inject = ['profileContext', 'settings']
   static Config = z.object({
+    routeAllModels: z.boolean().default(false),
+    routingProbeTimeoutMs: z.number().step(1).min(1).default(1000),
     zcodeEnabled: z.boolean().default(true).volatile(),
     antigravityEnabled: z.boolean().default(true).volatile(),
     sbEnabled: z.boolean().default(true).volatile(),
@@ -162,6 +169,25 @@ export default class ProxyServers extends TypertRemoteService {
     }, 'proxy-server: managed children')
   }
 
+  protected async [Service.init](): Promise<void> {
+    if (!this.config.routeAllModels) return
+    const sbServer = this.servers.find(server => server.id === 'sb')
+    if (sbServer === undefined) throw new Error('SB transport descriptor is missing')
+    await this.ctx.effect(() => installModelRouting(this.ctx, new URL(`http://127.0.0.1:${this.config.sbPort}`), this.config.routingProbeTimeoutMs, async () => {
+      await this.queue(sbServer, async () => {
+        if (!sbServer.enabled.get()) throw new Error('SB transport is disabled')
+        await this.start(sbServer)
+        sbServer.active++
+      })
+      return async () => {
+        sbServer.active--
+        if (sbServer.active === 0 && !sbServer.enabled.get() && !this.controller.signal.aborted) {
+          await this.queue(sbServer, async () => { if (sbServer.active === 0 && !sbServer.enabled.get()) await this.stop(sbServer) })
+        }
+      }
+    }))
+  }
+
   /** Return current loopback listener state without starting anything.
    * @returns Three embedded proxy descriptors with persistent usage preferences.
    */
@@ -198,7 +224,7 @@ export default class ProxyServers extends TypertRemoteService {
 
   private async * stream(options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk> {
     const server = this.servers.find(row => row.providers.includes(options.provider) || options.model.startsWith(`${row.id}/`))
-    if (server === undefined) { yield* next(); return }
+    if (server === undefined || this.config.routeAllModels && server.id === 'sb') { yield* next(); return }
     try {
       await this.queue(server, async () => {
         if (!server.enabled.get()) {
@@ -257,6 +283,7 @@ export default class ProxyServers extends TypertRemoteService {
     const env = { ...scrubbedParentEnv(), HOST: '127.0.0.1', ZCODE_PORT: String(this.config.zcodePort),
       ZCODE_PROXY_PORT: String(this.config.zcodePort), ANTIGRAVITY_PORT: String(this.config.antigravityPort),
       SB_PORT: String(this.config.sbPort),
+      ...(server.id === 'sb' ? { DSH_HOME: this.ctx.profileContext.home } : {}),
       ZCODE_CAPTCHA_WORKER: join(server.cwd, 'src/proxy/captcha-worker-entry.bundle.js'), ZCODE_CAPTCHA_REQUIRE_WORKER: '1' }
     const child = spawn(server.command, server.args, { cwd: server.cwd, env, stdio: 'ignore', windowsHide: true })
     const state = { failed: false }
