@@ -12,15 +12,27 @@
   en: c06da662cc206cb6
   zh: 17e433b7b459a357
 /deepseek-ai-dsh-proxy-server/table-of-contents:
-  en: ef89b3e34cb22127
-  zh: 093b9377fc9f0cba
+  en: d025448186462685
+  zh: 9f34f9494ef30c2c
 /deepseek-ai-dsh-proxy-server/use-this-package:
   en: 12b7cc0c2829c9db
   zh: e48f175094518d20
 /deepseek-ai-dsh-proxy-server/configuration:
-  en: 8299efaa728e37ef
-  zh: eae2fab9bfe2ac17
-/deepseek-ai-dsh-proxy-server/configuration/proxy-first-routing-for-every-model:
+  en: 2d2b165bece7232e
+  zh: e7902ded27cd99b5
+/deepseek-ai-dsh-proxy-server/set-up-and-use-the-bundled-proxies:
+  en: 8c192f88f89b1e3d
+  zh: 3048a542c694a008
+/deepseek-ai-dsh-proxy-server/set-up-and-use-the-bundled-proxies/prepare-zcode-direct:
+  en: c8f2f500345de72c
+  zh: 19ef28179e436e36
+/deepseek-ai-dsh-proxy-server/set-up-and-use-the-bundled-proxies/prepare-antigravity:
+  en: 07a374af1d8771f7
+  zh: fbab77c200d8772f
+/deepseek-ai-dsh-proxy-server/set-up-and-use-the-bundled-proxies/enable-routing-and-inspect-status:
+  en: 812483aede54cbd4
+  zh: 4e50e66b9aefc898
+/deepseek-ai-dsh-proxy-server/set-up-and-use-the-bundled-proxies/proxy-first-routing-for-every-model:
   en: 468fa56e4978d8de
   zh: 383f87aa50854c80
 /deepseek-ai-dsh-proxy-server/further-exploration:

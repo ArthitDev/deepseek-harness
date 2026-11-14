@@ -21,7 +21,8 @@
  *
  * Env: ANTIGRAVITY_PORT (18877), HOST (127.0.0.1), ANTIGRAVITY_TOKEN_FILE,
  *      ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET,
- *      ANTIGRAVITY_API_BASE, ANTIGRAVITY_OAUTH_TOKEN_URL, ANTIGRAVITY_TIMEOUT_MS.
+ *      ANTIGRAVITY_API_BASE, ANTIGRAVITY_OAUTH_TOKEN_URL, ANTIGRAVITY_TIMEOUT_MS,
+ *      ANTIGRAVITY_USER_AGENT.
  * Endpoint overrides are for trusted local simulations; they receive OAuth credentials.
  */
 import http from 'node:http'
@@ -49,6 +50,9 @@ const DEFAULT_CLIENT_SECRET = ['GOCSPX-K58FWR486Ld', 'LJ1mLB8sXC4z6qDAf'].join('
 const CLIENT_ID = process.env.ANTIGRAVITY_CLIENT_ID ?? DEFAULT_CLIENT_ID
 const CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET ?? DEFAULT_CLIENT_SECRET
 const CCA_BASE = process.env.ANTIGRAVITY_API_BASE ?? 'https://daily-cloudcode-pa.googleapis.com'
+// Cloud Code selects account provisioning from the Antigravity client identity.
+const USER_AGENT = process.env.ANTIGRAVITY_USER_AGENT
+  ?? `antigravity/hub/2.29.0 (aidev_client; os_type=${process.platform === 'win32' ? 'windows' : process.platform}; arch=${process.arch === 'x64' ? 'amd64' : process.arch})`
 const REQUEST_TIMEOUT_MS = Number(process.env.ANTIGRAVITY_TIMEOUT_MS ?? 60_000)
 const REFRESH_SKEW_MS = 120_000
 
@@ -194,7 +198,7 @@ async function ensureProject(accessToken, signal) {
     const post = async (operation, body) => {
       const response = await fetch(`${CCA_BASE}/v1internal:${operation}`, {
         method: 'POST', signal,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, 'User-Agent': USER_AGENT },
         body: JSON.stringify(body),
       })
       if (!response.ok) {
@@ -238,6 +242,7 @@ async function callCloudCode(body, translated, signal) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
+      'User-Agent': USER_AGENT,
     },
     body: JSON.stringify(payload),
   })

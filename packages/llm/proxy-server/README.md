@@ -15,6 +15,7 @@ Inspect and control ZCode Direct, Antigravity, and SB transport without starting
 
 - [Use this package](#use-this-package)
 - [Configuration](#configuration)
+- [Set up and use the bundled proxies](#set-up-and-use-the-bundled-proxies)
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
@@ -35,6 +36,54 @@ The volatile `zcodeEnabled`, `antigravityEnabled`, and `sbEnabled` fields hold i
 `externalProxies` defaults to an empty list. Add `zcode`, `antigravity`, or `sb` when another service manager, such as Docker Compose, owns that proxy. Harness verifies readiness, reports `external`, and never starts or stops it; usage switches still block new matching model requests. An unavailable external service returns a startup failure instead of falling back to a local process. External ZCode must return `x-dsh-proxy-service: zcode-proxy` from `/v1/models`; a generic HTTP 200/401 is insufficient. External services do not require local proxy source files.
 
 For proxies managed by Harness, ZCode requires Bun, its prepared worker bundle, and an existing `config.yaml` under `ZCODE_DIR` or `third-party/zcode-api`. All three proxies require Bun on `PATH`; Antigravity and SB run their bundled JavaScript with `bun --no-env-file`, preserving the Host-provided environment without loading additional `.env` files. The Harness Host stays on Node.js. This service neither creates credentials nor performs login, OAuth setup, or upstream model requests. Settings failures and missing setup are reported to the operator.
+
+<a id="set-up-and-use-the-bundled-proxies"></a>
+## Set up and use the bundled proxies
+
+These steps apply to an installed checkout on Windows and Linux. Use the same OS account and Harness home for setup and for Web/TUI. A server service account has its own login state; signing in on Windows does not sign in on Linux. Install the repository dependencies and build the Harness before running setup. Node.js must meet the root `package.json` engine requirement, and Bun must be on the runtime account's `PATH`.
+
+| Backend | Default local endpoint | Authentication | Source |
+|---|---|---|---|
+| SB transport | `http://127.0.0.1:18899` | Harness runtime CONNECT key | Maintained in this repository |
+| ZCode Direct | `http://127.0.0.1:18080/v1` | ZCode account plus local proxy API key | [TriDefender/zcode-api](https://github.com/TriDefender/zcode-api) |
+| Antigravity | `http://127.0.0.1:18877/v1` | The bundled proxy's Google OAuth login | Maintained in this repository |
+
+ZCode Proxy is vendored under [`third-party/zcode-api`](../../../third-party/zcode-api). Its [upstream record](../../../third-party/zcode-api/UPSTREAM.json) identifies the source version and Harness changes; its [CC-BY-NC-SA-4.0 license](../../../third-party/zcode-api/LICENSE) remains applicable. Harness adds provider registration, credential import, lifecycle management, and SB routing. Neither native ZCode Direct nor native Antigravity requires 9router or a separately installed CLIProxyAPI. Existing router providers remain separate selections.
+
+### Prepare ZCode Direct
+
+1. From the Harness checkout root, run `pnpm zcode:setup`. This installs the vendored backend's declared dependencies when missing, builds its worker, creates a local `third-party/zcode-api/config.yaml` if absent, and imports its local proxy key as `ZCODE_DIRECT_API_KEY`. Repeat setup after a relevant backend or Bun update; existing account configuration is preserved.
+2. Complete ZCode authentication on this machine as the runtime account. From `third-party/zcode-api`, run `bun run src/index.ts auth login zai` for Z.ai, or use `bigmodel` for that account type. The account owner completes the upstream login flow. `bun run src/index.ts --help` lists the login commands. An existing official ZCode login can be imported with the upstream `auth login <provider> --import` flow; do not paste tokens into a chat or README.
+3. Keep `provider`, `plan`, and `models` in the backend's `config.yaml` consistent with the account. The shipped Harness template uses `provider: zai`, `plan: start-plan`, and the `glm-5.3` / `glm-5.3-flash` model ids. An advertised model still requires quota and access from the upstream account.
+4. Restart Harness after changing setup. In TUI, select `/model zcode-direct/glm-5.3-flash` or `/model zcode-direct/glm-5.3`. In Web, select **ZCode Direct** in the model picker. Send a short message to verify real generation. The `zcode-glm` router provider is a different route.
+
+### Prepare Antigravity
+
+1. Run `pnpm antigravity:setup` from the checkout root. Use `pnpm antigravity:setup --no-browser` for a manual browser handoff, or `--dry-run` to preview without changing configuration. On a remote machine, make its loopback login endpoint available to your browser through the existing SSH workflow; setup does not expose the service publicly.
+2. Complete Google sign-in within the setup window. Setup starts a temporary bundled proxy only when needed. If sign-in does not finish, it closes its own child and keeps the previous provider route. A token-presence status is not proof of valid quota or a successful refresh.
+3. After authentication, setup backs up and replaces the Antigravity route in the home patch and installed profile patches, aligns the manager's port, and removes Antigravity from `externalProxies`. It preserves other providers, credentials, and independent proxy switches. It does not import another application's Google tokens or stop that application's process.
+4. Restart Web/TUI, select the **Antigravity (Google)** provider and a bundled Google model, and send a short message. A successful response verifies upstream authentication and that model at that time. Models previously offered by CLIProxyAPI, including Claude or GPT routes, are not automatically supported by this backend. Run setup again when adding profiles that do not inherit a shared Antigravity route.
+
+Google state defaults to `~/.gemini/antigravity-proxy-token.json`. Setup installs no OS autostart service; normal model requests start the bundled child through Harness and Host disposal waits for its exit. An old launcher installed by an earlier setup is not removed automatically. `--configure-only` deliberately skips the login check and can create a route that cannot yet generate; use it only when preparing configuration separately. See [Antigravity setup](../../experimental/pi-tui/README.md#connect-antigravity) for the owning protocol notes.
+
+The bundled proxy sends an `antigravity/hub/2.29.0` client identity, including the runtime OS and architecture, for Google project discovery and generation. `ANTIGRAVITY_USER_AGENT` overrides the complete header in the Harness process environment. The proxy does not update this version automatically; use a verified compatible identity when Google rejects an unsupported client version, restart Harness, and test generation again.
+
+### Enable routing and inspect status
+
+Open **Settings → Proxy Server** in Web to inspect endpoints, routed provider ids, usage preferences, and process ownership. Enable the proxies you intend to use. Reading this page does not start them or authenticate an account. Refresh or reopen it after an external change. A stopped sidecar before the first matching request is normal; a running process alone does not prove account access.
+
+Set `routeAllModels: true` on the active `proxy-servers` configuration to use SB for main and local child model calls. Native paths are `Harness → SB CONNECT → ZCode Proxy → ZCode` and `Harness → SB CONNECT → Antigravity → Google`; other selected providers keep their destination through SB. Keep provider URLs aligned with the manager's configured ports. An existing home patch overrides profile values; inspect `dsh --profile web --dump-config` or `dsh --profile tui --dump-config` locally when diagnosing precedence. The dump can contain private configuration; do not publish it.
+
+| Observation | Check or recovery |
+|---|---|
+| Native port is stopped before use | Send a matching model request or enable it in Proxy Server settings. |
+| Antigravity still points to `8317` | Complete `pnpm antigravity:setup` and restart both clients; the bundle alone does not replace an existing override. |
+| ZCode returns 401 | Check that its `config.yaml` key matches the stored `ZCODE_DIRECT_API_KEY`; repeat `pnpm zcode:setup` after changing the local key. |
+| Google login or generation fails | Inspect the setup log at `$DSH_HOME/logs/antigravity-proxy.log`, repeat Google sign-in, then test one model. A static `/v1/models` response does not prove login. |
+| Google reports an unsupported Antigravity version | Update the client identity as described above; signing in again alone does not change the request header. |
+| Proxy startup reports port in use | Identify the listener and its owner; do not stop another project's process. Declare an intended external backend explicitly or select a free, aligned port. |
+| SB is unavailable | The next call may dispatch directly under the existing policy; an already dispatched request is never replayed directly. VPN enforcement remains independent. |
+| Migration must be undone | Stop Harness, read the printed backup's `manifest.json`, restore each saved patch to its listed `file`, and restart. Entries with `existed: false` represent files created by migration. Backups contain private configuration and must remain private. |
 
 ### Proxy-first routing for every model
 

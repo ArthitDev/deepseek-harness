@@ -197,14 +197,14 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 源码检出包含独立的 Antigravity 代理，无需额外依赖或 Antigravity CLI。安装并构建 harness 后，在每台新机器的 harness 根目录运行以下设置命令。账号所有者必须完成 Google 登录；启动 `dsh tui` 不会运行此设置或打开登录页面：
 
 ```
-node packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs
+pnpm antigravity:setup
 ```
 
-设置会在缺失时创建 `tui` profile，复用健康代理或在 `127.0.0.1:18877` 启动代理，并打开 Google 登录。Windows 还会安装静默的启动文件夹启动器；Linux 和 macOS 需要自行配置服务管理器以随登录启动。使用 `--no-browser` 仅打印本地登录 URL，或使用 `--dry-run` 查看设置而不作更改。初次启动输出追加到 `~/.dsh/logs/antigravity-proxy.log`（`DSH_HOME` 可覆盖 harness 主目录）。
+设置会复用健康的内置代理，或在 `127.0.0.1:18877` 启动临时代理供 Google 登录。认证后，它备份并将 home 和 profile 路由迁移到内置后端，同时保留其他提供方和凭据。它只停止自己启动的临时子进程；Web/TUI 随后通过共享管理器按需启动代理。设置不会在 Windows 安装启动项，也不会在 Linux 安装服务。使用 `--no-browser` 打印本地 URL 并等待手动登录，`--dry-run` 预览，或 `--configure-only` 跳过认证检查直接迁移路由。初次启动输出追加到 `~/.dsh/logs/antigravity-proxy.log`（`DSH_HOME` 可覆盖 harness 主目录）。
 
-Google 令牌归此代理所有，保存在 `~/.gemini/antigravity-proxy-token.json`，设置 `ANTIGRAVITY_TOKEN_FILE` 时使用该路径。令牌按需刷新；移动源码不会移动账号凭据或用户 profile patch。请在目标机器上单独登录。TUI bundle 提供 `18877/v1` 路由和供客户端使用的本地占位 header；Google 认证始终由代理处理。已有 home 或 profile 覆盖优先，因此指向 `8317/v1` 的路由仍使用 CLIProxyAPI。Antigravity 代理停止或未认证时，仅其模型请求失败，其他 TUI provider 仍可使用。Antigravity 配额和 Google 条款照常适用。
+Google 令牌归此代理所有，保存在 `~/.gemini/antigravity-proxy-token.json`。令牌按需刷新；移动源码不会移动账号凭据或用户 profile patch。请在目标机器上单独登录。设置将 Antigravity 模型列表替换为内置 Google 列表，并删除其外部 API key 引用；此前由 CLIProxyAPI 提供的模型不保证在此后端可用。`~/.dsh/backups/antigravity-direct-*` 下的备份清单记录各原始 patch 对应的备份内容，供回滚使用。缺少令牌会使内置模型请求失败，其他提供方仍可使用。Antigravity 配额和 Google 条款照常适用。
 
-代理将文本和函数调用转发为 OpenAI SSE，保留函数结果和签名回放，也支持非流式 JSON。生成前会发现账号的 Cloud Code 项目。`pnpm antigravity:test` 使用本地上游 fixture 检查迁移和这些交互，包括已安装 pi-ai 客户端的工具往返。真实 Google 登录和模型可用性需由账号所有者验证。
+代理将文本和函数调用转发为 OpenAI SSE，保留函数结果和签名回放，也支持非流式 JSON。生成前会发现账号的 Cloud Code 项目。`pnpm exec vitest run scripts/antigravity-direct-setup.spec.ts scripts/proxy-bun.spec.ts` 无需 Google 凭据即可检查迁移和本地代理交互。真实 Google 登录和模型可用性需由账号所有者验证。启用 `routeAllModels: true` 时，生成路径为 Harness → SB CONNECT → 内置 Antigravity → Google；此路由不依赖 CLIProxyAPI 或 9router。
 
 在 Windows 上部署外部 CLIProxyAPI 时，下载其二进制并运行 `cli-proxy-api.exe --antigravity-login`。通过 `/provider` 注册它自己的端点和已配置的 API key；内置代理的本地占位值不是 CLIProxyAPI 凭据。运行 `node packages/experimental/pi-tui/tools/antigravity-proxy/install-autostart.mjs <cliproxy-directory>` 安装启动项。针对 `llm-pi-ai` 的 home patch 会按 id 替换 bundle 的 provider 配置。
 

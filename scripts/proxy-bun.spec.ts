@@ -15,7 +15,9 @@ const scripts: Record<Kind, string> = {
 }
 const answer = { candidates: [{ content: { parts: [{ text: 'สวัสดี Bun' }] }, finishReason: 'STOP' }] }
 
-async function fixture(kind: Kind, handler: (request: IncomingMessage, response: ServerResponse) => void, timeoutMs = 1000) {
+async function fixture(
+  kind: Kind, handler: (request: IncomingMessage, response: ServerResponse) => void, timeoutMs = 1000, includeProject = true,
+) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-bun-proxy-'))
   const upstream = createServer(handler)
   const running: { child?: ChildProcess; closed?: Promise<unknown> } = {}
@@ -36,7 +38,7 @@ async function fixture(kind: Kind, handler: (request: IncomingMessage, response:
   const tokenFile = join(home, 'token.json')
   await writeFile(tokenFile, JSON.stringify({
     refresh_token: 'fixture-refresh', access_token: 'fixture-access',
-    expiry: Date.now() + 3600_000, project_id: 'fixture-project',
+    expiry: Date.now() + 3600_000, ...(includeProject ? { project_id: 'fixture-project' } : {}),
   }))
   const child = spawn('bun', ['--no-env-file', scripts[kind], ...(kind === 'sb' ? ['serve'] : [])], {
     cwd: home, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
@@ -46,6 +48,7 @@ async function fixture(kind: Kind, handler: (request: IncomingMessage, response:
       ANTIGRAVITY_PORT: '0', ANTIGRAVITY_API_BASE: base, ANTIGRAVITY_TOKEN_FILE: tokenFile,
       ANTIGRAVITY_TIMEOUT_MS: String(timeoutMs), ANTIGRAVITY_CLIENT_ID: 'fixture-client',
       ANTIGRAVITY_CLIENT_SECRET: 'fixture-secret', ANTIGRAVITY_OAUTH_TOKEN_URL: base + '/token',
+      ANTIGRAVITY_USER_AGENT: 'antigravity/fixture-test',
     },
   })
   running.child = child
@@ -122,8 +125,10 @@ it('SB preserves request bytes, paths, caller authorization and JSON responses u
 
 it('Antigravity translates JSON with its own synthetic OAuth token under Bun', async () => {
   let authorization: string | undefined
+  let userAgent: string | undefined
   const f = await fixture('antigravity', (request, response) => {
     authorization = request.headers.authorization
+    userAgent = request.headers['user-agent']
     request.resume()
     response.setHeader('Content-Type', 'application/json')
     response.end(JSON.stringify(answer))
@@ -134,6 +139,24 @@ it('Antigravity translates JSON with its own synthetic OAuth token under Bun', a
     object: 'chat.completion', choices: [{ message: { content: 'สวัสดี Bun' }, finish_reason: 'stop' }],
   })
   expect(authorization).toBe('Bearer fixture-access')
+  expect(userAgent).toBe('antigravity/fixture-test')
+})
+
+it('Antigravity discovers and persists its Google project using the client identity', async () => {
+  const paths: string[] = []
+  const f = await fixture('antigravity', (request, response) => {
+    paths.push(request.url ?? '')
+    request.resume()
+    response.setHeader('Content-Type', 'application/json')
+    if (request.headers['user-agent'] !== 'antigravity/fixture-test') {
+      response.writeHead(403).end('{}')
+    } else if (request.url === '/v1internal:loadCodeAssist') {
+      response.end(JSON.stringify({ cloudaicompanionProject: 'discovered-project' }))
+    } else response.end(JSON.stringify(answer))
+  }, 1000, false)
+  expect((await f.post()).status).toBe(200)
+  expect(paths).toEqual(['/v1internal:loadCodeAssist', '/v1internal:generateContent'])
+  expect(JSON.parse(await readFile(join(f.home, 'token.json'), 'utf8'))).toHaveProperty('token.project_id', 'discovered-project')
 })
 
 it.each(['sb', 'antigravity'] as const)('%s streams incrementally through Bun', async (kind) => {
