@@ -4103,6 +4103,13 @@ export interface Config {
   maxActiveSubagents: Volatile<number>
   /** Default delegation depth for tools without an explicit limit; defaults to 1. */
   maxDepth: Volatile<number>
+  /** When set, require local children to share the parent preset and use this fixed LLM route; omission preserves provider behavior. */
+  localAgentPolicy?: {
+    /** Required LLM adapter provider for every child request. */
+    provider: string
+    /** Required model id within that provider. */
+    model: string
+  } | undefined
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-subagent -->

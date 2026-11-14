@@ -188,6 +188,13 @@ export interface Config {
   maxActiveSubagents: Volatile<number>
   /** Default delegation depth for tools without an explicit limit; defaults to 1. */
   maxDepth: Volatile<number>
+  /** When set, require local children to share the parent preset and use this fixed LLM route; omission preserves provider behavior. */
+  localAgentPolicy?: {
+    /** Required LLM adapter provider for every child request. */
+    provider: string
+    /** Required model id within that provider. */
+    model: string
+  } | undefined
 }
 
 /** Named provider registry with managed activations, durable discovery, and local child messaging. */
@@ -195,6 +202,10 @@ export class SubagentRuntime extends TypertRemoteService {
   static Config = z.object({
     maxDepth: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(1).volatile(),
     maxActiveSubagents: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(8).volatile(),
+    localAgentPolicy: (z.object({
+      provider: z.string().min(1).required(),
+      model: z.string().min(1).required(),
+    }) as z<Config['localAgentPolicy']>).default(undefined),
   })
   static inject = ['workingDirectory', 'sessionProjections']
   private providers = new Map<string, SubagentProvider>()
@@ -222,7 +233,7 @@ export class SubagentRuntime extends TypertRemoteService {
         identityOf: session => identityProjection.stateOf(session).identity,
         catalogOf: session => subagentCatalogProjectionDefinition.wire.view(catalogProjection.stateOf(session)),
         emitLifecycle: this.emitLifecycle,
-      }, () => this.config.maxActiveSubagents.get())
+      }, () => this.config.maxActiveSubagents.get(), this.config.localAgentPolicy)
       this.manager = manager
       childCtx.effect(() => () => {
         /* v8 ignore else -- one injected binding owns the slot until its fiber disposes. */
@@ -266,6 +277,9 @@ export class SubagentRuntime extends TypertRemoteService {
    */
   async startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation> {
     const provider = this.expectProvider(spec.provider)
+    if (this.config.localAgentPolicy !== undefined && provider.prepareContinuable === undefined) {
+      throw new SubagentError('the deployment requires local subagents with the parent preset and fixed LLM route', 'DELEGATION_POLICY_DENIED')
+    }
     if (spec.childId !== undefined && provider.prepareContinuable === undefined) {
       throw new SubagentError('reserved child ids require a local backend', 'UNSUPPORTED_CAPABILITY')
     }

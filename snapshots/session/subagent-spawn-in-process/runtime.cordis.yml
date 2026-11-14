@@ -1,3 +1,21 @@
 - insert:
     - id: subagent-spawn-settlement-order
       name: './settlement-order.mjs'
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
+      config:
+        default: parent
+    - id: preset-parent
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: parent
+        name: Parent
+        plugins: []
+    - id: parent-agent-preset
+      name: '../../../packages/test-support/session-snapshot/tests/fixtures/parent-agent-preset.ts'
+
+- id: subagent
+  config:
+    localAgentPolicy:
+      provider: deepseek-official
+      model: deepseek-v4-flash

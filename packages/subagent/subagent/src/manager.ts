@@ -24,6 +24,7 @@ import {
   childSessionMeta, resolveChildAgentOptions, resolveChildDepth,
 } from './child-agent.ts'
 import type { ChildComposition, DelegatedPolicyOverrides } from './child-agent.ts'
+import type { Config } from './index.ts'
 import {
   createAgentMessage, createSettlementMessage, withResultDeliveryGuidance,
 } from './continuation-messages.ts'
@@ -158,11 +159,13 @@ export class SubagentManager {
    * @param ctx - context providing Agents, Sessions, and teardown ownership.
    * @param host - descriptor reads and lifecycle publication owned by the service.
    * @param maxActiveSubagents - the current configured child capacity.
+   * @param localAgentPolicy - fixed local route and parent-preset requirement; omission preserves independent selection.
    */
   constructor(
     private readonly ctx: Context,
     private readonly host: SubagentHost,
     private readonly maxActiveSubagents: () => number,
+    private readonly localAgentPolicy?: Readonly<NonNullable<Config['localAgentPolicy']>>,
   ) {
     // Drain managed instances before Cordis releases their owning scope.
     const scope = ctx.plugin(function activationOwner() {})
@@ -337,7 +340,21 @@ export class SubagentManager {
       const childDepth = resolveChildDepth(parent, spec.maxDepth)
       // Snapshot before any await: invalid descriptor JSON rejects the call
       // before a child exists, and the detached value is what reaches the log.
-      const agentOptions = resolveChildAgentOptions(parent, spec.agentOptions, childDepth)
+      const policy = this.localAgentPolicy
+      if (policy !== undefined) {
+        const preset = parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
+        if (preset === undefined || spec.agentPreset !== undefined && spec.agentPreset !== preset) {
+          throw new SubagentError('subagents must inherit the parent agent preset', 'DELEGATION_POLICY_DENIED')
+        }
+        if (spec.agentOptions?.provider !== undefined && spec.agentOptions.provider !== policy.provider
+          || spec.agentOptions?.model !== undefined && spec.agentOptions.model !== policy.model) {
+          throw new SubagentError('subagents must use the deployment LLM route', 'DELEGATION_POLICY_DENIED')
+        }
+      }
+      const agentOptions = resolveChildAgentOptions(parent, policy === undefined
+        ? spec.agentOptions : { ...spec.agentOptions, ...policy }, childDepth)
+      const agentPreset = policy === undefined ? spec.agentPreset : undefined
+      const meta = childSessionMeta(parent, childDepth, false, agentPreset)
       const agentProvider = agentOptions.provider
       const agentModel = agentOptions.model
       const agentReasoningEffort = agentOptions.reasoningEffort
@@ -389,13 +406,13 @@ export class SubagentManager {
             parent,
             cwd,
             seed,
-            meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined, spec.agentPreset),
+            meta: { ...meta, isSeeded: prepared.seed !== undefined },
             inheritedEventCount,
             delegatedPolicies,
             descriptor,
           },
           agentOptions,
-          composition: { agentPreset: spec.agentPreset },
+          composition: { agentPreset },
           signal,
           delivery: spec.delivery,
           outputSchema: spec.outputSchema,
@@ -840,6 +857,27 @@ export class SubagentManager {
           await workingDirectory.set(child, create.cwd, inputs.signal)
         }
         if (inputs.composition.agentPreset === undefined) await applyChildComposition(childCtx, create?.parent, inputs.composition)
+        const policy = this.localAgentPolicy
+        if (policy !== undefined) {
+          const preset = create?.meta.agentPreset ?? root.ctx.get('agentPresets')?.composedPreset(root.ctx)
+          const assertPreset = (): void => {
+            if (preset === undefined || childCtx.get('agentPresets')?.composedPreset(childCtx) !== preset
+              || inputs.composition.persona !== undefined) {
+              throw new SubagentError('subagents must inherit the parent agent preset; start a new child under the current preset', 'DELEGATION_POLICY_DENIED')
+            }
+          }
+          assertPreset()
+          // Fork seeds and resumed selection events otherwise override creation options.
+          child.model.select({ ...policy, ...inputs.agentOptions.reasoningEffort === undefined
+            ? {} : { reasoningEffort: inputs.agentOptions.reasoningEffort } })
+          childCtx.on('agent/pre-step', ({ modelSelection }, next) => {
+            assertPreset()
+            if (modelSelection.provider !== policy.provider || modelSelection.model !== policy.model) {
+              throw new SubagentError('subagents must use the deployment LLM route', 'DELEGATION_POLICY_DENIED')
+            }
+            return next()
+          })
+        }
         if (inputs.outputSchema !== undefined) {
           structured = attachStructuredRuntime(childCtx, inputs.outputSchema, () =>
             child.inbox.nextStep.length === 0

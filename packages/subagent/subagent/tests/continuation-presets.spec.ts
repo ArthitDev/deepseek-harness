@@ -37,7 +37,10 @@ afterEach(async () => {
 })
 
 /** Real preset mounts, Agent lifecycle, and persistence with a scripted model. */
-async function setup(script: ConstructorParameters<typeof MockAdapter>[0] = [textResponse('done'), textResponse('continued'), textResponse('done again')]) {
+async function setup(
+  script: ConstructorParameters<typeof MockAdapter>[0] = [textResponse('done'), textResponse('continued'), textResponse('done again')],
+  localAgentPolicy?: { provider: string; model: string },
+) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-continuation-presets-'))
   roots.push(root)
   const ctx = new Context()
@@ -58,7 +61,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0] = [tex
     }))
   }
   await mountWorkingDirectoryFixture(ctx)
-  await ctx.plugin(SubagentRuntime)
+  await ctx.plugin(SubagentRuntime, { localAgentPolicy })
   const spawn = await ctx.plugin(SubagentSpawn, { providerName: 'separate' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   const adapter = new MockAdapter(script)
@@ -99,6 +102,101 @@ function continueChild(ctx: Context, childId: SessionId) {
     delivery: 'queue', source: { kind: 'user' }, signal: new AbortController().signal,
   })
 }
+
+describe('deployment local agent policy', () => {
+  const policy = { provider: 'sb-proxy', model: 'proxy-model' }
+
+  it.each(['separate', 'fork'])('routes %s through the proxy with the parent prompt, including cold resume', async (provider) => {
+    const { ctx, parent, adapter } = await setup([textResponse('parent done')], policy)
+    const proxy = new MockAdapter([textResponse('child done'), textResponse('resumed')])
+    ctx.llm.registerAdapter(['sb-proxy'], proxy)
+    parent.followup(createUserMessage({ content: [{ type: 'text', text: 'parent work' }], source: { kind: 'user' } }))
+    await parent.whenIdle()
+    parkParent(ctx, parent)
+    const started = await ctx.subagents.startActivation(startSpec(parent, undefined, provider))
+    const stored = await settled(ctx, started.childId)
+    expect(stored.meta.agentPreset).toBe('coding')
+    expect(stored.events.findLast(event => event.type === 'request/header')?.data).toMatchObject({
+      header: { config: policy },
+    })
+    expect(proxy.requests).toHaveLength(1)
+    expect(proxy.requests[0]?.messages.filter(message => message.role === 'system').map(message => message.content))
+      .toEqual(adapter.requests[0]?.messages.filter(message => message.role === 'system').map(message => message.content))
+    await continueChild(ctx, started.childId)
+    await settled(ctx, started.childId)
+    expect(proxy.requests).toHaveLength(2)
+    expect(adapter.requests).toHaveLength(1)
+    expect(ctx.agents.get(started.childId)).toBeUndefined()
+  })
+
+  it('rejects direct route/preset overrides and external backends before publication', async () => {
+    const { ctx, parent, adapter } = await setup([], policy)
+    const start = () => { throw new Error('external backend must not start') }
+    ctx.subagents.registerProvider({
+      name: 'external', inheritsParentContext: false,
+      capabilities: { agentOptions: true, agentPreset: false, outputSchema: false, depthLimit: false },
+      start,
+    })
+    for (const spec of [
+      { ...startSpec(parent), agentOptions: { provider: 'direct', model: 'proxy-model' } },
+      { ...startSpec(parent), agentOptions: { provider: 'sb-proxy', model: 'other-model' } },
+      startSpec(parent, 'reviewing'),
+      startSpec(parent, undefined, 'external'),
+    ]) {
+      await expect(ctx.subagents.startActivation(spec)).rejects.toMatchObject({ code: 'DELEGATION_POLICY_DENIED' })
+    }
+    expect(ctx.sessions.list().map(session => session.id)).toEqual([parent.id])
+    expect(adapter.requests).toHaveLength(0)
+  })
+
+  it.each(['route', 'preset'] as const)('blocks a later %s switch before any direct request', async (change) => {
+    const { ctx, parent, adapter } = await setup([], policy)
+    const proxy = new MockAdapter([textResponse('must not run')])
+    ctx.llm.registerAdapter(['sb-proxy'], proxy)
+    parkParent(ctx, parent)
+    ctx.on('agent/created', async ({ agent }) => {
+      if (agent.session.header.origin !== 'subagent') return
+      if (change === 'route') agent.model.select({ provider: 'mock', model: 'mock' })
+      else await ctx.agentPresets.recompose(agent.ctx, 'reviewing')
+    })
+    const started = await ctx.subagents.startActivation(startSpec(parent))
+    const result = await started.result
+    expect(result.stopReason).toBe('error')
+    expect(proxy.requests).toHaveLength(0)
+    expect(adapter.requests).toHaveLength(0)
+    expect(ctx.agents.get(started.childId)).toBeUndefined()
+  })
+
+  it('rejects cold resume after the root changes preset', async () => {
+    const { ctx, parent } = await setup([], policy)
+    const proxy = new MockAdapter([textResponse('done')])
+    ctx.llm.registerAdapter(['sb-proxy'], proxy)
+    parkParent(ctx, parent)
+    const started = await ctx.subagents.startActivation(startSpec(parent))
+    await settled(ctx, started.childId)
+    await ctx.agentPresets.recompose(parent.ctx, 'reviewing')
+    await expect(continueChild(ctx, started.childId)).rejects.toMatchObject({ code: 'DELEGATION_POLICY_DENIED' })
+    expect(proxy.requests).toHaveLength(1)
+    expect(ctx.agents.get(started.childId)).toBeUndefined()
+  })
+
+  it('applies the same policy to nested children', async () => {
+    const { ctx, parent } = await setup([], policy)
+    const entered = Promise.withResolvers<undefined>()
+    const proxy = new MockAdapter([() => { entered.resolve(undefined); return [] }, textResponse('nested done')])
+    ctx.llm.registerAdapter(['sb-proxy'], proxy)
+    parkParent(ctx, parent)
+    const first = await ctx.subagents.startActivation({ ...startSpec(parent), maxDepth: 3 })
+    await entered.promise
+    const child = ctx.agents.get(first.childId)
+    if (child === undefined) throw new Error('first child is unavailable')
+    const nested = await ctx.subagents.startActivation({ ...startSpec(child), maxDepth: 3, delivery: 'caller' })
+    expect((await nested.result).stopReason).toBe('completed')
+    expect(proxy.requests).toHaveLength(2)
+    expect((await loadStoredSession(ctx.sessionPersistence, nested.childId)).meta.agentPreset).toBe('coding')
+    await first.dispose()
+  })
+})
 
 describe('child preset start validation', () => {
   it('rejects an explicit same-as-parent preset before starting a fork', async () => {
