@@ -30,7 +30,7 @@ kind: "package-reference"
 <a id="configuration"></a>
 ## 配置
 
-可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`、`antigravity`、`sb`/`sb-proxy`。模型前缀 `zcode/`、`antigravity/` 和 `sb/` 也会选择对应代理。其他模型路由保持委托行为。
+可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`、`antigravity`、`sb`/`sb-proxy`。只有这些配置的提供方 id 会选择代理；路由器提供方上的 `zcode/` 等模型前缀不会选择本地辅助代理。其他模型路由保持委托行为。
 
 `externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode`、`antigravity` 或 `sb`。Harness 验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
 

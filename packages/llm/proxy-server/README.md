@@ -30,7 +30,7 @@ Only children started by this service are stopped, through their live process ha
 <a id="configuration"></a>
 ## Configuration
 
-The volatile `zcodeEnabled`, `antigravityEnabled`, and `sbEnabled` fields hold independent preferences. Ports default to `ZCODE_PORT` or 18080, `ANTIGRAVITY_PORT` or 18877, and `SB_PORT` or 18899. `startupTimeoutMs` defaults to 15000. Provider lists default to `zcode-direct`, `antigravity`, and `sb`/`sb-proxy`, respectively. Matching model prefixes `zcode/`, `antigravity/`, and `sb/` also select the corresponding proxy. Other model routes delegate unchanged.
+The volatile `zcodeEnabled`, `antigravityEnabled`, and `sbEnabled` fields hold independent preferences. Ports default to `ZCODE_PORT` or 18080, `ANTIGRAVITY_PORT` or 18877, and `SB_PORT` or 18899. `startupTimeoutMs` defaults to 15000. Provider lists default to `zcode-direct`, `antigravity`, and `sb`/`sb-proxy`, respectively. Only these configured provider ids select a proxy; model prefixes such as `zcode/` on a router provider do not select a local sidecar. Other model routes delegate unchanged.
 
 `externalProxies` defaults to an empty list. Add `zcode`, `antigravity`, or `sb` when another service manager, such as Docker Compose, owns that proxy. Harness verifies readiness, reports `external`, and never starts or stops it; usage switches still block new matching model requests. An unavailable external service returns a startup failure instead of falling back to a local process. External ZCode must return `x-dsh-proxy-service: zcode-proxy` from `/v1/models`; a generic HTTP 200/401 is insufficient. External services do not require local proxy source files.
 

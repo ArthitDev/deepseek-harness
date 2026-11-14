@@ -12,7 +12,7 @@ const filename = join(process.env.DSH_HOME || join(homedir(), '.dsh'), '.credent
 
 try {
   const config = YAML.parse(await readFile(join(resolve(process.argv[2] || join(here, '../third-party/zcode-api')), 'config.yaml'), 'utf8'))
-  const key = process.env.ZCODE_PROXY_API_KEY || config.auth?.proxyApiKey
+  const key = config.auth?.proxyApiKey
   if (typeof key !== 'string' || !key.trim() || /[\r\n]/.test(key)) throw new Error('Invalid proxy key')
   await mkdir(dirname(filename), { recursive: true, mode: 0o700 })
   await withFileLock(filename, async () => {

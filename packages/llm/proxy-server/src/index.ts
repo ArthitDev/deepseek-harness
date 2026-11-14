@@ -223,7 +223,7 @@ export default class ProxyServers extends TypertRemoteService {
   }
 
   private async * stream(options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk> {
-    const server = this.servers.find(row => row.providers.includes(options.provider) || options.model.startsWith(`${row.id}/`))
+    const server = this.servers.find(row => row.providers.includes(options.provider))
     if (server === undefined || this.config.routeAllModels && server.id === 'sb') { yield* next(); return }
     try {
       await this.queue(server, async () => {

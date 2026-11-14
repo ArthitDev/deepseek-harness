@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-proxy-server'
 
 /**
  * Start or reuse the checkout's shared ZCode proxy.
@@ -40,7 +41,7 @@ async function ensureProxy(installAnchor: string, script: string, command: strin
 }
 
 /**
- * Await one shared ZCode startup attempt before matching model requests.
+ * Await one shared ZCode startup attempt for the direct provider when no proxy manager is installed.
  * Other providers proceed independently; disposal cancels and awaits the helper.
  * @param ctx - host context owning the stream listener and helper lifetime.
  * @param installAnchor - CLI package manifest supplied by profileContext.
@@ -50,7 +51,7 @@ export function installZcodeStartup(ctx: Context, installAnchor: string, warn: (
   const controller = new AbortController()
   let startup: Promise<void> | undefined
   ctx.on('llm/stream', async function* (options, next) {
-    if (options.provider === 'zcode-direct' || /^zcode\/glm-5\.3(?:-flash)?$/.test(options.model)) {
+    if (options.provider === 'zcode-direct' && ctx.get('proxyServers') === undefined) {
       const signal = options.signal === undefined ? controller.signal : AbortSignal.any([options.signal, controller.signal])
       if (!signal.aborted) {
         startup ??= ensureZcodeProxy(installAnchor, controller.signal).catch(() => {

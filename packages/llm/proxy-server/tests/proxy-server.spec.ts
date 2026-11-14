@@ -192,19 +192,20 @@ it('disables new use immediately and stops its child only after the active model
   expect((await service.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'stopped', enabled: false })
 })
 
-it('blocks a disabled direct or routed model request while other providers proceed', async () => {
+it.each(['zcode', 'antigravity', 'sb'] as const)('keeps router models independent of the disabled %s direct provider', async (id) => {
   const f = await fixture()
   const service = await f.mount()
-  await service.setEnabled('zcode', false)
+  await service.setEnabled(id, false)
   const next = vi.fn(async function* (): AsyncGenerator<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } })
-  const request: GenerateOptions = { provider: 'zcode-direct', model: 'glm-5.3', messages: [] }
+  const request: GenerateOptions = { provider: id === 'zcode' ? 'zcode-direct' : id, model: 'fixture', messages: [] }
   const direct = await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', request, next))
   expect(direct).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: 'proxy-server/disabled' } } }])
-  const routed = await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { ...request, provider: '9router', model: 'zcode/glm-5.3' }, next))
-  expect(routed).toMatchObject(direct)
   expect(next).not.toHaveBeenCalled()
-  await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { ...request, provider: 'other' }, next))
+  const routed = await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { ...request, provider: '9router', model: `${id}/fixture` }, next))
+  expect(routed).toMatchObject([{ type: 'finish', reason: { kind: 'stop' } }])
   expect(next).toHaveBeenCalledOnce()
+  await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { ...request, provider: 'other' }, next))
+  expect(next).toHaveBeenCalledTimes(2)
 })
 
 

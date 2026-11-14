@@ -206,7 +206,7 @@ describe('TUI startup through Loader with optional proxies', () => {
       await vi.waitFor(() => { expect(visible()).toContain('DIRECT_MODEL_OK') })
       const route = mode === 'pending' ? { provider: 'direct', model: 'direct-model' } : { provider, model }
       expect(adapter.requests[0]).toMatchObject(route)
-      if (provider === 'direct') {
+      if (provider !== 'zcode-direct') {
         await expect(access(join(home, 'helper.pid'))).rejects.toThrow()
       } else {
         await vi.waitFor(async () => { expect(Number(await readFile(join(home, 'helper.pid'), 'utf8'))).toBeGreaterThan(0) })

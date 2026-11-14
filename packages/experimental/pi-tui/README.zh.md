@@ -32,11 +32,11 @@ kind: "package-bundle"
 
 共享预设选择优先读取 Web profile 的 `agent-preset-registry` 行，再读取旧版 `agent-presets` 行。自定义预设声明也必须安装到 TUI profile；仅存在于 Web 的声明不会在 TUI 注册。所选预设不可用时启动失败，不会替换为其他提示词。
 
-源码检出在每次交互式启动时于后台启动透明 SB 转发服务。内置 ZCode 代理在首次实际发出 `zcode-direct` 或 `zcode/glm-5.3[-flash]` 请求时启动；选择其他提供方不会启动 ZCode 辅助进程。同一 TUI 进程中的并发请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。健康服务会被复用，并在 TUI 关闭后继续运行。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
+源码检出在每次交互式启动时于后台启动透明 SB 转发服务。[代理管理器](../../llm/proxy-server/README.zh.md) 负责直连提供方的启动和使用开关。没有该管理器时，内置 ZCode 辅助程序在首次实际发出 `zcode-direct` 请求时启动；路由器模型前缀不会启动它。同一 TUI 进程中的并发回退请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
 
-`pnpm zcode:setup` 也会配置本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`，即可通过 `ZCode Direct` 直连，无需 9router 或 SB。直连预设默认为 `reasoning: low`；覆盖方式由下文环境变量控制。TUI 和 Web 内置路由均公布 1M 上下文，使用 18080 端口。启动 harness 前设置 `ZCODE_PORT` 会同时调整启动器与直连路由。内置代理要求 `PATH` 中存在 Bun；Antigravity 和 SB 使用 `--no-env-file`，继承 Harness 环境。内置 Antigravity 代理使用 18877，由 `ANTIGRAVITY_PORT` 控制，通用 `PORT` 变量不影响它。SB 保持 18899，由 `SB_PORT` 控制。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
+`pnpm zcode:setup` 准备内置后端，并将其 `config.yaml` 中的 `auth.proxyApiKey` 导入本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。受管理的后端使用该文件中的密钥，不采用 shell 的 `ZCODE_PROXY_API_KEY` 覆盖值。在本机登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`；Web 通过共享 home patch 提供相同的提供方。`ZCode Direct` 绕过 9router。启用 `routeAllModels: true` 时，路径为 Harness → SB CONNECT → ZCode Proxy → ZCode；SB 故障仅允许在发送模型请求之前改为直连。提供方默认使用 `reasoning: low`，公布 1M 上下文，端点为 `http://127.0.0.1:18080/v1`。更改端口时，让提供方 URL 与管理器的 `zcodePort` 保持一致。对于现有 Docker 后端，使用 `bun run scripts/zcode-direct-setup.mjs <config-directory>` 导入其配置，并在 `externalProxies` 中声明 `zcode`；无需第二个代理。所有内置代理都要求 `PATH` 中存在 Bun。Antigravity 默认使用 18877，SB 默认使用 18899。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
 
-迁移到另一台机器时，复制包含 `scripts/` 和 `third-party/` 的完整检出，安装 Node `^22.19 || >=24`、pnpm 与 Bun，再运行 `pnpm install`、`pnpm zcode:setup` 和 `pnpm build`。单独安装并配置系统 9router，注册目标机器的 ZCode 端点与密钥，并在该机器登录 ZCode。提供方路径为 Harness → 9router → ZCode → 提供方；可选 SB 转发位于 Harness 与 9router 之间。下文列出的本地集成必须另行恢复；仅复制 npm TUI 包不包含检出级启动脚本。
+迁移到另一台 Windows 或 Linux 机器时，复制包含 `scripts/` 和 `third-party/` 的完整检出，安装 Node >=24.9、pnpm 与 Bun，再运行 `pnpm install`、`pnpm zcode:setup` 和 `pnpm build`。使用内置后端的 `auth login` 命令在该机器登录 ZCode。`zcode-direct` 不要求 9router；单独保留现有路由器提供方即可继续选择两条路径。下文列出的本地集成必须另行恢复；仅复制 npm TUI 包不包含检出级启动脚本。
 
 `pnpm sb:start` 在仅限本机的 `18899` 端口启动无需额外依赖的 OpenAI 转发服务；`sb:status`、`sb:stop` 和 `sb:restart` 仅管理身份已验证且进程已记录的服务。`sb:install` 是 start 的别名，不创建操作系统启动任务。`SB_PORT`、`SB_BACKEND`（默认 `http://127.0.0.1:20128/v1`）、`SB_TIMEOUT_MS`（上游空闲超时，默认 120000）和 `DSH_HOME` 可覆盖部署设置。`GET /health` 返回服务身份与后端配置，不检查上游凭据。日志位于 `<DSH_HOME>/logs/sb-transport-<port>.log`，默认使用 `~/.dsh`。端口被其他服务占用时显示启动提示，不修改已有监听进程。
 
