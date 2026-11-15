@@ -86,9 +86,11 @@ function serve() {
       const rawBody = Buffer.concat(chunks);
       const isChat = req.method === 'POST' && req.url.includes('chat/completions');
       const isStream = isChat && /"stream"\s*:\s*true/.test(rawBody.toString('utf8'));
-      // v6 pipeline handles only non-stream chat bodies; streaming and
-      // non-chat requests take the original passthrough path untouched.
-      if (v6 && isChat && !isStream) {
+      // v6 pipeline enriches every chat request body (operator frame, skill,
+      // wiki, recon) before dispatch. Stream requests forward the enriched
+      // body and pipe the upstream SSE back untouched; only non-stream
+      // responses go through processResponse (execution chain, retry).
+      if (v6 && isChat) {
         (async () => {
           try {
             const processedBody = await v6.processBody(rawBody.toString('utf8'));
@@ -96,6 +98,16 @@ function serve() {
             // or { __directResponse } when a Kali direct tool answered without
             // an LLM round-trip.
             if (processedBody && typeof processedBody === 'object' && processedBody.__directResponse) {
+              if (isStream) {
+                const d = processedBody.__directResponse;
+                const content = d.choices?.[0]?.message?.content ?? '';
+                const first = { id: d.id, object: 'chat.completion.chunk', created: d.created, model: d.model, sb_intent: d.sb_intent, sb_target: d.sb_target, choices: [{ index: 0, delta: { role: 'assistant', content }, finish_reason: null }] };
+                const last = { id: d.id, object: 'chat.completion.chunk', created: d.created, model: d.model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+                res.writeHead(200, { 'Content-Type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive',
+                  'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
+                res.end(`data: ${JSON.stringify(first)}\n\ndata: ${JSON.stringify(last)}\n\ndata: [DONE]\n\n`);
+                return;
+              }
               const buf = Buffer.from(JSON.stringify(processedBody.__directResponse), 'utf8');
               res.writeHead(200, { 'Content-Type': 'application/json', 'content-length': buf.length,
                 'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
@@ -113,6 +125,11 @@ function serve() {
             }, response => {
               clearTimeout(deadline);
               response.on('error', () => res.destroy());
+              if (isStream) {
+                res.writeHead(response.statusCode, headers(response.headers));
+                response.pipe(res);
+                return;
+              }
               let respBody = '';
               response.on('data', c => { respBody += c; });
               response.on('end', async () => {
