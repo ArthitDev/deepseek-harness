@@ -666,7 +666,7 @@ function dockerApi(method, apiPath, body, upgrade) {
 async function execDocker(argv, timeoutMs = EXEC_CONFIG.execTimeout) {
   const start = Date.now();
   try {
-    const created = await dockerApi("POST", `/containers/${EXEC_CONFIG.dockerContainer}/exec`, { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: argv });
+    const created = await dockerApi("POST", `/containers/${EXEC_CONFIG.dockerContainer}/exec`, { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: argv, Env: ["PATH=/root/.local/bin:/root/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"] });
     if (created.status !== 201) return { success: false, error: `exec create ${created.status}: ${(created.body || "").slice(0, 200)}`, output: "", exitCode: null };
     const id = JSON.parse(created.body).Id;
     const run = await dockerApi("POST", `/exec/${id}/start`, { Detach: false, Tty: true }, true);
