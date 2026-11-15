@@ -406,7 +406,7 @@ const KALI_DIRECT = {
   }),
   "tech_fingerprint": (target) => ({
     tool: "httpx",
-    args: ["-u", target, "-title", "-tech-detect", "-status-code"],
+    args: [target, "-title", "-tech-detect", "-status-code"],
     desc: `httpx technology fingerprint on ${target}`,
   }),
   "vuln_scan": (target) => ({
@@ -751,7 +751,7 @@ async function runRecon(targets) {
     // Phase 3: If web target, tech fingerprint
     if (target.type === "url" || (nmap.output && nmap.output.includes("80/") || nmap.output.includes("443/"))) {
       const targetUrl = target.type === "url" ? target.value : `http://${host}`;
-      const httpx = await runKaliCommand("httpx", ["-u", targetUrl, "-title", "-tech-detect", "-status-code", "-silent"], 15000);
+      const httpx = await runKaliCommand("httpx", [targetUrl, "-title", "-tech-detect", "-status-code", "-silent"], 15000);
       if (httpx.output?.trim()) {
         results.push({ tool: "httpx", target: host, success: true, output: httpx.output.substring(0, 1000) });
         console.log(`[SB v6 RECON] httpx: ${httpx.output.trim()}`);
