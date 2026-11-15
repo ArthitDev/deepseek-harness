@@ -1203,7 +1203,7 @@ async function processBody(raw) {
 
     if (directOp) {
       console.log(`[SB v6 DIRECT] ${directOp.desc}`);
-      const result = await runKaliCommand(directOp.tool, directOp.args, 45000);
+      const result = await runKaliCommand(directOp.tool, directOp.args, 120000);
       console.log(`[SB v6 DIRECT] ${result.success ? "✓" : "✗"} (${result.output?.split("\n").length || 0} lines)`);
 
       // Return direct result without LLM round-trip; sb_* metadata rides the
