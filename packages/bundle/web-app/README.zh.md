@@ -46,7 +46,7 @@ dsh --profile web --no-open --port 8080
 
 已保存的模型选择覆盖组合默认值。设置卡接受兼容 Messages 的 API 地址与凭据引用。
 
-共享 home patch 可同时提供 [ZCode Direct](../../experimental/pi-tui/README.zh.md#use-this-package) 和路由器提供方。其内置生命周期由[代理管理器](../../llm/proxy-server/README.zh.md)负责；路由器模型前缀不会启动本地 ZCode 辅助程序。
+共享 home patch 可同时提供 [ZCode Direct](../../experimental/pi-tui/README.zh.md#use-this-package) 和路由器提供方。其内置生命周期由[代理管理器](../../llm/proxy-server/README.zh.md)负责；`zcode-direct` 和 `zcode-glm` 提供方在首次请求时启动本地 ZCode 代理并等待就绪。其他路由器提供方的模型前缀不会启动它。
 
 ### 配置
 

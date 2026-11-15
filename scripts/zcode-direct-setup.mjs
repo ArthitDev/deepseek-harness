@@ -47,8 +47,18 @@ try {
       if (!providers.has('zcode-direct')) providers.set('zcode-direct', defaults.clone())
       const direct = providers.get('zcode-direct', true)
       if (!YAML.isMap(direct)) throw new Error('Invalid ZCode provider')
-      if (direct.get('displayName') === undefined || direct.get('displayName') === 'ZCode Direct') {
+      if ([undefined, 'ZCode Direct', 'zcode-starter'].includes(direct.get('displayName'))) {
         direct.set('displayName', patch.createNode(defaults.get('displayName')))
+      }
+      for (const [id, displayName, legacy] of [
+        ['zai', 'zcode(coding plan)', ['Z.ai Coding Plan', 'Z.ai (Coding Plan)']],
+        ['zai-payg', 'zcode(pay-g)', ['Z.ai Pay-as-you-go', 'Z.ai (Pay-as-you-go)']],
+        ['zcode-glm', 'zcode(starter-9router)', ['ZCode Starter via 9Router']],
+      ]) {
+        const provider = providers.get(id, true)
+        if (YAML.isMap(provider) && [undefined, ...legacy].includes(provider.get('displayName'))) {
+          provider.set('displayName', patch.createNode(displayName))
+        }
       }
       const url = direct.get('baseURL', true)
       if (YAML.isScalar(url) && url.tag === 'tag:yaml.org,2002:js' && url.value === defaults.get('baseURL')) {
@@ -63,9 +73,9 @@ try {
           if (!YAML.isMap(model) || typeof model.get('id') !== 'string' || !model.get('id').startsWith(prefix)) continue
           const name = names.get(model.get('id').slice(prefix.length))
           if (!name) continue
-          const label = name.replace(/ \(zcode-starter\)$/, '')
-          if ([label, `${label} (ZCode Direct)`, `${label} (SB Proxy)`].includes(model.get('name'))) {
-            model.set('name', patch.createNode(name))
+          const label = name.replace(/ \(starter-direct\)$/, '')
+          if ([label, `${label} (ZCode Direct)`, `${label} (SB Proxy)`, `${label} (zcode-starter)`].includes(model.get('name'))) {
+            model.set('name', patch.createNode(id === 'sb-proxy' ? name.replace('(starter-direct)', '(starter-9router)') : name))
           }
         }
       }

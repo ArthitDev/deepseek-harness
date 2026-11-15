@@ -31,7 +31,7 @@ kind: "package-reference"
 <a id="configuration"></a>
 ## 配置
 
-可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`、`antigravity`、`sb`/`sb-proxy`。只有这些配置的提供方 id 会选择代理；路由器提供方上的 `zcode/` 等模型前缀不会选择本地辅助代理。其他模型路由保持委托行为。
+可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`/`zcode-glm`、`antigravity`、`sb`/`sb-proxy`。两个 ZCode 路由在分发前启动本地后端，包括通过 9router 的 Starter。只有配置的提供方 id 会选择代理；其他路由器提供方上的 `zcode/` 等模型前缀不会选择本地辅助代理。其他模型路由保持委托行为。
 
 `externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode`、`antigravity` 或 `sb`。Harness 验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
 
@@ -55,7 +55,7 @@ ZCode Proxy 位于 [`third-party/zcode-api`](../../../third-party/zcode-api)。�
 1. 在 Harness 根目录运行 `pnpm zcode:setup`。它在缺失时安装内置后端声明的依赖、构建 worker，在不存在时创建本地 `third-party/zcode-api/config.yaml`，并将本地代理密钥导入为 `ZCODE_DIRECT_API_KEY`。后端或 Bun 相关更新后再次运行设置；已有账户配置会保留。
 2. 在本机以运行账户完成 ZCode 认证。在 `third-party/zcode-api` 目录运行 `bun run src/index.ts auth login zai` 登录 Z.ai，或为相应账户使用 `bigmodel`。账户所有者完成上游登录流程。`bun run src/index.ts --help` 列出登录命令。已有官方 ZCode 登录可以通过上游 `auth login <provider> --import` 流程导入；不要将令牌粘贴到聊天或 README 中。
 3. 保持后端 `config.yaml` 中的 `provider`、`plan` 和 `models` 与账户一致。Harness 模板使用 `provider: zai`、`plan: start-plan` 及 `glm-5.3` / `glm-5.3-flash` 模型 id。列出的模型仍需上游账户的配额和访问权限。
-4. 设置修改后重启 Harness。在 TUI 中选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`。在 Web 模型选择器中选择 **ZCode Direct**。发送简短消息验证真实生成。`zcode-glm` 路由器提供方是不同路径。
+4. 设置修改后重启 Harness。在 TUI 中选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`。在 Web 模型选择器中选择 **zcode(starter-direct)**。发送简短消息验证真实生成。`zcode-glm` 提供方显示为 **zcode(starter-9router)**，通过 9router 使用相同后端；两个路由都在首次使用时启动它。Coding Plan 和 Pay-G 仍是独立的上游 API 路由。
 
 ### 准备 Antigravity
 

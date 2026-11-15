@@ -41,7 +41,7 @@ async function ensureProxy(installAnchor: string, script: string, command: strin
 }
 
 /**
- * Await one shared ZCode startup attempt for the direct provider when no proxy manager is installed.
+ * Await one shared ZCode startup attempt for the Direct and Starter 9router providers without a proxy manager.
  * Other providers proceed independently; disposal cancels and awaits the helper.
  * @param ctx - host context owning the stream listener and helper lifetime.
  * @param installAnchor - CLI package manifest supplied by profileContext.
@@ -51,7 +51,7 @@ export function installZcodeStartup(ctx: Context, installAnchor: string, warn: (
   const controller = new AbortController()
   let startup: Promise<void> | undefined
   ctx.on('llm/stream', async function* (options, next) {
-    if (options.provider === 'zcode-direct' && ctx.get('proxyServers') === undefined) {
+    if ((options.provider === 'zcode-direct' || options.provider === 'zcode-glm') && ctx.get('proxyServers') === undefined) {
       const signal = options.signal === undefined ? controller.signal : AbortSignal.any([options.signal, controller.signal])
       if (!signal.aborted) {
         startup ??= ensureZcodeProxy(installAnchor, controller.signal).catch(() => {

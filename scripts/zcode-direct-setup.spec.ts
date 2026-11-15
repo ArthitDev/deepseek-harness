@@ -58,10 +58,10 @@ it('adds the Starter catalog without changing the router or credential reference
   const providers = await f.providers()
   expect(providers.router).toEqual(other)
   expect(providers['zcode-direct']).toMatchObject({
-    displayName: 'zcode-starter', baseURL: endpoint, apiKeyEnv: 'ZCODE_DIRECT_API_KEY',
+    displayName: 'zcode(starter-direct)', baseURL: endpoint, apiKeyEnv: 'ZCODE_DIRECT_API_KEY',
     models: [
-      { id: 'glm-5.3', name: 'GLM 5.3 (zcode-starter)' },
-      { id: 'glm-5.3-flash', name: 'GLM 5.3 Flash (zcode-starter)' },
+      { id: 'glm-5.3', name: 'GLM 5.3 (starter-direct)' },
+      { id: 'glm-5.3-flash', name: 'GLM 5.3 Flash (starter-direct)' },
     ],
   })
   expect(YAML.load(await readFile(join(f.home, '.credentials.yaml'), 'utf8'))).toEqual({
@@ -77,6 +77,24 @@ it('rejects an invalid config key before changing the credential store', async (
   const before = await readFile(join(f.home, '.credentials.yaml'), 'utf8')
   expect(f.run().status).toBe(1)
   expect(await readFile(join(f.home, '.credentials.yaml'), 'utf8')).toBe(before)
+})
+
+it('distinguishes all four ZCode routes while preserving ids, endpoints and model settings', async () => {
+  const original = {
+    zai: { models: [{ id: 'glm-5.3', name: 'GLM-5.3' }] },
+    'zai-payg': { baseURL: 'https://api.z.ai/api/paas/v4', models: [{ id: 'glm-5.3' }] },
+    'zcode-glm': { displayName: 'ZCode Starter via 9Router', baseURL: 'http://127.0.0.1:20128/v1', models: [{ id: 'zcode/glm-5.3' }] },
+    'zcode-direct': { displayName: 'zcode-starter', baseURL: endpoint, models: [{ id: 'glm-5.3', name: 'GLM 5.3 (zcode-starter)' }] },
+  }
+  const f = await fixture(YAML.dump([{ id: 'llm-pi-ai', config: { providers: original } }]))
+  expect(f.run().status).toBe(0)
+  const providers = await f.providers()
+  expect(providers).toEqual({
+    zai: { ...original.zai, displayName: 'zcode(coding plan)' },
+    'zai-payg': { ...original['zai-payg'], displayName: 'zcode(pay-g)' },
+    'zcode-glm': { ...original['zcode-glm'], displayName: 'zcode(starter-9router)' },
+    'zcode-direct': { ...original['zcode-direct'], displayName: 'zcode(starter-direct)', models: [{ id: 'glm-5.3', name: 'GLM 5.3 (starter-direct)' }] },
+  })
 })
 
 it.each([endpoint, JSON.stringify(endpoint)])('repairs the tagged literal URL and legacy labels: %s', async (scalar) => {
@@ -102,11 +120,11 @@ it.each([endpoint, JSON.stringify(endpoint)])('repairs the tagged literal URL an
   expect(f.run().status).toBe(0)
   const providers = await f.providers()
   expect(providers['zcode-direct']).toMatchObject({
-    displayName: 'zcode-starter', baseURL: endpoint, apiKeyEnv: 'KEEP_REFERENCE',
-    models: [{ id: 'glm-5.3', name: 'GLM 5.3 (zcode-starter)' }, { id: 'glm-5.3-flash', name: 'Custom flash name' }],
+    displayName: 'zcode(starter-direct)', baseURL: endpoint, apiKeyEnv: 'KEEP_REFERENCE',
+    models: [{ id: 'glm-5.3', name: 'GLM 5.3 (starter-direct)' }, { id: 'glm-5.3-flash', name: 'Custom flash name' }],
   })
   expect(providers['sb-proxy']).toEqual({ displayName: 'SB Proxy', models: [
-    { id: 'zcode/glm-5.3-flash', name: 'GLM 5.3 Flash (zcode-starter)' }, { id: 'other/model', name: 'Main model' },
+    { id: 'zcode/glm-5.3-flash', name: 'GLM 5.3 Flash (starter-9router)' }, { id: 'other/model', name: 'Main model' },
   ] })
   const after = await readFile(f.patch, 'utf8')
   const rows = YAML.load(after, tags) as { id: string; config: { value?: { __jsExpr: string } } }[]

@@ -46,7 +46,7 @@ After startup you see a `dsh web:` line whose root URL carries a fresh process t
 
 Saved model selections override the composition default. The settings card accepts a Messages-compatible API address and a credential reference.
 
-The shared home patch can expose [ZCode Direct](../../experimental/pi-tui/README.md#use-this-package) alongside a router provider. Its embedded lifecycle is owned by the [proxy manager](../../llm/proxy-server/README.md); router model prefixes do not start a local ZCode helper.
+The shared home patch can expose [ZCode Direct](../../experimental/pi-tui/README.md#use-this-package) alongside a router provider. Its embedded lifecycle is owned by the [proxy manager](../../llm/proxy-server/README.md); the `zcode-direct` and `zcode-glm` providers start the local ZCode proxy on their first request and wait for readiness. Model prefixes on other router providers do not start it.
 
 ### Configuration
 

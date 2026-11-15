@@ -130,6 +130,10 @@ describe('TUI startup through Loader with optional proxies', () => {
     ['failed', 'pending', 'direct', 'direct-model'],
     ['ready', 'ready', 'zcode-direct', 'glm-5.3'],
     ['ready', 'ready', 'zcode-direct', 'glm-5.3-flash'],
+    ['ready', 'ready', 'zcode-glm', 'zcode/glm-5.3-flash'],
+    ['failed', 'ready', 'zcode-glm', 'zcode/glm-5.3-flash'],
+    ['pending', 'ready', 'zcode-glm', 'zcode/glm-5.3-flash'],
+    ['gated', 'ready', 'zcode-glm', 'zcode/glm-5.3-flash'],
     ['ready', 'ready', 'gateway', 'zcode/glm-5.3'],
     ['ready', 'ready', 'gateway', 'zcode/glm-5.3-flash'],
     ['failed', 'ready', 'zcode-direct', 'glm-5.3-flash'],
@@ -145,7 +149,7 @@ describe('TUI startup through Loader with optional proxies', () => {
     terminal.write.mockClear()
     try {
       await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: 'DIRECT_MODEL_SYSTEM' } })
-      ctx.llm.registerAdapter(['direct', 'zcode-direct', 'gateway'], adapter)
+      ctx.llm.registerAdapter(['direct', 'zcode-direct', 'zcode-glm', 'gateway'], adapter)
       ctx.provide('cmdlineArgs', { get: () => [] })
       ctx.provide('profileContext', { home, dir: home, name: 'tui', installAnchor: anchor })
       ctx.provide('workspaceRegistry', { resolveByPath: async () => ({ attachSession: async () => {} }) })
@@ -206,7 +210,7 @@ describe('TUI startup through Loader with optional proxies', () => {
       await vi.waitFor(() => { expect(visible()).toContain('DIRECT_MODEL_OK') })
       const route = mode === 'pending' ? { provider: 'direct', model: 'direct-model' } : { provider, model }
       expect(adapter.requests[0]).toMatchObject(route)
-      if (provider !== 'zcode-direct') {
+      if (provider !== 'zcode-direct' && provider !== 'zcode-glm') {
         await expect(access(join(home, 'helper.pid'))).rejects.toThrow()
       } else {
         await vi.waitFor(async () => { expect(Number(await readFile(join(home, 'helper.pid'), 'utf8'))).toBeGreaterThan(0) })

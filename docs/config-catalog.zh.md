@@ -3065,7 +3065,7 @@ export interface Config {
   routeAllModels: boolean
   /** Deadline in milliseconds for a local SB CONNECT capability probe. */
   routingProbeTimeoutMs: number
-  /** Permit new model requests to use ZCode Direct. */
+  /** Permit new model requests to use the local ZCode proxy. */
   zcodeEnabled: Volatile<boolean>
   /** Permit new model requests to use Antigravity. */
   antigravityEnabled: Volatile<boolean>
@@ -3077,7 +3077,7 @@ export interface Config {
   antigravityPort: number
   /** Loopback port used by the SB transport proxy. */
   sbPort: number
-  /** Provider ids routed through ZCode Direct. */
+  /** Provider ids requiring the local ZCode proxy before dispatch, including Starter 9router routes. */
   zcodeProviders: string[]
   /** Provider ids routed through Antigravity. */
   antigravityProviders: string[]

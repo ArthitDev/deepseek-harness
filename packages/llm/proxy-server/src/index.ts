@@ -42,7 +42,7 @@ export interface Config {
   routeAllModels: boolean
   /** Deadline in milliseconds for a local SB CONNECT capability probe. */
   routingProbeTimeoutMs: number
-  /** Permit new model requests to use ZCode Direct. */
+  /** Permit new model requests to use the local ZCode proxy. */
   zcodeEnabled: Volatile<boolean>
   /** Permit new model requests to use Antigravity. */
   antigravityEnabled: Volatile<boolean>
@@ -54,7 +54,7 @@ export interface Config {
   antigravityPort: number
   /** Loopback port used by the SB transport proxy. */
   sbPort: number
-  /** Provider ids routed through ZCode Direct. */
+  /** Provider ids requiring the local ZCode proxy before dispatch, including Starter 9router routes. */
   zcodeProviders: string[]
   /** Provider ids routed through Antigravity. */
   antigravityProviders: string[]
@@ -133,7 +133,7 @@ export default class ProxyServers extends TypertRemoteService {
     zcodePort: z.number().step(1).min(1).max(65535).default(Number(process.env.ZCODE_PORT ?? 18080)),
     antigravityPort: z.number().step(1).min(1).max(65535).default(Number(process.env.ANTIGRAVITY_PORT ?? 18877)),
     sbPort: z.number().step(1).min(1).max(65535).default(Number(process.env.SB_PORT ?? 18899)),
-    zcodeProviders: z.array(z.string()).default(['zcode-direct']),
+    zcodeProviders: z.array(z.string()).default(['zcode-direct', 'zcode-glm']),
     antigravityProviders: z.array(z.string()).default(['antigravity']),
     sbProviders: z.array(z.string()).default(['sb', 'sb-proxy']),
     externalProxies: z.array(z.union(['zcode', 'antigravity', 'sb'] as const)).default([]),

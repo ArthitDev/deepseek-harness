@@ -31,7 +31,7 @@ async function fixture() {
   const config = {
     routeAllModels: false,
     zcodeEnabled: true, antigravityEnabled: true, sbEnabled: true,
-    zcodePort: 1, antigravityPort: 2, sbPort: 3, zcodeProviders: ['zcode-direct'],
+    zcodePort: 1, antigravityPort: 2, sbPort: 3,
     antigravityProviders: ['antigravity'], sbProviders: ['sb'], startupTimeoutMs: 1000,
     externalProxies: [] as ProxyId[],
   }
@@ -79,7 +79,7 @@ it('reads the three proxies without starting one, and records independent usage 
   const f = await fixture()
   const service = await f.mount()
   expect(await service.list()).toMatchObject([
-    { id: 'zcode', available: false, status: 'stopped' },
+    { id: 'zcode', available: false, status: 'stopped', providers: ['zcode-direct', 'zcode-glm'] },
     { id: 'antigravity', available: false, status: 'stopped' },
     { id: 'sb', available: false, status: 'stopped' },
   ])
@@ -154,6 +154,9 @@ it('refuses an unowned ZCode port even when it answers with a generic authentica
   const next = vi.fn(async function* (): AsyncGenerator<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } })
   const result = await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { provider: 'zcode-direct', model: 'glm', messages: [] }, next))
   expect(result).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: 'proxy-server/port-in-use' } } }])
+  expect(next).not.toHaveBeenCalled()
+  const starterRouter = await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { provider: 'zcode-glm', model: 'zcode/glm-5.3-flash', messages: [] }, next))
+  expect(starterRouter).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: 'proxy-server/port-in-use' } } }])
   expect(next).not.toHaveBeenCalled()
   expect(unrelated.listening).toBe(true)
 })
