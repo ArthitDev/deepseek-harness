@@ -1,5 +1,7 @@
-#!/usr/bin/env -S bun --no-env-file
-// Checkout-local OpenAI transport. It never imports the legacy prompt or execution pipeline.
+// sb-transport.cjs — checkout-local OpenAI transport with the SB Proxy v6
+// pipeline mounted on non-stream /v1/chat/completions requests. Everything
+// else (health, CONNECT tunnel, streaming, non-chat endpoints) stays
+// passthrough exactly as the original transport.
 const http = require('node:http');
 const net = require('node:net');
 const https = require('node:https');
@@ -26,6 +28,15 @@ if (!Number.isInteger(port) || port < 0 || port > 65535 || !Number.isFinite(time
 backend.pathname = backend.pathname.replace(/\/+$/, '') || '/v1';
 const stateFile = path.join(home, 'run', `sb-transport-${port}.json`);
 const logFile = path.join(home, 'logs', `sb-transport-${port}.log`);
+
+// SB Proxy v6 pipeline: processBody/processResponse over the same backend.
+// The v6 module binds its own port only when run directly; required here it
+// just exports the request/response transforms and server factory.
+const v6Path = path.join(__dirname, 'sb-proxy-v6.cjs');
+let v6 = null;
+try { v6 = require(v6Path); } catch (error) {
+  console.error('[sb-transport] v6 pipeline unavailable, passthrough only:', error.message);
+}
 
 async function health() {
   try {
@@ -54,7 +65,7 @@ function serve() {
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ service: SERVICE, mode: 'passthrough', supportsConnect: true, pid: process.pid,
+      res.end(JSON.stringify({ service: SERVICE, mode: v6 ? 'v6-pipeline' : 'passthrough', supportsConnect: true, pid: process.pid,
         backend: backend.href, port: server.address().port }));
       return;
     }
@@ -72,9 +83,98 @@ function serve() {
     req.on('end', () => {
       if (res.destroyed || res.writableEnded) return;
       const started = performance.now();
+      const rawBody = Buffer.concat(chunks);
+      const isChat = req.method === 'POST' && req.url.includes('chat/completions');
+      const isStream = isChat && /"stream"\s*:\s*true/.test(rawBody.toString('utf8'));
+      // v6 pipeline handles only non-stream chat bodies; streaming and
+      // non-chat requests take the original passthrough path untouched.
+      if (v6 && isChat && !isStream) {
+        (async () => {
+          try {
+            const processedBody = await v6.processBody(rawBody.toString('utf8'));
+            // processBody returns either a processed request string (LLM path)
+            // or { __directResponse } when a Kali direct tool answered without
+            // an LLM round-trip.
+            if (processedBody && typeof processedBody === 'object' && processedBody.__directResponse) {
+              const buf = Buffer.from(JSON.stringify(processedBody.__directResponse), 'utf8');
+              res.writeHead(200, { 'Content-Type': 'application/json', 'content-length': buf.length,
+                'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
+              res.end(buf);
+              return;
+            }
+            const requestBody = typeof processedBody === 'string' ? processedBody : rawBody.toString('utf8');
+            const outgoing = headers(req.headers);
+            outgoing.host = backend.host;
+            outgoing['content-length'] = Buffer.byteLength(requestBody);
+            if (process.env.SB_BACKEND_KEY) outgoing.authorization = `Bearer ${process.env.SB_BACKEND_KEY}`;
+            const upstream = (backend.protocol === 'https:' ? https : http).request({
+              hostname: backend.hostname, port: backend.port || undefined, method: req.method,
+              path: backend.pathname.replace(/\/$/, '') + req.url.replace(/^\/v1/, ''), headers: outgoing,
+            }, response => {
+              clearTimeout(deadline);
+              response.on('error', () => res.destroy());
+              let respBody = '';
+              response.on('data', c => { respBody += c; });
+              response.on('end', async () => {
+                try {
+                  const processed = await v6.processResponse(respBody, requestBody);
+                  let clean = processed;
+                  const objStart = processed.indexOf('{');
+                  if (objStart !== -1) {
+                    let depth = 0, inStr = false, esc = false, objEnd = -1;
+                    for (let i = objStart; i < processed.length; i++) {
+                      const ch = processed[i];
+                      if (esc) { esc = false; continue; }
+                      if (ch === '\\') { esc = true; continue; }
+                      if (ch === '"') { inStr = !inStr; continue; }
+                      if (inStr) continue;
+                      if (ch === '{') depth++;
+                      else if (ch === '}') { depth--; if (depth === 0) { objEnd = i + 1; break; } }
+                    }
+                    if (objEnd !== -1) {
+                      try { clean = JSON.stringify(JSON.parse(processed.slice(objStart, objEnd))); }
+                      catch { /* keep raw body when the object does not parse */ }
+                    }
+                  }
+                  const buf = Buffer.from(clean, 'utf8');
+                  const { 'content-encoding': _enc, 'content-length': _len, ...respHeaders } = headers(response.headers);
+                  res.writeHead(response.statusCode, { ...respHeaders,
+                    'content-length': buf.length,
+                    'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
+                  res.end(buf);
+                } catch (error) {
+                  console.error('[sb-transport] v6 response error, raw passthrough:', error.message);
+                  res.writeHead(response.statusCode, headers(response.headers));
+                  res.end(respBody);
+                }
+              });
+            });
+            let timedOut = false;
+            const expire = () => { timedOut = true; upstream.destroy(new Error('Upstream timeout')); };
+            const deadline = setTimeout(expire, timeout);
+            upstream.once('close', () => clearTimeout(deadline));
+            upstream.setTimeout(timeout, expire);
+            upstream.on('error', () => {
+              if (res.destroyed) return;
+              if (res.headersSent) { res.destroy(); return; }
+              res.writeHead(timedOut ? 504 : 502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: { message: timedOut ? 'Upstream idle timeout' : 'Upstream unavailable' } }));
+            });
+            upstream.end(requestBody);
+          } catch (error) {
+            console.error('[sb-transport] v6 request error, raw passthrough:', error.message);
+            // Fall through to a plain passthrough with the original body.
+            passthrough(req, res, rawBody, started);
+          }
+        })();
+        return;
+      }
+      passthrough(req, res, rawBody, started);
+    });
+    function passthrough(req, res, rawBody, started) {
       const outgoing = headers(req.headers);
       outgoing.host = backend.host;
-      outgoing['content-length'] = size;
+      outgoing['content-length'] = rawBody.length;
       // The caller supplies its router credential; an explicit deployment key may override it.
       if (process.env.SB_BACKEND_KEY) outgoing.authorization = `Bearer ${process.env.SB_BACKEND_KEY}`;
       const upstream = (backend.protocol === 'https:' ? https : http).request({
@@ -99,8 +199,8 @@ function serve() {
         res.writeHead(timedOut ? 504 : 502, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: timedOut ? 'Upstream idle timeout' : 'Upstream unavailable' } }));
       });
-      upstream.end(Buffer.concat(chunks));
-    });
+      upstream.end(rawBody);
+    }
   });
   server.on('connect', (req, client, head) => {
     const supplied = Buffer.from(req.headers['proxy-authorization'] || '');
@@ -139,7 +239,7 @@ function serve() {
     upstream.once('close', () => { if (connected && !upstream.readableEnded) client.destroy(); });
   });
   server.on('error', error => { console.error(error.message); process.exitCode = 1; });
-  server.listen(port, '127.0.0.1', () => console.log(`SB transport listening on http://127.0.0.1:${server.address().port}`));
+  server.listen(port, '127.0.0.1', () => console.log(`SB transport listening on http://127.0.0.1:${server.address().port} (mode: ${v6 ? 'v6-pipeline' : 'passthrough'})`));
 }
 
 async function start() {
@@ -210,7 +310,7 @@ async function main() {
     case 'restart': await stop(); await start(); break;
     case 'status': {
       const state = await health();
-      console.log(state ? `SB transport ready on :${port}` : `SB transport unavailable on :${port}`);
+      console.log(state ? `SB transport ready on :${port} (mode ${state.mode})` : `SB transport unavailable on :${port}`);
       if (!state) process.exitCode = 1;
       break;
     }

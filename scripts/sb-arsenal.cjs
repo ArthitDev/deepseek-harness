@@ -102,7 +102,7 @@ const TOOLS = {
   "theharvester_osint": {
     desc: "Email/subdomain/name harvesting",
     params: ["domain", "source"],
-    build: (p) => `theHarvester -d ${q(p.domain)} -b ${q(p.source || "google")} 2>/dev/null | head -50`,
+    build: (p) => `theHarvester -d ${q(p.domain)} -b ${q(p.source || "duckduckgo")} 2>/dev/null | head -50`,
   },
 
   // ── WEB SCANNING ──────────────────────────────────────────
