@@ -20,7 +20,8 @@ it.each(['amazon-bedrock', 'openai-codex'])('keeps %s transport overrides inside
     for await (const chunk of adapter.stream({ provider, model: model.id, messages: [] })) void chunk
   }
   const scope = await installModelProxyDispatcher(new URL('http://127.0.0.1:18899'))
-  onTestFinished(() => scope.dispose())
+  const inactiveScope = await installModelProxyDispatcher(new URL('http://127.0.0.1:18900'))
+  onTestFinished(async () => { await inactiveScope.dispose(); await scope.dispose() })
   vi.stubEnv('NO_PROXY', '*')
   onTestFinished(() => { vi.unstubAllEnvs() })
   expect(await modelProxyEndpointForCall()).toBeUndefined()

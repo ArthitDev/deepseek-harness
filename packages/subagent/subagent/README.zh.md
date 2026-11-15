@@ -72,7 +72,9 @@ kind: "package-reference"
 <a id="child-presets"></a>
 ### 子级 preset
 
-设置 `inheritParentPreset: true`，可要求本地子级使用父方 preset，而不固定提供方或模型。冲突的 preset、缺失的父方组装及外部后端会被拒绝；后续每一步和冷恢复都会检查继承的 preset。新子级保留调用方所选模型，包括覆盖 fork 历史；冷恢复保留已保存的模型。默认值为 `false`。如需模型传输优先走代理并在不可用时直连回退，请单独启用 [`proxy-servers.routeAllModels`](../../llm/proxy-server/README.zh.md#configuration)，并省略 `localAgentPolicy`。
+设置 `inheritParentPreset: true`，可要求本地子级使用父方 preset，而不固定提供方或模型。冲突的 preset、缺失的父方组装及外部后端会被拒绝；后续每一步和冷恢复都会检查继承的 preset。新子级保留调用方所选模型，包括覆盖 fork 历史；冷恢复保留已保存的模型。默认值为 `false`。另行启用 [`proxy-servers.routeAllModels`](../../llm/proxy-server/README.zh.md#configuration)，即可要求 SB 传输且禁止直连回退。
+
+设置 `localAgentPolicy: parent`，可要求父方的 preset 及当前 LLM 提供方/模型，而不是固定路由。spawn、fork 和嵌套子级继承父方最新记录的请求选择；父方首次请求前使用创建选项。冲突的子级路由及外部后端会被拒绝。后续每一步都会阻止与在线父方不同的路由或 preset；冷恢复采用在线根节点的路由，并拒绝已保存 preset 不匹配的情况。更改父方 preset 后请新建子级。结合 `proxy-servers.routeAllModels: true`，可在 Windows 和 Linux 上使用相同 preset 和模型路由，且只经 SB 传输。这些控制约束 Harness 的模型调用，并非任意子程序的操作系统级出站限制。
 
 进程内 spawn 接受独立的 `agentPreset`；fork 与外部后端拒绝此选项。省略选择时，本地子级加入父方当前的 preset 代际。显式 id 挂载当前可用代际，即使该 id 与父方相同。通过 [`dsh-tool-subagent`](../tool-subagent/README.zh.md#selecting-a-child-preset) 配置模型可选项，并在 [preset 组装](../../preset/agent-preset-registry/README.zh.md)中配置 persona 与工具。冷恢复保留历史子级 descriptor 记录的 persona 和工具限制。
 

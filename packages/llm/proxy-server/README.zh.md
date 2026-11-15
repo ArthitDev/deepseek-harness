@@ -82,7 +82,7 @@ Google 状态默认位于 `~/.gemini/antigravity-proxy-token.json`。设置不�
 | Google 登录或生成失败 | 查看 `$DSH_HOME/logs/antigravity-proxy.log`，重新登录后测试一个模型。静态 `/v1/models` 响应不能证明登录成功。 |
 | Google 报告 Antigravity 版本不受支持 | 按上述说明更新客户端标识；仅重新登录不会改变请求头。 |
 | 代理启动报告端口被占用 | 确认监听进程及其归属，不要停止其他项目的进程。明确声明有意使用的外部后端，或选择空闲且对齐的端口。 |
-| SB 不可用 | 后续调用可能按原策略直接分派；已分派请求不会直接重放。VPN 强制策略仍独立适用。 |
+| SB 不可用 | 启用 `routeAllModels: true` 时，模型请求在分派前被阻止。恢复 SB 后重试；不会直连回退或重放。VPN 强制策略仍独立适用。 |
 | 需要撤销迁移 | 停止 Harness，读取打印的备份目录中的 `manifest.json`，将各备份 patch 恢复到列出的 `file`，然后重启。`existed: false` 表示迁移创建的文件。备份包含私有配置，必须保持私密。 |
 
 ### 所有模型优先使用代理
@@ -91,7 +91,7 @@ CONNECT 要求使用存于 `$DSH_HOME/run/sb-connect.key` 的 256 位运行时�
 
 设置 `routeAllModels: true`，可通过 `sbPort` 上的 SB 隧道转发主智能体和本地子智能体的模型流，并保留所选提供方、模型、URL、授权信息和载荷。默认值为 `false`。SB 的 `/health` 必须标识自身并返回 `supportsConnect: true`；Harness 通过同一生命周期管理器启动或探测它。`routingProbeTimeoutMs` 限制能力探测时间，默认为 1000。此模式支持 Windows 和 Linux。
 
-SB 无法启动、被禁用或未通过本地探测时，该次调用在现有网络策略下使用原始提供方传输。VPN 强制执行仍独立生效，且必须允许出站。提供方 HTTP 错误或分发后失败的流绝不会触发直连重放。若 SB 在探测成功后退出，当前尝试失败；下次尝试重新探测。Bedrock 接收单次调用的代理环境，Codex Responses 在路由生效时使用 SSE。其他 fetch 保留原有 dispatcher。外部智能体进程不受本进程模型传输控制；可用[子智能体 preset 继承](../../subagent/subagent/README.zh.md#child-presets)要求本地子级。
+SB 无法启动、被禁用或未通过本地探测时，该次调用在分派前返回 `proxy-server/start-failed`，不会直连回退。VPN 强制执行仍独立生效，且必须允许出站。提供方 HTTP 错误或分发后失败的流绝不会触发直连重放。若 SB 在探测成功后退出，当前尝试失败；下次尝试重新探测。Bedrock 接收单次调用的代理环境，Codex Responses 在路由生效时使用 SSE。其他 fetch 保留原有 dispatcher。外部智能体进程不受本进程模型传输控制；设置 [`subagent.localAgentPolicy: parent`](../../subagent/subagent/README.zh.md#child-presets)，可要求本地子级使用父方的 preset 和模型路由。
 
 <a id="further-exploration"></a>
 ## 进一步探索

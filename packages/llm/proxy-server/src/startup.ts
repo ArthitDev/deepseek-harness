@@ -1,4 +1,4 @@
-/** Proxy-first model transport with pre-dispatch fallback to the existing provider route. */
+/** Required model transport through SB; unavailable routing blocks before dispatch. */
 import { get } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -30,7 +30,7 @@ async function ready(endpoint: URL, timeout: number, signal: AbortSignal): Promi
 }
 
 /**
- * Scope model transport to SB while retaining selected provider/model and ambient fallback.
+ * Scope model transport to SB while retaining the selected provider and model.
  * The owner supplies bounded startup and active-stream accounting; cancellation never replays a request.
  * @param ctx - host owning the listener and dispatcher lifetime.
  * @param endpoint - owner's loopback SB transport origin.
@@ -51,7 +51,6 @@ export async function installModelRouting(
   authenticated.username = 'dsh'
   authenticated.password = token
   const controller = new AbortController()
-  let unavailable = false
   const routing = await installModelProxyDispatcher(authenticated)
   const remove = ctx.on('llm/stream', async function* (options, next) {
     const signal = options.signal === undefined ? controller.signal : AbortSignal.any([options.signal, controller.signal])
@@ -69,7 +68,7 @@ export async function installModelRouting(
             signal.addEventListener('abort', onAbort, { once: true })
             if (signal.aborted) complete()
           })])
-        } catch (error) { void error /* Startup failure selects the existing route below. */ }
+        } catch (error) { void error /* The unavailable route is rejected below without dispatch. */ }
         finally { signal.removeEventListener('abort', onAbort) }
       }
       const available = release !== undefined && await ready(endpoint, timeout, signal)
@@ -78,12 +77,12 @@ export async function installModelRouting(
         return
       }
       if (!available) {
-        if (!unavailable) ctx.logger.warn('SB Proxy unavailable; using the selected provider through the existing network policy')
-        unavailable = true
-        yield* next()
+        yield { type: 'finish', reason: { kind: 'error', failure: {
+          code: 'proxy-server/start-failed',
+          message: 'SB Proxy unavailable; model request blocked. Check Proxy Server settings and local setup.',
+        } } }
         return
       }
-      unavailable = false
       const iterator = routing.run(() => next()[Symbol.asyncIterator]())
       let completed = false
       try {

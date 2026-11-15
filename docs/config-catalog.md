@@ -3059,7 +3059,7 @@ export interface Config {
 ```ts config-catalog
 /** Live usage switches and deployment-specific ports, routes and startup deadline. */
 export interface Config {
-  /** Route all model streams through SB CONNECT, falling back before dispatch if unavailable. */
+  /** Require SB CONNECT for all model streams; block before dispatch when unavailable. */
   routeAllModels: boolean
   /** Deadline in milliseconds for a local SB CONNECT capability probe. */
   routingProbeTimeoutMs: number
@@ -4109,8 +4109,8 @@ export interface Config {
   maxDepth: Volatile<number>
   /** Require local children to inherit the parent preset while retaining normal model selection; defaults to false. */
   inheritParentPreset: boolean
-  /** When set, require local children to share the parent preset and use this fixed LLM route; omission preserves provider behavior. */
-  localAgentPolicy?: {
+  /** Require the parent preset and either the parent's LLM route or a fixed route; omission preserves provider behavior. */
+  localAgentPolicy?: 'parent' | {
     /** Required LLM adapter provider for every child request. */
     provider: string
     /** Required model id within that provider. */

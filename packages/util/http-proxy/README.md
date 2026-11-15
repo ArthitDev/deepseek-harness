@@ -41,7 +41,7 @@ Plain `fetch()` is proxied, and so is any SDK that reaches `globalThis.fetch` â€
 | A harness that must reach its own fixture server | apply `clearedProxyEnv()` to the spawn |
 | The model-routing owner | `installModelProxyDispatcher(endpoint)`, enter `run()` for each iterator operation, and await `dispose()` after unregistering the listener |
 
-The model scope tunnels HTTP and HTTPS through SB without changing request bytes or TLS verification. `modelProxyEndpointForCall()` exposes the active endpoint to SDKs with their own HTTP agents; outside the scope it returns `undefined`. Unrelated async chains retain the previous dispatcher. Dispose nested installations in reverse order. Availability and fallback decisions belong to the proxy-server owner; this library never retries.
+The model scope tunnels HTTP and HTTPS through SB without changing request bytes or TLS verification. `modelProxyEndpointForCall()` exposes the active endpoint to SDKs with their own HTTP agents; outside the scope it returns `undefined`. Nested installations preserve an active outer scope when the newer scope has no active call, keeping SDK and fetch routing aligned. Unrelated async chains retain the previous dispatcher. Dispose nested installations in reverse order. The proxy-server owner enforces availability; this library never retries.
 
 `proxyRouteFor` answers with the transport that answer assumed, not just the answer: its proxied arm carries the dispatcher already routing by this policy. A caller that read the policy and then built its own transport could have an unmount land between the two and send the request somewhere its branch never cleared.
 

@@ -20,7 +20,7 @@ import { managerState, subagentManager } from './manager-internals.ts'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
-import SubagentRuntime, { SUBAGENT_DESCRIPTOR_VERSION, snapshotSubagentDescriptor } from '../src/index.ts'
+import SubagentRuntime, { SUBAGENT_DESCRIPTOR_VERSION, snapshotSubagentDescriptor, type Config } from '../src/index.ts'
 import { TestSessionQuery } from './test-session-query.ts'
 import { loadStoredSession } from './persistence-helpers.ts'
 
@@ -39,7 +39,7 @@ afterEach(async () => {
 /** Real preset mounts, Agent lifecycle, and persistence with a scripted model. */
 async function setup(
   script: ConstructorParameters<typeof MockAdapter>[0] = [textResponse('done'), textResponse('continued'), textResponse('done again')],
-  localAgentPolicy?: { provider: string; model: string },
+  localAgentPolicy?: Config['localAgentPolicy'],
   inheritParentPreset = false,
 ) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-continuation-presets-'))
@@ -106,6 +106,69 @@ function continueChild(ctx: Context, childId: SessionId) {
 
 describe('deployment local agent policy', () => {
   const policy = { provider: 'sb-proxy', model: 'proxy-model' }
+
+  it.each(['separate', 'fork'])('requires the current parent route and preset for %s, including cold resume', async (provider) => {
+    const { ctx, parent, adapter } = await setup([], 'parent')
+    const selected = new MockAdapter([textResponse('parent selected'), textResponse('child selected'), textResponse('resumed selected')])
+    ctx.llm.registerAdapter(['selected'], selected)
+    parent.model.select({ provider: 'selected', model: 'selected-model' })
+    parent.followup(createUserMessage({ content: [{ type: 'text', text: 'work' }], source: { kind: 'user' } }))
+    await parent.whenIdle()
+    parkParent(ctx, parent)
+    const run = await ctx.subagents.startActivation(startSpec(parent, undefined, provider))
+    expect((await run.result).stopReason).toBe('completed')
+    const stored = await settled(ctx, run.childId)
+    expect(stored.meta.agentPreset).toBe('coding')
+    expect(selected.requests[1]).toMatchObject({ provider: 'selected', model: 'selected-model' })
+    expect(selected.requests[1]?.messages.filter(message => message.role === 'system').map(message => message.content))
+      .toEqual(selected.requests[0]?.messages.filter(message => message.role === 'system').map(message => message.content))
+    await continueChild(ctx, run.childId)
+    await settled(ctx, run.childId)
+    expect(selected.requests).toHaveLength(3)
+    expect(selected.requests[2]).toMatchObject({ provider: 'selected', model: 'selected-model' })
+    expect(adapter.requests).toHaveLength(0)
+    await expect(ctx.subagents.startActivation({ ...startSpec(parent), agentOptions: { provider: 'mock', model: 'mock' } }))
+      .rejects.toMatchObject({ code: 'DELEGATION_POLICY_DENIED' })
+  })
+
+  it.each(['route', 'preset'] as const)('blocks a child %s override under the parent-route policy', async (change) => {
+    const { ctx, parent, adapter } = await setup([textResponse('must not run')], 'parent')
+    parkParent(ctx, parent)
+    ctx.on('agent/created', async ({ agent }) => {
+      if (agent.session.header.origin !== 'subagent') return
+      if (change === 'route') agent.model.select({ provider: 'mock', model: 'other-model' })
+      else await ctx.agentPresets.recompose(agent.ctx, 'reviewing')
+    })
+    const run = await ctx.subagents.startActivation(startSpec(parent))
+    expect((await run.result).stopReason).toBe('error')
+    expect(adapter.requests).toHaveLength(0)
+  })
+
+  it('rejects external backends under the parent-route policy before starting them', async () => {
+    const { ctx, parent, adapter } = await setup([], 'parent')
+    let started = false
+    ctx.subagents.registerProvider({
+      name: 'external', inheritsParentContext: false,
+      capabilities: { agentOptions: true, agentPreset: false, outputSchema: false, depthLimit: false },
+      start: () => { started = true; throw new Error('external backend must not start') },
+    })
+    await expect(ctx.subagents.startActivation(startSpec(parent, undefined, 'external')))
+      .rejects.toMatchObject({ code: 'DELEGATION_POLICY_DENIED' })
+    expect(started).toBe(false)
+    expect(adapter.requests).toHaveLength(0)
+    expect(ctx.sessions.list().map(session => session.id)).toEqual([parent.id])
+  })
+
+  it('blocks a child request after its parent changes preset', async () => {
+    const { ctx, parent, adapter } = await setup([textResponse('must not run')], 'parent')
+    parkParent(ctx, parent)
+    ctx.on('agent/created', async ({ agent }) => {
+      if (agent.session.header.origin === 'subagent') await ctx.agentPresets.recompose(parent.ctx, 'reviewing')
+    })
+    const run = await ctx.subagents.startActivation(startSpec(parent))
+    expect((await run.result).stopReason).toBe('error')
+    expect(adapter.requests).toHaveLength(0)
+  })
 
   it.each(['separate', 'fork'])('inherits the preset for %s without fixing the model route', async (provider) => {
     const { ctx, parent } = await setup([], undefined, true)

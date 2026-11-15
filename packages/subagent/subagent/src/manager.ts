@@ -21,7 +21,7 @@ import type { SessionObservation, SessionQueryEngine } from '@deepseek-ai/dsh-se
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import {
   appendDelegatedPolicyOverrides, applyChildComposition, captureDelegatedPolicyOverrides,
-  childSessionMeta, resolveChildAgentOptions, resolveChildDepth,
+  childSessionMeta, parentAgentOptionsForDelegation, resolveChildAgentOptions, resolveChildDepth,
 } from './child-agent.ts'
 import type { ChildComposition, DelegatedPolicyOverrides } from './child-agent.ts'
 import type { Config } from './index.ts'
@@ -159,7 +159,7 @@ export class SubagentManager {
    * @param ctx - context providing Agents, Sessions, and teardown ownership.
    * @param host - descriptor reads and lifecycle publication owned by the service.
    * @param maxActiveSubagents - the current configured child capacity.
-   * @param localAgentPolicy - fixed local route and parent-preset requirement; omission preserves independent selection.
+   * @param localAgentPolicy - required parent preset and parent or fixed route; omission preserves independent selection.
    * @param inheritParentPreset - require the parent preset without fixing the child's model route.
    */
   constructor(
@@ -326,6 +326,16 @@ export class SubagentManager {
     }
   }
 
+  /** Resolve the enforced route from the parent's request selection or the configured fixed route. */
+  private localRoute(parent: Agent): { provider: string; model: string } | undefined {
+    if (this.localAgentPolicy !== 'parent') return this.localAgentPolicy
+    const { provider, model } = parentAgentOptionsForDelegation(parent)
+    if (provider === undefined || model === undefined) {
+      throw new SubagentError('subagents require a resolved parent LLM route', 'DELEGATION_POLICY_DENIED')
+    }
+    return { provider, model }
+  }
+
   /** Create one local child under a name reserved before any await. */
   private startLocalNamed(
     spec: SubagentActivationSpec,
@@ -342,7 +352,7 @@ export class SubagentManager {
       const childDepth = resolveChildDepth(parent, spec.maxDepth)
       // Snapshot before any await: invalid descriptor JSON rejects the call
       // before a child exists, and the detached value is what reaches the log.
-      const policy = this.localAgentPolicy
+      const policy = this.localRoute(parent)
       const inheritPreset = policy !== undefined || this.inheritParentPreset
       if (inheritPreset) {
         const preset = parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
@@ -860,12 +870,14 @@ export class SubagentManager {
           await workingDirectory.set(child, create.cwd, inputs.signal)
         }
         if (inputs.composition.agentPreset === undefined) await applyChildComposition(childCtx, create?.parent, inputs.composition)
-        const policy = this.localAgentPolicy
+        const parent = create?.parent ?? root
+        const policy = this.localRoute(parent)
         if (policy !== undefined || this.inheritParentPreset) {
           const preset = create?.meta.agentPreset ?? root.ctx.get('agentPresets')?.composedPreset(root.ctx)
           const assertPreset = (): void => {
             if (preset === undefined || childCtx.get('agentPresets')?.composedPreset(childCtx) !== preset
-              || inputs.composition.persona !== undefined) {
+              || inputs.composition.persona !== undefined
+              || this.localAgentPolicy === 'parent' && parent.ctx.get('agentPresets')?.composedPreset(parent.ctx) !== preset) {
               throw new SubagentError('subagents must inherit the parent agent preset; start a new child under the current preset', 'DELEGATION_POLICY_DENIED')
             }
           }
@@ -880,7 +892,8 @@ export class SubagentManager {
           }
           childCtx.on('agent/pre-step', ({ modelSelection }, next) => {
             assertPreset()
-            if (policy !== undefined && (modelSelection.provider !== policy.provider || modelSelection.model !== policy.model)) {
+            const expected = this.localAgentPolicy === 'parent' ? this.localRoute(parent) : policy
+            if (expected !== undefined && (modelSelection.provider !== expected.provider || modelSelection.model !== expected.model)) {
               throw new SubagentError('subagents must use the deployment LLM route', 'DELEGATION_POLICY_DENIED')
             }
             return next()

@@ -190,8 +190,8 @@ export interface Config {
   maxDepth: Volatile<number>
   /** Require local children to inherit the parent preset while retaining normal model selection; defaults to false. */
   inheritParentPreset: boolean
-  /** When set, require local children to share the parent preset and use this fixed LLM route; omission preserves provider behavior. */
-  localAgentPolicy?: {
+  /** Require the parent preset and either the parent's LLM route or a fixed route; omission preserves provider behavior. */
+  localAgentPolicy?: 'parent' | {
     /** Required LLM adapter provider for every child request. */
     provider: string
     /** Required model id within that provider. */
@@ -205,10 +205,10 @@ export class SubagentRuntime extends TypertRemoteService {
     maxDepth: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(1).volatile(),
     maxActiveSubagents: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(8).volatile(),
     inheritParentPreset: z.boolean().default(false),
-    localAgentPolicy: (z.object({
+    localAgentPolicy: (z.union([z.const('parent'), z.object({
       provider: z.string().min(1).required(),
       model: z.string().min(1).required(),
-    }) as z<Config['localAgentPolicy']>).default(undefined),
+    })]) as z<Config['localAgentPolicy']>).default(undefined),
   })
   static inject = ['workingDirectory', 'sessionProjections']
   private providers = new Map<string, SubagentProvider>()

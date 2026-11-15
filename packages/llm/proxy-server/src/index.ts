@@ -38,7 +38,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Live usage switches and deployment-specific ports, routes and startup deadline. */
 export interface Config {
-  /** Route all model streams through SB CONNECT, falling back before dispatch if unavailable. */
+  /** Require SB CONNECT for all model streams; block before dispatch when unavailable. */
   routeAllModels: boolean
   /** Deadline in milliseconds for a local SB CONNECT capability probe. */
   routingProbeTimeoutMs: number

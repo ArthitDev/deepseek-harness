@@ -27,7 +27,7 @@ export async function installModelProxyDispatcher(endpoint: URL): Promise<ModelP
   const scope = new AsyncLocalStorage<boolean>()
   class ScopedDispatcher extends Dispatcher {
     modelProxyEndpoint(): string | undefined {
-      return scope.getStore() === true ? endpoint.href.replace(/\/$/, '') : undefined
+      return scope.getStore() === true ? endpoint.href.replace(/\/$/, '') : modelProxyEndpointOf(previous)
     }
     override dispatch(options: DispatcherTypes.DispatchOptions, handler: DispatcherTypes.DispatchHandler): boolean {
       // Legacy SB providers already address this proxy's /v1 passthrough directly.
@@ -55,7 +55,10 @@ export async function installModelProxyDispatcher(endpoint: URL): Promise<ModelP
  */
 export async function modelProxyEndpointForCall(): Promise<string | undefined> {
   const { getGlobalDispatcher } = await import('undici')
-  const dispatcher = getGlobalDispatcher()
+  return modelProxyEndpointOf(getGlobalDispatcher())
+}
+
+function modelProxyEndpointOf(dispatcher: DispatcherTypes): string | undefined {
   if ('modelProxyEndpoint' in dispatcher && typeof dispatcher.modelProxyEndpoint === 'function') {
     const readEndpoint = dispatcher.modelProxyEndpoint as () => unknown
     const endpoint = readEndpoint.call(dispatcher)

@@ -35,7 +35,7 @@ httpx_probe        → HTTP probe + tech detect
 whatweb_fingerprint→ tech stack fingerprint
 dig_lookup         → DNS lookup
 whois_lookup       → WHOIS info
-theharvester_osint → email/name harvest
+theharvester_osint → email/name harvest (default source duckduckgo; google/bing unsupported in theHarvester 4.x)
 ```
 
 ### When He asks to FIND VULNS:

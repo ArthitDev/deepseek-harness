@@ -82,7 +82,7 @@ Set `routeAllModels: true` on the active `proxy-servers` configuration to use SB
 | Google login or generation fails | Inspect the setup log at `$DSH_HOME/logs/antigravity-proxy.log`, repeat Google sign-in, then test one model. A static `/v1/models` response does not prove login. |
 | Google reports an unsupported Antigravity version | Update the client identity as described above; signing in again alone does not change the request header. |
 | Proxy startup reports port in use | Identify the listener and its owner; do not stop another project's process. Declare an intended external backend explicitly or select a free, aligned port. |
-| SB is unavailable | The next call may dispatch directly under the existing policy; an already dispatched request is never replayed directly. VPN enforcement remains independent. |
+| SB is unavailable | With `routeAllModels: true`, the model request is blocked before dispatch. Restore SB and retry; no direct fallback or replay occurs. VPN enforcement remains independent. |
 | Migration must be undone | Stop Harness, read the printed backup's `manifest.json`, restore each saved patch to its listed `file`, and restart. Entries with `existed: false` represent files created by migration. Backups contain private configuration and must remain private. |
 
 ### Proxy-first routing for every model
@@ -91,7 +91,7 @@ CONNECT requires a 256-bit runtime credential stored in `$DSH_HOME/run/sb-connec
 
 Set `routeAllModels: true` to tunnel main-agent and local subagent model streams through SB on `sbPort`, preserving the selected provider, model, URL, authorization, and payload. The default is `false`. SB must identify itself at `/health` with `supportsConnect: true`; Harness starts or probes it through the same lifecycle manager. `routingProbeTimeoutMs` bounds the capability probe and defaults to 1000. This mode works on Windows and Linux.
 
-When SB cannot start, is disabled, or fails its local probe, that call uses the original provider transport under the existing network policy. VPN enforcement remains independent and must still permit egress. A provider HTTP error or a stream that fails after dispatch never triggers a direct replay. If SB disappears after its successful probe, the current attempt fails; the next attempt probes again. Bedrock receives a per-call proxy environment, and Codex Responses uses SSE while routing is active. Other fetches retain their ambient dispatcher. External agent processes are outside this process's model transport; use [subagent preset inheritance](../../subagent/subagent/README.md#child-presets) to require local children.
+When SB cannot start, is disabled, or fails its local probe, that call returns `proxy-server/start-failed` before dispatch. There is no direct fallback. VPN enforcement remains independent and must still permit egress. A provider HTTP error or a stream that fails after dispatch never triggers a direct replay. If SB disappears after its successful probe, the current attempt fails; the next attempt probes again. Bedrock receives a per-call proxy environment, and Codex Responses uses SSE while routing is active. Other fetches retain their ambient dispatcher. External agent processes are outside this process's model transport; set [`subagent.localAgentPolicy: parent`](../../subagent/subagent/README.md#child-presets) to require local children with their parent's preset and model route.
 
 <a id="further-exploration"></a>
 ## Further Exploration

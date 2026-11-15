@@ -41,7 +41,7 @@ kind: "package-reference"
 | 必须连到自带 fixture（测试前置数据）服务器的 harness | 把 `clearedProxyEnv()` 应用到该 spawn |
 | 模型路由拥有方 | `installModelProxyDispatcher(endpoint)`，在每次迭代器操作中进入 `run()`，注销监听器后等待 `dispose()` |
 
-模型作用域通过 SB 隧道转发 HTTP 和 HTTPS，不改变请求字节或 TLS 验证。`modelProxyEndpointForCall()` 为使用自身 HTTP agent 的 SDK 提供当前端点；作用域外返回 `undefined`。不相关的异步调用链保留原有 dispatcher。嵌套安装按逆序销毁。可用性与回退决策由 proxy-server 拥有方负责；本库从不重试。
+模型作用域通过 SB 隧道转发 HTTP 和 HTTPS，不改变请求字节或 TLS 验证。`modelProxyEndpointForCall()` 为使用自身 HTTP agent 的 SDK 提供当前端点；作用域外返回 `undefined`。嵌套安装时，若较新的作用域没有活动调用，仍保留外层活动作用域，使 SDK 与 fetch 的路由一致。不相关的异步调用链保留原有 dispatcher。嵌套安装按逆序销毁。可用性由 proxy-server 拥有方强制检查；本库从不重试。
 
 `proxyRouteFor` 给出的不只是答案，还有该答案所假定的传输：走代理的那一支携带着此刻正按该策略路由的 dispatcher。若调用方先读策略、再自建传输，卸载就可能落在两次读取之间，把请求发往其分支从未放行的去处。
 
