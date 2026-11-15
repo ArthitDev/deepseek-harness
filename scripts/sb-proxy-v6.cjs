@@ -451,7 +451,7 @@ const KALI_DIRECT = {
   }),
   "url_harvest": (target) => ({
     tool: "bash",
-    args: ["-c", "(getallurls '${target}' 2>/dev/null || gau '${target}' 2>/dev/null) | head -200; waybackurls '${target}' 2>/dev/null | head -200; curl -s -m 30 'https://web.archive.org/cdx/search/cdx?url=${target}/*&output=text&fl=original&collapse=urlkey&limit=300' 2>/dev/null | grep -v '^<html' | head -200`],
+    args: ["-c", "(getallurls '" + target + "' 2>/dev/null || gau '" + target + "' 2>/dev/null) | head -200; waybackurls '" + target + "' 2>/dev/null | head -200; curl -s -m 30 'https://web.archive.org/cdx/search/cdx?url=" + target + "/*&output=text&fl=original&collapse=urlkey&limit=300' 2>/dev/null | grep -v '^<html' | head -200"],
     desc: `gau + waybackurls + CDX fallback URL harvest on ${target}`,
   }),
   "cert_harvest": (target) => ({
