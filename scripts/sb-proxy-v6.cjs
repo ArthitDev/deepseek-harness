@@ -50,8 +50,11 @@ if (!process.env.SB_BACKEND_KEY) {
 }
 
 const EXEC_CONFIG = {
-  workspace: path.join(__dirname, "exec-workspace"),
+  workspace: process.env.SB_EXEC_WORKSPACE || path.join(__dirname, "exec-workspace"),
   kaliDistro: "kali-linux",
+  dockerSocket: process.env.SB_DOCKER_SOCKET || null,
+  dockerContainer: process.env.SB_KALI_CONTAINER || null,
+  dockerWorkspace: process.env.SB_KALI_WORKSPACE || null,
   maxOutputSize: 512 * 1024,
   execTimeout: 120000,
   maxChainSteps: 10,
@@ -638,8 +641,60 @@ function extractTargets(text) {
   return targets;
 }
 
+const DOCKER_EXEC = Boolean(EXEC_CONFIG.dockerSocket && EXEC_CONFIG.dockerContainer && EXEC_CONFIG.dockerWorkspace);
+
+function dockerApi(method, apiPath, body, upgrade) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
+    const headers = { Host: "docker" };
+    if (payload) { headers["Content-Type"] = "application/json"; headers["Content-Length"] = payload.length; }
+    if (upgrade) { headers.Connection = "Upgrade"; headers.Upgrade = "tcp"; }
+    const req = http.request({ socketPath: EXEC_CONFIG.dockerSocket, path: `/v1.41${apiPath}`, method, headers }, (res) => {
+      let out = "";
+      res.on("data", c => { if (out.length < EXEC_CONFIG.maxOutputSize) out += c; });
+      res.on("end", () => resolve({ status: res.statusCode, body: out }));
+    });
+    req.on("upgrade", (_res, socket) => resolve({ status: 101, socket }));
+    req.on("error", reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+// Docker exec runner for deployments without WSL: SB_KALI_CONTAINER executes
+// through the broker socket; output arrives combined (Tty) as raw text.
+async function execDocker(argv, timeoutMs = EXEC_CONFIG.execTimeout) {
+  const start = Date.now();
+  try {
+    const created = await dockerApi("POST", `/containers/${EXEC_CONFIG.dockerContainer}/exec`, { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: argv });
+    if (created.status !== 201) return { success: false, error: `exec create ${created.status}: ${(created.body || "").slice(0, 200)}`, output: "", exitCode: null };
+    const id = JSON.parse(created.body).Id;
+    const run = await dockerApi("POST", `/exec/${id}/start`, { Detach: false, Tty: true }, true);
+    if (!run.socket) return { success: false, error: `exec start ${run.status}: ${(run.body || "").slice(0, 200)}`, output: "", exitCode: null };
+    let out = "";
+    const timer = setTimeout(() => { try { run.socket.destroy(); } catch { } }, timeoutMs);
+    await new Promise((done) => {
+      run.socket.on("data", d => { if (out.length < EXEC_CONFIG.maxOutputSize) out += d.toString("utf8"); });
+      run.socket.on("close", done);
+      run.socket.on("error", done);
+    });
+    clearTimeout(timer);
+    const killed = Date.now() - start >= timeoutMs - 1500;
+    let exitCode = null;
+    try {
+      const state = await dockerApi("GET", `/exec/${id}/json`);
+      if (state.status === 200) exitCode = JSON.parse(state.body).ExitCode;
+    } catch { }
+    const finalOutput = killed ? out + "\n[exec timed out after " + timeoutMs + "ms - output above is partial]" : out;
+    return { success: !killed && exitCode === 0, exitCode, killed, duration: Date.now() - start, stdout: out, stderr: "", output: finalOutput };
+  } catch (e) {
+    return { success: false, error: e.message, output: "", exitCode: null };
+  }
+}
+
 function runKaliCommand(cmd, args, timeoutMs = 30000) {
   return new Promise((resolve) => {
+    if (DOCKER_EXEC) { execDocker([cmd, ...args], timeoutMs).then(resolve); return; }
     // Ensure Kali is up
     try { execSync(`wsl -d ${EXEC_CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe" }); } catch { }
 
@@ -913,11 +968,12 @@ function extractCode(text) {
 }
 
 function bootKali() {
+  if (DOCKER_EXEC) return true;
   try { execSync(`wsl -d ${EXEC_CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe" }); return true; } catch { return false; }
 }
 
 function execCode(block, env) {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const ext = { rust: ".rs", go: ".go", python: ".py", bash: ".sh", powershell: ".ps1", javascript: ".js", c: ".c", cpp: ".cpp" }[block.language] || ".txt";
     const fname = `sb_exec_${block.hash}_${ts}${ext}`;
@@ -943,6 +999,18 @@ function execCode(block, env) {
     let cmd, args;
     if (env === "kali") {
       if (!bootKali()) return resolve({ success: false, error: "Kali WSL boot failed", output: "" });
+      if (DOCKER_EXEC) {
+        const kPath = EXEC_CONFIG.dockerWorkspace + "/" + fname;
+        let dockerCmd;
+        if (block.language === "python") dockerCmd = ["python3", kPath, ...scriptArgs];
+        else if (block.language === "rust") dockerCmd = ["bash", "-c", "rustc -O -o /tmp/sb_exec '" + kPath + "' && /tmp/sb_exec " + quotedArgs];
+        else if (block.language === "go") dockerCmd = ["bash", "-c", "go build -o /tmp/sb_exec '" + kPath + "' && /tmp/sb_exec " + quotedArgs];
+        else if (block.language === "bash") dockerCmd = ["bash", "-c", "chmod +x '" + kPath + "' && bash '" + kPath + "' " + quotedArgs];
+        else dockerCmd = ["bash", "-c", "cat '" + kPath + "' | bash"];
+        const dstart = Date.now();
+        const dresult = await execDocker(dockerCmd);
+        return resolve({ success: dresult.success, exitCode: dresult.exitCode, killed: dresult.killed, duration: dresult.duration ?? (Date.now() - dstart), stdout: dresult.output, stderr: "", output: dresult.output, env, file: fpath, hash: block.hash, language: block.language });
+      }
       const wslPath = `/mnt/${EXEC_CONFIG.workspace[0].toLowerCase()}/${EXEC_CONFIG.workspace.slice(3).replace(/\\/g, "/")}/${fname}`;
       if (block.language === "python") { cmd = "wsl"; args = ["-d", EXEC_CONFIG.kaliDistro, "-u", "root", "--exec", "python3", wslPath, ...scriptArgs]; }
       else if (block.language === "rust" || block.language === "go") { cmd = "wsl"; args = compiledRun(wslPath); }
