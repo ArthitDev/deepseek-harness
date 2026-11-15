@@ -140,7 +140,7 @@
       config:
         providers:
           zcode-direct:
-            displayName: ZCode Direct
+            displayName: zcode-starter
             api: openai-completions
             apiKeyEnv: ZCODE_DIRECT_API_KEY
             baseURL: http://127.0.0.1:18080/v1
@@ -150,13 +150,13 @@
               thinkingFormat: zai
             models:
               - id: glm-5.3
-                name: GLM 5.3 (ZCode Direct)
+                name: GLM 5.3 (zcode-starter)
                 contextWindow: 1000000
                 maxTokens: 128000
                 input: [text]
                 reasoningEfforts: { low: low, medium: medium, high: high, xhigh: xhigh }
               - id: glm-5.3-flash
-                name: GLM 5.3 Flash (ZCode Direct)
+                name: GLM 5.3 Flash (zcode-starter)
                 contextWindow: 1000000
                 maxTokens: 128000
                 input: [text, image]

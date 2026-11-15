@@ -41,10 +41,34 @@ try {
       const providers = row?.getIn(['config', 'providers'], true)
       if (providers === undefined) return
       if (!YAML.isMap(providers)) throw new Error('Invalid home provider map')
-      if (providers.has('zcode-direct')) return
       const bundle = YAML.parseDocument(await readFile(join(here, '../packages/experimental/pi-tui/cordis.patch.yml'), 'utf8'), tags)
       const source = entries(bundle).find(entry => YAML.isMap(entry) && entry.get('id') === 'llm-pi-ai')
-      providers.set('zcode-direct', source.getIn(['config', 'providers', 'zcode-direct'], true).clone())
+      const defaults = source.getIn(['config', 'providers', 'zcode-direct'], true)
+      if (!providers.has('zcode-direct')) providers.set('zcode-direct', defaults.clone())
+      const direct = providers.get('zcode-direct', true)
+      if (!YAML.isMap(direct)) throw new Error('Invalid ZCode provider')
+      if (direct.get('displayName') === undefined || direct.get('displayName') === 'ZCode Direct') {
+        direct.set('displayName', patch.createNode(defaults.get('displayName')))
+      }
+      const url = direct.get('baseURL', true)
+      if (YAML.isScalar(url) && url.tag === 'tag:yaml.org,2002:js' && url.value === defaults.get('baseURL')) {
+        direct.set('baseURL', patch.createNode(url.value))
+      }
+      const names = new Map(defaults.get('models', true).items.map(model => [model.get('id'), model.get('name')]))
+      for (const [id, prefix] of [['zcode-direct', ''], ['sb-proxy', 'zcode/']]) {
+        const provider = providers.get(id, true)
+        const models = YAML.isMap(provider) ? provider.get('models', true) : undefined
+        if (!YAML.isSeq(models)) continue
+        for (const model of models.items) {
+          if (!YAML.isMap(model) || typeof model.get('id') !== 'string' || !model.get('id').startsWith(prefix)) continue
+          const name = names.get(model.get('id').slice(prefix.length))
+          if (!name) continue
+          const label = name.replace(/ \(zcode-starter\)$/, '')
+          if ([label, `${label} (ZCode Direct)`, `${label} (SB Proxy)`].includes(model.get('name'))) {
+            model.set('name', patch.createNode(name))
+          }
+        }
+      }
       await writeFileAtomic(patchFile, String(patch), { mode: 0o600, dirMode: 0o700 })
     }, { waitMs: 30_000 })
   } catch (error) { if (error.code !== 'ENOENT') throw error }
