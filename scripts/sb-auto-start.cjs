@@ -69,8 +69,10 @@ function detectEnvironment() {
   ].filter(Boolean);
 
   for (const sd of possibleScriptDirs) {
+    const transport = path.join(sd, "sb-transport.cjs");
     const v6 = path.join(sd, "sb-proxy-v6.cjs");
     const v6js = path.join(sd, "sb-proxy-v6.js");
+    if (fs.existsSync(transport)) { env.proxyScript = transport; env.scriptsDir = sd; break; }
     if (fs.existsSync(v6)) { env.proxyScript = v6; env.scriptsDir = sd; break; }
     if (fs.existsSync(v6js)) { env.proxyScript = v6js; env.scriptsDir = sd; break; }
   }
@@ -183,12 +185,12 @@ async function startProxy(env, silent = false) {
     return true;
   }
 
-  const args = [
-    env.proxyScript,
-    "--port", String(env.port),
-    "--backend", env.backendUrl,
-    "--exec", env.execMode,
-  ];
+  // Merged transport owns health + CONNECT for deployment; spawn it with
+  // environment config. Legacy standalone v6 keeps its argv interface.
+  const usesTransport = path.basename(env.proxyScript) === "sb-transport.cjs";
+  const args = usesTransport
+    ? [env.proxyScript, "serve"]
+    : [env.proxyScript, "--port", String(env.port), "--backend", env.backendUrl, "--exec", env.execMode];
 
   const backendKey = resolveBackendKey(env.backendUrl);
   proxyProcess = spawn("bun", ["--no-env-file", ...args], {
@@ -197,9 +199,12 @@ async function startProxy(env, silent = false) {
     windowsHide: true,
     env: {
       ...process.env,
+      SB_PORT: String(env.port),
+      SB_BACKEND: env.backendUrl,
+      SB_EXEC_MODE: env.execMode,
       SB_SKILLS_DIR: env.skillsDir || "",
       SB_WIKI_DIR: env.wikiDir || "",
-      SB_WORKSPACE: env.workspaceDir || "",
+      SB_EXEC_WORKSPACE: env.workspaceDir || "",
       ...(backendKey ? { SB_BACKEND_KEY: backendKey } : {}),
     },
   });
