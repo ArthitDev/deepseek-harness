@@ -1,45 +1,22 @@
 /** Required model transport through SB; unavailable routing blocks before dispatch. */
-import { get } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelProxyDispatcher } from '@deepseek-ai/dsh-http-proxy'
+import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-llm'
-
-/** Check local sidecar identity and CONNECT capability without contacting a model backend. */
-async function ready(endpoint: URL, timeout: number, signal: AbortSignal): Promise<boolean> {
-  return new Promise((complete) => {
-    const request = get(new URL('/health', endpoint), { signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]) }, (response) => {
-      let body = ''
-      response.setEncoding('utf8')
-      response.on('data', (part: string) => { body += part; if (body.length > 4096) response.destroy() })
-      response.once('error', () => { complete(false) })
-      response.once('close', () => { complete(false) })
-      response.once('end', () => {
-        try {
-          const value: unknown = JSON.parse(body)
-          complete(response.statusCode === 200 && typeof value === 'object' && value !== null
-            && 'service' in value && value.service === 'dsh-sb-transport'
-            && 'supportsConnect' in value && value.supportsConnect === true)
-        } catch { complete(false) }
-      })
-    })
-    request.once('error', () => { complete(false) })
-  })
-}
 
 /**
  * Scope model transport to SB while retaining the selected provider and model.
  * The owner supplies bounded startup and active-stream accounting; cancellation never replays a request.
  * @param ctx - host owning the listener and dispatcher lifetime.
  * @param endpoint - owner's loopback SB transport origin.
- * @param timeout - deadline for one local capability probe, in milliseconds.
- * @param acquire - start/reserve SB; return a release operation, or reject before dispatch.
+ * @param acquire - await verified SB CONNECT readiness and reserve it; cancellation rejects before dispatch.
  * @returns a disposer that unregisters routing and restores the prior dispatcher.
  */
 export async function installModelRouting(
-  ctx: Context, endpoint: URL, timeout: number, acquire: () => Promise<() => Promise<void>>,
+  ctx: Context, endpoint: URL, acquire: (signal: AbortSignal) => Promise<() => Promise<void>>,
 ): Promise<() => Promise<void>> {
   const tokenFile = join(ctx.profileContext.home, 'run', 'sb-connect.key')
   await mkdir(join(ctx.profileContext.home, 'run'), { recursive: true, mode: 0o700 })
@@ -55,10 +32,11 @@ export async function installModelRouting(
   const remove = ctx.on('llm/stream', async function* (options, next) {
     const signal = options.signal === undefined ? controller.signal : AbortSignal.any([options.signal, controller.signal])
     let release: (() => Promise<void>) | undefined
+    let unavailableMessage = 'SB Proxy unavailable; model request blocked. Check Proxy Server settings and local setup.'
     let onAbort = (): void => {}
     try {
       if (!signal.aborted) {
-        const pending = acquire().then(async (reserved) => {
+        const pending = acquire(signal).then(async (reserved) => {
           if (signal.aborted) await reserved()
           else release = reserved
         })
@@ -68,18 +46,17 @@ export async function installModelRouting(
             signal.addEventListener('abort', onAbort, { once: true })
             if (signal.aborted) complete()
           })])
-        } catch (error) { void error /* The unavailable route is rejected below without dispatch. */ }
+        } catch (error) { unavailableMessage = remoteErrorOf(error)?.message ?? unavailableMessage }
         finally { signal.removeEventListener('abort', onAbort) }
       }
-      const available = release !== undefined && await ready(endpoint, timeout, signal)
       if (signal.aborted) {
         yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'Model proxy wait cancelled' } } }
         return
       }
-      if (!available) {
+      if (release === undefined) {
         yield { type: 'finish', reason: { kind: 'error', failure: {
           code: 'proxy-server/start-failed',
-          message: 'SB Proxy unavailable; model request blocked. Check Proxy Server settings and local setup.',
+          message: unavailableMessage,
         } } }
         return
       }

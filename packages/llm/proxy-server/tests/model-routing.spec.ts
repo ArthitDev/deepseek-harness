@@ -25,6 +25,10 @@ async function fixture(available = true, status = 200, partial: boolean | 'broke
   const received: string[] = []
   let tunnels = 0
   let authorization: string | undefined
+  let supportsConnect = available
+  let pendingHealth = false
+  let healthChecks = 0
+  const healthRequested = Promise.withResolvers<undefined>()
   let breakStream = (): void => {}
   const backend = createServer((req, res) => {
     let body = ''
@@ -37,8 +41,11 @@ async function fixture(available = true, status = 200, partial: boolean | 'broke
     })
   })
   const proxy = createServer((_req, res) => {
+    healthChecks++
+    healthRequested.resolve(undefined)
+    if (pendingHealth) return
     res.writeHead(available ? 200 : 503)
-    res.end(JSON.stringify({ service: 'dsh-sb-transport', supportsConnect: available }))
+    res.end(JSON.stringify({ service: 'dsh-sb-transport', supportsConnect }))
   })
   for (const server of [backend, proxy]) server.on('connection', (socket) => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)) })
   onTestFinished(async () => {
@@ -76,7 +83,7 @@ async function fixture(available = true, status = 200, partial: boolean | 'broke
     { id: 'config-editor', name: 'cordis:editor' },
     { id: 'settings', name: 'cordis:settings' },
     { id: 'llm', name: 'cordis:llm' },
-    { id: 'proxy-servers', name: 'cordis:proxy', config: { sbPort: proxyPort, routeAllModels: true, sbEnabled, externalProxies: ['sb'] } },
+    { id: 'proxy-servers', name: 'cordis:proxy', config: { sbPort: proxyPort, routeAllModels: true, sbEnabled, externalProxies: ['sb'], startupTimeoutMs: 500 } },
   ]))
   const previous = getGlobalDispatcher()
   const ctx = await boot('routing-test', file, [], (inner) => {
@@ -86,8 +93,8 @@ async function fixture(available = true, status = 200, partial: boolean | 'broke
   })
   onTestFinished(() => ctx.fiber.dispose())
   const url = `http://127.0.0.1:${port}`
-  async function request(path = '/v1/chat/completions', signal?: AbortSignal) {
-    const options: GenerateOptions = { provider: 'chosen-provider', model: 'chosen-model', messages: [], ...(signal ? { signal } : {}) }
+  async function request(path = '/v1/chat/completions', signal?: AbortSignal, selection = { provider: 'chosen-provider', model: 'chosen-model' }) {
+    const options: GenerateOptions = { ...selection, messages: [], ...(signal ? { signal } : {}) }
     const chunks: StreamChunk[] = []
     for await (const chunk of ctx.waterfall(ctx.llm, 'llm/stream', options, async function* (): AsyncGenerator<StreamChunk> {
       const response = await fetch(url + path, { method: 'POST', body: JSON.stringify({ model: options.model, prompt: 'unchanged' }),
@@ -105,6 +112,11 @@ async function fixture(available = true, status = 200, partial: boolean | 'broke
   }
   const token = await readFile(join(root, 'run/sb-connect.key'), 'utf8')
   return { ctx, url, request, observed, received, previous, token,
+    healthRequested: healthRequested.promise,
+    setAvailable(value: boolean) { available = value },
+    setSupportsConnect(value: boolean) { supportsConnect = value },
+    setPendingHealth(value: boolean) { pendingHealth = value },
+    get healthChecks() { return healthChecks },
     get authorization() { return authorization }, get tunnels() { return tunnels } }
 }
 
@@ -136,6 +148,74 @@ it('blocks before dispatch when the proxy is unavailable', async () => {
   expect(await f.request()).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: 'proxy-server/start-failed' } } }])
   expect(f.tunnels).toBe(0)
   expect(f.observed).toHaveLength(0)
+})
+
+it('waits for external SB readiness before dispatching once', async () => {
+  const f = await fixture(false)
+  const pending = f.request()
+  await f.healthRequested
+  expect(f.tunnels).toBe(0)
+  expect(f.observed).toHaveLength(0)
+  f.setAvailable(true)
+  f.setSupportsConnect(true)
+  expect(await pending).toEqual([{ type: 'finish', reason: { kind: 'stop' } }])
+  expect(f.healthChecks).toBeGreaterThan(1)
+  expect(f.tunnels).toBe(1)
+  expect(f.observed).toHaveLength(1)
+})
+
+it('waits for CONNECT capability even when SB identifies itself', async () => {
+  const f = await fixture()
+  f.setSupportsConnect(false)
+  const pending = f.request()
+  await f.healthRequested
+  expect(f.tunnels).toBe(0)
+  f.setSupportsConnect(true)
+  expect(await pending).toEqual([{ type: 'finish', reason: { kind: 'stop' } }])
+  expect(f.healthChecks).toBeGreaterThan(1)
+  expect(f.observed).toHaveLength(1)
+})
+
+it('bounds a hanging readiness probe and reports the external service failure without dispatch', async () => {
+  const f = await fixture()
+  f.setPendingHealth(true)
+  expect(await f.request()).toMatchSnapshot()
+  expect(f.healthChecks).toBe(1)
+  expect(f.tunnels).toBe(0)
+  expect(f.observed).toHaveLength(0)
+})
+
+it('cancels readiness waiting without dispatch and permits a later request', async () => {
+  const f = await fixture(false)
+  const controller = new AbortController()
+  const pending = f.request(undefined, controller.signal)
+  await f.healthRequested
+  controller.abort()
+  expect(await pending).toMatchObject([{ type: 'finish', reason: { kind: 'aborted' } }])
+  expect(f.tunnels).toBe(0)
+  expect(f.observed).toHaveLength(0)
+  f.setAvailable(true)
+  f.setSupportsConnect(true)
+  expect(await f.request()).toEqual([{ type: 'finish', reason: { kind: 'stop' } }])
+  expect(f.tunnels).toBe(1)
+})
+
+it('waits again after switching provider and model without replaying either request', async () => {
+  const f = await fixture()
+  await f.request()
+  f.setAvailable(false)
+  const checks = f.healthChecks
+  const pending = f.request(undefined, undefined, { provider: 'next-provider', model: 'next-model' })
+  await expect.poll(() => f.healthChecks).toBeGreaterThan(checks)
+  expect(f.observed).toHaveLength(1)
+  f.setAvailable(true)
+  expect(await pending).toEqual([{ type: 'finish', reason: { kind: 'stop' } }])
+  expect(f.tunnels).toBe(1)
+  expect(f.observed).toHaveLength(2)
+  expect(f.observed.map(row => row.body)).toEqual([
+    JSON.stringify({ model: 'chosen-model', prompt: 'unchanged' }),
+    JSON.stringify({ model: 'next-model', prompt: 'unchanged' }),
+  ])
 })
 
 it('blocks before dispatch when SB usage is disabled', async () => {

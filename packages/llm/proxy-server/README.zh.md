@@ -33,7 +33,7 @@ kind: "package-reference"
 
 可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`/`zcode-glm`、`antigravity`、`sb`/`sb-proxy`。两个 ZCode 路由在分发前启动本地后端，包括通过 9router 的 Starter。只有配置的提供方 id 会选择代理；其他路由器提供方上的 `zcode/` 等模型前缀不会选择本地辅助代理。其他模型路由保持委托行为。
 
-`externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode`、`antigravity` 或 `sb`。Harness 验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
+`externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode`、`antigravity` 或 `sb`。Harness 在 `startupTimeoutMs` 内等待验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
 
 对于由 Harness 管理的代理，ZCode 需要 Bun、已构建的 worker bundle，以及 `ZCODE_DIR` 或 `third-party/zcode-api` 中已有的 `config.yaml`。三个代理都要求 `PATH` 中存在 Bun；Antigravity 和 SB 通过 `bun --no-env-file` 运行内置 JavaScript，保留 Host 传入的环境，不额外加载 `.env` 文件。Harness Host 仍使用 Node.js。服务不创建凭据，不执行登录、OAuth 设置或上游模型请求。设置失败和缺失的本地配置会报告给操作者。
 
@@ -89,7 +89,7 @@ Google 状态默认位于 `~/.gemini/antigravity-proxy-token.json`。设置不�
 
 CONNECT 要求使用存于 `$DSH_HOME/run/sb-connect.key` 的 256 位运行时凭据，该文件以排他创建方式和仅拥有者可访问的权限生成。主级和子级调用共享此凭据；受管 SB 接收同一 Harness home。它不会进入提供方授权信息或提示词。外部 SB 服务也必须使用该 home。请保密此密钥，轮换后同时重启 Harness 和 SB。
 
-设置 `routeAllModels: true`，可通过 `sbPort` 上的 SB 隧道转发主智能体和本地子智能体的模型流，并保留所选提供方、模型、URL、授权信息和载荷。默认值为 `false`。SB 的 `/health` 必须标识自身并返回 `supportsConnect: true`；Harness 通过同一生命周期管理器启动或探测它。`routingProbeTimeoutMs` 限制能力探测时间，默认为 1000。此模式支持 Windows 和 Linux。
+设置 `routeAllModels: true`，可通过 `sbPort` 上的 SB 隧道转发主智能体和本地子智能体的模型流，并保留所选提供方、模型、URL、授权信息和载荷。默认值为 `false`。每次请求前（包括切换模型后），生命周期管理器等待 SB 的 `/health` 标识自身并返回 `supportsConnect: true`。这适用于 Windows 和 Linux 上的受管子进程及外部服务。`startupTimeoutMs` 限制每次启动或就绪等待（含探测）的总时间；`routingProbeTimeoutMs` 限制每次 SB 探测时间，默认为 1000。取消会停止等待，不分发模型请求。
 
 SB 无法启动、被禁用或未通过本地探测时，该次调用在分派前返回 `proxy-server/start-failed`，不会直连回退。VPN 强制执行仍独立生效，且必须允许出站。提供方 HTTP 错误或分发后失败的流绝不会触发直连重放。若 SB 在探测成功后退出，当前尝试失败；下次尝试重新探测。Bedrock 接收单次调用的代理环境，Codex Responses 在路由生效时使用 SSE。其他 fetch 保留原有 dispatcher。外部智能体进程不受本进程模型传输控制；设置 [`subagent.localAgentPolicy: parent`](../../subagent/subagent/README.zh.md#child-presets)，可要求本地子级使用父方的 preset 和模型路由。
 

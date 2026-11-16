@@ -108,6 +108,37 @@ it('authenticates managed SB routing with a custom Harness home', async () => {
   expect((await f.ctx.proxyServers.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'running' })
 })
 
+it('waits for a managed SB child to support CONNECT before model dispatch', async () => {
+  const f = await fixture()
+  f.config.routeAllModels = true
+  await f.prepareSidecar()
+  await writeFile(join(f.root, 'scripts/sb-transport.cjs'), "const http=require('node:http');let checks=0;http.createServer((req,res)=>res.end(JSON.stringify({service:'dsh-sb-transport',supportsConnect:++checks>1}))).listen(Number(process.env.SB_PORT),'127.0.0.1')")
+  await f.mount()
+  const next = vi.fn(async function* (): AsyncGenerator<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } })
+  const result = await collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { provider: 'other', model: 'selected-model', messages: [] }, next))
+  expect(result).toEqual([{ type: 'finish', reason: { kind: 'stop' } }])
+  expect(next).toHaveBeenCalledOnce()
+  expect((await f.ctx.proxyServers.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'running' })
+})
+
+it('cancels a managed SB startup and awaits child shutdown on unload', async () => {
+  const f = await fixture()
+  f.config.routeAllModels = true
+  f.config.startupTimeoutMs = 5000
+  await f.prepareSidecar()
+  await writeFile(join(f.root, 'scripts/sb-transport.cjs'), "const http=require('node:http');http.createServer((req,res)=>res.end(JSON.stringify({service:'dsh-sb-transport',supportsConnect:false}))).listen(Number(process.env.SB_PORT),'127.0.0.1')")
+  const service = await f.mount()
+  const next = vi.fn(async function* (): AsyncGenerator<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } })
+  const controller = new AbortController()
+  const pending = collect(f.ctx.waterfall(f.ctx.llm, 'llm/stream', { provider: 'other', model: 'selected-model', messages: [], signal: controller.signal }, next))
+  await expect.poll(async () => (await f.ctx.proxyServers.list()).find(row => row.id === 'sb')?.status).toBe('port-in-use')
+  controller.abort()
+  expect(await pending).toMatchObject([{ type: 'finish', reason: { kind: 'aborted' } }])
+  expect(next).not.toHaveBeenCalled()
+  await f.ctx.fiber.dispose()
+  expect((await service.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'stopped' })
+})
+
 it('leaves an external proxy running after disable and distinguishes occupied ports', async () => {
   const f = await fixture()
   const external = createServer((_req, res) => { res.end(JSON.stringify({ service: 'antigravity-proxy' })) })

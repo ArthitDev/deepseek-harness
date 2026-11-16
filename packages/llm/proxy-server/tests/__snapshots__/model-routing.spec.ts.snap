@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`bounds a hanging readiness probe and reports the external service failure without dispatch 1`] = `
+[
+  {
+    "reason": {
+      "failure": {
+        "code": "proxy-server/start-failed",
+        "message": "SB transport is managed externally and was not ready within 500 ms; start or repair its service",
+      },
+      "kind": "error",
+    },
+    "type": "finish",
+  },
+]
+`;

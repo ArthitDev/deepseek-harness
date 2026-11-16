@@ -93,11 +93,13 @@ async function listening(port: number): Promise<boolean> {
 }
 
 /** Validate sidecar identity without reading model output or authentication state. */
-async function healthy(server: Descriptor, ownedZcode = false, external = false): Promise<boolean> {
+async function healthy(
+  server: Descriptor, ownedZcode: boolean, external: boolean, signal: AbortSignal, timeout: number, requireConnect: boolean,
+): Promise<boolean> {
   // External ZCode must identify this integration; a generic 200/401 is insufficient.
   if (server.id === 'zcode' && !ownedZcode && !external) return false
   return new Promise((complete) => {
-    const request = get({ hostname: '127.0.0.1', port: server.port, path: server.id === 'zcode' ? '/v1/models' : '/health', signal: AbortSignal.timeout(1000) }, (response) => {
+    const request = get({ hostname: '127.0.0.1', port: server.port, path: server.id === 'zcode' ? '/v1/models' : '/health', signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]) }, (response) => {
       if (server.id === 'zcode') {
         response.resume()
         complete((response.statusCode === 401 || response.statusCode === 200)
@@ -113,7 +115,8 @@ async function healthy(server: Descriptor, ownedZcode = false, external = false)
         try {
           const value: unknown = JSON.parse(body)
           complete(response.statusCode === 200 && typeof value === 'object' && value !== null && 'service' in value
-            && value.service === (server.id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy'))
+            && value.service === (server.id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy')
+            && (!requireConnect || 'supportsConnect' in value && value.supportsConnect === true))
         } catch { complete(false) }
       })
     })
@@ -173,10 +176,12 @@ export default class ProxyServers extends TypertRemoteService {
     if (!this.config.routeAllModels) return
     const sbServer = this.servers.find(server => server.id === 'sb')
     if (sbServer === undefined) throw new Error('SB transport descriptor is missing')
-    await this.ctx.effect(() => installModelRouting(this.ctx, new URL(`http://127.0.0.1:${this.config.sbPort}`), this.config.routingProbeTimeoutMs, async () => {
+    await this.ctx.effect(() => installModelRouting(this.ctx, new URL(`http://127.0.0.1:${this.config.sbPort}`), async (signal) => {
       await this.queue(sbServer, async () => {
-        if (!sbServer.enabled.get()) throw new Error('SB transport is disabled')
-        await this.start(sbServer)
+        signal.throwIfAborted()
+        if (!sbServer.enabled.get()) throw new RemoteError('proxy-server/disabled', 'SB transport is disabled in Proxy Server settings', { id: 'sb' })
+        await this.start(sbServer, signal)
+        signal.throwIfAborted()
         sbServer.active++
       })
       return async () => {
@@ -195,7 +200,7 @@ export default class ProxyServers extends TypertRemoteService {
   async list(): Promise<ProxyServerRow[]> {
     return Promise.all(this.servers.map(async (server) => {
       const external = this.config.externalProxies.includes(server.id)
-      const ready = await healthy(server, this.owned.has(server.id), external)
+      const ready = await this.healthy(server)
       return {
         id: server.id, name: server.name, endpoint: `http://127.0.0.1:${server.port}/v1`,
         enabled: server.enabled.get(), available: external ? ready : server.files.every(file => existsSync(file)),
@@ -230,7 +235,8 @@ export default class ProxyServers extends TypertRemoteService {
         if (!server.enabled.get()) {
           throw new RemoteError('proxy-server/disabled', `${server.name} is disabled in Proxy Server settings`, { id: server.id })
         }
-        await this.start(server)
+        options.signal?.throwIfAborted()
+        await this.start(server, options.signal)
         server.active++
       })
     } catch (error) {
@@ -265,15 +271,30 @@ export default class ProxyServers extends TypertRemoteService {
     return task
   }
 
-  private async start(server: Descriptor): Promise<void> {
+  private healthy(server: Descriptor, signal = this.controller.signal, remaining = 1000): Promise<boolean> {
+    const requireConnect = server.id === 'sb' && this.config.routeAllModels
+    const timeout = requireConnect ? this.config.routingProbeTimeoutMs : 1000
+    return healthy(server, this.owned.has(server.id), this.config.externalProxies.includes(server.id), signal,
+      Math.max(1, Math.min(timeout, remaining)), requireConnect)
+  }
+
+  private async start(server: Descriptor, requestSignal?: AbortSignal): Promise<void> {
+    const signal = requestSignal === undefined ? this.controller.signal : AbortSignal.any([requestSignal, this.controller.signal])
+    signal.throwIfAborted()
+    const deadline = Date.now() + this.config.startupTimeoutMs
     const external = this.config.externalProxies.includes(server.id)
-    if (await healthy(server, this.owned.has(server.id), external)) return
-    if (external) {
-      throw new RemoteError('proxy-server/start-failed', `${server.name} is managed externally; start or repair its service`, { id: server.id })
+    if (await this.healthy(server, signal, deadline - Date.now())) return
+    if (external || this.owned.has(server.id)) {
+      while (Date.now() < deadline) {
+        await delay(Math.max(1, Math.min(100, deadline - Date.now())), undefined, { signal })
+        if (await this.healthy(server, signal, deadline - Date.now())) return
+      }
+      signal.throwIfAborted()
+      throw new RemoteError('proxy-server/start-failed', external
+        ? `${server.name} is managed externally and was not ready within ${this.config.startupTimeoutMs} ms; start or repair its service`
+        : `${server.name} child is not ready within ${this.config.startupTimeoutMs} ms; turn it off before retrying`, { id: server.id })
     }
-    if (this.owned.has(server.id)) {
-      throw new RemoteError('proxy-server/start-failed', `${server.name} child is not ready; turn it off before retrying`, { id: server.id })
-    }
+    signal.throwIfAborted()
     if (await listening(server.port)) {
       throw new RemoteError('proxy-server/port-in-use', `${server.name} port is occupied by another service`, { id: server.id })
     }
@@ -291,11 +312,11 @@ export default class ProxyServers extends TypertRemoteService {
     const closed = new Promise<void>((complete) => { child.once('close', () => { if (this.owned.get(server.id)?.child === child) this.owned.delete(server.id); complete() }) })
     this.owned.set(server.id, { child, closed })
     try {
-      const deadline = Date.now() + this.config.startupTimeoutMs
       while (Date.now() < deadline) {
+        signal.throwIfAborted()
         if (state.failed || child.exitCode !== null || child.signalCode !== null) break
-        if (await healthy(server, true)) return
-        await delay(100, undefined, { signal: this.controller.signal })
+        if (await this.healthy(server, signal, deadline - Date.now())) return
+        await delay(Math.max(1, Math.min(100, deadline - Date.now())), undefined, { signal })
       }
       throw new RemoteError('proxy-server/start-failed', `${server.name} did not become ready; check its local installation`, { id: server.id })
     } catch (error) { await this.stop(server); throw error }
