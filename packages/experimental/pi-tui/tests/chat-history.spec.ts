@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from 'node:util'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
@@ -27,7 +28,7 @@ async function historyFixture(historyLimit = 20) {
     clearFromCursor: vi.fn(), clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn(),
   }
   const tui = new TuiAltScreen(terminal)
-  const screen = new ChatScreen({ ctx, tui, agent, config: { historyLimit, cwd: tmpdir() }, onQuit: vi.fn() })
+  const screen = new ChatScreen({ ctx, tui, agent, config: { historyLimit, cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
   tui.start()
   await screen.replayTranscript(agent)
   const frame = () => {

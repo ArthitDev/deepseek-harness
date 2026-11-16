@@ -14,11 +14,11 @@ exports[`lazy transcript history > reaches all older and newer messages by scrol
   " › saved-010                                                            ↔                                               ",
   " › saved-011                                                            │                                               ",
   " › saved-012                                                            │                                               ",
-  " › saved-013                                                            │                                               ",
   "─────────────────────────────────────────────────────────────────────── │                                               ",
   "                                                                        │                                               ",
   "─────────────────────────────────────────────────────────────────────── │                                               ",
   "⧉ Shield Break · 🤖 deepseek-v4-flash · Kali unavailable                │                                               ",
-  "◈ Jev unavailable · ◌ normal · ◌ lazy-his · ▾ Temp · Σ 0 tok            │                                               ",
+  "◈ Jev unavailable · ◌ normal · ◌ lazy-his · ▾ deepseek-harness          │                                               ",
+  "Σ 0 tok                                                                 │                                               ",
 ]
 `;
