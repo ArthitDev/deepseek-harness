@@ -64,6 +64,7 @@ const EXEC_CONFIG = {
   // Internal LLM calls (chain analysis, refusal retry) ride the model the
   // client requested; SB_MODEL overrides the fallback default.
   model: process.env.SB_MODEL || "glm/glm-5.3-flash",
+  skipDomains: (process.env.SB_SKIP_DOMAINS || "github.com,npmjs.com,microsoft.com,google.com,example.com,localhost").split(",").map(s => s.trim().toLowerCase()).filter(Boolean),
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -633,9 +634,9 @@ function extractTargets(text) {
   const TLD = String.raw`(?:com|net|org|io|dev|app|co|th|xyz|me|info|biz|edu|gov|mil|asia|tv|ai|cloud|site|online|top|shop|blog|news|wiki|ltd|group|agency|digital|systems|solutions|museum|travel|radio|au|id|tw|hk|sg|my|ph|vn|br|mx|kr|jp|cn|nz|za|in|tr|ar|cl)`;
   const MULTIPART_SUFFIX = String.raw`(?:co|com|org|net|gov|ac|edu)\.(?:uk|au|th|nz|za|in|id|br|mx|kr|jp|cn|tw|hk|sg|my|ph|vn|tr|ar|cl|co)`;
   const domainMatches = text.match(new RegExp(String.raw`\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+(?:` + MULTIPART_SUFFIX + String.raw`|` + TLD + String.raw`)\b`, "gi")) || [];
-  const skipDomains = ["github.com", "npmjs.com", "microsoft.com", "google.com", "example.com", "localhost"];
+
   for (const d of domainMatches) {
-    if (skipDomains.some(s => d.toLowerCase().includes(s))) continue;
+    if (EXEC_CONFIG.skipDomains.some(s => d.toLowerCase().includes(s))) continue;
     if (!targets.some(t => t.value.includes(d))) targets.push({ type: "domain", value: d });
   }
   return targets;
