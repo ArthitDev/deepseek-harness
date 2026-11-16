@@ -1,0 +1,46 @@
+import { describe, expect, it, vi } from 'vitest'
+import { Text } from '@earendil-works/pi-tui'
+import { HistoryScrollView } from '../src/ui/history-scroll.ts'
+
+describe('history scroll', () => {
+  it('restores a prepend offset against replacement geometry and retains rapid input', () => {
+    const navigate = vi.fn()
+    const scroll = new HistoryScrollView(new Text(''), navigate)
+    const render = vi.fn()
+    expect(scroll.getContentWidth(48)).toBe(48)
+    expect(scroll.contentWidth).toBe(48)
+    scroll.updateLayout(100, 20, render)
+    scroll.scrollBy(-70)
+    expect(navigate).toHaveBeenCalledWith('older')
+    scroll.restoreOnLayout(110)
+    scroll.scrollBy(-2)
+    scroll.scrollBy(1)
+    scroll.updateLayout(200, 20, render)
+    expect(scroll.scrollTop).toBe(109)
+    expect(scroll.isFollowingEnd).toBe(false)
+    scroll.updateLayout(205, 20, render)
+    expect(scroll.scrollTop).toBe(109)
+    scroll.scrollBy(1)
+    expect(navigate).toHaveBeenLastCalledWith('newer')
+  })
+
+  it('lets first/latest jumps replace a pending correction', () => {
+    const navigate = vi.fn()
+    const scroll = new HistoryScrollView(new Text(''), navigate)
+    scroll.updateLayout(100, 20, vi.fn())
+    scroll.restoreOnLayout(50)
+    scroll.scrollToStart()
+    scroll.updateLayout(200, 20, vi.fn())
+    expect(scroll.scrollTop).toBe(0)
+    expect(scroll.isFollowingEnd).toBe(false)
+    expect(navigate).toHaveBeenLastCalledWith('start')
+    scroll.restoreOnLayout(80)
+    scroll.scrollToEnd()
+    scroll.updateLayout(120, 20, vi.fn())
+    expect(scroll.scrollTop).toBe(100)
+    expect(scroll.isFollowingEnd).toBe(true)
+    expect(navigate).toHaveBeenLastCalledWith('end')
+    scroll.scrollBy(0)
+    expect(navigate).toHaveBeenCalledTimes(2)
+  })
+})

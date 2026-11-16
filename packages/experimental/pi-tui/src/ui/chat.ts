@@ -1,10 +1,8 @@
 /**
  * ChatScreen: the live conversation surface.
  *
- * Layout is a vertical stack — messages, working loader, status bar, editor
- * — rendered top-down. Like pi's own chat, the terminal viewport naturally
- * sticks to the bottom (the last rendered lines), and scrollback is the
- * terminal's native buffer.
+ * Transcript views load in pages inside an application-owned scrollport;
+ * the status bar and editor stay pinned below it.
  *
  * Key semantics (pi / Claude Code conventions):
  *   Esc        interrupt (cancel the running turn; editor cancels autocomplete)
@@ -43,7 +41,6 @@ import {
   Container,
   Editor,
   Loader,
-  ScrollView,
   Text,
   TuiAltScreen,
   VStack,
@@ -78,6 +75,7 @@ import {
 import { runRgFiles, shouldShowPath } from '../core/files.js'
 import { collectExecHistory } from '../core/exec-history.js'
 import { foldWindow, visibleItemsBefore, type FoldWindow } from '../core/fold.js'
+import { HistoryScrollView, type HistoryNavigation } from './history-scroll.js'
 import {
   ctrlC,
   isPathLikeToken,
@@ -131,7 +129,7 @@ export interface ChatScreenOptions {
     model?: string
     cwd?: string
     preset?: string
-    /** Newest transcript items to render until explicitly expanded; defaults to 20. */
+    /** Initial transcript items and minimum browsing page size; defaults to 20. */
     historyLimit?: number
     /** Quiet time after a recognized job prompt before Agent Debug warns. */
     jobInputWarningDelayMs?: number
@@ -342,7 +340,7 @@ export class ChatScreen {
   private debugEntries: readonly ActivityEntry[] = []
   private readonly activeToolCalls = new Map<string, symbol>()
   /** ScrollView over the transcript (Ctrl+F jump target). */
-  private transcriptScroll: ScrollView | undefined
+  private transcriptScroll: HistoryScrollView | undefined
   /** Active find query — views highlight its matches while set. */
   private searchQuery: string | undefined
   /** Cached git state for the session cwd (boot + switch refresh only). */
@@ -359,10 +357,13 @@ export class ChatScreen {
   replaying = false
   /** Per-card expand override toggled by Enter in browse mode. */
   private expandedToolId: number | undefined
-  /** Long-session fold: render only the newest items above this line. */
+  /** Initial retained count; browsing pages also cover the measured viewport height. */
   private readonly historyLimit: number
+  private historyPageSize: number
+  private historyStart: number | undefined
   private expandedAll = false
   private foldNotice: Text | undefined
+  private newerNotice: Text | undefined
   private lastFoldKey = ''
   /** Banner above the editor listing messages queued for after the turn. */
   private readonly queueBanner = new Text('', 0, 1)
@@ -402,6 +403,7 @@ export class ChatScreen {
       this.scheduleActivitySync()
     })
     this.historyLimit = options.config.historyLimit ?? 20
+    this.historyPageSize = this.historyLimit
     this.commands = this.ctx.get('commands')
     this.onAgentSwitch = options.onAgentSwitch
     installContextCapture(this.ctx)
@@ -434,11 +436,12 @@ export class ChatScreen {
     // convention). The alternate-screen renderer diffs rows in place, so
     // content shrink (e.g. reasoning collapsing at seal) no longer triggers
     // the whole-screen + scrollback clear that TuiMainScreen used.
-    this.transcriptScroll = new ScrollView(this.messages, {
-      follow: 'end',
-      primary: true,
-      overscroll: 'chain',
-    })
+    this.transcriptScroll = new HistoryScrollView(this.messages,
+      (direction) => { this.navigateHistory(direction) },
+      (previousWidth, width) => {
+        const anchor = this.historyAnchor(previousWidth)
+        return anchor === undefined ? undefined : this.measureOffset(anchor.id, width) + anchor.offset
+      })
     this.chatRoot.addChild(this.transcriptScroll, { basis: 0, grow: 1, minSize: 1 })
     this.chatRoot.addChild(
       new VStack([this.queueBanner, this.editor, this.statusBar]),
@@ -921,6 +924,7 @@ export class ChatScreen {
     this.handledMarkerSeq = undefined
     this.expandedToolId = undefined
     this.expandedAll = false
+    this.historyStart = undefined
     if (this.workingLoader !== undefined) {
       this.workingLoader.stop()
       this.workingLoader = undefined
@@ -2774,6 +2778,8 @@ export class ChatScreen {
       this.model.openReasoning = undefined
       this.views.clear()
       this.lastFoldKey = ''
+      this.historyStart = undefined
+      this.transcriptScroll?.scrollToEnd()
       this.searchQuery = undefined
       this.focusedToolId = undefined
       this.expandedToolId = undefined
@@ -3115,6 +3121,62 @@ export class ChatScreen {
   /** Cache of the latest find, kept in sync with `searchQuery`. */
   private findMatches: TranscriptSearchMatch[] = []
 
+  private transcriptWindow(): FoldWindow {
+    return foldWindow(this.model.items.length, this.expandedAll, this.historyLimit, this.historyStart, this.historyPageSize)
+  }
+
+  private historyAnchor(width: number): { id: number; offset: number } | undefined {
+    const scroll = this.transcriptScroll
+    if (scroll === undefined) return undefined
+    const window = this.transcriptWindow()
+    let offset = window.boundary > 0 ? this.foldNotice?.render(width).length ?? 1 : 0
+    for (let id = window.boundary; id < window.end; id++) {
+      const height = this.views.get(id)?.render(width).length ?? 0
+      if (offset + height > scroll.scrollTop) return { id, offset: scroll.scrollTop - offset }
+      offset += height
+    }
+    return undefined
+  }
+
+  /** Move the retained window only on reader input, keeping one shared item at its screen offset. */
+  private navigateHistory(direction: HistoryNavigation): void {
+    const scroll = this.transcriptScroll
+    if (scroll === undefined) return
+    if (direction === 'end') {
+      if (this.historyStart !== undefined) { this.historyStart = undefined; this.sync(false) }
+      return
+    }
+    if (this.expandedAll) return
+    const window = this.transcriptWindow()
+    this.historyPageSize = Math.max(this.historyPageSize, scroll.viewportHeight)
+    if (direction === 'start') {
+      this.historyStart = 0
+      this.sync(false)
+      return
+    }
+    if (direction === 'newer' && window.end === this.model.items.length && scroll.isFollowingEnd) {
+      if (this.historyStart !== undefined) { this.historyStart = undefined; this.sync(false) }
+      return
+    }
+    const width = scroll.contentWidth
+    const anchor = this.historyAnchor(width) ?? { id: Math.max(window.boundary, window.end - 1), offset: 0 }
+    let start = window.boundary
+    if (direction === 'older' && scroll.scrollTop <= scroll.viewportHeight) {
+      start = Math.max(0, window.boundary - this.historyPageSize)
+    } else if (direction === 'newer' && window.end < this.model.items.length) {
+      const height = this.messages.render(width).length
+      if (height - scroll.scrollTop - scroll.viewportHeight <= scroll.viewportHeight) {
+        start = Math.min(anchor.id, window.boundary + this.historyPageSize)
+      }
+    }
+    // A large card or a resize can put the reader beyond the proposed two-page overlap.
+    start = Math.max(start, anchor.id - 2 * this.historyPageSize + 1)
+    if (start === this.historyStart) return
+    this.historyStart = start
+    this.sync(false)
+    scroll.restoreOnLayout(this.measureOffset(anchor.id, width) + anchor.offset)
+  }
+
   /**
    * Ctrl+F: search the transcript and jump to matches. The overlay re-runs
    * the search per keystroke and live-jumps to the first match; ↑/↓ cycle;
@@ -3143,14 +3205,14 @@ export class ChatScreen {
 
   /** Scroll the transcript so the matched item sits at the top, highlighted. */
   private jumpToMatch(itemId: number): void {
-    // A match below the fold boundary is invisible; expand to reveal it.
-    const window = foldWindow(this.model.items.length, this.expandedAll, this.historyLimit)
-    if (window.key.startsWith('folded:') && itemId < window.boundary) {
-      this.expandedAll = true
+    this.historyPageSize = Math.max(this.historyPageSize, this.transcriptScroll?.viewportHeight ?? 0)
+    const window = this.transcriptWindow()
+    if (itemId < window.boundary || itemId >= window.end) {
+      this.historyStart = Math.max(0, itemId - Math.floor(this.historyPageSize / 2))
     }
     this.sync()
-    const width = this.tui.terminal.columns
-    this.transcriptScroll?.scrollTo(this.measureOffset(itemId, width))
+    const width = this.transcriptScroll?.contentWidth ?? this.tui.terminal.columns
+    this.transcriptScroll?.restoreOnLayout(this.measureOffset(itemId, width))
     this.tui.requestRender()
   }
 
@@ -3162,7 +3224,7 @@ export class ChatScreen {
    * exactly what the ScrollView content shows.
    */
   private measureOffset(targetId: number, width: number): number {
-    const window = foldWindow(this.model.items.length, this.expandedAll, this.historyLimit)
+    const window = this.transcriptWindow()
     return visibleItemsBefore(
       targetId,
       window,
@@ -3294,6 +3356,7 @@ export class ChatScreen {
   /** Toggle the long-session fold (show all messages / fold old ones). */
   private cmdExpandAll(): void {
     this.expandedAll = !this.expandedAll
+    this.historyStart = undefined
     this.pushNotice(this.expandedAll ? 'showing all messages' : 'folding old messages again')
     this.sync()
   }
@@ -3344,13 +3407,13 @@ export class ChatScreen {
   /** Finished tool-card ids, newest last; folded cards are skipped. */
   private settledToolIds(): number[] {
     const { items } = this.model
-    const boundary = foldWindow(items.length, this.expandedAll, this.historyLimit).boundary
+    const { boundary, end } = this.transcriptWindow()
     const ids: number[] = []
     for (const item of items) {
       if (item.kind !== 'tool' || item.tool === undefined || item.tool.status === 'running') {
         continue
       }
-      if (item.id < boundary) continue
+      if (item.id < boundary || item.id >= end) continue
       ids.push(item.id)
     }
     return ids
@@ -3670,6 +3733,8 @@ export class ChatScreen {
       // container children must go before sync rebuilds from the new list.
       this.views.clear()
       this.lastFoldKey = ''
+      this.historyStart = undefined
+      this.transcriptScroll?.scrollToEnd()
     }
     if (event.type === 'tool/result' && !this.replaying) {
       const card = this.model.items.find(item => item.tool?.callId === event.data.message.source.callId)
@@ -4008,11 +4073,11 @@ export class ChatScreen {
       || this.mainSummary.latestTool !== undefined || this.mainSummary.todos !== undefined
     this.toolActivity.update(this.debugEntries, this.jobSnapshots, this.model.targets.getSnapshot(),
       summaryVisible ? formatAgentSummary(this.mainSummary) : undefined, this.waitingJobIds)
-    const foldKey = foldWindow(items.length, this.expandedAll, this.historyLimit)
+    const foldKey = this.transcriptWindow()
     for (const id of this.views.keys()) {
-      if (id < foldKey.boundary) this.views.delete(id)
+      if (id < foldKey.boundary || id >= foldKey.end) this.views.delete(id)
     }
-    for (let index = foldKey.boundary; index < items.length; index++) {
+    for (let index = foldKey.boundary; index < foldKey.end; index++) {
       const item = items[index]
       if (item === undefined || this.views.has(item.id)) continue
       const view = createView(item)
@@ -4040,7 +4105,7 @@ export class ChatScreen {
         },
       )
       this.workingLoader = loader
-      this.messages.addChild(loader)
+      if (foldKey.end === items.length) this.messages.addChild(loader)
     } else if (!this.model.working && this.workingLoader !== undefined) {
       this.workingLoader.stop()
       this.messages.removeChild(this.workingLoader)
@@ -4054,7 +4119,7 @@ export class ChatScreen {
     if (foldKey.key !== this.lastFoldKey) {
       this.lastFoldKey = foldKey.key
       this.reconcileContainer(items, foldKey)
-    } else if (foldKey.boundary === 0) {
+    } else if (foldKey.boundary === 0 && foldKey.end === items.length) {
       const loaderOffset = this.workingLoader !== undefined ? 1 : 0
       const firstMissing = this.messages.children.length - loaderOffset
       if (firstMissing < items.length) {
@@ -4160,26 +4225,29 @@ export class ChatScreen {
     this.tui.requestRender()
   }
 
-  /** Rebuild the transcript container for the current fold window: a fold
-   * notice (when folded), the visible views in order, then the loader. */
+  /** Rebuild retained views with directional paging notices and the live tail loader. */
   private reconcileContainer(items: readonly ChatItem[], window: FoldWindow): void {
     this.messages.clear()
-    if (window.key.startsWith('folded:')) {
-      const folded = Number(window.key.slice('folded:'.length))
+    if (window.boundary > 0) {
+      const folded = window.boundary
       if (this.foldNotice === undefined) this.foldNotice = new Text('', 1, 0)
       this.foldNotice.setText(
         style.muted(
-          `… ${folded} earlier message${folded === 1 ? '' : 's'} folded — /expand-all shows all`,
+          `↑ ${folded} earlier item${folded === 1 ? '' : 's'} · scroll up to load`,
         ),
       )
       this.messages.addChild(this.foldNotice)
     }
-    for (let index = window.boundary; index < items.length; index++) {
+    for (let index = window.boundary; index < window.end; index++) {
       const item = items[index]
       const view = item === undefined ? undefined : this.views.get(item.id)
       if (view !== undefined) this.messages.addChild(view)
     }
-    if (this.workingLoader !== undefined) this.messages.addChild(this.workingLoader)
+    if (window.end < items.length) {
+      this.newerNotice ??= new Text('', 1, 0)
+      this.newerNotice.setText(style.muted(`↓ ${items.length - window.end} newer items · scroll down or Ctrl+End for latest`))
+      this.messages.addChild(this.newerNotice)
+    } else if (this.workingLoader !== undefined) this.messages.addChild(this.workingLoader)
   }
 
   /**

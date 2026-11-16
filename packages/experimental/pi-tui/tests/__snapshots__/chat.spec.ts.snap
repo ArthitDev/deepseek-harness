@@ -2,7 +2,7 @@
 
 exports[`exit and resume hints > creates only the visible history views with limit 3 > bounded history 1`] = `
 [
-  " … 119 earlier messages folded — /expand-all shows all                  │ ── Agent Debug · Tab panels ──                ",
+  " ↑ 119 earlier items · scroll up to load                                │ ── Agent Debug · Tab panels ──                ",
   " › saved-119                                                            │ ╭─ Main Agent ▾ ─────────────────────────────╮",
   " › saved-120                                                            │ │ task: saved-120 · calls: none · usage:     │",
   " ℹ Recap · Request: saved-120                                           │ │ unknown                                    │",

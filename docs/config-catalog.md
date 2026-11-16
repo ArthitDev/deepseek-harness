@@ -2911,7 +2911,7 @@ export interface Config {
   model?: string
   /** Session working directory; defaults to the invoking directory. */
   cwd?: string
-  /** Newest transcript items rendered by default; older items remain searchable. */
+  /** Initial transcript items and minimum lazy-render page size; older items load on scroll. */
   historyLimit?: number
   /** Quiet time after a recognized background-job prompt before Agent Debug warns. */
   jobInputWarningDelayMs?: number

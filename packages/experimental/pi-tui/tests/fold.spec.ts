@@ -3,16 +3,23 @@ import { foldWindow, visibleItemsBefore } from '../src/core/fold.ts'
 
 describe('foldWindow', () => {
   it('expands everything under /expand-all', () => {
-    expect(foldWindow(500, true, 200)).toEqual({ key: 'all', boundary: 0 })
+    expect(foldWindow(500, true, 200)).toEqual({ key: 'all', boundary: 0, end: 500 })
   })
 
   it('folds the head once the transcript passes the threshold', () => {
-    expect(foldWindow(205, false, 200)).toEqual({ key: 'folded:5', boundary: 5 })
+    expect(foldWindow(205, false, 200)).toEqual({ key: 'folded:5', boundary: 5, end: 205 })
   })
 
   it('stays unfolded at or below the threshold', () => {
-    expect(foldWindow(200, false, 200)).toEqual({ key: 'none', boundary: 0 })
-    expect(foldWindow(0, false, 200)).toEqual({ key: 'none', boundary: 0 })
+    expect(foldWindow(200, false, 200)).toEqual({ key: 'none', boundary: 0, end: 200 })
+    expect(foldWindow(0, false, 200)).toEqual({ key: 'none', boundary: 0, end: 0 })
+  })
+
+  it('keeps a bounded browsing page while newer items arrive', () => {
+    expect(foldWindow(500, false, 20, 100, 25)).toEqual({ key: 'window:100:150:500', boundary: 100, end: 150 })
+    expect(foldWindow(501, false, 20, 100, 25)).toEqual({ key: 'window:100:150:501', boundary: 100, end: 150 })
+    expect(foldWindow(500, true, 20, 100, 25)).toEqual({ key: 'all', boundary: 0, end: 500 })
+    expect(foldWindow(0, false, 20, 100)).toEqual({ key: 'window:0:0:0', boundary: 0, end: 0 })
   })
 })
 
@@ -31,7 +38,7 @@ describe('visibleItemsBefore', () => {
   })
 
   it('honors a custom notice height and skips items below the boundary', () => {
-    const window = { key: 'folded:3', boundary: 3 }
+    const window = { key: 'folded:3', boundary: 3, end: 6 }
     expect(visibleItemsBefore(5, window, heights, 2)).toBe(2 + heights(3) + heights(4))
   })
 

@@ -1,0 +1,24 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`lazy transcript history > reaches all older and newer messages by scrolling while retaining a bounded set of views > oldest lazy page 1`] = `
+[
+  " › saved-001                                                            │ ── Agent Debug · Tab panels ──                ",
+  " › saved-002                                                            │ ╭─ Main Agent ▾ ─────────────────────────────╮",
+  " › saved-003                                                            │ │ task: saved-200 · calls: none · usage:     │",
+  " › saved-004                                                            │ │ unknown                                    │",
+  " › saved-005                                                            │ ╰──────────────────── ↕ ─────────────────────╯",
+  " › saved-006                                                            │                                               ",
+  " › saved-007                                                            │                                               ",
+  " › saved-008                                                            │                                               ",
+  " › saved-009                                                            │                                               ",
+  " › saved-010                                                            ↔                                               ",
+  " › saved-011                                                            │                                               ",
+  " › saved-012                                                            │                                               ",
+  " › saved-013                                                            │                                               ",
+  "─────────────────────────────────────────────────────────────────────── │                                               ",
+  "                                                                        │                                               ",
+  "─────────────────────────────────────────────────────────────────────── │                                               ",
+  "⧉ Shield Break · 🤖 deepseek-v4-flash · Kali unavailable                │                                               ",
+  "◈ Jev unavailable · ◌ normal · ◌ lazy-his · ▾ Temp · Σ 0 tok            │                                               ",
+]
+`;

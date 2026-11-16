@@ -1,38 +1,47 @@
 /**
  * Long-session fold window computation. Pure and unit-testable: once a
- * transcript passes `threshold` items, the screen renders only the newest
- * `threshold` items and replaces the hidden head with a one-line notice.
- * `/expand-all` (or a find jump into the folded region) lifts the fold.
+ * transcript passes `threshold` items, the screen starts at the newest
+ * `threshold` items. Browsing retains at most two pages around `start`.
+ * `/expand-all` lifts the window explicitly.
  *
  * The transcript's item ids are sequential from 0, so "first visible id" is
  * exactly the fold count — everything below it is hidden.
  */
 export interface FoldWindow {
-  /** Container rebuild key: 'none' | 'all' | 'folded:<count>'. */
+  /** Container rebuild key, including offscreen counts for paging notices. */
   key: string
   /** First visible item id (0 when not folded or expanded). */
   boundary: number
+  /** Exclusive last visible item id. */
+  end: number
 }
 
 /**
  * Compute the visible window for a transcript: all items when expanded,
- * otherwise the newest `threshold` items with the hidden head replaced by
- * the fold notice. Item ids are sequential, so `boundary` is both the fold
- * count and the first visible id.
+ * otherwise the newest `threshold` items, or two pages from a browsing start.
  * @param itemsLength - Total transcript item count.
- * @param expandedAll - True when the fold is lifted (`/expand-all` or a find jump into the folded region).
+ * @param expandedAll - True when `/expand-all` lifts the window.
  * @param threshold - Newest-item count kept visible while folded.
- * @returns The container rebuild key and the first visible item id.
+ * @param start - First browsing item; absent follows the newest items.
+ * @param pageSize - Items per browsing page, at least the viewport's line count.
+ * @returns The rebuild key and visible half-open item range.
  */
 export function foldWindow(
   itemsLength: number,
   expandedAll: boolean,
   threshold: number,
+  start?: number,
+  pageSize = threshold,
 ): FoldWindow {
-  if (expandedAll) return { key: 'all', boundary: 0 }
+  if (expandedAll) return { key: 'all', boundary: 0, end: itemsLength }
+  if (start !== undefined) {
+    const boundary = Math.min(start, Math.max(0, itemsLength - 1))
+    const end = Math.min(itemsLength, boundary + 2 * pageSize)
+    return { key: `window:${boundary}:${end}:${itemsLength}`, boundary, end }
+  }
   const folded = itemsLength - threshold
-  if (folded > 0) return { key: `folded:${folded}`, boundary: folded }
-  return { key: 'none', boundary: 0 }
+  if (folded > 0) return { key: `folded:${folded}`, boundary: folded, end: itemsLength }
+  return { key: 'none', boundary: 0, end: itemsLength }
 }
 
 /**
@@ -54,9 +63,8 @@ export function visibleItemsBefore(
   noticeHeight = 1,
 ): number {
   let offset = 0
-  if (window.key.startsWith('folded:')) offset += noticeHeight
-  for (let id = 0; id < targetId; id += 1) {
-    if (id < window.boundary) continue
+  if (window.boundary > 0) offset += noticeHeight
+  for (let id = window.boundary; id < Math.min(targetId, window.end); id += 1) {
     offset += heights(id)
   }
   return offset
