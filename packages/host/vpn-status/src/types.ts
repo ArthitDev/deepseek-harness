@@ -5,3 +5,9 @@ export interface VpnStatusSnapshot {
   readonly checkedAt: number | null
   readonly validUntil: number | null
 }
+
+/** Operator-only reconnect outcome; only snapshot.state can attest egress. */
+export interface VpnReconnectResult {
+  readonly kind: 'reconnected' | 'busy' | 'unavailable' | 'failed'
+  readonly snapshot: VpnStatusSnapshot
+}

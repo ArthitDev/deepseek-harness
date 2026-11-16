@@ -1,0 +1,21 @@
+[Unit]
+Description=Restricted Harness VPN control broker
+Requires=dsh-kali-broker.service dsh-vpn-mullvad.service
+After=dsh-kali-broker.service dsh-vpn-mullvad.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/dsh-vpn-node /usr/local/libexec/dsh-vpn-control-broker.mjs
+Restart=on-failure
+RestartSec=2
+UMask=0007
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/dsh-kali-broker
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_CHOWN
+
+[Install]
+WantedBy=multi-user.target

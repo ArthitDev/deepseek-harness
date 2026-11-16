@@ -32,6 +32,29 @@ Mullvad 官方的 `mullvad_exit_ip: true` 可验证其出口。其他服务商�
 
 ## 开发备注
 
+<a id="tui-control"></a>
+
+### TUI 控制
+
+`/vpn status` 读取本机 Mullvad tunnel 和缓存的 Host HTTPS 证据，不发送额外公网请求。`/vpn reconnect` 重连 Mullvad，使旧结果失效并重新检查 HTTPS。控制命令完成但 HTTPS 为 unknown/unverified 时，不代表出口已验证。并发重连会被拒绝。命令保留 VPN 设置、firewall、proxy 路由和 kill-switch policy；共享 tunnel 的 Web/TUI 会短暂中断。其他 VPN 继续支持 `expectedExitCidrs` 验证，目前自动重连仅支持 Mullvad。
+
+Windows 使用 `%ProgramFiles%\Mullvad VPN\resources\mullvad.exe`，普通 Linux 使用 `/usr/bin/mullvad`，以固定参数执行，不经过 shell。`controlTimeoutMs` 默认为 45000。禁用监测时拒绝重连；CLI 或 broker 缺失显示 unavailable，不会退回其他网络路径。
+
+### 隔离 Linux Server 设置
+
+无法访问 Mullvad 管理 socket 的隔离 Host 使用受限 [control broker](../../../scripts/vpn-control-broker.mjs)。它仅监听 `/run/dsh-kali-broker/vpn.sock`，只接受无 body 的 `GET /status` 和 `POST /reconnect`，执行固定 Mullvad 命令，删除 IP/account 数据，并跨 TUI 进程串行处理重连。Web Remote API 不暴露控制操作。
+
+Server 已有的 `/run/dsh-kali-broker` 必须由 root 拥有，mode 为 `0750`，group 为 Harness 用户组；workload 保留只读 bind mount。先备份现有脚本、unit 和配置，再安装 root 拥有的文件并启用 [unit](../../../scripts/vpn-control-broker.service)：
+
+```sh
+sudo install -o root -g root -m 0644 scripts/vpn-control-broker.mjs /usr/local/libexec/dsh-vpn-control-broker.mjs
+sudo install -o root -g root -m 0644 scripts/vpn-control-broker.service /etc/systemd/system/dsh-vpn-control.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now dsh-vpn-control.service
+```
+
+unit 使用 root 拥有的 `/usr/local/libexec/dsh-vpn-node` launcher 和现有 Mullvad/Kali broker 服务。保留 `vpn-status` 的其他配置，设置 `controlSocketPath: /run/dsh-kali-broker/vpn.sock` 后重新打开 TUI。验证 `/vpn status`、socket 的 root/用户组归属与 `0660` mode、未变更的 firewall 和重连后的 HTTPS 证据。回滚时停止并禁用 `dsh-vpn-control.service`，恢复备份文件与配置，运行 `systemctl daemon-reload` 后重新打开 TUI；VPN/firewall 服务保持运行。
+
 验证状态只在观测结果有效且未过期时成立；此结果不能代表其他进程或目的地址的路由。
 
 

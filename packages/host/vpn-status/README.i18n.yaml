@@ -18,8 +18,14 @@
   en: 120d04c72ab5155b
   zh: 514c4e8bc9b4fb66
 /deepseek-ai-dsh-host-vpn-status/dev-note:
-  en: 57abb2eb933903aa
-  zh: c0615a1f52213f2f
+  en: 7410b003a5057dc2
+  zh: 5a342584bf141586
+/deepseek-ai-dsh-host-vpn-status/dev-note/tui-control:
+  en: 639208cef99f7846
+  zh: ecbcb9714cd1a574
+/deepseek-ai-dsh-host-vpn-status/dev-note/isolated-linux-server-setup:
+  en: 96c8d656810bd486
+  zh: 39a8f0dd2d3639d5
 /deepseek-ai-dsh-host-vpn-status/model-experience:
   en: 65aed0570f26a446
   zh: f66579fc4d3ef7de

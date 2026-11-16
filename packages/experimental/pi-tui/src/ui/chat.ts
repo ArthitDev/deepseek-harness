@@ -1035,6 +1035,7 @@ export class ChatScreen {
       { name: 'suppress-prompt', description: 'Show strict prompt protection status' },
       { name: 'mcp', description: 'Enable or disable MCP tools' },
       { name: 'jev', description: 'Enable or disable JEV tools and policy context' },
+      { name: 'vpn', description: 'VPN: status | reconnect (affects every session on this Host)' },
       { name: 'team-mode', description: 'Switch the team mode' },
       { name: 'thinking', description: 'Choose reasoning level for the selected model' },
       { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
@@ -1388,6 +1389,7 @@ export class ChatScreen {
     if (parsed.name === 'preset') return this.cmdPreset(parsed.raw.trim())
     if (parsed.name === 'suppress-prompt' || parsed.name === 'suppress-promot') return this.cmdSuppressPrompt(parsed.raw.trim())
     if (parsed.name === 'mcp') return this.cmdMcp(parsed.raw.trim())
+    if (parsed.name === 'vpn') return this.cmdVpn(parsed.raw.trim())
     if (parsed.name === 'jev') {
       this.cmdJev(parsed.raw.trim())
       return
@@ -1529,6 +1531,34 @@ export class ChatScreen {
 
   private llm(): LlmRuntime | undefined {
     return this.ctx.get('llm')
+  }
+
+  private async cmdVpn(action: string): Promise<void> {
+    if (action !== '' && action !== 'status' && action !== 'reconnect') {
+      this.pushNotice('usage: /vpn [status|reconnect]', 'error')
+      return
+    }
+    const vpn = this.ctx.get('vpnStatus')
+    if (vpn === undefined) {
+      this.pushNotice('VPN service unavailable in this profile', 'error')
+      return
+    }
+    if (action === 'reconnect') {
+      this.pushNotice('Reconnecting VPN for this Host; shared Web/TUI traffic may pause. Policy remains unchanged.')
+      const result = await vpn.reconnect()
+      this.sync()
+      if (result.kind !== 'reconnected') {
+        this.pushNotice(`VPN reconnect ${result.kind}; egress is not confirmed. Check Mullvad or the configured control broker.`, 'error')
+        return
+      }
+      if (result.snapshot.state === 'verified') this.pushNotice('VPN reconnected; Host HTTPS egress verified.')
+      else this.pushNotice(`VPN reconnect completed; Host HTTPS ${result.snapshot.state}. Egress is not confirmed.`, 'error')
+      return
+    }
+    const tunnel = await vpn.tunnel()
+    const sample = vpn.read()
+    const checked = sample.checkedAt === null ? 'never' : new Date(sample.checkedAt).toISOString()
+    this.pushNotice(`VPN tunnel: ${tunnel.tunnel} (${tunnel.kind})\nHost HTTPS: ${sample.state}${sample.evidence === null ? '' : ` (${sample.evidence})`}\nLast check: ${checked}`)
   }
 
   private currentRoute(): ModelRoute {

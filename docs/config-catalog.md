@@ -1972,7 +1972,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-host-vpn-status`
 
-- `source`: [`packages/host/vpn-status/src/index.ts:10`](../packages/host/vpn-status/src/index.ts)
+- `source`: [`packages/host/vpn-status/src/index.ts:12`](../packages/host/vpn-status/src/index.ts)
 
 ```ts config-catalog
 /** Deployment-specific probe policy; disabled by default to avoid unsolicited third-party requests. */
@@ -1985,6 +1985,10 @@ export interface Config {
   timeoutMs: number
   /** Known VPN exit addresses or CIDRs for providers without official attestation. */
   expectedExitCidrs: string[]
+  /** Restricted Linux control broker socket; empty uses the installed Mullvad CLI. */
+  controlSocketPath?: string
+  /** Maximum duration of one local control operation, in milliseconds. */
+  controlTimeoutMs?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-vpn-status -->

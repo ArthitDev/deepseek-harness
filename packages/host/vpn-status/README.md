@@ -28,6 +28,27 @@ The `vpnStatus/read` Remote and in-process `ctx.vpnStatus.read()` return checkin
 
 ## Dev Note
 
+### TUI control
+
+`/vpn status` reads the local Mullvad tunnel and cached Host HTTPS evidence without an extra public request. `/vpn reconnect` reconnects Mullvad, invalidates the previous sample and performs a fresh HTTPS check. Completed control with unknown/unverified HTTPS does not confirm VPN egress. Concurrent reconnects are refused. These commands preserve VPN settings, firewall rules, proxy routing and kill-switch policy; reconnect affects every Web/TUI process sharing the tunnel. Other providers retain `expectedExitCidrs` verification; automatic reconnect currently supports Mullvad only.
+
+Windows uses `%ProgramFiles%\Mullvad VPN\resources\mullvad.exe`; normal Linux uses `/usr/bin/mullvad`. Both execute fixed arguments without a shell, bounded by `controlTimeoutMs` (default 45000). Disabled monitoring refuses reconnect. A missing CLI or broker reports unavailable, without falling back to another network path.
+
+### Isolated Linux Server setup
+
+An isolated Host without the Mullvad management socket uses the restricted [control broker](../../../scripts/vpn-control-broker.mjs). It listens only on `/run/dsh-kali-broker/vpn.sock`, accepts bodyless `GET /status` and `POST /reconnect`, executes fixed Mullvad commands and strips IP/account data. It serializes reconnects across TUI processes. No control operation is exposed through the Web Remote API.
+
+The Server's existing `/run/dsh-kali-broker` must be root-owned, mode `0750`, with the Harness group; workloads retain its read-only bind mount. Back up existing script/unit/config files, install root-owned copies and enable the [unit](../../../scripts/vpn-control-broker.service):
+
+```sh
+sudo install -o root -g root -m 0644 scripts/vpn-control-broker.mjs /usr/local/libexec/dsh-vpn-control-broker.mjs
+sudo install -o root -g root -m 0644 scripts/vpn-control-broker.service /etc/systemd/system/dsh-vpn-control.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now dsh-vpn-control.service
+```
+
+The unit uses the root-owned Server launcher `/usr/local/libexec/dsh-vpn-node` and existing Mullvad/Kali broker services. Preserve the `vpn-status` row's other config and set `controlSocketPath: /run/dsh-kali-broker/vpn.sock`, then reopen TUI. Verify `/vpn status`, socket ownership/mode (`root`, Harness group, `0660`), unchanged firewall rules and fresh HTTPS evidence after reconnect. To roll back, stop and disable `dsh-vpn-control.service`, restore the backed-up files/config, run `systemctl daemon-reload` and reopen TUI; VPN/firewall services stay running.
+
 Verification requires fresh egress evidence; this sample cannot establish routing for other processes or destinations.
 
 

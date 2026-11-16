@@ -5,6 +5,8 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from 'zod'
 import { exitMatcher, fetchEgress, verifyResponse } from './probe.ts'
 import type { VpnStatusSnapshot } from './types.ts'
+import type { VpnReconnectResult } from './types.ts'
+import { controlVpn, type VpnControlResult } from './control.ts'
 
 /** Deployment-specific probe policy; disabled by default to avoid unsolicited third-party requests. */
 export interface Config {
@@ -16,6 +18,10 @@ export interface Config {
   timeoutMs: number
   /** Known VPN exit addresses or CIDRs for providers without official attestation. */
   expectedExitCidrs: string[]
+  /** Restricted Linux control broker socket; empty uses the installed Mullvad CLI. */
+  controlSocketPath?: string
+  /** Maximum duration of one local control operation, in milliseconds. */
+  controlTimeoutMs?: number
 }
 /** Validated polling policy; never permit frequent external checks. */
 export const Config: z<Config> = z.object({
@@ -23,6 +29,8 @@ export const Config: z<Config> = z.object({
   intervalMs: z.number().min(60000).max(3600000).default(300000),
   timeoutMs: z.number().min(1000).max(30000).default(10000),
   expectedExitCidrs: z.array(z.string()).default([]),
+  controlSocketPath: z.string().default(''),
+  controlTimeoutMs: z.number().min(1000).max(120000).default(45000),
 })
 
 declare module '@deepseek-ai/cordis' {
@@ -36,13 +44,19 @@ declare module '@deepseek-ai/cordis' {
 export class VpnStatusService extends TypertRemoteService<Config> {
   static Config = Config
   private snapshot: VpnStatusSnapshot = { state: 'unknown', evidence: null, checkedAt: null, validUntil: null }
+  private reconnectTask: Promise<VpnReconnectResult> | undefined
+  private performReconnect: (() => Promise<VpnReconnectResult>) | undefined
+  private resumePolling: (() => void) | undefined
+  private readonly lifetime = new AbortController()
+  private readonly policy: Config
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'vpnStatus')
+    this.policy = config
     const matches = exitMatcher(config.expectedExitCidrs)
     if (!config.enabled) return
     ctx.effect(() => {
-      const lifetime = new AbortController()
+      const lifetime = this.lifetime
       let timer: NodeJS.Timeout | undefined
       const active = (): boolean => !lifetime.signal.aborted
       const poll = async (): Promise<void> => {
@@ -58,12 +72,65 @@ export class VpnStatusService extends TypertRemoteService<Config> {
         if (!active()) return
         const checkedAt = Date.now()
         this.snapshot = { ...result, checkedAt, validUntil: checkedAt + config.intervalMs }
+        if (this.reconnectTask === undefined) schedule()
+      }
+      const schedule = (): void => {
+        clearTimeout(timer)
+        if (!active()) return
         timer = setTimeout(() => { pending = poll() }, config.intervalMs)
         timer.unref()
       }
+      this.resumePolling = schedule
       let pending = poll()
-      return async () => { lifetime.abort(); clearTimeout(timer); await pending }
+      this.performReconnect = async () => {
+        clearTimeout(timer)
+        await pending
+        if (!active()) return { kind: 'failed', snapshot: this.read() }
+        this.snapshot = { state: 'checking', evidence: null, checkedAt: null, validUntil: null }
+        const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(config.controlTimeoutMs ?? 45000)])
+        const control = await controlVpn('reconnect', config.controlSocketPath ?? '', signal)
+        if (!active()) return { kind: 'failed', snapshot: this.read() }
+        if (control.kind !== 'ok') {
+          this.snapshot = { state: 'unknown', evidence: null, checkedAt: null, validUntil: null }
+          return { kind: control.kind, snapshot: this.read() }
+        }
+        pending = poll()
+        await pending
+        return { kind: 'reconnected', snapshot: this.read() }
+      }
+      return async () => {
+        lifetime.abort(); clearTimeout(timer)
+        await pending
+        await this.reconnectTask
+        this.performReconnect = undefined
+        this.resumePolling = undefined
+      }
     })
+  }
+
+  /** Read the local tunnel without sending public traffic; never exposed as a Remote mutation.
+   * @returns sanitized CLI/broker state, independent of the cached HTTPS evidence.
+   */
+  async tunnel(): Promise<VpnControlResult> {
+    return controlVpn('status', this.policy.controlSocketPath ?? '', AbortSignal.any([
+      this.lifetime.signal, AbortSignal.timeout(this.policy.timeoutMs),
+    ]))
+  }
+
+  /** Reconnect Mullvad once, then replace the HTTPS sample; concurrent calls are rejected.
+   * @returns control outcome and fresh egress result; a completed reconnect can still be unknown/unverified.
+   */
+  async reconnect(): Promise<VpnReconnectResult> {
+    if (this.reconnectTask !== undefined) return { kind: 'busy', snapshot: this.read() }
+    if (this.performReconnect === undefined) return { kind: 'unavailable', snapshot: this.read() }
+    const task = this.performReconnect()
+    this.reconnectTask = task
+    try { return await task }
+    finally {
+      this.reconnectTask = undefined
+      // The poll inside reconnect does not schedule while reconnectTask is owned.
+      this.resumePolling?.()
+    }
   }
 
   /** Read cached verification only; never triggers network I/O.

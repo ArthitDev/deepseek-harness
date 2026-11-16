@@ -19,6 +19,16 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Owns one non-overlapping external check and a bounded-lifetime cached result.
 
 ```ts cordis-catalog
+/** Read the local tunnel without sending public traffic; never exposed as a Remote mutation.
+ * @returns sanitized CLI/broker state, independent of the cached HTTPS evidence.
+ */
+async tunnel(): Promise<VpnControlResult>
+
+/** Reconnect Mullvad once, then replace the HTTPS sample; concurrent calls are rejected.
+ * @returns control outcome and fresh egress result; a completed reconnect can still be unknown/unverified.
+ */
+async reconnect(): Promise<VpnReconnectResult>
+
 /** Read cached verification only; never triggers network I/O.
  * @param signal - optional Remote carrier cancellation; this synchronous cache read performs no I/O.
  * @returns current sample, or unknown after its expiry.

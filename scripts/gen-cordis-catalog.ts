@@ -1097,6 +1097,8 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   VpnStatusSnapshot: 'Sampled Host HTTPS status fields are owned by packages/host/vpn-status/README.md',
+  VpnControlResult: 'Local Mullvad control outcomes are owned by packages/host/vpn-status/README.md#tui-control',
+  VpnReconnectResult: 'Reconnect and fresh egress outcomes are owned by packages/host/vpn-status/README.md#tui-control',
   ActionCardDecision: 'packages/experimental/action-cards/README.md',
   ActionCardKind: 'packages/experimental/action-cards/README.md',
   ActionCardResult: 'packages/experimental/action-cards/README.md',

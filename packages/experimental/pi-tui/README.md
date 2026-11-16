@@ -176,6 +176,8 @@ The status bar shows `Kali checking`, `Kali ready`, or `Kali unavailable` even w
 
 The bundled [VPN status service](../../host/vpn-status/README.md) adds a sampled Host HTTPS verification segment with its last-check time. Enable the `vpn-status` row to opt in; TUI refreshes the shared cache display every 15 seconds without starting network checks.
 
+`/vpn status` shows the local tunnel and cached HTTPS evidence. `/vpn reconnect` reconnects Mullvad and checks egress again; reconnect alone does not establish verification. It affects shared Web/TUI traffic and preserves policy. See [Windows/Linux control and isolated Server setup](../../host/vpn-status/README.md#tui-control).
+
 Background Git status, file search, clipboard helpers, and Kali readiness commands request hidden initial windows on Windows. Commands that explicitly open their own windows remain outside this guarantee.
 
 `/exit`, `/new`, `/fork`, `/resume`, `/recap`, `/context`, `/tree`, `/agents`, `/jobs`, `/model`, `/preset`, `/thinking`, `/team-mode`, `/suppress-prompt`, `/mcp`, `/jev`, `/skills`, `/shell [win|kali|close]`, `/agent-debug`, `/exec`, `/wiki`, `/runs`, `/recon`, `/machines`, `/key`, `/provider`, `/providers`, `/memory`, `/sessions`, `/rewind`, `/clear`, `/queue`, `/export`, `/rename`, `/copy`, `/retry`, `/expand-all`, `/hotkeys`, plus the official dsh slash commands (`/compact`, `/goal`, `/plan`, `/feedback`).

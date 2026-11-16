@@ -5074,6 +5074,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Owns one non-overlapping external check and a bounded-lifetime cached result.',
     methods: [
       {
+        signature: 'async tunnel(): Promise<VpnControlResult>',
+        description: 'Read the local tunnel without sending public traffic; never exposed as a Remote mutation.',
+        parameters: [],
+        returns: 'sanitized CLI/broker state, independent of the cached HTTPS evidence.',
+      },
+      {
+        signature: 'async reconnect(): Promise<VpnReconnectResult>',
+        description: 'Reconnect Mullvad once, then replace the HTTPS sample; concurrent calls are rejected.',
+        parameters: [],
+        returns: 'control outcome and fresh egress result; a completed reconnect can still be unknown/unverified.',
+      },
+      {
         signature: '@Remote(\'read\') read(signal?: AbortSignal): VpnStatusSnapshot',
         description: 'Read cached verification only; never triggers network I/O.',
         parameters: [{ name: 'signal', description: 'optional Remote carrier cancellation; this synchronous cache read performs no I/O.' }],
@@ -11247,6 +11259,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ViewerPluginPolicy',
     declaration: 'export interface ViewerPluginPolicy {\n    readonly plugin: string;\n    readonly mode: \'all\' | \'none\' | \'selected\';\n    readonly endpoints?: readonly string[];\n}',
+  },
+  {
+    name: 'VpnControlResult',
+    declaration: 'export interface VpnControlResult {\n    kind: \'ok\' | \'busy\' | \'unavailable\' | \'failed\';\n    tunnel: \'connected\' | \'connecting\' | \'disconnected\' | \'disconnecting\' | \'error\' | \'unknown\';\n}',
+  },
+  {
+    name: 'VpnReconnectResult',
+    declaration: 'export interface VpnReconnectResult {\n    readonly kind: \'reconnected\' | \'busy\' | \'unavailable\' | \'failed\';\n    readonly snapshot: VpnStatusSnapshot;\n}',
   },
   {
     name: 'VpnStatusSnapshot',
