@@ -35,6 +35,8 @@ const EXEC_MODE = process.env.SB_EXEC_MODE || (() => {
   return i !== -1 ? process.argv[i+1] : "auto";
 })();
 
+const CRED_FILE = process.env.SB_CREDENTIALS_FILE || path.join(os.homedir(), ".dsh", ".credentials.yaml");
+
 // Resolve the upstream credential at boot: direct launches bypass
 // sb-auto-start, which otherwise injects SB_BACKEND_KEY.
 if (!process.env.SB_BACKEND_KEY) {
@@ -43,24 +45,31 @@ if (!process.env.SB_BACKEND_KEY) {
     const credName = b.includes("z.ai") ? "ZAI_API_KEY"
       : b.includes("deepseek.com") ? "DEEPSEEK_API_KEY"
       : "NINE_ROUTER_GLM_DEEPSEEK_API_KEY";
-    const credFile = fs.readFileSync(path.join(os.homedir(), ".dsh", ".credentials.yaml"), "utf8");
+    const credFile = fs.readFileSync(CRED_FILE, "utf8");
     const credMatch = credFile.match(new RegExp(credName + ":\\s*(\\S+)"));
     if (credMatch) process.env.SB_BACKEND_KEY = credMatch[1];
   } catch { /* unauthenticated upstream calls fail loud at use time */ }
 }
 
+const num = (name, dflt) => { const v = parseInt(process.env[name]); return Number.isFinite(v) && v > 0 ? v : dflt; };
+
 const EXEC_CONFIG = {
   workspace: process.env.SB_EXEC_WORKSPACE || path.join(__dirname, "exec-workspace"),
-  kaliDistro: "kali-linux",
+  kaliDistro: process.env.SB_KALI_DISTRO || "kali-linux",
   dockerSocket: process.env.SB_DOCKER_SOCKET || null,
   dockerContainer: process.env.SB_KALI_CONTAINER || null,
   dockerWorkspace: process.env.SB_KALI_WORKSPACE || null,
-  maxOutputSize: 512 * 1024,
-  execTimeout: 120000,
-  maxChainSteps: 10,
-  skillsDir: path.join(os.homedir(), ".dsh", "skills"),
-  wikiDir: path.join(os.homedir(), ".dsh", "cyber-wiki"),
-  reconTimeout: 60000,
+  maxOutputSize: num("SB_MAX_OUTPUT_SIZE", 512 * 1024),
+  execTimeout: num("SB_EXEC_TIMEOUT", 120000),
+  maxChainSteps: num("SB_CHAIN_STEPS", 10),
+  skillsDir: process.env.SB_SKILLS_DIR || path.join(os.homedir(), ".dsh", "skills"),
+  wikiDir: process.env.SB_WIKI_DIR || path.join(os.homedir(), ".dsh", "cyber-wiki"),
+  reconTimeout: num("SB_RECON_TIMEOUT", 60000),
+  httpxTimeout: num("SB_HTTPX_TIMEOUT", 15000),
+  directTimeout: num("SB_DIRECT_TIMEOUT", 120000),
+  toolTimeout: num("SB_TOOL_TIMEOUT", 30000),
+  bootTimeout: num("SB_BOOT_TIMEOUT", 60000),
+  credFile: CRED_FILE,
   // Internal LLM calls (chain analysis, refusal retry) ride the model the
   // client requested; SB_MODEL overrides the fallback default.
   model: process.env.SB_MODEL || "glm/glm-5.3-flash",
@@ -693,11 +702,11 @@ async function execDocker(argv, timeoutMs = EXEC_CONFIG.execTimeout) {
   }
 }
 
-function runKaliCommand(cmd, args, timeoutMs = 30000) {
+function runKaliCommand(cmd, args, timeoutMs = EXEC_CONFIG.toolTimeout) {
   return new Promise((resolve) => {
     if (DOCKER_EXEC) { execDocker([cmd, ...args], timeoutMs).then(resolve); return; }
     // Ensure Kali is up
-    try { execSync(`wsl -d ${EXEC_CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe" }); } catch { }
+    try { execSync(`wsl -d ${EXEC_CONFIG.kaliDistro} -- true`, { timeout: EXEC_CONFIG.bootTimeout, stdio: "pipe" }); } catch { }
 
     const proc = spawn("wsl", ["-d", EXEC_CONFIG.kaliDistro, "-u", "root", "--exec", cmd, ...args], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -752,7 +761,7 @@ async function runRecon(targets) {
     // Phase 3: If web target, tech fingerprint
     if (target.type === "url" || (nmap.output && nmap.output.includes("80/") || nmap.output.includes("443/"))) {
       const targetUrl = target.type === "url" ? target.value : `http://${host}`;
-      const httpx = await runKaliCommand("httpx", [targetUrl, "-title", "-tech-detect", "-status-code", "-silent"], 15000);
+      const httpx = await runKaliCommand("httpx", [targetUrl, "-title", "-tech-detect", "-status-code", "-silent"], EXEC_CONFIG.httpxTimeout);
       if (httpx.output?.trim()) {
         results.push({ tool: "httpx", target: host, success: true, output: httpx.output.substring(0, 1000) });
         console.log(`[SB v6 RECON] httpx: ${httpx.output.trim()}`);
@@ -970,7 +979,7 @@ function extractCode(text) {
 
 function bootKali() {
   if (DOCKER_EXEC) return true;
-  try { execSync(`wsl -d ${EXEC_CONFIG.kaliDistro} -- true`, { timeout: 60000, stdio: "pipe" }); return true; } catch { return false; }
+  try { execSync(`wsl -d ${EXEC_CONFIG.kaliDistro} -- true`, { timeout: EXEC_CONFIG.bootTimeout, stdio: "pipe" }); return true; } catch { return false; }
 }
 
 function execCode(block, env) {
@@ -1204,7 +1213,7 @@ async function processBody(raw) {
 
     if (directOp) {
       console.log(`[SB v6 DIRECT] ${directOp.desc}`);
-      const result = await runKaliCommand(directOp.tool, directOp.args, 120000);
+      const result = await runKaliCommand(directOp.tool, directOp.args, EXEC_CONFIG.directTimeout);
       console.log(`[SB v6 DIRECT] ${result.success ? "✓" : "✗"} (${result.output?.split("\n").length || 0} lines)`);
 
       // Return direct result without LLM round-trip; sb_* metadata rides the
