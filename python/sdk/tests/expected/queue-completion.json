@@ -1,0 +1,8 @@
+{
+  "final_response": "TWO",
+  "finish_reason": "completed",
+  "turns": [
+    { "turn": 1, "reason": { "kind": "completed" } },
+    { "turn": 2, "reason": { "kind": "completed" } }
+  ]
+}

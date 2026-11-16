@@ -31,6 +31,46 @@ async function renderScreen(tui: TuiAltScreen): Promise<string> {
   return stripVTControlCharacters(tui.getScreenLines().join('\n'))
 }
 
+describe('queued input', () => {
+  it('shows that Esc keeps the queue and explains how to resume after stopping', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('queued-input'))
+    const agent = fixtureAgent(ctx, session)
+    const cancel = vi.spyOn(agent, 'cancel')
+    const followup = vi.spyOn(agent, 'followup')
+    const pending = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'queued followup' }] })]
+    Object.defineProperty(agent.inbox, 'nextTurn', { get: () => pending })
+    const start = vi.fn<Terminal['start']>()
+    const tui = new TuiAltScreen({ columns: 120, rows: 40, kittyProtocolActive: false,
+      start, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
+      hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
+      clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn() })
+    const screen = new ChatScreen({ ctx, tui, agent, config: { cwd: join(tmpdir(), 'deepseek-harness') }, onQuit: vi.fn() })
+    tui.start()
+    try {
+      screen.handleEvent(session.append('turn/start', { turn: 1 }))
+      const running = await renderScreen(tui)
+      expect(running).toContain('1 message to send after this turn')
+      expect(running).toContain('(Esc stops; queue kept)')
+      expect(running).not.toContain('Esc to send now')
+      expect(running.split('\n').filter(line => line.includes('message to send') || line.includes('└ queued followup'))
+        .map(line => line.split('│')[0]!.trim())).toMatchSnapshot('queued input while working')
+      start.mock.calls[0]?.[0]('\x1b')
+      expect(cancel).toHaveBeenCalledExactlyOnceWith({ kind: 'user' }, { keepInbox: true })
+      screen.handleEvent(session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } }))
+      const stopped = await renderScreen(tui)
+      expect(stopped).toContain('1 message queued')
+      expect(stopped).toContain('(send a message to resume)')
+      expect(stopped).toContain('queued followup')
+      expect(stopped.split('\n').filter(line => line.includes('message queued') || line.includes('└ queued followup'))
+        .map(line => line.split('│')[0]!.trim())).toMatchSnapshot('preserved queue after Esc')
+      expect(followup).not.toHaveBeenCalled()
+      expect(agent.inbox.nextTurn).toEqual(pending)
+    } finally { tui.stop(); await ctx.fiber.dispose() }
+  })
+})
+
 describe('running subagents in the status bar', () => {
   it('shows Wiki availability for the visible session and follows tool changes', async () => {
     const ctx = new Context()

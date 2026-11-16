@@ -2803,7 +2803,8 @@ export class ChatScreen {
   private updateQueueBanner(): void {
     const inbox = this.agent.inbox
     const queued = [...inbox.nextStep, ...inbox.nextTurn]
-    const key = queued.map(message => String(message.id)).join(',')
+    const working = this.isWorking()
+    const key = `${working}:${queued.map(message => String(message.id)).join(',')}`
     if (key === this.lastQueueKey) return
     this.lastQueueKey = key
     if (queued.length === 0) {
@@ -2818,9 +2819,9 @@ export class ChatScreen {
         .replace(/\s+/g, ' ')
         .trim()
     const header = style.queueHeader(
-      `⏳ ${queued.length} message${queued.length > 1 ? 's' : ''} to send after this turn`,
+      `⏳ ${queued.length} message${queued.length > 1 ? 's' : ''} ${working ? 'to send after this turn' : 'queued'}`,
     )
-    const hint = style.muted(' (Esc to send now)')
+    const hint = style.muted(working ? ' (Esc stops; queue kept)' : ' (send a message to resume)')
     const rows = queued.map(message => `${style.muted('└')} ${style.queueItem(textOf(message).slice(0, 120))}`)
     this.queueBanner.setText([header + hint, ...rows].join('\n'))
   }

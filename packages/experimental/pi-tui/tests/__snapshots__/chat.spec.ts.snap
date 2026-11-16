@@ -131,6 +131,20 @@ exports[`exit and resume hints > resumes at the latest transcript bubble after b
 ]
 `;
 
+exports[`queued input > shows that Esc keeps the queue and explains how to resume after stopping > preserved queue after Esc 1`] = `
+[
+  "⏳ 1 message queued (send a message to resume)",
+  "└ queued followup",
+]
+`;
+
+exports[`queued input > shows that Esc keeps the queue and explains how to resume after stopping > queued input while working 1`] = `
+[
+  "⏳ 1 message to send after this turn (Esc stops; queue kept)",
+  "└ queued followup",
+]
+`;
+
 exports[`the split-pane shell > opens the shared shell beside the chat, cycles focus, then toggles closed > shared shell and resize divider 1`] = `
 [
   " │ ── Agent Debug ──                             ",

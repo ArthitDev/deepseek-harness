@@ -1793,7 +1793,7 @@ describe('agent loop', () => {
     ])
   })
 
-  it('keeps a session-listener send after dequeue in the following turn', async () => {
+  it.each(['assistant/message', 'turn/end'] as const)('keeps a %s listener microtask send in the following turn', async (boundary) => {
     const adapter = new MockAdapter([textResponse('first'), textResponse('second')])
     const ctx = await harness(adapter)
     const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
@@ -1801,10 +1801,10 @@ describe('agent loop', () => {
     const turns: number[] = []
     ctx.on('session/event', (_s, event) => { if (event.type === 'turn/start') turns.push(event.data.turn) })
 
-    // Queue the second from the first turn's durable Assistant settlement.
+    // Exercise input arriving after turn/end but before driver convergence.
     let queued = false
     ctx.on('session/event', (_s, event) => {
-      if (event.type === 'assistant/message' && !queued) {
+      if (event.type === boundary && !queued) {
         queued = true
         queueMicrotask(() => { send(agent, 'second message') })
       }
@@ -1815,8 +1815,33 @@ describe('agent loop', () => {
 
     expect(turns).toEqual([1, 2])
     expect(adapter.requests).toHaveLength(2)
+    expect(agent.inbox.nextTurn).toHaveLength(0)
     expect(JSON.stringify(adapter.requests[1]!.messages)).toContain('first')
     expect(JSON.stringify(adapter.requests[1]!.messages)).toContain('second message')
+  })
+
+  it('drains a turn/end microtask followup after an empty completed turn', async () => {
+    const adapter = new MockAdapter([textResponse('second')])
+    const ctx = await harness(adapter)
+    const agent = await ctx.agentLoop.create(SessionId('empty-completed'), { provider: 'mock', model: 'mock' })
+    ctx.on('agent/pre-step', ({ turn }, next) => turn === 1
+      ? Promise.resolve({ kind: 'enter' as const, messages: [] })
+      : next())
+    ctx.on('session/event', (session, event) => {
+      if (session === agent.session && event.type === 'turn/end' && event.data.turn === 1) {
+        queueMicrotask(() => { send(agent, 'second message') })
+      }
+    })
+
+    send(agent, 'empty first turn')
+    await agent.whenIdle()
+
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'turn/end').map(event => event.data)).toEqual([
+      { turn: 1, reason: { kind: 'completed' } },
+      { turn: 2, reason: { kind: 'completed' } },
+    ])
+    expect(adapter.requests).toHaveLength(1)
+    expect(agent.inbox.nextTurn).toHaveLength(0)
   })
 
   it('keeps a model-adapter callback send in the following turn', async () => {

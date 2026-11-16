@@ -1,0 +1,9 @@
+version: 1
+scenario: queued-turn-completion
+profile: sdk
+composition: default
+recording: authored
+header:
+  class: queued-turn-completion
+  pin: true
+  toolSchemasSource: session/text-turn

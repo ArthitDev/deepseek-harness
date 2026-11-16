@@ -141,6 +141,10 @@ interface SdkAssertions {
 }
 
 const SDK_ASSERTIONS: Readonly<Record<string, SdkAssertions>> = {
+  'queued-turn-completion': {
+    patches: [fileURLToPath(new URL('./queued-turn-completion/runtime.cordis.yml', import.meta.url))],
+    expectedFinalResponse: 'TWO',
+  },
   'team-default-enabled': {
     expectedFinalResponse: 'TEAM_CONFIG_OK',
     patches: [

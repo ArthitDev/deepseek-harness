@@ -90,6 +90,8 @@ The output must contain `pi-tui`, `global-default-skills`, `jev-first-action-pol
 
 `/new` keeps the most recently selected provider, model, and mounted preset.
 
+Messages submitted while the agent runs enter the queue and run automatically, in order, after normal turn completion. Esc or Ctrl+C during agent work interrupts it and preserves queued messages; it does not send them immediately. The idle queue banner asks for a new message to resume the preserved queue. `/queue` lists pending input, `/queue remove <id>` removes one item, and `/queue clear` discards it all.
+
 Switching `/preset`, or selecting a model bound to a different preset, changes the current idle Agent in the same session. The session id, conversation history, tool results, and compacted checkpoints remain unchanged. The next request assembles the new preset's prompt and tools; no prior events or injected instructions are removed. Deployment skill hooks must be installed in the TUI profile as well as Web. Preset switches are refused while work is running. Prior answers and checkpoint summaries can still influence later responses.
 
 Press Ctrl+X or run `/thinking` to open a numbered reasoning-level list with descriptions. The picker focuses the current effort or configured default and marks both when available. Use ↑/↓ or a number to choose a row, Enter to apply it from the next step, and Esc to cancel. It offers only the selected model's advertised levels; binary controls describe enabling or disabling thinking. `/thinking <level>` remains available for direct selection. Confirmed selections persist through the shared model defaults. Cancelling the picker during a running turn leaves that turn running.

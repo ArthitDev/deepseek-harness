@@ -72,6 +72,8 @@ Every inbox mutation commits one normalized `agent/inbox/spliced` event. The pro
 
 ### What a step does
 
+Queued prompts run in order after normal turn completion, including input submitted by a turn-end listener's microtask. Rejected and failed turns leave remaining input parked until a fresh waking message. Cancellation with `keepInbox: true` preserves older queued input without resuming it; a waking send after cancellation resumes pending input once the aborted activity settles.
+
 Each step sends the session's derived history — with the latest non-empty `system/message` node as the effective prompt, or no system messages when the rendered prompt is empty — and its visible tool schemas; the model's tool calls run through the guarded tool pipeline and every accepted fact is appended to the session log before the next step derives from it. The loop passes the complete raw call batch to `ctx.tools.execute()`; built-in executors preserve model-order results and exclusive barriers. Cancellation is cooperative: `agent.cancel()` aborts the current activity and, unless `keepInbox` is set, clears pending work; a cancelled stream finalizes the text already delivered to the user.
 
 -----
