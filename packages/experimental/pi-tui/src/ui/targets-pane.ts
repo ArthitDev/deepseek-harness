@@ -1,8 +1,8 @@
-/** Compact, scrollable URL tree above the Agent Debug timeline. */
+/** Compact, scrollable target tree above the Agent Debug timeline. */
 import { isIP } from 'node:net'
 import { matchesKey, ScrollView, VStack, truncateToWidth, visibleWidth, type Component, type TuiMouseEvent } from '@earendil-works/pi-tui'
 import type { TuiMouseDispatchResult } from '@earendil-works/pi-tui/dist/tui.js'
-import type { TargetUrl } from '../core/targets.js'
+import type { TargetEntry } from '../core/targets.js'
 import { style } from './theme.js'
 
 interface Branch {
@@ -60,9 +60,9 @@ function rowsOf(nodes: readonly Branch[], collapsed: ReadonlySet<string>, path: 
   })
 }
 
-function targetBranches(urls: readonly TargetUrl[]): Branch[] {
+function webBranches(urls: readonly TargetEntry[]): Branch[] {
   const roots = urls.filter(entry => entry.primary).map((entry) => {
-    const url = new URL(entry.url)
+    const url = new URL(entry.value)
     const hostname = url.hostname
     const pathname = url.pathname
     return {
@@ -71,14 +71,14 @@ function targetBranches(urls: readonly TargetUrl[]): Branch[] {
       origin: url.origin,
       basePath: pathname.replace(/\/$/, ''),
       isIp: isIP(hostname.replace(/^\[|\]$/g, '')) !== 0,
-      node: branch(entry.url),
+      node: branch(entry.value),
       children: [] as URL[],
     }
   })
   const others: URL[] = []
   for (const entry of urls) {
     if (entry.primary) continue
-    const url = new URL(entry.url)
+    const url = new URL(entry.value)
     const hostname = url.hostname
     const origin = url.origin
     const pathname = url.pathname
@@ -106,27 +106,49 @@ function targetBranches(urls: readonly TargetUrl[]): Branch[] {
     for (const url of root.children) addPath(sub, url, root.origin, root.basePath)
     root.node.children.set('sub', sub)
   }
-  const targets = branch(`Target · ${roots.length}`, 'target')
+  const targets = branch(`Web · ${roots.length}`, 'web')
   for (const root of roots) targets.children.set(root.url.href, root.node)
-  const other = branch(`Other · ${others.length}`, 'other')
+  const other = branch(`Other web · ${others.length}`, 'other-web')
   for (const url of others) other.children.set(url.href, branch(url.href))
-  return [targets, ...others.length === 0 ? [] : [other]]
+  return [...roots.length === 0 ? [] : [targets], ...others.length === 0 ? [] : [other]]
+}
+
+function targetBranches(entries: readonly TargetEntry[]): Branch[] {
+  const web = entries.filter(entry => entry.kind === 'web')
+  const groups: Branch[] = web.length === 0 ? [] : webBranches(web)
+  const labels = { host: 'Hosts', network: 'Networks', file: 'Files / folders', app: 'Apps / programs', other: 'Targets' } as const
+  for (const kind of ['host', 'network', 'file', 'app', 'other'] as const) {
+    const entriesOfKind = entries.filter(entry => entry.kind === kind)
+    if (entriesOfKind.length === 0) continue
+    const group = branch(`${labels[kind]} · ${entriesOfKind.length}`, kind)
+    const discoveries = entriesOfKind.filter(entry => !entry.primary)
+    for (const entry of entriesOfKind.filter(entry => entry.primary)) {
+      group.children.set(entry.value, branch(entry.value))
+    }
+    if (discoveries.length > 0) {
+      const observed = branch(`Observed · ${discoveries.length}`, 'observed')
+      for (const entry of discoveries) observed.children.set(entry.value, branch(entry.value))
+      group.children.set('observed', observed)
+    }
+    groups.push(group)
+  }
+  return groups
 }
 
 /**
- * Group explicit targets, matching hosts/subdomains, and unrelated URLs into folder branches.
+ * Group targets by kind, separating explicit identifiers from discoveries.
  * Host matches rank by hostname length, then matching same-origin path length.
  * Equal scores keep the first root.
- * @param urls - Normalized session URL observations.
+ * @param entries - Normalized session target observations.
  * @returns Display-only lines; host matching never authorizes tool execution.
  */
-export function targetTreeLines(urls: readonly TargetUrl[]): string[] {
-  return rowsOf(targetBranches(urls), new Set()).map(row => row.prefix + row.label)
+export function targetTreeLines(entries: readonly TargetEntry[]): string[] {
+  return rowsOf(targetBranches(entries), new Set()).map(row => row.prefix + row.label)
 }
 
 /** Collapsible Targets tree with independent selection, branch state, and scrolling. */
 export class TargetsPane extends VStack {
-  private urls: readonly TargetUrl[] = []
+  private targetEntries: readonly TargetEntry[] = []
   private tree: readonly Branch[] = []
   private rows: readonly TargetRow[] = []
   private collapsed = new Set<string>()
@@ -257,31 +279,31 @@ export class TargetsPane extends VStack {
   }
 
   /**
-   * Rebuild the tree only when URL observations change.
-   * @param urls - Cached URL snapshot for the visible session.
+   * Rebuild the tree only when target observations change.
+   * @param entries - Cached target snapshot for the visible session.
    */
-  update(urls: readonly TargetUrl[]): void {
-    if (urls === this.urls) return
-    const previous = new Set(this.urls.map(entry => entry.url))
-    if (!urls.some(entry => previous.has(entry.url))) {
+  update(entries: readonly TargetEntry[]): void {
+    if (entries === this.targetEntries) return
+    const previous = new Set(this.targetEntries.map(entry => `${entry.kind}:${entry.value}`))
+    if (!entries.some(entry => previous.has(`${entry.kind}:${entry.value}`))) {
       this.scroll.scrollToStart()
       this.collapsed.clear()
       this.paneCollapsed = false
       this.selected = undefined
     }
-    this.urls = urls
-    this.tree = targetBranches(urls)
+    this.targetEntries = entries
+    this.tree = targetBranches(entries)
     this.rows = rowsOf(this.tree, this.collapsed)
     this.renderedRows = undefined
     if (!this.rows.some(row => row.key === this.selected)) this.selected = undefined
-    if (urls.length === 0) this.focused = false
+    if (entries.length === 0) this.focused = false
   }
 
   /**
-   * Whether the tree contains any observed URLs.
-   * @returns true when at least one URL row exists.
+   * Whether the tree contains any observed targets.
+   * @returns true when at least one identifier exists.
    */
-  get hasUrls(): boolean { return this.urls.length > 0 }
+  get hasTargets(): boolean { return this.targetEntries.length > 0 }
 
   /** Whether only the box header is visible; its expanded height is retained by the owner. */
   get isCollapsed(): boolean { return this.paneCollapsed }

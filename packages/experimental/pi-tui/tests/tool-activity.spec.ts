@@ -5,7 +5,7 @@ import { JobId, type JobView } from '@deepseek-ai/dsh-jobs'
 import type { ActivityEntry } from '../src/core/activity.ts'
 import type { ToolCardStatus } from '../src/core/model.ts'
 import { ToolActivityPane } from '../src/ui/tool-activity.ts'
-import { TargetIndex } from '../src/core/targets.ts'
+import { TargetIndex, type TargetEntry } from '../src/core/targets.ts'
 import { TargetsPane } from '../src/ui/targets-pane.ts'
 import { style } from '../src/ui/theme.ts'
 
@@ -54,18 +54,45 @@ function targetPaneWithUnicodeRows(): TargetsPane {
   const pane = new TargetsPane(owner, () => {})
   const root = 'https://example.test/ไทย/漢字/😀/'
   pane.update([
-    { url: root, primary: true },
-    { url: `${root}ascii/alpha`, primary: false },
-    { url: `${root}ascii/beta/gamma`, primary: false },
-    { url: `${root}ไทย/二`, primary: false },
-    { url: `${root}漢字/二`, primary: false },
-    { url: `${root}emoji/😂`, primary: false },
+    { kind: 'web', value: root, primary: true },
+    { kind: 'web', value: `${root}ascii/alpha`, primary: false },
+    { kind: 'web', value: `${root}ascii/beta/gamma`, primary: false },
+    { kind: 'web', value: `${root}ไทย/二`, primary: false },
+    { kind: 'web', value: `${root}漢字/二`, primary: false },
+    { kind: 'web', value: `${root}emoji/😂`, primary: false },
   ])
   return pane
 }
 
 describe('agent tool activity', () => {
   afterEach(() => { vi.restoreAllMocks() })
+  it('shows non-web target groups beside activity and navigates them in a constrained pane', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+    const pane = new ToolActivityPane()
+    const index = new TargetIndex()
+    index.observe(1, 'host:LAB.internal:8443 /opt/demo/app app:"Desktop Demo with a long name"', true)
+    pane.update([call(0, 'ok')], [], index.getSnapshot())
+    const { tui, frame, input, dimensions } = fixture(pane, 46, 18)
+    tui.setFocus(pane)
+    try {
+      expect(frame()).toContain('Hosts · 1')
+      expect(frame()).not.toContain('Web ·')
+      expect(frame()).toContain('Agent Debug')
+      expect(frame().split('\n').map(line => line.trimEnd()).join('\n')).toMatchSnapshot('non-web targets above agent activity')
+      input('\t')
+      input('\x1b[F')
+      expect(frame()).toContain('Desktop Demo')
+      input('\x1b[A')
+      input('\r')
+      expect(frame()).toContain('▸ Apps / programs')
+      expect(frame()).not.toContain('Desktop Demo')
+      dimensions.columns = 20
+      expect(frame().split('\n').every(line => visibleWidth(line) <= 20)).toBe(true)
+      pane.update([])
+      expect(frame()).not.toContain('Targets')
+    } finally { tui.stop() }
+  })
+
   it('reuses wrapped activity rows while the visible content and width stay unchanged', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2000)
     const pane = new ToolActivityPane()
@@ -150,29 +177,29 @@ describe('agent tool activity', () => {
     tui.setFocus(pane)
     try {
       expect(frame()).toContain('╭─ Targets')
-      expect(frame()).toContain('Target · 1')
+      expect(frame()).toContain('Web · 1')
       expect(frame()).toContain('tool_0')
       expect(frame().split('\n').map(line => line.trimEnd()).join('\n')).toMatchSnapshot('targets above agent activity')
       input('\t')
       input('\x1b[F')
-      expect(frame()).toContain('Other · 1')
+      expect(frame()).toContain('Other web · 1')
       expect(frame()).toContain('https://docs.test/')
-      expect(frame()).not.toContain('Target · 1')
+      expect(frame()).not.toContain('Web · 1')
       expect(frame()).not.toContain('full output')
       // End selects the last leaf; Home clears the selection so Enter toggles the box.
       input('\x1b[H')
-      expect(frame()).toContain('Target · 1')
+      expect(frame()).toContain('Web · 1')
       input('\r')
       expect(frame()).toContain('Targets ▸')
       input('\r')
       expect(frame()).toContain('Targets ▾')
-      expect(frame()).toContain('Target · 1')
+      expect(frame()).toContain('Web · 1')
       input('\x1b[6~')
-      expect(frame()).not.toContain('Target · 1')
+      expect(frame()).not.toContain('Web · 1')
       input('\x1b[5~')
       input('\x1b[B')
       input('\x1b[A')
-      expect(frame()).toContain('Target · 1')
+      expect(frame()).toContain('Web · 1')
       for (let step = 0; step < 24; step++) input('\x1b[<65;3;4M')
       expect(frame()).toContain('https://docs.test/')
       input('\t')
@@ -277,13 +304,13 @@ describe('agent tool activity', () => {
 
   it.each([46, 15, 2, 1])('keeps the Targets frame within %i columns', (width) => {
     const pane = new ToolActivityPane()
-    pane.update([], [], [{ url: `https://example.test/${'คำ'.repeat(40)}`, primary: true }])
+    pane.update([], [], [{ kind: 'web', value: `https://example.test/${'คำ'.repeat(40)}`, primary: true }])
     expect(text(pane, width).split('\n').every(line => visibleWidth(line) <= width)).toBe(true)
   })
 
   it('collapses the whole Targets box by mouse and reopens it from the focused header', () => {
     const pane = new ToolActivityPane()
-    pane.update([call(0, 'ok')], [], [{ url: 'https://example.test/', primary: true }])
+    pane.update([call(0, 'ok')], [], [{ kind: 'web', value: 'https://example.test/', primary: true }])
     const { tui, frame, input } = fixture(pane, 64, 18)
     try {
       const debugRow = () => frame().split('\n').findIndex(line => line.includes('Agent Debug'))
@@ -313,7 +340,7 @@ describe('agent tool activity', () => {
   it('collapses each header independently and retains hidden summary updates', () => {
     const pane = new ToolActivityPane()
     const entries = [call(0, 'ok')]
-    const urls = [{ url: 'https://example.test/', primary: true }]
+    const urls: TargetEntry[] = [{ kind: 'web', value: 'https://example.test/', primary: true }]
     pane.update(entries, [], urls, 'task: inspect the service · elapsed: 1.0s')
     const { tui, frame, input } = fixture(pane, 64, 18)
     const click = (label: string): void => {
@@ -334,7 +361,7 @@ describe('agent tool activity', () => {
       expect(frame()).toContain('Targets ▸')
       expect(frame()).toContain('Main Agent ▸')
       expect(frame()).not.toContain('https://example.test/')
-      pane.update(entries, [], [...urls, { url: 'https://example.test/api/v1', primary: false }],
+      pane.update(entries, [], [...urls, { kind: 'web', value: 'https://example.test/api/v1', primary: false }],
         'task: latest summary · elapsed: 2.0s')
       expect(frame()).toContain('Main Agent ▸')
       expect(frame()).not.toContain('latest summary')
@@ -353,7 +380,7 @@ describe('agent tool activity', () => {
   it('cycles keyboard focus through Targets, Main Agent and activity', () => {
     const pane = new ToolActivityPane()
     const entries = [call(0, 'ok')]
-    pane.update(entries, [], [{ url: 'https://example.test/', primary: true }], 'task: keyboard controls')
+    pane.update(entries, [], [{ kind: 'web', value: 'https://example.test/', primary: true }], 'task: keyboard controls')
     const { tui, frame, input } = fixture(pane, 64, 18)
     tui.setFocus(pane)
     try {
@@ -385,8 +412,8 @@ describe('agent tool activity', () => {
 
   it('drags each bottom border independently and retains its height across collapse and updates', () => {
     const pane = new ToolActivityPane()
-    const urls = [{ url: 'https://example.test/', primary: true },
-      ...Array.from({ length: 30 }, (_, id) => ({ url: `https://example.test/path-${id}`, primary: false }))]
+    const urls: TargetEntry[] = [{ kind: 'web', value: 'https://example.test/', primary: true },
+      ...Array.from({ length: 30 }, (_, id): TargetEntry => ({ kind: 'web', value: `https://example.test/path-${id}`, primary: false }))]
     const entries = Array.from({ length: 20 }, (_, id) => call(id, 'ok'))
     const summary = Array.from({ length: 20 }, (_, id) => `summary line ${id}`).join('\n')
     pane.update(entries, [], urls, summary)
@@ -445,8 +472,8 @@ describe('agent tool activity', () => {
 
   it('resizes focused panels with Shift arrows and scrolls a shortened Main Agent box', () => {
     const pane = new ToolActivityPane()
-    pane.update([], [], [{ url: 'https://example.test/', primary: true },
-      ...Array.from({ length: 12 }, (_, id) => ({ url: `https://example.test/path-${id}`, primary: false }))],
+    pane.update([], [], [{ kind: 'web', value: 'https://example.test/', primary: true },
+      ...Array.from({ length: 12 }, (_, id): TargetEntry => ({ kind: 'web', value: `https://example.test/path-${id}`, primary: false }))],
     Array.from({ length: 20 }, (_, id) => `summary line ${id}`).join('\n'))
     const { tui, frame, input } = fixture(pane, 64, 40)
     tui.setFocus(pane)
@@ -472,7 +499,7 @@ describe('agent tool activity', () => {
 
   it.each([64, 30, 10, 1])('bounds both boxes at %i columns in a short pane', (width) => {
     const pane = new ToolActivityPane()
-    pane.update([call(0, 'ok')], [], [{ url: 'https://example.test/', primary: true }],
+    pane.update([call(0, 'ok')], [], [{ kind: 'web', value: 'https://example.test/', primary: true }],
       `task: ${'ตรวจระบบ漢字'.repeat(20)}`)
     const { tui, frame, input } = fixture(pane, width, 6)
     tui.setFocus(pane)
@@ -691,7 +718,7 @@ describe('agent tool activity', () => {
   it('keeps the Main Agent box fixed during keyboard and mouse scrolling and summary updates', () => {
     const pane = new ToolActivityPane()
     const entries = Array.from({ length: 20 }, (_, id) => call(id, 'ok'))
-    const urls = [{ url: 'https://example.test/', primary: true }]
+    const urls: TargetEntry[] = [{ kind: 'web', value: 'https://example.test/', primary: true }]
     const summary = 'task: ตรวจ service · calls: 20 completed · elapsed: 153.3s · usage: 752 in / 3005 out tokens'
     pane.update(entries, [], urls, summary)
     const { tui, frame, input } = fixture(pane, 64, 22)

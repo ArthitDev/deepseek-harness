@@ -2,7 +2,7 @@
 
 exports[`agent tool activity > drags each bottom border independently and retains its height across collapse and updates > independently resized debug boxes 1`] = `
 "╭─ Targets ▾ · Enter toggle · Tab next ────────────────────────╮
-│   ▾ Target · 1                                               │
+│   ▾ Web · 1                                                  │
 │   └─ ▾ https://example.test/                                 │
 │      └─ ▾ Sub Target · 30                                    │
 │         ├─   path-0                                          │
@@ -53,7 +53,7 @@ full output"
 
 exports[`agent tool activity > keeps collapsed branches through URL updates and navigates their parents with arrow keys > collapsed sub target after discovery 1`] = `
 "╭─ Targets ▾ · Enter toggle · Tab next ────────────────────────╮
-│   ▾ Target · 1                                               │
+│   ▾ Web · 1                                                  │
 │   └─ ▾ https://example.test/                                 │
 │ ›    └─ ▸ Sub Target · 3                                     │
 ╰───────────────────────────── ↕ ──────────────────────────────╯
@@ -63,7 +63,7 @@ No activity yet. Send a task in chat."
 
 exports[`agent tool activity > keeps the Main Agent box fixed during keyboard and mouse scrolling and summary updates > fixed summary above scrollable activity 1`] = `
 "╭─ Targets ▾ ──────────────────────────────────────────────────╮
-│   ▾ Target · 1                                               │
+│   ▾ Web · 1                                                  │
 │   └─   https://example.test/                                 │
 ╰───────────────────────────── ↕ ──────────────────────────────╯
 ── Agent Debug · Tab panels ──
@@ -119,7 +119,7 @@ exports[`agent tool activity > preserves complete Target rows across narrow widt
   ],
   "collapsed, width 46": [
     "[90m╭─ Targets ▾ · Enter toggle · Tab next ──────╮[39m",
-    "[90m│[39m [36;1m  ▾ Target · 1[39;22m                             [90m│[39m",
+    "[90m│[39m [36;1m  ▾ Web · 1[39;22m                                [90m│[39m",
     "[90m│[39m [31m› └─ ▸ https://example.test/ไทย/漢字/😀/[39m   [90m│[39m",
     "[90m╰────────────────────────────────────────────╯[39m",
   ],
@@ -222,7 +222,7 @@ exports[`agent tool activity > preserves complete Target rows across narrow widt
   ],
   "expanded, width 46": [
     "[90m╭─ Targets ▾ · Enter toggle · Tab next ──────╮[39m",
-    "[90m│[39m [36;1m  ▾ Target · 1[39;22m                             [90m│[39m",
+    "[90m│[39m [36;1m  ▾ Web · 1[39;22m                                [90m│[39m",
     "[90m│[39m [31m› └─ ▾ https://example.test/ไทย/漢字/😀/[39m   [90m│[39m",
     "[90m│[39m [36;1m     └─ ▾ Sub Target · 5[39;22m                   [90m│[39m",
     "[90m│[39m [36;1m        ├─ ▾ ascii[39;22m                         [90m│[39m",
@@ -358,7 +358,7 @@ exports[`agent tool activity > preserves complete Target rows across narrow widt
   ],
   "selected, width 46": [
     "[90m╭─ Targets ▾ · Enter toggle · Tab next ──────╮[39m",
-    "[90m│[39m [36;1m  ▾ Target · 1[39;22m                             [90m│[39m",
+    "[90m│[39m [36;1m  ▾ Web · 1[39;22m                                [90m│[39m",
     "[90m│[39m [31m› └─ ▾ https://example.test/ไทย/漢字/😀/[39m   [90m│[39m",
     "[90m│[39m [36;1m     └─ ▾ Sub Target · 5[39;22m                   [90m│[39m",
     "[90m│[39m [36;1m        ├─ ▾ ascii[39;22m                         [90m│[39m",
@@ -494,7 +494,7 @@ exports[`agent tool activity > preserves complete Target rows across narrow widt
   ],
   "unfocused, width 46": [
     "[90m╭─ Targets ▾ ────────────────────────────────╮[39m",
-    "[90m│[39m [36;1m  ▾ Target · 1[39;22m                             [90m│[39m",
+    "[90m│[39m [36;1m  ▾ Web · 1[39;22m                                [90m│[39m",
     "[90m│[39m [36;1m  └─ ▾ https://example.test/ไทย/漢字/😀/[39;22m   [90m│[39m",
     "[90m│[39m [36;1m     └─ ▾ Sub Target · 5[39;22m                   [90m│[39m",
     "[90m│[39m [36;1m        ├─ ▾ ascii[39;22m                         [90m│[39m",
@@ -548,7 +548,7 @@ exports[`agent tool activity > preserves complete Target rows across narrow widt
 
 exports[`agent tool activity > shows Targets above Debug and scrolls the tree independently by keyboard and mouse > targets above agent activity 1`] = `
 "╭─ Targets ▾ ────────────────────────────────╮
-│   ▾ Target · 1                             │
+│   ▾ Web · 1                                │
 │   └─ ▾ https://example.test/               │
 │      └─ ▾ Sub Target · 15                  │
 │         ├─   path-0                        │
@@ -600,4 +600,19 @@ Recorded event details
 
 + [RETRY] Retry · operation · 1.5s            
 Recorded event details"
+`;
+
+exports[`agent tool activity > shows non-web target groups beside activity and navigates them in a constrained pane > non-web targets above agent activity 1`] = `
+"╭─ Targets ▾ ────────────────────────────────╮
+│   ▾ Hosts · 1                              │
+│   └─   lab.internal:8443                   │
+│   ▾ Files / folders · 1                    │
+│   └─   /opt/demo/app                       │
+│   ▾ Apps / programs · 1                    │
+│   └─   Desktop Demo with a long name       │
+╰──────────────────── ↕ ─────────────────────╯
+── Agent Debug · Tab panels ──
+› [OK] Tool · tool_0 · 1.5s
+{"command":"Get-Date"}
+exit code: 0"
 `;

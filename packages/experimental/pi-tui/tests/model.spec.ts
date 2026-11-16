@@ -134,6 +134,22 @@ describe('createModel', () => {
 })
 
 describe('target observations', () => {
+  it('replays non-web targets and removes discoveries shadowed by rewind', () => {
+    const events = [
+      userMessageEvent(userMessage('app:"Desktop Demo" /opt/demo/app 10.0.0.5')),
+      toolResultEvent({ turn: 1, step: 1, message: toolResult('target-files', 'file:/opt/demo/plugin.so') }),
+    ]
+    const model = createModel()
+    events.forEach(event => applyEvent(model, event))
+    const replay = createModel()
+    events.forEach(event => applyEvent(replay, event))
+    expect(replay.targets.getSnapshot()).toEqual(model.targets.getSnapshot())
+    expect(model.targets.getSnapshot().map(entry => entry.kind)).toEqual(['app', 'file', 'host', 'file'])
+    applyEvent(model, developerMessageEvent('rewound', { op: 'replace', startSeq: events[1]!.seq, endSeq: events[1]!.seq }))
+    expect(model.targets.getSnapshot()).toHaveLength(3)
+    expect(model.targets.getSnapshot().every(entry => entry.primary)).toBe(true)
+  })
+
   it('folds committed user, assistant, tool arguments and orphan tool results identically on replay', () => {
     const events = [
       userMessageEvent(userMessage('https://example.test/')),
@@ -147,10 +163,10 @@ describe('target observations', () => {
     const model = createModel()
     events.forEach(event => applyEvent(model, event))
     expect(model.targets.getSnapshot()).toEqual([
-      { url: 'https://example.test/', primary: true },
-      { url: 'https://example.test/api', primary: false },
-      { url: 'https://api.example.test/v1', primary: false },
-      { url: 'https://docs.test/', primary: false },
+      { kind: 'web', value: 'https://example.test/', primary: true },
+      { kind: 'web', value: 'https://example.test/api', primary: false },
+      { kind: 'web', value: 'https://api.example.test/v1', primary: false },
+      { kind: 'web', value: 'https://docs.test/', primary: false },
     ])
     const replay = createModel()
     events.forEach(event => applyEvent(replay, event))
@@ -167,7 +183,7 @@ describe('target observations', () => {
     } as CompactionCheckpointSource)))
     expect(model.targets.getSnapshot()).toBe(snapshot)
     applyEvent(model, developerMessageEvent('rewound', { op: 'replace', startSeq: events[1]!.seq, endSeq: events[3]!.seq }))
-    expect(model.targets.getSnapshot()).toEqual([{ url: 'https://example.test/', primary: true }])
+    expect(model.targets.getSnapshot()).toEqual([{ kind: 'web', value: 'https://example.test/', primary: true }])
     applyEvent(model, developerMessageEvent('the operator cleared', { op: 'replace', startSeq: events[0]!.seq, endSeq: events[0]!.seq }))
     expect(model.targets.getSnapshot()).toEqual([])
   })

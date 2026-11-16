@@ -4,7 +4,7 @@ import type { JobId, JobView } from '@deepseek-ai/dsh-jobs'
 import { matchesKey, ScrollView, Text, VStack, truncateToWidth, visibleWidth, type Component, type TuiMouseEvent } from '@earendil-works/pi-tui'
 import { LAYOUT_NODE, type StackLayoutNode } from '@earendil-works/pi-tui/dist/layout-node.js'
 import type { ActivityEntry } from '../core/activity.js'
-import type { TargetUrl } from '../core/targets.js'
+import type { TargetEntry } from '../core/targets.js'
 import { TargetsPane } from './targets-pane.js'
 import { style } from './theme.js'
 
@@ -58,10 +58,10 @@ export class ToolActivityPane extends VStack {
         return { handled: true }
       },
     }
-    this.addChild(this.targets, { basis: 'auto', shrink: 1, maxSize: 10, minSize: 1, visible: () => this.targets.hasUrls })
+    this.addChild(this.targets, { basis: 'auto', shrink: 1, maxSize: 10, minSize: 1, visible: () => this.targets.hasTargets })
     this.addChild({
       invalidate: () => {},
-      render: width => new Text(style.muted(`── Agent Debug${this.targets.hasUrls || this.mainSummary !== undefined ? ' · Tab panels' : ''} ──`), 0, 0).render(width),
+      render: width => new Text(style.muted(`── Agent Debug${this.targets.hasTargets || this.mainSummary !== undefined ? ' · Tab panels' : ''} ──`), 0, 0).render(width),
     }, { basis: 'auto' })
     const summary = new VStack()
     const summaryHeader: Component = {
@@ -148,7 +148,7 @@ export class ToolActivityPane extends VStack {
    * Display the current session's recent activity without resetting scroll on ordinary updates.
    * @param entries - Bounded rows from the transcript fold, including replayed history.
    * @param jobs - Live registry snapshots for the visible session, independent of tool completion.
-   * @param urls - Cached URL observations from committed session events.
+   * @param targets - Cached target observations from committed session events.
    * @param mainSummary - Current Main Agent facts, when a task or turn has started.
    * @param waitingJobIds - Jobs whose final prompt matched and stayed quiet.
    * @returns nothing; updates the existing timeline in place.
@@ -156,11 +156,11 @@ export class ToolActivityPane extends VStack {
   update(
     entries: readonly ActivityEntry[],
     jobs: readonly JobView[] = [],
-    urls: readonly TargetUrl[] = [],
+    targets: readonly TargetEntry[] = [],
     mainSummary?: string,
     waitingJobIds: ReadonlySet<JobId> = new Set(),
   ): void {
-    this.targets.update(urls)
+    this.targets.update(targets)
     const visibleJobs = [
       ...jobs.filter(job => job.status !== 'running' && job.status !== 'stopping').slice(-20),
       ...jobs.filter(job => job.status === 'running' || job.status === 'stopping'),
@@ -189,12 +189,12 @@ export class ToolActivityPane extends VStack {
     if ((this.targets.focused || this.summaryFocused) && (matchesKey(data, 'shift+up') || matchesKey(data, 'shift+down'))) {
       const panel = this.targets.focused ? 'targets' : 'summary'
       this.resizePanel(panel, this.panelHeight(panel) + (matchesKey(data, 'shift+up') ? -1 : 1))
-    } else if (matchesKey(data, 'tab') && (this.targets.hasUrls || this.mainSummary !== undefined)) {
+    } else if (matchesKey(data, 'tab') && (this.targets.hasTargets || this.mainSummary !== undefined)) {
       if (this.targets.focused) {
         this.targets.focused = false
         this.summaryFocused = this.mainSummary !== undefined
       } else if (this.summaryFocused) this.summaryFocused = false
-      else if (this.targets.hasUrls) this.targets.focused = true
+      else if (this.targets.hasTargets) this.targets.focused = true
       else this.summaryFocused = true
     } else if (this.targets.focused) this.targets.handleInput(data)
     else if (this.summaryFocused) {
