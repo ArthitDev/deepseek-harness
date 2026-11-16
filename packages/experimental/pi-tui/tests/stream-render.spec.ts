@@ -44,6 +44,33 @@ async function fixture() {
 }
 
 describe('stream rendering', () => {
+  it('renders non-web target types in the assembled chat screen through replay and session changes', async () => {
+    const f = await fixture()
+    try {
+      f.screen.handleEvent(f.agent.session.append('user/message', createUserMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'app:"Desktop Demo" /opt/demo/app 10.0.0.5' }],
+      }), { surfaceOp: 'append' }))
+      expect(f.text()).toContain('Apps / programs · 1')
+      expect(f.text()).toContain('Files / folders · 1')
+      expect(f.text()).toContain('Hosts · 1')
+      expect(f.text()).not.toContain('Web ·')
+      expect(f.tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(54).trimEnd()).join('\n').trimEnd())
+        .toMatchSnapshot('non-web targets beside chat')
+      await f.screen.replayTranscript(f.agent)
+      expect(f.text()).toContain('Apps / programs · 1')
+      await f.screen.switchAgent(f.makeAgent('empty-non-web-targets'))
+      expect(f.text()).not.toContain('Targets')
+      await f.screen.switchAgent(f.agent)
+      expect(f.text()).toContain('Apps / programs · 1')
+      f.screen.submit('/clear')
+      expect(f.text()).not.toContain('Targets')
+    } finally {
+      f.tui.stop()
+      await f.ctx.fiber.dispose()
+      vi.useRealTimers()
+    }
+  })
+
   it('restores Targets on replay, shares Debug visibility, and resets on session switch and clear', async () => {
     const f = await fixture()
     try {
@@ -65,7 +92,7 @@ describe('stream rendering', () => {
         return f.tui.getScreenLines().map(line => stripVTControlCharacters(line).slice(54).trimEnd()).join('\n').trimEnd()
       }
       expect(targets()).toContain('Sub Target · 1')
-      expect(targets()).toContain('Other · 1')
+      expect(targets()).toContain('Other web · 1')
       expect(targets()).toMatchSnapshot('targets restored from session events without a shell')
       expect(f.text()).not.toContain('Shell ·')
       const input = f.start.mock.calls[0]?.[0]
@@ -79,7 +106,7 @@ describe('stream rendering', () => {
       f.screen.submit('/agent-debug')
       expect(targets()).toContain('https://example.test/')
       await f.screen.replayTranscript(f.agent)
-      expect(targets()).toContain('Other · 1')
+      expect(targets()).toContain('Other web · 1')
       expect(f.agent.session.snapshotEvents()).toEqual(events)
       await f.screen.switchAgent(f.makeAgent('empty-targets'))
       expect(targets()).not.toContain('Targets')

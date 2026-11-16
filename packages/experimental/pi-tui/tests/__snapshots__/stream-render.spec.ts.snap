@@ -1,12 +1,28 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`stream rendering > renders non-web target types in the assembled chat screen through replay and session changes > non-web targets beside chat 1`] = `
+"╭─ Targets ▾ ────────────────────────────────╮
+│   ▾ Hosts · 1                              │
+│   └─   10.0.0.5                            │
+│   ▾ Files / folders · 1                    │
+│   └─   /opt/demo/app                       │
+│   ▾ Apps / programs · 1                    │
+│   └─   Desktop Demo                        │
+╰──────────────────── ↕ ─────────────────────╯
+── Agent Debug · Tab panels ──
+╭─ Main Agent ▾ ─────────────────────────────╮
+│ task: app:"Desktop Demo" /opt/demo/app     │
+│ 10.0.0.5 · calls: none · usage: unknown    │
+╰──────────────────── ↕ ─────────────────────╯"
+`;
+
 exports[`stream rendering > restores Targets on replay, shares Debug visibility, and resets on session switch and clear > targets restored from session events without a shell 1`] = `
 "╭─ Targets ▾ ────────────────────────────────╮
-│   ▾ Target · 1                             │
+│   ▾ Web · 1                                │
 │   └─ ▾ https://example.test/               │
 │      └─ ▾ Sub Target · 1                   │
 │         └─   api                           │
-│   ▾ Other · 1                              │
+│   ▾ Other web · 1                          │
 │   └─   https://docs.test/                  │
 ╰──────────────────── ↕ ─────────────────────╯
 ── Agent Debug · Tab panels ──

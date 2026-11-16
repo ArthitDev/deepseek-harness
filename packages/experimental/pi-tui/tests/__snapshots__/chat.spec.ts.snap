@@ -63,7 +63,7 @@ exports[`exit and resume hints > rebuilds the Main Agent summary when an externa
 exports[`exit and resume hints > rebuilds the Main Agent summary when an externally driven replay is finalized > resized debug boxes beside chat and draft 1`] = `
 [
   " ⧉  S H I E L D   B R E A K   A G E N T                                 │ ╭─ Targets ▾ ────────────────────────────────╮",
-  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ │   ▾ Target · 1                             │",
+  " model: deepseek-v4-flash · cwd: deepseek-harness                       │ │   ▾ Web · 1                                │",
   " Esc interrupt · Ctrl+C exit · /hotkeys all keys                        │ │   └─   https://example.test/               │",
   " › inspect the service at https://example.test/                         │ ╰──────────────────── ↕ ─────────────────────╯",
   "│ ◆ ⏺ read_file {}                                                      │ ── Agent Debug · Tab panels ──                ",
