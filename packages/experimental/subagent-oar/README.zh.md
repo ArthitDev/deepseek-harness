@@ -90,7 +90,7 @@ kind: "package-reference"
 
 [配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-subagent-oar)定义接受的字段和校验规则。如果子进程需要环境变量中的 API 凭据，必须通过 `env` 提供；原生账户文件仍可通过原生运行时设置访问。
 
-固定版本的 OAR 默认注册表包含 `antigravity`、`claude`、`codex`、`grok`、`kimi`、`opencode` 和 `pi`。提供方配置接受每个已注册的运行时 id。Codex 和 Claude 有原生 e2e 覆盖。其他运行时需要显式添加提供方和工具映射，且仍未经验证。
+提供方配置接受固定版本 OAR 默认注册表中的运行时 id，但不接受 `antigravity`，Harness 会在查找运行时之前拒绝它。Codex 和 Claude 有原生 e2e 覆盖。其他运行时需要显式添加提供方和工具映射，且仍未经验证。
 
 -----
 

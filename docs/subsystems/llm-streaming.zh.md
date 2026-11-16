@@ -1203,7 +1203,7 @@ Host-owned children are stopped through their live handles; external listeners a
 
 ```ts cordis-catalog
 /** Return current loopback listener state without starting anything.
- * @returns Three embedded proxy descriptors with persistent usage preferences.
+ * @returns ZCode and SB proxy descriptors with persistent usage preferences.
  */
 @Remote async list(): Promise<ProxyServerRow[]>
 

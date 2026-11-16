@@ -30,9 +30,9 @@ async function fixture() {
   onTestFinished(() => rm(root, { recursive: true, force: true }))
   const config = {
     routeAllModels: false,
-    zcodeEnabled: true, antigravityEnabled: true, sbEnabled: true,
-    zcodePort: 1, antigravityPort: 2, sbPort: 3,
-    antigravityProviders: ['antigravity'], sbProviders: ['sb'], startupTimeoutMs: 1000,
+    zcodeEnabled: true, sbEnabled: true,
+    zcodePort: 1, sbPort: 3,
+    sbProviders: ['sb'], startupTimeoutMs: 1000,
     externalProxies: [] as ProxyId[],
   }
   const dir = join(root, 'profiles/test')
@@ -47,14 +47,14 @@ async function fixture() {
     installAnchor: join(root, 'apps/cli/package.json'), cwd: root, home: root, overlays: [], telemetryDisabledEnv: undefined,
   }
   let ctx: Context
-  const prepareSidecar = async (id: 'sb' | 'antigravity' = 'sb'): Promise<void> => {
+  const prepareSidecar = async (): Promise<void> => {
     const reservation = createServer()
-    config[`${id}Port`] = await listen(reservation)
+    config.sbPort = await listen(reservation)
     await close(reservation)
     await mkdir(join(root, 'scripts'), { recursive: true })
-    const script = id === 'sb' ? 'scripts/sb-transport.cjs' : 'packages/experimental/pi-tui/tools/antigravity-proxy/antigravity_proxy.mjs'
+    const script = 'scripts/sb-transport.cjs'
     await mkdir(join(root, script, '..'), { recursive: true })
-    await writeFile(join(root, script), `import http from 'node:http';http.createServer((req,res)=>res.end(JSON.stringify({service:'${id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy'}',runtime:process.versions.bun?'bun':'node',customHome:process.env.DSH_HOME}))).listen(Number(process.env.${id === 'sb' ? 'SB_PORT' : 'ANTIGRAVITY_PORT'}),'127.0.0.1')`)
+    await writeFile(join(root, script), "import http from 'node:http';http.createServer((req,res)=>res.end(JSON.stringify({service:'dsh-sb-transport',runtime:process.versions.bun?'bun':'node',customHome:process.env.DSH_HOME}))).listen(Number(process.env.SB_PORT),'127.0.0.1')")
   }
   const mount = async () => {
     await writeFile(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
@@ -75,19 +75,18 @@ async function fixture() {
   return { root, get ctx() { return ctx }, config, mount, prepareSidecar }
 }
 
-it('reads the three proxies without starting one, and records independent usage switches', async () => {
+it('reads only ZCode and SB without starting either, and records independent usage switches', async () => {
   const f = await fixture()
   const service = await f.mount()
   expect(await service.list()).toMatchObject([
     { id: 'zcode', available: false, status: 'stopped', providers: ['zcode-direct', 'zcode-glm'] },
-    { id: 'antigravity', available: false, status: 'stopped' },
     { id: 'sb', available: false, status: 'stopped' },
   ])
   await service.setEnabled('zcode', false)
-  expect((await service.list()).map(row => row.enabled)).toEqual([false, true, true])
+  expect((await service.list()).map(row => row.enabled)).toEqual([false, true])
   await expect(service.setEnabled('sb', true)).rejects.toThrow('missing')
   await f.ctx.fiber.dispose()
-  expect((await (await f.mount()).list()).map(row => row.enabled)).toEqual([false, true, true])
+  expect((await (await f.mount()).list()).map(row => row.enabled)).toEqual([false, true])
 })
 
 it('authenticates managed SB routing with a custom Harness home', async () => {
@@ -141,24 +140,26 @@ it('cancels a managed SB startup and awaits child shutdown on unload', async () 
 
 it('leaves an external proxy running after disable and distinguishes occupied ports', async () => {
   const f = await fixture()
-  const external = createServer((_req, res) => { res.end(JSON.stringify({ service: 'antigravity-proxy' })) })
-  f.config.antigravityPort = await listen(external)
+  const external = createServer((_req, res) => { res.setHeader('x-dsh-proxy-service', 'zcode-proxy'); res.end('{}') })
+  f.config.zcodePort = await listen(external)
+  f.config.externalProxies = ['zcode']
   onTestFinished(() => close(external))
   const other = createServer((_req, res) => { res.end('{}') })
   f.config.sbPort = await listen(other)
   onTestFinished(() => close(other))
   const service = await f.mount()
-  expect((await service.list()).find(row => row.id === 'antigravity')).toMatchObject({ status: 'external' })
-  await service.setEnabled('antigravity', false)
+  expect((await service.list()).find(row => row.id === 'zcode')).toMatchObject({ status: 'external' })
+  await service.setEnabled('zcode', false)
   expect(external.listening).toBe(true)
-  expect((await service.list()).find(row => row.id === 'antigravity')).toMatchObject({ enabled: false, status: 'external' })
+  expect((await service.list()).find(row => row.id === 'zcode')).toMatchObject({ enabled: false, status: 'external' })
   await expect(service.setEnabled('sb', true)).rejects.toThrow('occupied')
   expect(other.listening).toBe(true)
 })
 
-it.each(['sb', 'antigravity'] as const)('starts %s with Bun, serializes repeated switches and awaits its stop', async (id) => {
+it('starts sb with Bun, serializes repeated switches and awaits its stop', async () => {
+  const id = 'sb'
   const f = await fixture()
-  await f.prepareSidecar(id)
+  await f.prepareSidecar()
   const service = await f.mount()
   await Promise.all([service.setEnabled(id, true), service.setEnabled(id, true)])
   expect((await service.list()).find(row => row.id === id)).toMatchObject({ status: 'running' })
@@ -226,7 +227,7 @@ it('disables new use immediately and stops its child only after the active model
   expect((await service.list()).find(row => row.id === 'sb')).toMatchObject({ status: 'stopped', enabled: false })
 })
 
-it.each(['zcode', 'antigravity', 'sb'] as const)('keeps router models independent of the disabled %s direct provider', async (id) => {
+it.each(['zcode', 'sb'] as const)('keeps router models independent of the disabled %s direct provider', async (id) => {
   const f = await fixture()
   const service = await f.mount()
   await service.setEnabled(id, false)
@@ -243,14 +244,14 @@ it.each(['zcode', 'antigravity', 'sb'] as const)('keeps router models independen
 })
 
 
-it.each(['zcode', 'antigravity', 'sb'] as const)('uses externally managed %s without owning its lifecycle', async (id) => {
+it.each(['zcode', 'sb'] as const)('uses externally managed %s without owning its lifecycle', async (id) => {
   const f = await fixture()
   f.config.externalProxies = [id]
   const external = createServer((_req, res) => {
     if (id === 'zcode') res.setHeader('x-dsh-proxy-service', 'zcode-proxy')
-    res.end(JSON.stringify({ service: id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy' }))
+    res.end(JSON.stringify({ service: id === 'sb' ? 'dsh-sb-transport' : 'zcode-proxy' }))
   })
-  f.config[id === 'zcode' ? 'zcodePort' : id === 'antigravity' ? 'antigravityPort' : 'sbPort'] = await listen(external)
+  f.config[id === 'zcode' ? 'zcodePort' : 'sbPort'] = await listen(external)
   onTestFinished(() => close(external))
   const service = await f.mount()
   expect((await service.list()).find(row => row.id === id)).toMatchObject({ available: true, status: 'external' })

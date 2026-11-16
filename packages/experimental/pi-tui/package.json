@@ -18,7 +18,6 @@
     "lib/index.js",
     "cordis.patch.yml",
     "lib/app-*.js",
-    "tools/antigravity-proxy",
     "lib/types/**/*.d.ts"
   ],
   "publishConfig": {

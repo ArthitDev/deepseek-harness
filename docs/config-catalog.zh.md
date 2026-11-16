@@ -1541,7 +1541,7 @@ export interface Config {
 ```ts config-catalog
 /** Native runtime selection and deployment settings for one provider instance. */
 export interface Config {
-  /** OAR default-runtime id; unknown ids fail during plugin activation. */
+  /** OAR default-runtime id, excluding Antigravity; unsupported ids fail during activation. */
   runtime: string
   /** Name registered on ctx.subagents (default oar). */
   providerName?: string
@@ -3067,20 +3067,14 @@ export interface Config {
   routingProbeTimeoutMs: number
   /** Permit new model requests to use the local ZCode proxy. */
   zcodeEnabled: Volatile<boolean>
-  /** Permit new model requests to use Antigravity. */
-  antigravityEnabled: Volatile<boolean>
   /** Permit new model requests to use SB transport. */
   sbEnabled: Volatile<boolean>
   /** Loopback port used by the ZCode Direct proxy. */
   zcodePort: number
-  /** Loopback port used by the Antigravity proxy. */
-  antigravityPort: number
   /** Loopback port used by the SB transport proxy. */
   sbPort: number
   /** Provider ids requiring the local ZCode proxy before dispatch, including Starter 9router routes. */
   zcodeProviders: string[]
-  /** Provider ids routed through Antigravity. */
-  antigravityProviders: string[]
   /** Proxies run by an external service manager; Harness probes but never spawns or stops them. */
   externalProxies: ProxyId[]
   /** Provider ids routed through SB transport. */
@@ -3090,7 +3084,7 @@ export interface Config {
 }
 
 /** Embedded proxies supported by this checkout. */
-export type ProxyId = 'zcode' | 'antigravity' | 'sb'
+export type ProxyId = 'zcode' | 'sb'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-proxy-server -->
 

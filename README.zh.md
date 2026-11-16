@@ -18,7 +18,7 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 本仓库是 DeepSeek Harness 的 **Shield Break** 分支，跟随上游 `0.2.2-rc.1`，在完整上游功能之外加入 Shield Break 安全测试能力：渗透测试控制平面（持久化运行、Supervisor/Executor 回合、确定性侦察）、目标范围与运行预算守卫、已保存的 SSH 机器、运行时包不变量、团队化 Agent 集群、Exa 与 Perplexity 网络搜索提供商，以及集成 Kali WSL 的 Shield Break 终端界面。
 
-内置代理（ZCode Direct、Antigravity 和 SB transport）使用 **Bun** 运行；Harness Host 使用 **Node.js** 运行。请确保服务账户的 `PATH` 中可以找到 Bun。运行 `pnpm zcode:setup` 设置 ZCode Direct，运行 `pnpm antigravity:setup` 完成独立 Google 登录并迁移外部 Antigravity 网关；启用 `routeAllModels: true` 时 SB 按需启动。详见[代理运行时要求](packages/llm/proxy-server/README.zh.md)、[Antigravity 设置](packages/experimental/pi-tui/README.zh.md#connect-antigravity)和 [Bun 迁移指南](docs/upgrade-guide/v0.2.2-rc.1/embedded-proxy-bun/guide.zh.md)。
+内置 ZCode Direct 和 SB transport 代理使用 **Bun** 运行；Harness Host 使用 **Node.js** 运行。请确保服务账户的 `PATH` 中可以找到 Bun。运行 `pnpm zcode:setup` 设置 ZCode Direct；启用 `routeAllModels: true` 时 SB 按需启动。详见[代理运行时要求](packages/llm/proxy-server/README.zh.md)和 [Bun 迁移指南](docs/upgrade-guide/v0.2.2-rc.1/embedded-proxy-bun/guide.zh.md)。已有外部代理应用仍由其自身的设置和生命周期管理。
 
 仅将 Shield Break 用于合法目的和经授权的安全测试。用户对自己的使用与滥用行为负责；本项目的责任免责声明仅在法律允许的范围内适用。请阅读[合法使用与责任声明](SAFETY.zh.md#lawful-use-and-user-responsibility)。
 

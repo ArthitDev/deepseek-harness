@@ -1,5 +1,5 @@
 /** Embedded proxies supported by this checkout. */
-export type ProxyId = 'zcode' | 'antigravity' | 'sb'
+export type ProxyId = 'zcode' | 'sb'
 
 /** Secret-free state returned to the operator. Enabled controls new Harness requests. */
 export interface ProxyServerRow {

@@ -19,13 +19,20 @@ function scan(file: string, source: string) {
     const path = join(root, file)
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, source)
-    return findPackagePathViolations(root, path, new Set(['tool-present']))
+    return findPackagePathViolations(root, path, new Set(['tool-present', 'pi-tui']))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 }
 
 describe('historical package references', () => {
+  it.each(['guide.md', 'guide.zh.md'])('preserves only the retired Antigravity setup reference in frozen %s', (name) => {
+    const file = `docs/upgrade-guide/v0.2.2-rc.1/embedded-proxy-bun/${name}`
+    const retired = 'packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs'
+    expect(scan(file, [retired, removedReference].join('\n'))).toEqual([{ file, line: 2, ref: removedReference }])
+    const current = `docs/upgrade-guide/v0.2.2-rc.2/embedded-proxy-bun/${name}`
+    expect(scan(current, retired)).toEqual([{ file: current, line: 1, ref: retired }])
+  })
   it.each(['v0.md', 'v3.md', 'v10.zh.md'])('preserves checked historical source paths in %s', (name) => {
     const file = `docs/persistence-changes/historical-formats/${name}`
     for (const newline of ['\n', '\r\n']) {

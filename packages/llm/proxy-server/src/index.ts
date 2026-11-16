@@ -44,20 +44,14 @@ export interface Config {
   routingProbeTimeoutMs: number
   /** Permit new model requests to use the local ZCode proxy. */
   zcodeEnabled: Volatile<boolean>
-  /** Permit new model requests to use Antigravity. */
-  antigravityEnabled: Volatile<boolean>
   /** Permit new model requests to use SB transport. */
   sbEnabled: Volatile<boolean>
   /** Loopback port used by the ZCode Direct proxy. */
   zcodePort: number
-  /** Loopback port used by the Antigravity proxy. */
-  antigravityPort: number
   /** Loopback port used by the SB transport proxy. */
   sbPort: number
   /** Provider ids requiring the local ZCode proxy before dispatch, including Starter 9router routes. */
   zcodeProviders: string[]
-  /** Provider ids routed through Antigravity. */
-  antigravityProviders: string[]
   /** Proxies run by an external service manager; Harness probes but never spawns or stops them. */
   externalProxies: ProxyId[]
   /** Provider ids routed through SB transport. */
@@ -115,7 +109,7 @@ async function healthy(
         try {
           const value: unknown = JSON.parse(body)
           complete(response.statusCode === 200 && typeof value === 'object' && value !== null && 'service' in value
-            && value.service === (server.id === 'sb' ? 'dsh-sb-transport' : 'antigravity-proxy')
+            && value.service === 'dsh-sb-transport'
             && (!requireConnect || 'supportsConnect' in value && value.supportsConnect === true))
         } catch { complete(false) }
       })
@@ -131,15 +125,12 @@ export default class ProxyServers extends TypertRemoteService {
     routeAllModels: z.boolean().default(false),
     routingProbeTimeoutMs: z.number().step(1).min(1).default(1000),
     zcodeEnabled: z.boolean().default(true).volatile(),
-    antigravityEnabled: z.boolean().default(true).volatile(),
     sbEnabled: z.boolean().default(true).volatile(),
     zcodePort: z.number().step(1).min(1).max(65535).default(Number(process.env.ZCODE_PORT ?? 18080)),
-    antigravityPort: z.number().step(1).min(1).max(65535).default(Number(process.env.ANTIGRAVITY_PORT ?? 18877)),
     sbPort: z.number().step(1).min(1).max(65535).default(Number(process.env.SB_PORT ?? 18899)),
     zcodeProviders: z.array(z.string()).default(['zcode-direct', 'zcode-glm']),
-    antigravityProviders: z.array(z.string()).default(['antigravity']),
     sbProviders: z.array(z.string()).default(['sb', 'sb-proxy']),
-    externalProxies: z.array(z.union(['zcode', 'antigravity', 'sb'] as const)).default([]),
+    externalProxies: z.array(z.union(['zcode', 'sb'] as const)).default([]),
     startupTimeoutMs: z.number().step(1).min(100).default(15_000),
   })
   private readonly servers: Descriptor[]
@@ -151,15 +142,11 @@ export default class ProxyServers extends TypertRemoteService {
     super(ctx, 'proxyServers')
     const root = resolve(dirname(ctx.profileContext.installAnchor), '../..')
     const zcode = resolve(process.env.ZCODE_DIR ?? join(root, 'third-party/zcode-api'))
-    const antigravity = join(root, 'packages/experimental/pi-tui/tools/antigravity-proxy/antigravity_proxy.mjs')
     const sb = join(root, 'scripts/sb-transport.cjs')
     this.servers = [
       { id: 'zcode', name: 'ZCode Direct', active: 0, port: config.zcodePort, enabled: config.zcodeEnabled, providers: config.zcodeProviders,
         command: 'bun', args: ['run', 'src/index.ts', 'serve', join(zcode, 'config.yaml')], cwd: zcode,
         files: [join(zcode, 'src/index.ts'), join(zcode, 'config.yaml'), join(zcode, 'src/proxy/captcha-worker-entry.bundle.js')] },
-      { id: 'antigravity', name: 'Antigravity', active: 0,
-        port: config.antigravityPort, enabled: config.antigravityEnabled, providers: config.antigravityProviders,
-        command: 'bun', args: ['--no-env-file', antigravity], cwd: root, files: [antigravity] },
       { id: 'sb', name: 'SB transport', active: 0, port: config.sbPort, enabled: config.sbEnabled, providers: config.sbProviders,
         command: 'bun', args: ['--no-env-file', sb, 'serve'], cwd: root, files: [sb] },
     ]
@@ -194,7 +181,7 @@ export default class ProxyServers extends TypertRemoteService {
   }
 
   /** Return current loopback listener state without starting anything.
-   * @returns Three embedded proxy descriptors with persistent usage preferences.
+   * @returns ZCode and SB proxy descriptors with persistent usage preferences.
    */
   @Remote
   async list(): Promise<ProxyServerRow[]> {
@@ -302,7 +289,7 @@ export default class ProxyServers extends TypertRemoteService {
       throw new RemoteError('proxy-server/setup-required', `${server.name} bundled files or local setup are missing`, { id: server.id })
     }
     const env = { ...scrubbedParentEnv(), HOST: '127.0.0.1', ZCODE_PORT: String(this.config.zcodePort),
-      ZCODE_PROXY_PORT: String(this.config.zcodePort), ANTIGRAVITY_PORT: String(this.config.antigravityPort),
+      ZCODE_PROXY_PORT: String(this.config.zcodePort),
       SB_PORT: String(this.config.sbPort),
       ...(server.id === 'sb' ? { DSH_HOME: this.ctx.profileContext.home } : {}),
       ZCODE_CAPTCHA_WORKER: join(server.cwd, 'src/proxy/captcha-worker-entry.bundle.js'), ZCODE_CAPTCHA_REQUIRE_WORKER: '1' }

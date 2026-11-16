@@ -17,7 +17,7 @@
     "website"
   ],
   "scripts": {
-    "antigravity:setup": "bun --no-env-file packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs",
+    "antigravity:remove": "bun --no-env-file scripts/remove-antigravity.mjs",
     "zcode:setup": "bun --no-env-file scripts/sb-auto-start.cjs setup-zcode",
     "prepare:primary-runtime": "tsx scripts/primary-runtime/prepare.ts",
     "build": "tsx scripts/build.ts",

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-查看并控制 ZCode Direct、Antigravity 和 SB transport，读取状态不会启动进程。保存独立的使用偏好，在匹配请求到来时启动已启用的代理，并仅停止此 Host 拥有的子进程。禁用会阻止新的匹配请求，现有流仍可完成。三个代理都需要 Bun；Harness Host 仍使用 Node.js。
+查看并控制 ZCode Direct 和 SB transport，读取状态不会启动进程。保存独立的使用偏好，在匹配请求到来时启动已启用的代理，并仅停止此 Host 拥有的子进程。禁用会阻止新的匹配请求，现有流仍可完成。ZCode Direct 和 SB 需要 Bun；Harness Host 仍使用 Node.js。
 
 ## 目录
 
@@ -24,18 +24,18 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-`proxyServers` 服务列出 ZCode Direct、Antigravity 和 SB transport。读取状态仅探测其回环端点，不启动进程。`setEnabled` 先持久化一个使用偏好，再启动或停止对应代理。启动失败保留已保存的偏好并返回错误，不报告为运行中。禁用会阻止通过已配置路由发送新请求，不取消进行中的请求。
+`proxyServers` 服务列出 ZCode Direct 和 SB transport。读取状态仅探测其回环端点，不启动进程。`setEnabled` 先持久化一个使用偏好，再启动或停止对应代理。启动失败保留已保存的偏好并返回错误，不报告为运行中。禁用会阻止通过已配置路由发送新请求，不取消进行中的请求。
 
-服务仅通过自身持有的进程句柄停止自己启动的子进程。外部监听进程在禁用后仍继续运行。禁用会等待进行中的下游流结束再停止子进程；保存偏好不必等待这些流结束。每个代理的操作串行执行；Host 销毁会停止并等待受管子进程。打开设置页不启动代理。三个使用偏好默认启用以保持现有路由行为；匹配的模型请求或显式打开开关才启动代理。Liveshare 读者不能读取或控制此 Host 级服务。
+服务仅通过自身持有的进程句柄停止自己启动的子进程。外部监听进程在禁用后仍继续运行。禁用会等待进行中的下游流结束再停止子进程；保存偏好不必等待这些流结束。每个代理的操作串行执行；Host 销毁会停止并等待受管子进程。打开设置页不启动代理。两个使用偏好默认启用以保持现有路由行为；匹配的模型请求或显式打开开关才启动代理。Liveshare 读者不能读取或控制此 Host 级服务。
 
 <a id="configuration"></a>
 ## 配置
 
-可动态更新的 `zcodeEnabled`、`antigravityEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`ANTIGRAVITY_PORT` 或 18877、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`/`zcode-glm`、`antigravity`、`sb`/`sb-proxy`。两个 ZCode 路由在分发前启动本地后端，包括通过 9router 的 Starter。只有配置的提供方 id 会选择代理；其他路由器提供方上的 `zcode/` 等模型前缀不会选择本地辅助代理。其他模型路由保持委托行为。
+可动态更新的 `zcodeEnabled` 和 `sbEnabled` 字段分别保存独立偏好。端口默认取 `ZCODE_PORT` 或 18080、`SB_PORT` 或 18899。`startupTimeoutMs` 默认 15000。提供方列表分别默认为 `zcode-direct`/`zcode-glm` 和 `sb`/`sb-proxy`。两个 ZCode 路由在分发前启动本地后端，包括通过 9router 的 Starter。只有配置的提供方 id 会选择代理；其他路由器提供方上的 `zcode/` 等模型前缀不会选择本地辅助代理。其他模型路由保持委托行为。
 
-`externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode`、`antigravity` 或 `sb`。Harness 在 `startupTimeoutMs` 内等待验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
+`externalProxies` 默认为空列表。由 Docker Compose 等其他服务管理器负责的代理可列为 `zcode` 或 `sb`。Harness 在 `startupTimeoutMs` 内等待验证就绪状态并显示 `external`，不会启动或停止它们；使用开关仍会阻止新的匹配模型请求。外部服务不可用时返回启动失败，不回退到本地进程。外部 ZCode 必须在 `/v1/models` 响应中返回 `x-dsh-proxy-service: zcode-proxy`；通用 HTTP 200/401 不足以确认身份。外部服务不要求本地代理源码。
 
-对于由 Harness 管理的代理，ZCode 需要 Bun、已构建的 worker bundle，以及 `ZCODE_DIR` 或 `third-party/zcode-api` 中已有的 `config.yaml`。三个代理都要求 `PATH` 中存在 Bun；Antigravity 和 SB 通过 `bun --no-env-file` 运行内置 JavaScript，保留 Host 传入的环境，不额外加载 `.env` 文件。Harness Host 仍使用 Node.js。服务不创建凭据，不执行登录、OAuth 设置或上游模型请求。设置失败和缺失的本地配置会报告给操作者。
+对于由 Harness 管理的代理，ZCode 需要 Bun、已构建的 worker bundle，以及 `ZCODE_DIR` 或 `third-party/zcode-api` 中已有的 `config.yaml`。ZCode Direct 和 SB 要求 `PATH` 中存在 Bun；SB 通过 `bun --no-env-file` 运行内置 JavaScript，保留 Host 传入的环境，不额外加载 `.env` 文件。Harness Host 仍使用 Node.js。服务不创建凭据、不执行登录或上游模型请求。设置失败和缺失的本地配置会报告给操作者。
 
 <a id="set-up-and-use-the-bundled-proxies"></a>
 ## 设置和使用内置代理
@@ -46,9 +46,8 @@ kind: "package-reference"
 |---|---|---|---|
 | SB transport | `http://127.0.0.1:18899` | Harness 运行时 CONNECT 密钥 | 本仓库维护 |
 | ZCode Direct | `http://127.0.0.1:18080/v1` | ZCode 账户及本地代理 API key | [TriDefender/zcode-api](https://github.com/TriDefender/zcode-api) |
-| Antigravity | `http://127.0.0.1:18877/v1` | 内置代理自己的 Google OAuth 登录 | 本仓库维护 |
 
-ZCode Proxy 位于 [`third-party/zcode-api`](../../../third-party/zcode-api)。其[上游记录](../../../third-party/zcode-api/UPSTREAM.json)标明源版本和 Harness 修改；其 [CC-BY-NC-SA-4.0 许可证](../../../third-party/zcode-api/LICENSE)仍然适用。Harness 增加提供方注册、凭据导入、生命周期管理和 SB 路由。内置 ZCode Direct 和 Antigravity 均不需要 9router 或单独安装的 CLIProxyAPI。已有路由器提供方仍是独立选项。
+ZCode Proxy 位于 [`third-party/zcode-api`](../../../third-party/zcode-api)。其[上游记录](../../../third-party/zcode-api/UPSTREAM.json)标明源版本和 Harness 修改；其 [CC-BY-NC-SA-4.0 许可证](../../../third-party/zcode-api/LICENSE)仍然适用。Harness 增加提供方注册、凭据导入、生命周期管理和 SB 路由。内置 ZCode Direct 不需要 9router 或单独安装的 CLIProxyAPI。已有路由器提供方仍是独立选项。
 
 ### 准备 ZCode Direct
 
@@ -57,30 +56,16 @@ ZCode Proxy 位于 [`third-party/zcode-api`](../../../third-party/zcode-api)。�
 3. 保持后端 `config.yaml` 中的 `provider`、`plan` 和 `models` 与账户一致。Harness 模板使用 `provider: zai`、`plan: start-plan` 及 `glm-5.3` / `glm-5.3-flash` 模型 id。列出的模型仍需上游账户的配额和访问权限。
 4. 设置修改后重启 Harness。在 TUI 中选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`。在 Web 模型选择器中选择 **zcode(starter-direct)**。发送简短消息验证真实生成。`zcode-glm` 提供方显示为 **zcode(starter-9router)**，通过 9router 使用相同后端；两个路由都在首次使用时启动它。Coding Plan 和 Pay-G 仍是独立的上游 API 路由。
 
-### 准备 Antigravity
-
-1. 在源码根目录运行 `pnpm antigravity:setup`。需要手动浏览器交接时运行 `pnpm antigravity:setup --no-browser`，或用 `--dry-run` 预览而不修改配置。在远程机器上，通过已有 SSH 工作流使浏览器能访问其回环登录端点；设置不会公开服务。
-2. 在设置等待窗口内完成 Google 登录。设置仅在需要时启动临时内置代理。登录未完成时，它关闭自己启动的子进程并保留原提供方路由。令牌存在状态不能证明配额有效或刷新成功。
-3. 认证后，设置备份并替换 home 和已安装 profile patch 中的 Antigravity 路由，对齐管理器端口，并将 Antigravity 从 `externalProxies` 删除。它保留其他提供方、凭据及独立代理开关，不导入其他应用的 Google 令牌，也不停止其他应用的进程。
-4. 重启 Web/TUI，选择 **Antigravity (Google)** 提供方及内置 Google 模型，然后发送简短消息。成功响应可验证当时的上游认证和该模型。此前 CLIProxyAPI 提供的模型，包括 Claude 或 GPT 路由，不会自动成为此后端支持的模型。新增未继承共享 Antigravity 路由的 profile 后再次运行设置。
-
-Google 状态默认位于 `~/.gemini/antigravity-proxy-token.json`。设置不安装系统自启动服务；正常模型请求由 Harness 启动内置子进程，Host 释放会等待其退出。早期设置安装的旧启动项不会自动删除。`--configure-only` 明确跳过登录检查，可能创建尚不能生成的路由；仅在分开准备配置时使用。协议说明见 [Antigravity 设置](../../experimental/pi-tui/README.zh.md#connect-antigravity)。
-
-内置代理在 Google 项目发现和生成请求中发送 `antigravity/hub/2.29.0` 客户端标识，并包含运行时操作系统及架构。Harness 进程环境中的 `ANTIGRAVITY_USER_AGENT` 可覆盖完整请求头。代理不会自动更新此版本；如果 Google 拒绝不受支持的客户端版本，请使用已验证兼容的标识，重启 Harness，然后再次测试生成。
-
 ### 启用路由并检查状态
 
 在 Web 中打开 **Settings → Proxy Server**，查看端点、路由提供方 id、使用偏好和进程归属。启用需要的代理。读取页面不会启动进程或登录账户。外部状态变更后刷新或重新打开页面。首次匹配请求前 sidecar 处于停止状态是正常现象；进程运行不等于账户有访问权限。
 
-在生效的 `proxy-servers` 配置中设置 `routeAllModels: true`，使主 agent 和本地子 agent 的模型调用使用 SB。内置路径为 `Harness → SB CONNECT → ZCode Proxy → ZCode` 和 `Harness → SB CONNECT → Antigravity → Google`；其他选中提供方经 SB 保留其目标。提供方 URL 必须与管理器端口对齐。已有 home patch 优先于 profile 值；诊断优先级时在本机查看 `dsh --profile web --dump-config` 或 `dsh --profile tui --dump-config`。输出可能包含私有配置，不要公开。
+在生效的 `proxy-servers` 配置中设置 `routeAllModels: true`，使主 agent 和本地子 agent 的模型调用使用 SB。内置路径为 `Harness → SB CONNECT → ZCode Proxy → ZCode`；其他选中提供方经 SB 保留其目标。提供方 URL 必须与管理器端口对齐。已有 home patch 优先于 profile 值；诊断优先级时在本机查看 `dsh --profile web --dump-config` 或 `dsh --profile tui --dump-config`。输出可能包含私有配置，不要公开。
 
 | 现象 | 检查或恢复 |
 |---|---|
 | 使用前内置端口停止 | 发送匹配的模型请求，或在 Proxy Server 设置中启用。 |
-| Antigravity 仍指向 `8317` | 完成 `pnpm antigravity:setup` 并重启两个客户端；仅 bundle 不会替换已有覆盖。 |
 | ZCode 返回 401 | 检查 `config.yaml` 密钥是否匹配 `ZCODE_DIRECT_API_KEY`；本地密钥变更后再次运行 `pnpm zcode:setup`。 |
-| Google 登录或生成失败 | 查看 `$DSH_HOME/logs/antigravity-proxy.log`，重新登录后测试一个模型。静态 `/v1/models` 响应不能证明登录成功。 |
-| Google 报告 Antigravity 版本不受支持 | 按上述说明更新客户端标识；仅重新登录不会改变请求头。 |
 | 代理启动报告端口被占用 | 确认监听进程及其归属，不要停止其他项目的进程。明确声明有意使用的外部后端，或选择空闲且对齐的端口。 |
 | SB 不可用 | 启用 `routeAllModels: true` 时，模型请求在分派前被阻止。恢复 SB 后重试；不会直连回退或重放。VPN 强制策略仍独立适用。 |
 | 需要撤销迁移 | 停止 Harness，读取打印的备份目录中的 `manifest.json`，将各备份 patch 恢复到列出的 `file`，然后重启。`existed: false` 表示迁移创建的文件。备份包含私有配置，必须保持私密。 |

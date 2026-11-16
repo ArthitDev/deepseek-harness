@@ -28,9 +28,9 @@ describe('seedModelSelection', () => {
 
   it('carries the prior provider/model over startup config, agent options and defaults', () => {
     const seeded = seedModelSelection({
-      config: { provider: 'antigravity', model: 'gemini-3.1-pro-low' },
-      agentOptions: { provider: 'antigravity', model: 'gemini-3-flash' },
-      defaults: { provider: 'antigravity', model: 'gemini-3-flash' },
+      config: { provider: 'google', model: 'gemini-3.1-pro-low' },
+      agentOptions: { provider: 'google', model: 'gemini-3-flash' },
+      defaults: { provider: 'google', model: 'gemini-3-flash' },
       prior: { provider: 'b-ai', model: 'glm-5.3-flash' },
     })
     expect(seeded.provider).toBe('b-ai')
@@ -80,10 +80,10 @@ describe('seedModelSelection', () => {
 
   it('applies the saved default effort on a fresh start when the route matches', () => {
     const seeded = seedModelSelection({
-      defaults: { provider: 'antigravity', model: 'gemini-3-flash', reasoningEffort: 'high' },
+      defaults: { provider: 'google', model: 'gemini-3-flash', reasoningEffort: 'high' },
     })
     expect(seeded).toEqual({
-      provider: 'antigravity',
+      provider: 'google',
       model: 'gemini-3-flash',
       reasoningEffort: ReasoningEffortId('high'),
     })

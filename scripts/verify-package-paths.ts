@@ -6,7 +6,7 @@
  */
 
 import { existsSync, globSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { historicalSchemaRegion } from './historical-schema-region.ts'
 import {
@@ -84,13 +84,16 @@ function isDriftedPackageReference(repoRoot: string, packageNames: ReadonlySet<s
  * @returns missing references naming a live package, with original source line numbers.
  */
 export function findPackagePathViolations(repoRoot: string, absPath: string, packageNames: ReadonlySet<string>): Violation[] {
+  // Frozen rc.1 guides retain their original setup command after Antigravity removal.
+  const historicalAntigravitySetup = /^docs\/upgrade-guide\/v0\.2\.2-rc\.1\/embedded-proxy-bun\/guide(?:\.zh)?\.md$/.test(relative(repoRoot, absPath).replaceAll('\\', '/'))
   return findReferenceViolations(
     repoRoot,
     absPath,
     PKG_REF,
     // Remove trailing separators or sentence punctuation matched greedily.
     ref => ref.replace(/[./]+$/, ''),
-    ref => isDriftedPackageReference(repoRoot, packageNames, ref),
+    ref => !(historicalAntigravitySetup && ref === 'packages/experimental/pi-tui/tools/antigravity-proxy/setup.mjs')
+      && isDriftedPackageReference(repoRoot, packageNames, ref),
     historicalSchemaRegion,
   )
 }

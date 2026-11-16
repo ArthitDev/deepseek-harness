@@ -2974,7 +2974,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote async list(): Promise<ProxyServerRow[]>',
         description: 'Return current loopback listener state without starting anything.',
         parameters: [],
-        returns: 'Three embedded proxy descriptors with persistent usage preferences.',
+        returns: 'ZCode and SB proxy descriptors with persistent usage preferences.',
       },
       {
         signature: '@Remote async setEnabled(id: ProxyId, enabled: boolean): Promise<void>',
@@ -8914,7 +8914,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ProxyId',
-    declaration: 'export type ProxyId = \'zcode\' | \'antigravity\' | \'sb\';',
+    declaration: 'export type ProxyId = \'zcode\' | \'sb\';',
   },
   {
     name: 'ProxyServerRow',

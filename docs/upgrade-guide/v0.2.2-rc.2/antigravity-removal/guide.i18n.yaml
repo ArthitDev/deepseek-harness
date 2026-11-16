@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.2/antigravity-removal/guide.md
+/:
+  en: 3a6048781612ff0e
+  zh: 47faa4e4afc153c2
+/antigravity-removal:
+  en: ca085f7dd7e658da
+  zh: 83830f636b9ead02
+/antigravity-removal/change:
+  en: f286ff54bdfb2fc4
+  zh: 8296bf259b63a05a
+/antigravity-removal/migration:
+  en: f06c378d368f3c8e
+  zh: 1dd91213eb633129

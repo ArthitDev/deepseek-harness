@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`dsh-pi-tui` 在 Web profile 的 agent 运行时上提供全屏终端界面。会话保存在 `~/.dsh/sessions`，可在 TUI 与 Web 之间重新打开。它渲染流式 Markdown、思考与工具卡片，并提供 agent preset、渗透测试控制（`/runs`、`/recon`）和已保存的 SSH 机器（`/machines`）。安装 `tui` profile 后，在交互式终端中运行 `dsh tui`。`--resume`、`--preset` 和 `--machine` 分别选择会话、preset 和执行目标。Antigravity 需要单独执行[设置步骤](#connect-antigravity)。
+`dsh-pi-tui` 在 Web profile 的 agent 运行时上提供全屏终端界面。会话保存在 `~/.dsh/sessions`，可在 TUI 与 Web 之间重新打开。它渲染流式 Markdown、思考与工具卡片，并提供 agent preset、渗透测试控制（`/runs`、`/recon`）和已保存的 SSH 机器（`/machines`）。安装 `tui` profile 后，在交互式终端中运行 `dsh tui`。`--resume`、`--preset` 和 `--machine` 分别选择会话、preset 和执行目标。
 
 ## 目录
 
@@ -34,7 +34,7 @@ kind: "package-bundle"
 
 源码检出在每次交互式启动时于后台启动透明 SB 转发服务。[代理管理器](../../llm/proxy-server/README.zh.md) 负责内置代理的启动和使用开关。没有该管理器时，内置 ZCode 辅助程序在首次实际发出 `zcode-direct` 或 `zcode-glm` 请求时启动，并在分发前等待就绪；其他路由器提供方的模型前缀不会启动它。同一 TUI 进程中的并发回退请求共享一次启动尝试，取消的请求可独立结束等待。启动失败时显示提示；仍可通过 `/model` 选择其他提供方。关闭 TUI 会取消尚未完成的辅助进程；帮助和非交互式调用跳过启动。
 
-`pnpm zcode:setup` 准备内置后端，并将其 `config.yaml` 中的 `auth.proxyApiKey` 导入本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。受管理的后端使用该文件中的密钥，不采用 shell 的 `ZCODE_PROXY_API_KEY` 覆盖值。在本机登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`；Web 通过共享 home patch 提供相同的提供方。选择器区分 `zcode(coding plan)`（`zai`）、`zcode(pay-g)`（`zai-payg`）、`zcode(starter-9router)`（`zcode-glm`）和 `zcode(starter-direct)`（`zcode-direct`）。两个 Starter 路由共享本地 ZCode 后端；Direct 绕过 9router。重新运行设置会更新旧的 Direct/SB 标签，并修复带有 `!!js` 的默认本机 URL，同时保留自定义标签和 URL 表达式。字面量 URL 不得带 `!!js`：该标签会导致 `llm-pi-ai` 激活失败，并报告 `SyntaxError: Unexpected end of input`。修复共享 home patch 后重新打开 TUI。启用 `routeAllModels: true` 时，路径为 Harness → SB CONNECT → ZCode Proxy → ZCode；SB 故障会在分派前阻止模型请求，不会直连回退。提供方默认使用 `reasoning: low`，公布 1M 上下文，端点为 `http://127.0.0.1:18080/v1`。更改端口时，让提供方 URL 与管理器的 `zcodePort` 保持一致。对于现有 Docker 后端，使用 `bun run scripts/zcode-direct-setup.mjs <config-directory>` 导入其配置，并在 `externalProxies` 中声明 `zcode`；无需第二个代理。所有内置代理都要求 `PATH` 中存在 Bun。Antigravity 默认使用 18877，SB 默认使用 18899。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
+`pnpm zcode:setup` 准备内置后端，并将其 `config.yaml` 中的 `auth.proxyApiKey` 导入本地 `ZCODE_DIRECT_API_KEY` 凭据，不打印其值。受管理的后端使用该文件中的密钥，不采用 shell 的 `ZCODE_PROXY_API_KEY` 覆盖值。在本机登录 ZCode 后，选择 `/model zcode-direct/glm-5.3-flash` 或 `/model zcode-direct/glm-5.3`；Web 通过共享 home patch 提供相同的提供方。选择器区分 `zcode(coding plan)`（`zai`）、`zcode(pay-g)`（`zai-payg`）、`zcode(starter-9router)`（`zcode-glm`）和 `zcode(starter-direct)`（`zcode-direct`）。两个 Starter 路由共享本地 ZCode 后端；Direct 绕过 9router。重新运行设置会更新旧的 Direct/SB 标签，并修复带有 `!!js` 的默认本机 URL，同时保留自定义标签和 URL 表达式。字面量 URL 不得带 `!!js`：该标签会导致 `llm-pi-ai` 激活失败，并报告 `SyntaxError: Unexpected end of input`。修复共享 home patch 后重新打开 TUI。启用 `routeAllModels: true` 时，路径为 Harness → SB CONNECT → ZCode Proxy → ZCode；SB 故障会在分派前阻止模型请求，不会直连回退。提供方默认使用 `reasoning: low`，公布 1M 上下文，端点为 `http://127.0.0.1:18080/v1`。更改端口时，让提供方 URL 与管理器的 `zcodePort` 保持一致。对于现有 Docker 后端，使用 `bun run scripts/zcode-direct-setup.mjs <config-directory>` 导入其配置，并在 `externalProxies` 中声明 `zcode`；无需第二个代理。ZCode 和 SB 要求 `PATH` 中存在 Bun；SB 默认使用 18899。系统 9router 和外部 CLIProxyAPI 保留各自独立配置的端口。
 
 迁移到另一台 Windows 或 Linux 机器时，复制包含 `scripts/` 和 `third-party/` 的完整检出，安装 Node >=24.9、pnpm 与 Bun，再运行 `pnpm install`、`pnpm zcode:setup` 和 `pnpm build`。使用内置后端的 `auth login` 命令在该机器登录 ZCode。`zcode-direct` 不要求 9router；单独保留现有路由器提供方即可继续选择两条路径。下文列出的本地集成必须另行恢复；仅复制 npm TUI 包不包含检出级启动脚本。
 
@@ -195,24 +195,6 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 `/clear` 立即移除对话文本、思考内容、工具卡片和旧的 UI 提示，仅保留欢迎横幅和一条清空提示。会话 id 和持久化历史仍保留，可供恢复。`/clear` 和 `/rewind` 标记保留在日志中供 UI 回放，但无论 Suppress 开关状态如何都不成为模型输入；恢复会话中的标记和压缩输入也遵循此规则。
 
 即使模型上下文中没有对话消息，纯 UI 命令输出和失败尝试预览也会清空。清空范围来自当前会话界面节点，包括没有对话气泡的注入用户上下文。纯 UI 清空保留系统消息，不追加会话编辑标记。回放清空标记时，也会移除被替换范围与标记之间的尝试文本和回合提示。
-
-<a id="connect-antigravity"></a>
-
-## 连接 Antigravity
-
-源码检出包含独立的 Antigravity 代理，无需额外依赖或 Antigravity CLI。安装并构建 harness 后，在每台新机器的 harness 根目录运行以下设置命令。账号所有者必须完成 Google 登录；启动 `dsh tui` 不会运行此设置或打开登录页面：
-
-```
-pnpm antigravity:setup
-```
-
-设置会复用健康的内置代理，或在 `127.0.0.1:18877` 启动临时代理供 Google 登录。认证后，它备份并将 home 和 profile 路由迁移到内置后端，同时保留其他提供方和凭据。它只停止自己启动的临时子进程；Web/TUI 随后通过共享管理器按需启动代理。设置不会在 Windows 安装启动项，也不会在 Linux 安装服务。使用 `--no-browser` 打印本地 URL 并等待手动登录，`--dry-run` 预览，或 `--configure-only` 跳过认证检查直接迁移路由。初次启动输出追加到 `~/.dsh/logs/antigravity-proxy.log`（`DSH_HOME` 可覆盖 harness 主目录）。
-
-Google 令牌归此代理所有，保存在 `~/.gemini/antigravity-proxy-token.json`。令牌按需刷新；移动源码不会移动账号凭据或用户 profile patch。请在目标机器上单独登录。设置将 Antigravity 模型列表替换为内置 Google 列表，并删除其外部 API key 引用；此前由 CLIProxyAPI 提供的模型不保证在此后端可用。`~/.dsh/backups/antigravity-direct-*` 下的备份清单记录各原始 patch 对应的备份内容，供回滚使用。缺少令牌会使内置模型请求失败，其他提供方仍可使用。Antigravity 配额和 Google 条款照常适用。
-
-代理将文本和函数调用转发为 OpenAI SSE，保留函数结果和签名回放，也支持非流式 JSON。生成前会发现账号的 Cloud Code 项目。`pnpm exec vitest run scripts/antigravity-direct-setup.spec.ts scripts/proxy-bun.spec.ts` 无需 Google 凭据即可检查迁移和本地代理交互。真实 Google 登录和模型可用性需由账号所有者验证。启用 `routeAllModels: true` 时，生成路径为 Harness → SB CONNECT → 内置 Antigravity → Google；此路由不依赖 CLIProxyAPI 或 9router。
-
-在 Windows 上部署外部 CLIProxyAPI 时，下载其二进制并运行 `cli-proxy-api.exe --antigravity-login`。通过 `/provider` 注册它自己的端点和已配置的 API key；内置代理的本地占位值不是 CLIProxyAPI 凭据。运行 `node packages/experimental/pi-tui/tools/antigravity-proxy/install-autostart.mjs <cliproxy-directory>` 安装启动项。针对 `llm-pi-ai` 的 home patch 会按 id 替换 bundle 的 provider 配置。
 
 <a id="dev-note"></a>
 

@@ -270,7 +270,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-web-app': ['lib/public-url-*.js'],
   // The TUI patch rows point the model provider at the in-repo local proxy;
   // tsdown shares the app tree through hashed runtime chunks.
-  '@deepseek-ai/dsh-pi-tui': ['lib/app-*.js', 'tools/antigravity-proxy'],
+  '@deepseek-ai/dsh-pi-tui': ['lib/app-*.js'],
   // The headless entry and its startup row share the JSON projection code
   // through a hashed tsdown chunk; both import it by relative path.
   '@deepseek-ai/dsh-headless': ['lib/json-stream-*.js'],

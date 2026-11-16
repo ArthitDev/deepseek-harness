@@ -676,7 +676,7 @@ describe('/new model selection', () => {
   it('keeps the latest selected provider and model across repeated new sessions', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
-    const startup = { provider: 'antigravity', model: 'gemini-3.1-pro-low' }
+    const startup = { provider: 'google', model: 'gemini-3.1-pro-low' }
     const selected = { provider: 'b-ai', model: 'glm-5.3-flash' }
     const saveSelection = vi.fn()
     ctx.provide('agentDefaultModel', { currentSelection: () => startup, saveSelection })

@@ -414,14 +414,14 @@ describe('resolveModelPreset', () => {
     const presetIdForModel = vi.fn(() => 'shield-break-agent')
     const ctx = harness({ profileContext: { home: root }, agentPresets: { presetIdForModel } })
     try {
-      expect(resolveModelPreset(ctx, 'antigravity', model)).toBe('shield-break-agent')
+      expect(resolveModelPreset(ctx, 'google', model)).toBe('shield-break-agent')
       presetIdForModel.mockClear()
       await mkdir(web, { recursive: true })
       await writeFile(join(web, 'cordis.patch.yml'), JSON.stringify([{ id: 'agent-presets', config: {
         default: 'standard', selectedDefault: 'gemini-preset-lite', modeSelectionEnabled: enabled,
-        models: { antigravity: { 'gemini-3.1-pro-low': 'gemini-pro' } },
+        models: { google: { 'gemini-3.1-pro-low': 'gemini-pro' } },
       } }]))
-      expect(resolveModelPreset(ctx, 'antigravity', model)).toBe(expected)
+      expect(resolveModelPreset(ctx, 'google', model)).toBe(expected)
       expect(presetIdForModel).not.toHaveBeenCalled()
     } finally {
       await ctx.fiber.dispose()

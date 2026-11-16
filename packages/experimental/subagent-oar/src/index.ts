@@ -23,7 +23,7 @@ const DEFAULT_PROVIDER_NAME = 'oar'
 
 /** Native runtime selection and deployment settings for one provider instance. */
 export interface Config {
-  /** OAR default-runtime id; unknown ids fail during plugin activation. */
+  /** OAR default-runtime id, excluding Antigravity; unsupported ids fail during activation. */
   runtime: string
   /** Name registered on ctx.subagents (default oar). */
   providerName?: string
@@ -55,6 +55,7 @@ export const Config: z<Config> = z.object({
  * @param config - runtime, registry name, native settings, and turn deadline.
  */
 export function apply(ctx: Context, config: Config): void {
+  if (config.runtime === 'antigravity') throw new Error('subagent-oar: Antigravity is no longer supported; select another runtime')
   const runtime = defaultRuntimes.require(config.runtime)
   const timeoutMs = config.timeoutMs
   const providerName = config.providerName ?? DEFAULT_PROVIDER_NAME

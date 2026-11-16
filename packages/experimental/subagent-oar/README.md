@@ -90,7 +90,7 @@ For Claude, select the native permission mode explicitly in `launchArgs` and ret
 
 The [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-subagent-oar) owns accepted fields and validation. A child that needs an API credential from an environment variable must receive it through `env`; native account files remain available through the native runtime's settings.
 
-OAR's pinned default registry includes `antigravity`, `claude`, `codex`, `grok`, `kimi`, `opencode`, and `pi`. Provider configuration accepts every registered runtime id. Codex and Claude have native e2e coverage. Other runtimes need an explicit provider and tool mapping and remain unverified.
+Provider configuration accepts runtime ids in OAR's pinned default registry except `antigravity`, which Harness rejects before runtime lookup. Codex and Claude have native e2e coverage. Other runtimes need an explicit provider and tool mapping and remain unverified.
 
 -----
 

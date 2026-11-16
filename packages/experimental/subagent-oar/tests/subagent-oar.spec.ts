@@ -52,6 +52,11 @@ function observedRuntime(base = scriptedRuntime({ id: 'future-runtime', turn: (t
 }
 
 describe('OAR provider composition', () => {
+  it('rejects Antigravity before runtime lookup or provider registration', () => {
+    const lookup = vi.spyOn(defaultRuntimes, 'require')
+    expect(() => { oar.apply(new Context(), { runtime: 'antigravity' }) }).toThrow('Antigravity is no longer supported')
+    expect(lookup).not.toHaveBeenCalled()
+  })
   it('loads named exports and releases only its own registration', async () => {
     expect('default' in oar).toBe(false)
     const loader = new Loader(new Context())
