@@ -224,7 +224,12 @@
     "verify-official-bundle-catalog": "tsx scripts/gen-official-bundle-catalog.ts --check",
     "gen-provider-data": "tsx packages/llm/llm-pi-ai/scripts/gen-provider-data.ts",
     "verify-provider-data": "tsx packages/llm/llm-pi-ai/scripts/gen-provider-data.ts --check",
-    "verify-product-use": "tsx scripts/verify-product-use.ts"
+    "verify-product-use": "tsx scripts/verify-product-use.ts",
+    "predev": "bun --no-env-file scripts/sb-auto-start.cjs start --background",
+    "prestart": "bun --no-env-file scripts/sb-auto-start.cjs start --background",
+    "sb:start": "bun --no-env-file scripts/sb-auto-start.cjs start",
+    "sb:stop": "bun --no-env-file scripts/sb-auto-start.cjs stop",
+    "sb:status": "bun --no-env-file scripts/sb-auto-start.cjs status"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-hooks-claude-code": "workspace:*",
