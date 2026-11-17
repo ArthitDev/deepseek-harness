@@ -22,7 +22,8 @@ it('routes operator VPN commands without model turns and distinguishes reconnect
   const ctx = new Context()
   const root = await mkdtemp(join(tmpdir(), 'dsh-vpn-command-'))
   const startInput = vi.fn<Terminal['start']>()
-  const terminal: Terminal = { columns: 160, rows: 60, kittyProtocolActive: false,
+  let columns = 160
+  const terminal: Terminal = { get columns() { return columns }, rows: 60, kittyProtocolActive: false,
     start: startInput, stop: vi.fn(), drainInput: async () => {}, write: vi.fn(), moveBy: vi.fn(),
     hideCursor: vi.fn(), showCursor: vi.fn(), clearLine: vi.fn(), clearFromCursor: vi.fn(),
     clearScreen: vi.fn(), setTitle: vi.fn(), setProgress: vi.fn(), setProgramStatus: vi.fn() }
@@ -66,7 +67,7 @@ it('routes operator VPN commands without model turns and distinguishes reconnect
     expect(visible().split('\n').filter(line => /1\. Status|2\. Reconnect|↑\/↓ or number/.test(line)))
       .toMatchSnapshot('VPN action picker')
     expect(vi.mocked(controlVpn)).not.toHaveBeenCalled()
-    terminal.columns = 72
+    columns = 72
     tui.requestRender(true)
     expect(visible()).toContain('1. Status')
     expect(visible()).toContain('2. Reconnect')
@@ -74,7 +75,7 @@ it('routes operator VPN commands without model turns and distinguishes reconnect
     input('\x1b')
     await vi.waitFor(() => { expect(tui.hasOverlay()).toBe(false) })
     expect(vi.mocked(controlVpn)).not.toHaveBeenCalled()
-    terminal.columns = 160
+    columns = 160
     tui.requestRender(true)
     input('/vpn')
     input('\r')
