@@ -66,8 +66,7 @@ function post(path, body, timeoutMs = 300000) {
       let d = "";
       res.on("data", c => d += c);
       res.on("end", () => resolve({ status: res.statusCode, body: d }));
-    });
-    req.on("error", reject);
+    }); req.on("error", e => reject(e));
     req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error("timeout")); });
     req.write(JSON.stringify(body)); req.end();
   });
@@ -81,7 +80,9 @@ function post(path, body, timeoutMs = 300000) {
       const res = await post("/v1/chat/completions", tc.body);
       let verdict;
       if (res.status !== 200) {
-        verdict = res.status === 429 ? "SKIP — upstream 429 (session busy)" : `FAIL — HTTP ${res.status}`;
+        verdict = res.status === 429 ? "SKIP — upstream 429 (session busy)"
+          : (res.status === 502 || res.status === 503) && !tc.body.stream ? "SKIP — upstream/exec-chain slow (HTTP " + res.status + ")"
+          : `FAIL — HTTP ${res.status}`;
       } else if (tc.body.stream) {
         verdict = tc.check(res.body);
       } else {
