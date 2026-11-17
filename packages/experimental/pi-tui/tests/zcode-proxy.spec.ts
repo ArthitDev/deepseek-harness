@@ -139,7 +139,8 @@ describe('TUI startup through Loader with optional proxies', () => {
     ['failed', 'ready', 'zcode-direct', 'glm-5.3-flash'],
     ['pending', 'ready', 'zcode-direct', 'glm-5.3-flash'],
     ['gated', 'ready', 'zcode-direct', 'glm-5.3-flash'],
-  ] as const)('starts ZCode only on use: %s/%s %s/%s', { timeout: 30_000 }, async (mode, sbMode, provider, model) => {
+    ['failed', 'failed', 'direct', 'direct-model', true],
+  ] as const)('starts ZCode only on use: %s/%s %s/%s', { timeout: 30_000 }, async (mode, sbMode, provider, model, managed: boolean = false) => {
     const { home, anchor } = await fixture(mode, sbMode)
     const ctx = new Context()
     const adapter = new DirectAdapter()
@@ -158,6 +159,7 @@ describe('TUI startup through Loader with optional proxies', () => {
         include: Include, loop: AgentLoop, sessions: SessionStore, agents: AgentRegistry, agentPresets: AgentPresetRegistry,
         preset: AgentPreset, projections: SessionProjectionRegistry, model: AgentDefaultModel,
         policy: PentestModePolicy, persona: Persona, tui: piTui,
+        manager: { apply: (inner: Context) => { inner.provide('proxyServers', {}) } },
       })
       const composition = join(home, 'cordis.yml')
       await writeFile(composition, JSON.stringify([
@@ -166,6 +168,7 @@ describe('TUI startup through Loader with optional proxies', () => {
         { id: 'agent-preset-registry', name: 'cordis:agentPresets', config: { default: 'test' } },
         { id: 'agent-preset-test', name: 'cordis:preset', config: { id: 'test', name: 'Test', plugins: [] } },
         { id: 'agent-default-model', name: 'cordis:model', config: { provider, model } },
+        ...managed ? [{ id: 'proxy-servers', name: 'cordis:manager' }] : [],
         { id: 'tui', name: 'cordis:tui', config: { cwd: home } },
       ]))
       await ctx.loader.root.update([{ id: 'include', name: 'cordis:include', config: { path: pathToFileURL(composition).href } }])
@@ -175,7 +178,7 @@ describe('TUI startup through Loader with optional proxies', () => {
       await vi.waitFor(() => { expect(visible()).toContain('Kali unavailable') })
       await expect(access(join(home, 'helper.pid'))).rejects.toThrow()
       expect(visible()).not.toContain('ZCode proxy startup failed.')
-      if (sbMode === 'failed') {
+      if (sbMode === 'failed' && !managed) {
         await vi.waitFor(() => { expect(visible()).toContain('SB transport startup failed.') })
         expect(visible().match(/SB transport startup failed\.[^│]+/)?.[0].trim()).toMatchInlineSnapshot('"SB transport startup failed. Direct providers remain available. Run pnpm sb:status and check the SB log or port conflict."')
       }
@@ -208,6 +211,10 @@ describe('TUI startup through Loader with optional proxies', () => {
       }
       await vi.waitFor(() => { expect(adapter.requests).toHaveLength(mode === 'gated' ? 2 : 1) })
       await vi.waitFor(() => { expect(visible()).toContain('DIRECT_MODEL_OK') })
+      if (managed) {
+        await expect(access(join(home, 'sb-helper.pid'))).rejects.toThrow()
+        expect(visible()).not.toContain('SB transport startup failed.')
+      }
       const route = mode === 'pending' ? { provider: 'direct', model: 'direct-model' } : { provider, model }
       expect(adapter.requests[0]).toMatchObject(route)
       if (provider !== 'zcode-direct' && provider !== 'zcode-glm') {

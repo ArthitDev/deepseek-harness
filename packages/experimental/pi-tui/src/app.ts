@@ -89,10 +89,10 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   const profile = ctx.get('profileContext') as { installAnchor: string }
   const startupWarnings: string[] = []
   let pushProxyWarning = (warning: string): void => { startupWarnings.push(warning) }
-  const proxyStartups = [
+  const proxyStartups = ctx.get('proxyServers') === undefined ? [
     ensureSbProxy(profile.installAnchor, proxyStartupAbort.signal)
       .then(() => undefined, () => 'SB transport startup failed. Direct providers remain available. Run pnpm sb:status and check the SB log or port conflict.'),
-  ]
+  ] : []
   installZcodeStartup(ctx, profile.installAnchor, () => {
     pushProxyWarning('ZCode proxy startup failed. Use /model to select another provider. Run pnpm zcode:setup and check ZCode login.')
   })
