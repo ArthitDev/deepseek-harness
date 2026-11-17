@@ -126,8 +126,59 @@ function serve() {
               clearTimeout(deadline);
               response.on('error', () => res.destroy());
               if (isStream) {
-                res.writeHead(response.statusCode, headers(response.headers));
-                response.pipe(res);
+                // Stream refusal guard: buffer the SSE body, check the final
+                // content for refusal-shaped replies, hard-retry once, then
+                // re-emit as proper chat.completion.chunk SSE. Falls back to
+                // the buffered original on any error.
+                let sse = '';
+                response.on('data', c => { sse += c; });
+                response.on('end', async () => {
+                  try {
+                    let content = '';
+                    let meta = null;
+                    let retryTried = false;
+                    if (v6?.collectSseContent && v6?.REFUSAL_RE) {
+                      const collected = v6.collectSseContent(sse);
+                      if (collected && collected.content) {
+                        meta = collected;
+                        if (v6.REFUSAL_RE.test(collected.content.slice(0, 300))) {
+                          console.log('[sb-transport] stream refusal detected — hard retry');
+                          retryTried = true;
+                          let reqData = null;
+                          try { reqData = JSON.parse(requestBody); } catch { }
+                          const retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true });
+                          if (retried) content = retried;
+                        } else {
+                          content = collected.content;
+                        }
+                      }
+                    }
+                    if (!content) {
+                      // passthrough the buffered SSE unchanged
+                      res.writeHead(response.statusCode, headers(response.headers));
+                      res.end(sse);
+                      return;
+                    }
+                    const id = meta?.id || 'sb-stream-guard';
+                    const created = meta?.created || Math.floor(Date.now() / 1000);
+                    const model = meta?.model || 'unknown';
+                    const parts = [];
+                    parts.push({ id, object: 'chat.completion.chunk', created, model, sb_refusal_retry: retryTried, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
+                    for (let i = 0; i < content.length; i += 512) {
+                      parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: content.slice(i, i + 512) }, finish_reason: null }] });
+                    }
+                    parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
+                    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+                    const out = parts.map(p => `data: ${JSON.stringify(p)}\n\n`).join('') + 'data: [DONE]\n\n';
+                    res.end(out);
+                  } catch (guardError) {
+                    console.error('[sb-transport] stream guard error:', guardError.message);
+                    try {
+                      res.writeHead(response.statusCode, headers(response.headers));
+                      res.end(sse);
+                    } catch { }
+                  }
+                });
                 return;
               }
               let respBody = '';
