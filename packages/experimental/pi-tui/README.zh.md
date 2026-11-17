@@ -176,7 +176,7 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 
 组合中的 [VPN 状态服务](../../host/vpn-status/README.zh.md) 增加宿主 HTTPS 采样验证和上次检查时间。启用 `vpn-status` 条目即可使用；TUI 每 15 秒刷新缓存显示，不触发网络检查。
 
-`/vpn status` 显示本机 tunnel 和缓存的 HTTPS 证据。`/vpn reconnect` 重连 Mullvad 后重新检查出口；重连本身不代表验证通过。操作会短暂影响共享 Web/TUI 流量，并保留 policy。参阅 [Windows/Linux 控制和隔离 Server 设置](../../host/vpn-status/README.zh.md#tui-control)。
+`/vpn` 打开 Status/Reconnect 选择菜单；使用方向键或数字选择、Enter 执行、Esc 取消，取消时不执行操作。`/vpn status` 显示本机 tunnel 和缓存的 HTTPS 证据。`/vpn reconnect` 重连 Mullvad 后重新检查出口；重连本身不代表验证通过。操作会短暂影响共享 Web/TUI 流量，并保留 policy。参阅 [Windows/Linux 控制和隔离 Server 设置](../../host/vpn-status/README.zh.md#tui-control)。
 
 后台 Git 状态、文件搜索、剪贴板辅助进程和 Kali 就绪探测命令在 Windows 上请求隐藏初始窗口。显式打开自身窗口的命令不在此保证范围内。
 

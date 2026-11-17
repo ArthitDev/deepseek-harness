@@ -1,5 +1,13 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`routes operator VPN commands without model turns and distinguishes reconnect from egress verification > VPN action picker 1`] = `
+[
+  "                         ↑/↓ or number · Enter select · Esc cancel                                                                                              ",
+  "                        → 1. Status                       Local tunnel and cached Host HTTPS verification                                                       ",
+  "                          2. Reconnect                    Reconnect Mullvad, then verify HTTPS; shared traffic may pause                                        ",
+]
+`;
+
 exports[`routes operator VPN commands without model turns and distinguishes reconnect from egress verification > reconnect without verified egress 1`] = `
 [
   "✗ VPN reconnect completed; Host HTTPS unknown. Egress is not confirmed.",

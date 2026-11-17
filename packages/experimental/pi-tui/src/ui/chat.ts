@@ -1543,6 +1543,21 @@ export class ChatScreen {
       this.pushNotice('VPN service unavailable in this profile', 'error')
       return
     }
+    if (action === '') {
+      if (this.tui.hasOverlay()) return
+      const picked = await pickFromList(this.tui, {
+        title: 'VPN',
+        body: '↑/↓ or number · Enter select · Esc cancel',
+        items: [
+          { value: 'status', label: '1. Status', description: 'Local tunnel and cached Host HTTPS verification' },
+          { value: 'reconnect', label: '2. Reconnect', description: 'Reconnect Mullvad, then verify HTTPS; shared traffic may pause' },
+        ],
+        initial: 'status',
+        numberKeys: true,
+      })
+      if (picked === undefined || this.disposed || this.quitting) return
+      action = picked
+    }
     if (action === 'reconnect') {
       this.pushNotice('Reconnecting VPN for this Host; shared Web/TUI traffic may pause. Policy remains unchanged.')
       const result = await vpn.reconnect()
