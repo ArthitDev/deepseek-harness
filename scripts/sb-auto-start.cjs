@@ -28,7 +28,9 @@ const http = require("http");
 const os = require("os");
 
 // Optional persistent deployment config: ~/.dsh/.sb-env with KEY=VALUE lines
-// (SB_BACKEND, SB_MODEL_ALIAS, SB_REFUSAL_LOG, ...). Shell env wins.
+// (SB_BACKEND, SB_MODEL_ALIAS, SB_REFUSAL_LOG, ...). The file WINS over inherited
+// shell env: a long-lived harness passes stale values (e.g. an old backend) into
+// every child, so operator-controlled deployment config must be authoritative.
 (function loadDeploymentEnv() {
   try {
     const file = path.join(os.homedir(), ".dsh", ".sb-env");
@@ -38,7 +40,7 @@ const os = require("os");
       const eq = trimmed.indexOf("=");
       if (eq < 1) continue;
       const key = trimmed.slice(0, eq).trim();
-      if (!process.env[key]) process.env[key] = trimmed.slice(eq + 1).trim();
+      process.env[key] = trimmed.slice(eq + 1).trim();
     }
     process.env.SB_SBENV_LOADED = "1";
   } catch { /* no config file is fine */ }
