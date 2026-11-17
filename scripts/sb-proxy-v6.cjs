@@ -1433,7 +1433,7 @@ async function processBody(raw) {
 
 // Hard-line refusal detector: refusal-shaped replies (EN + TH) within the
 // first 300 chars. Shared by processResponse and the stream guard.
-const REFUSAL_RE = /(?:\bI\s+(?:'m\s+|am\s+)?(?:sorry|afraid|unable)|\bI\s+can(?:'t|not)\b|\bI\s+won'?t\b|\bI\s+(?:must|have\s+to)\s+(?:decline|refuse)\b|\bas\s+an\s+AI\b|\bcontent\s+policy\b|\bagainst\s+(?:my|the)\s+(?:policy|policies|terms)\b|\bunable\s+to\s+(?:help|assist|complete|provide|perform)\b|ผมไม่สามารถ|ดิฉันไม่สามารถ|ไม่สามารถ(?:ช่วย|ทำ|ให้ได้)|ขออภัย\s*(?:ครับ|ค่ะ|จะ|ที่)|นอกขอบเขต|ไม่สามารถช่วย|จะไม่(?:ช่วย|ทำ))/i;
+const REFUSAL_RE = /(?:\bI\s+(?:'m\s+|am\s+)?(?:sorry|afraid|unable)|\bI\s+can(?:'t|not)\b|\bI\s+won'?t\b|\bI\s+(?:must|have\s+to)\s+(?:decline|refuse)\b|\bI'm\s+not\s+going\s+to\b|\bnot\s+going\s+to\s+(?:write|help|provide)\b|\bI\s+(?:will\s+not|would\s+rather\s+not|refuse\s+to)\b|\brefuse\s+to\s+(?:write|help|provide|answer)\b|\bunwilling\s+to\b|\bhere's\s+a\s+simple\s+version\b|\bas\s+an\s+AI\b|\bcontent\s+policy\b|\bagainst\s+(?:my|the)\s+(?:policy|policies|terms)\b|\bunable\s+to\s+(?:help|assist|complete|provide|perform)\b|ผมไม่สามารถ|ดิฉันไม่สามารถ|ไม่สามารถ(?:ช่วย|ทำ|ให้ได้)|ขออภัย\s*(?:ครับ|ค่ะ|จะ|ที่)|นอกขอบเขต|ไม่สามารถช่วย|จะไม่(?:ช่วย|ทำ)|ไม่ขอ(?:ช่วย|เขียน))/i;
 
 // Refusal telemetry: one JSONL line per detected/retried refusal. Best-effort.
 function logRefusal(entry) {
@@ -1495,8 +1495,9 @@ function collectSseContent(sse) {
     let obj;
     try { obj = JSON.parse(trimmed.slice(5).trim()); } catch { continue; }
     if (!id) { id = obj.id; created = obj.created; model = obj.model; }
-    const delta = obj.choices?.[0]?.delta?.content;
-    if (typeof delta === "string") content += delta;
+    const delta = obj.choices?.[0]?.delta;
+    if (typeof delta?.content === "string" && delta.content) content += delta.content;
+    else if (typeof delta?.reasoning_content === "string" && delta.reasoning_content) content += delta.reasoning_content;
   }
   if (!sawDone && !content) return null;
   return { id, created, model, content };
@@ -1528,8 +1529,17 @@ async function processResponse(responseBody, originalRequest) {
     try { data = JSON.parse(responseBody); } catch { return responseBody; }
   }
 
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return responseBody;
+  let content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    const reasoning = data.choices?.[0]?.message?.reasoning_content;
+    if (typeof reasoning === "string" && reasoning.trim()) {
+      console.log("[SB v6] empty content — promoted reasoning_content to content");
+      content = reasoning;
+      data.choices[0].message.content = reasoning;
+    } else {
+      return responseBody;
+    }
+  }
 
   // Restore pipeline facts stashed by processBody, then read the caller's
   // model: internal calls follow it first, then SB_MODEL. The model comes
