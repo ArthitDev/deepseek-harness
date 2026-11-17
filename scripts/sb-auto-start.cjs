@@ -27,6 +27,23 @@ const path = require("path");
 const http = require("http");
 const os = require("os");
 
+// Optional persistent deployment config: ~/.dsh/.sb-env with KEY=VALUE lines
+// (SB_BACKEND, SB_MODEL_ALIAS, SB_REFUSAL_LOG, ...). Shell env wins.
+(function loadDeploymentEnv() {
+  try {
+    const file = path.join(os.homedir(), ".dsh", ".sb-env");
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      if (!process.env[key]) process.env[key] = trimmed.slice(eq + 1).trim();
+    }
+    process.env.SB_SBENV_LOADED = "1";
+  } catch { /* no config file is fine */ }
+})();
+
 // ═══════════════════════════════════════════════════════════════
 // AUTO-DETECT ENVIRONMENT
 // ═══════════════════════════════════════════════════════════════
@@ -103,6 +120,7 @@ function detectEnvironment() {
 
   // Detect backend (try common ports)
   env.backendUrl = process.env.SB_BACKEND || "http://127.0.0.1:20128";
+  if (process.env.SB_DEBUG_ENV) console.error(`[SB DBG] SB_BACKEND=${process.env.SB_BACKEND} sb-env-loaded=${process.env.SB_SBENV_LOADED} backendUrl=${env.backendUrl}`);
 
   try {
     const { command, args } = kaliInvocation('. /etc/os-release && [ "$ID" = kali ] && [ "$(id -u)" = 0 ]');
@@ -162,6 +180,7 @@ function resolveBackendKey(backendUrl) {
   const b = backendUrl.toLowerCase();
   let credName = null;
   if (b.includes("z.ai")) credName = "ZAI_API_KEY";
+  else if (b.includes("refuseless.com")) credName = "REFUSE_LESS_API_KEY";
   else if (b.includes("deepseek.com")) credName = "DEEPSEEK_API_KEY";
   else if (b.includes(":20128")) credName = "NINE_ROUTER_GLM_DEEPSEEK_API_KEY";
   if (!credName) return null;

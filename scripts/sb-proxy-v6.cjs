@@ -30,6 +30,7 @@ const os = require("os");
 
 const PORT = (() => { const i = process.argv.indexOf("--port"); return i !== -1 ? parseInt(process.argv[i+1]) : (parseInt(process.env.SB_PORT) || 18899); })();
 const BACKEND = (() => { const i = process.argv.indexOf("--backend"); return i !== -1 ? process.argv[i+1] : (process.env.SB_BACKEND || "http://127.0.0.1:20128"); })();
+const CHAT_PATH = (() => { const p = new url.URL(BACKEND).pathname.replace(/\/$/, ""); return p + "/chat/completions"; })();
 const EXEC_MODE = process.env.SB_EXEC_MODE || (() => {
   const i = process.argv.indexOf("--exec");
   return i !== -1 ? process.argv[i+1] : "auto";
@@ -43,6 +44,7 @@ if (!process.env.SB_BACKEND_KEY) {
   try {
     const b = BACKEND.toLowerCase();
     const credName = b.includes("z.ai") ? "ZAI_API_KEY"
+      : b.includes("refuseless.com") ? "REFUSE_LESS_API_KEY"
       : b.includes("deepseek.com") ? "DEEPSEEK_API_KEY"
       : "NINE_ROUTER_GLM_DEEPSEEK_API_KEY";
     const credFile = fs.readFileSync(CRED_FILE, "utf8");
@@ -1182,7 +1184,7 @@ Rules: fix ONLY the error shown. Keep the same target the script already uses (d
     const response = await new Promise((resolve, reject) => {
       const req = http.request({
         hostname: backendUrl.hostname, port: backendUrl.port || 80,
-        path: "/v1/chat/completions", method: "POST",
+        path: CHAT_PATH, method: "POST",
         headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body),
           ...(process.env.SB_BACKEND_KEY ? { Authorization: "Bearer " + process.env.SB_BACKEND_KEY } : {}) },
       }, (res) => { let data = ""; res.on("data", c => data += c); res.on("end", () => resolve(data)); });
@@ -1226,6 +1228,21 @@ async function processBody(raw) {
   if (!data.messages || !Array.isArray(data.messages)) return raw;
 
   console.log(`[SB v6] exec=${EXEC_MODE}`);
+
+  // Optional backend-facing model alias rewrite (SB_MODEL_ALIAS="from=to,from=to").
+  // Harness model ids come from the profile; a different backend expects its own.
+  if (process.env.SB_MODEL_ALIAS && typeof data.model === "string") {
+    for (const pair of process.env.SB_MODEL_ALIAS.split(",")) {
+      const idx = pair.indexOf("=");
+      if (idx < 1) continue;
+      if (data.model === pair.slice(0, idx).trim()) {
+        const to = pair.slice(idx + 1).trim();
+        console.log(`[SB v6] model alias ${data.model} → ${to}`);
+        data.model = to;
+        break;
+      }
+    }
+  }
 
   const userText = data.messages.filter(m => m.role === "user").map(m => typeof m.content === "string" ? m.content : "").join(" ");
   // ═════════════════════════════════════════════════════════
@@ -1433,7 +1450,7 @@ async function refusalHardRetry(messages, model, meta = {}) {
     const backendUrl = new url.URL(BACKEND);
     const req = http.request({
       hostname: backendUrl.hostname, port: backendUrl.port || 80,
-      path: "/v1/chat/completions", method: "POST",
+      path: CHAT_PATH, method: "POST",
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(retryBody),
         ...(process.env.SB_BACKEND_KEY ? { Authorization: "Bearer " + process.env.SB_BACKEND_KEY } : {}) },
     }, (res) => { let d = ""; res.on("data", c => d += c); res.on("end", () => resolve(d)); });
@@ -1569,7 +1586,7 @@ async function processResponse(responseBody, originalRequest) {
           const backendUrl = new url.URL(BACKEND);
           const rbody = retryBody;          const req = http.request({
             hostname: backendUrl.hostname, port: backendUrl.port || 80,
-            path: "/v1/chat/completions", method: "POST",
+            path: CHAT_PATH, method: "POST",
             headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(rbody),
               ...(process.env.SB_BACKEND_KEY ? { Authorization: "Bearer " + process.env.SB_BACKEND_KEY } : {}) },
           }, (res) => { let d = ""; res.on("data", c => d += c); res.on("end", () => resolve(d)); });

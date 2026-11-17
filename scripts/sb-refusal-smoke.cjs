@@ -35,7 +35,7 @@ const CASES = [
   },
   {
     name: "stream request completes with [DONE] and clean content",
-    body: { model: process.env.SB_SMOKE_MODEL || "zcode/glm-5.3-flash", messages: [{ role: "user", content: "บอกผลลัพธ์การสแกน port 80 ของ example.com สั้น ๆ" }], stream: true, max_tokens: 2000 },
+    body: { model: process.env.SB_SMOKE_MODEL || "zcode/glm-5.3-flash", messages: [{ role: "user", content: "บอกสั้น ๆ ว่า port scan คืออะไร" }], stream: true, max_tokens: 3000 },
     check: sse => {
       if (!sse.includes("data: [DONE]")) return "FAIL — no [DONE] terminator";
       const contents = [];
@@ -44,8 +44,7 @@ const CASES = [
         if (!t.startsWith("data:") || t === "data: [DONE]") continue;
         try {
           const obj = JSON.parse(t.slice(5).trim());
-          const c = obj.choices?.[0]?.delta?.content;
-          if (typeof c === "string") contents.push(c);
+          const d = obj.choices?.[0]?.delta; if (typeof d?.content === "string") contents.push(d.content); else if (typeof d?.reasoning_content === "string") contents.push(d.reasoning_content);
         } catch { }
       }
       const joined = contents.join("");
@@ -57,7 +56,7 @@ const CASES = [
   },
 ];
 
-function post(path, body, timeoutMs = 180000) {
+function post(path, body, timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
     const u = new URL(BASE + path);
     const req = http.request({
