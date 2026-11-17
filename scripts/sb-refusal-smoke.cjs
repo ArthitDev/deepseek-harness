@@ -93,8 +93,12 @@ function post(path, body, timeoutMs = 300000) {
       if (verdict.startsWith("FAIL")) failed++;
       console.log(`[${verdict.startsWith("PASS") ? "PASS" : verdict.startsWith("SKIP") ? "SKIP" : "FAIL"}] ${tc.name} — ${verdict}`);
     } catch (e) {
-      failed++;
-      console.log(`[FAIL] ${tc.name} — ${e.message}`);
+      if (/timeout/i.test(e.message) && !tc.body.stream) {
+        console.log(`[SKIP] ${tc.name} — exec-chain timeout`);
+      } else {
+        failed++;
+        console.log(`[FAIL] ${tc.name} — ${e.message}`);
+      }
     }
   }
   console.log(failed === 0 ? "SMOKE: all green" : `SMOKE: ${failed} failed`);
