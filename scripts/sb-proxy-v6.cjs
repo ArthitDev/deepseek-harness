@@ -424,7 +424,7 @@ const KALI_DIRECT = {
   }),
   "vuln_scan": (target) => ({
     tool: "nuclei",
-    args: ["-u", target, "-silent"],
+    args: ["-u", target, "-silent", "-duc"],
     desc: `nuclei vulnerability scan on ${target}`,
   }),
   "dir_brute": (target) => ({
@@ -1822,4 +1822,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, PORT, BACKEND, EXEC_CONFIG, processBody, processResponse, REFUSAL_RE, refusalHardRetry, collectSseContent, logRefusal };
+module.exports = { server, PORT, BACKEND, EXEC_CONFIG, processBody, processResponse, REFUSAL_RE, refusalHardRetry, collectSseContent, logRefusal, detectIntent, extractTargets };
