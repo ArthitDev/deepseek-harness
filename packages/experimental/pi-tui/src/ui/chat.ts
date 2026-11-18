@@ -1035,7 +1035,15 @@ export class ChatScreen {
       { name: 'suppress-prompt', description: 'Show strict prompt protection status' },
       { name: 'mcp', description: 'Enable or disable MCP tools' },
       { name: 'jev', description: 'Enable or disable JEV tools and policy context' },
-      { name: 'vpn', description: 'VPN: status | reconnect | rotate sg|hk|jp|my|th (affects every session on this Host)' },
+      {
+        name: 'vpn',
+        description: 'Open VPN action menu',
+        getArgumentCompletions: prefix => [
+          { value: 'status', label: 'View VPN status', description: 'Local tunnel and cached HTTPS verification' },
+          { value: 'reconnect', label: 'Reconnect VPN', description: 'Shared Web/TUI traffic may pause' },
+          { value: 'rotate', label: 'Rotate exit', description: 'Rotate the Mullvad exit: region (asia|europe|americas|oceania|africa|any) or country code' },
+        ].filter(item => item.value.startsWith(prefix)),
+      },
       { name: 'team-mode', description: 'Switch the team mode' },
       { name: 'thinking', description: 'Choose reasoning level for the selected model' },
       { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
@@ -1536,13 +1544,13 @@ export class ChatScreen {
   private async cmdVpn(action: string): Promise<void> {
     const parts = action.split(/\s+/).filter(part => part !== '')
     const [verb, argument] = [parts[0] ?? '', parts[1] ?? '']
-    const rotateCountries = ['sg', 'hk', 'jp', 'my', 'th']
+    const rotateTargets = ['asia', 'europe', 'americas', 'oceania', 'africa', 'any']
     if (verb !== '' && verb !== 'status' && verb !== 'reconnect' && verb !== 'rotate') {
-      this.pushNotice('usage: /vpn [status|reconnect|rotate sg|hk|jp|my|th]', 'error')
+      this.pushNotice('usage: /vpn [status|reconnect|rotate asia|europe|americas|oceania|africa|any]', 'error')
       return
     }
-    if (verb === 'rotate' && !rotateCountries.includes(argument)) {
-      this.pushNotice('usage: /vpn rotate sg|hk|jp|my|th', 'error')
+    if (verb === 'rotate' && !rotateTargets.includes(argument) && !/^[a-z]{2}$/.test(argument)) {
+      this.pushNotice('usage: /vpn rotate asia|europe|americas|oceania|africa|any — or a two-letter country code: /vpn rotate sg', 'error')
       return
     }
     const vpn = this.ctx.get('vpnStatus')
@@ -1558,10 +1566,10 @@ export class ChatScreen {
         items: [
           { value: 'status', label: '1. Status', description: 'Local tunnel and cached Host HTTPS verification' },
           { value: 'reconnect', label: '2. Reconnect', description: 'Reconnect Mullvad, then verify HTTPS; shared traffic may pause' },
-          ...rotateCountries.map((code, index) => ({
-            value: `rotate ${code}`,
-            label: `${index + 3}. Rotate → ${code.toUpperCase()}`,
-            description: 'Switch the exit relay to this Asia location, then verify HTTPS; shared traffic may pause',
+          ...rotateTargets.map((region, index) => ({
+            value: `rotate ${region}`,
+            label: `${index + 3}. Rotate → ${region}`,
+            description: 'Pick a random exit in this region (any = whole Mullvad list), then verify HTTPS; shared traffic may pause',
           })),
         ],
         initial: 'status',
@@ -1592,8 +1600,8 @@ export class ChatScreen {
         return
       }
       const relay = result.relay === undefined ? '' : ` Exit relay: ${result.relay}.`
-      if (result.snapshot.state === 'verified') this.pushNotice(`VPN rotated to ${country.toUpperCase()}; Host HTTPS egress verified.${relay}`)
-      else this.pushNotice(`VPN rotated to ${country.toUpperCase()}; Host HTTPS ${result.snapshot.state}. Egress is not confirmed.${relay}`, 'error')
+      if (result.snapshot.state === 'verified') this.pushNotice(`VPN rotated (target: ${country}); Host HTTPS egress verified.${relay}`)
+      else this.pushNotice(`VPN rotated (target: ${country}); Host HTTPS ${result.snapshot.state}. Egress is not confirmed.${relay}`, 'error')
       return
     }
     const tunnel = await vpn.tunnel()
@@ -4482,7 +4490,7 @@ class PathAwareAutocomplete implements AutocompleteProvider {
     if (suggestions === null) return null
     // Belt and braces: outside slash/@ contexts, only path-like tokens may
     // receive file suggestions.
-    if (token.startsWith('/') || token.startsWith('@') || isPathLikeToken(token)) {
+    if (before.trimStart().startsWith('/') || token.startsWith('@') || isPathLikeToken(token)) {
       return suggestions
     }
     return null

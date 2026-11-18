@@ -176,7 +176,7 @@ The status bar shows `Kali checking`, `Kali ready`, or `Kali unavailable` even w
 
 The bundled [VPN status service](../../host/vpn-status/README.md) adds a sampled Host HTTPS verification segment with its last-check time. Enable the `vpn-status` row to opt in; TUI refreshes the shared cache display every 15 seconds without starting network checks.
 
-`/vpn` opens the Status/Reconnect picker; use arrow keys or a number, Enter to apply, and Esc to cancel without running an operation. `/vpn status` shows the local tunnel and cached HTTPS evidence. `/vpn reconnect` reconnects Mullvad and checks egress again; reconnect alone does not establish verification. It affects shared Web/TUI traffic and preserves policy. See [Windows/Linux control and isolated Server setup](../../host/vpn-status/README.md#tui-control).
+`/vpn` opens the action picker; use arrow keys or a number, Enter to apply, and Esc to cancel without running an operation. Typing `/vpn ` also shows `View VPN status` and `Reconnect VPN` suggestions: use arrow keys and Enter to fill the command, then Enter again to run it. Esc dismisses suggestions without running the command. `/vpn status` shows the local tunnel and cached HTTPS evidence. `/vpn reconnect` reconnects Mullvad and checks egress again; reconnect alone does not establish verification. It affects shared Web/TUI traffic and preserves policy. See [Windows/Linux control and isolated Server setup](../../host/vpn-status/README.md#tui-control).
 
 Background Git status, file search, clipboard helpers, and Kali readiness commands request hidden initial windows on Windows. Commands that explicitly open their own windows remain outside this guarantee.
 

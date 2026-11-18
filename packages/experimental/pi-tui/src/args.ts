@@ -119,7 +119,7 @@ Commands:
   /thinking [level]       choose reasoning level (next step)
   /suppress-prompt [on|off|toggle|status]   choose prompt suppression (ON/OFF picker)
   /mcp [on|off|toggle|status]   list MCP servers or control all MCP tools
-  /vpn [status|reconnect|rotate CODE]  open VPN actions, inspect status, reconnect, or rotate the Asia exit (sg|hk|jp|my|th)
+  /vpn [status|reconnect|rotate TARGET]  open VPN actions, inspect status, reconnect, or rotate the exit (TARGET: region asia|europe|americas|oceania|africa|any, or a country code like sg)
   /jev [on|off|toggle|status]   enable or disable JEV tools and policy context
   /team-mode [blue|red|black|dead]   choose the team mode (numbered picker)
   /skills [on|off|toggle|status]   list and toggle skills or control them all

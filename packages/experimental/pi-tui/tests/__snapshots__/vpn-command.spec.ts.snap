@@ -5,11 +5,19 @@ exports[`routes operator VPN commands without model turns and distinguishes reco
   "                         ↑/↓ or number · Enter select · Esc cancel                                                                                              ",
   "                        → 1. Status                       Local tunnel and cached Host HTTPS verification                                                       ",
   "                          2. Reconnect                    Reconnect Mullvad, then verify HTTPS; shared traffic may pause                                        ",
-  "                          3. Rotate → SG                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
-  "                          4. Rotate → HK                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
-  "                          5. Rotate → JP                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
-  "                          6. Rotate → MY                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
-  "                          7. Rotate → TH                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
+  "                          3. Rotate → asia                Pick a random exit in this region (any = whole Mullvad list), then verify HT                          ",
+  "                          4. Rotate → europe              Pick a random exit in this region (any = whole Mullvad list), then verify HT                          ",
+  "                          5. Rotate → americas            Pick a random exit in this region (any = whole Mullvad list), then verify HT                          ",
+  "                          6. Rotate → oceania             Pick a random exit in this region (any = whole Mullvad list), then verify HT                          ",
+  "                          7. Rotate → africa              Pick a random exit in this region (any = whole Mullvad list), then verify HT                          ",
+  "                          8. Rotate → any                 Pick a random exit in this region (any = whole Mullvad list), then verify HT                          ",
+]
+`;
+
+exports[`routes operator VPN commands without model turns and distinguishes reconnect from egress verification > VPN command suggestions 1`] = `
+[
+  " → View VPN status                 Local tunnel and cached HTTPS verification                                   │                                               ",
+  "   Reconnect VPN                   Shared Web/TUI traffic may pause                                             │                                               ",
 ]
 `;
 

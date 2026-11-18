@@ -68,7 +68,9 @@ export async function controlVpn(action: 'status' | 'reconnect' | 'rotate', sock
 
 function socketControl(action: 'status' | 'reconnect' | 'rotate', socketPath: string, signal: AbortSignal, country?: string): Promise<VpnControlResult> {
   return new Promise((resolve) => {
-    const path = action === 'rotate' ? `/rotate?country=${encodeURIComponent(country ?? '')}` : '/' + action
+    const target = encodeURIComponent(country ?? '')
+    // Two-letter targets are country codes; anything else is a region name.
+    const path = action === 'rotate' ? (/^[a-z]{2}$/.test(target) ? `/rotate?country=${target}` : `/rotate?region=${target}`) : '/' + action
     const req = request({ socketPath, path, method: action === 'status' ? 'GET' : 'POST', signal, agent: false }, (res) => {
       let body = ''
       res.on('data', (part: Buffer) => { body += part.toString('utf8'); if (body.length > 16384) res.destroy(new Error('VPN control response too large')) })
