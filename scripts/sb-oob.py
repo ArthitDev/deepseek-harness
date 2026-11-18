@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-ROOT = Path.home() / ".dsh" / "oob"
+ROOT = Path(os.environ.get("OOB_ROOT") or ("/workspace/.oob" if Path("/workspace").exists() else Path.home() / ".dsh" / "oob"))
 DEFAULT_PORT = int(os.environ.get("OOB_PUBLIC_PORT", "18898"))
 
 
