@@ -16,6 +16,8 @@ describe('decodeOsc52', () => {
 
   it('decodes an encoded payload back to text', () => {
     expect(decodeOsc52(osc52Encode('copied text'))).toEqual(['copied text'])
+    const text = 'สถานะ agent ทั้งหมดตอนนี้: ไทย 中文 🙂\nบรรทัดที่สอง'
+    expect(decodeOsc52(osc52Encode(text))).toEqual([text])
   })
 
   it('decodes every payload in a multi-write stream', () => {

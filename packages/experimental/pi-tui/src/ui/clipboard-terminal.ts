@@ -41,7 +41,8 @@ export class ClipboardTerminal extends ProcessTerminal {
     if (process.platform === 'darwin') {
       jobs.push(pipeTo('pbcopy', [], text))
     } else if (process.platform === 'win32') {
-      jobs.push(pipeTo('clip', [], text))
+      // clip.exe detects Unicode from the UTF-16LE BOM; UTF-8 uses the system code page.
+      jobs.push(pipeTo('clip', [], Buffer.from(`\uFEFF${text}`, 'utf16le')))
     } else {
       jobs.push(pipeTo('xclip', ['-selection', 'clipboard'], text))
     }
@@ -50,7 +51,7 @@ export class ClipboardTerminal extends ProcessTerminal {
 }
 
 /** Spawn a clipboard command, feed `text` on stdin, and settle quietly. */
-function pipeTo(command: string, args: string[], text: string): Promise<void> {
+function pipeTo(command: string, args: string[], text: string | Buffer): Promise<void> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>
     try {

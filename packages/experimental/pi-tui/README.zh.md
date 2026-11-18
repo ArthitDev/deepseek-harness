@@ -180,6 +180,8 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 
 后台 Git 状态、文件搜索、剪贴板辅助进程和 Kali 就绪探测命令在 Windows 上请求隐藏初始窗口。显式打开自身窗口的命令不在此保证范围内。
 
+`/copy last` 和 `Alt+C` 通过 OSC 52 及本地剪贴板辅助进程复制最新的助手消息。Windows 向 `clip.exe` 发送带 BOM 的 UTF-16LE，以避免系统代码页影响 Unicode 文本；OSC 52、tmux、macOS 和 Linux 仍使用 UTF-8。鼠标选中复制由终端应用处理，不经过此辅助进程。
+
 `/exit`、`/new`、`/fork`、`/resume`、`/recap`、`/context`、`/tree`、`/agents`、`/jobs`、`/model`、`/preset`、`/thinking`、`/team-mode`、`/suppress-prompt`、`/mcp`、`/jev`、`/skills`、`/shell [win|kali|close]`、`/agent-debug`、`/exec`、`/wiki`、`/runs`、`/recon`、`/machines`、`/key`、`/provider`、`/providers`、`/memory`、`/sessions`、`/rewind`、`/clear`、`/queue`、`/export`、`/rename`、`/copy`、`/retry`、`/expand-all`、`/hotkeys`，以及官方 dsh 斜杠命令（`/compact`、`/goal`、`/plan`、`/feedback`）。
 
 `/wiki` 打开带编号的知识库选择列表，读取当前预设可见的 `knowledge_list` 工具所配置的知识库。选择知识库后，可在对话区查看 `INDEX.md` 的标题和链接、在 Obsidian 中打开该索引，或在文件管理器中打开配置的文件夹。方向键或数字选择，Enter 确认，Esc 取消。需要安装 Obsidian 并注册 `obsidian://` 协议处理程序，且 Wiki 文件夹已作为 Obsidian 库打开过。知识库不可用或打开失败时显示 TUI 通知。菜单不请求模型、不追加会话事件，也不修改提示词或 Wiki 文件。

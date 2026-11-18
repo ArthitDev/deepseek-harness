@@ -180,6 +180,8 @@ The bundled [VPN status service](../../host/vpn-status/README.md) adds a sampled
 
 Background Git status, file search, clipboard helpers, and Kali readiness commands request hidden initial windows on Windows. Commands that explicitly open their own windows remain outside this guarantee.
 
+`/copy last` and `Alt+C` copy the newest assistant message through OSC 52 and the local clipboard helper. Windows sends BOM-marked UTF-16LE to `clip.exe` to preserve Unicode regardless of the system code page; OSC 52, tmux, macOS, and Linux retain UTF-8. Mouse-selected copying belongs to the terminal application and does not use this helper.
+
 `/exit`, `/new`, `/fork`, `/resume`, `/recap`, `/context`, `/tree`, `/agents`, `/jobs`, `/model`, `/preset`, `/thinking`, `/team-mode`, `/suppress-prompt`, `/mcp`, `/jev`, `/skills`, `/shell [win|kali|close]`, `/agent-debug`, `/exec`, `/wiki`, `/runs`, `/recon`, `/machines`, `/key`, `/provider`, `/providers`, `/memory`, `/sessions`, `/rewind`, `/clear`, `/queue`, `/export`, `/rename`, `/copy`, `/retry`, `/expand-all`, `/hotkeys`, plus the official dsh slash commands (`/compact`, `/goal`, `/plan`, `/feedback`).
 
 `/wiki` opens a numbered picker for libraries exposed by the current preset's `knowledge_list` tool. Select a library to view its `INDEX.md` titles and links in the transcript, open that index in Obsidian, or open its configured folder in the file manager. Arrow keys or numbers select, Enter confirms, and Esc cancels. Obsidian must be installed with its `obsidian://` handler registered, and the Wiki folder must already be an Obsidian vault. Missing libraries and open failures appear as TUI notices. The menu sends no model request, adds no session events, and does not change prompts or Wiki files.
