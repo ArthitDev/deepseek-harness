@@ -174,7 +174,7 @@ shell 打开时，其 agent 可以调用 `shell_draft`，传入 `shell`（`win` 
 
 状态栏会显示 `Kali checking`、`Kali ready` 或 `Kali unavailable`，即使 `/shell` 已关闭。每次探测通过已激活的 `kali` terminal-bash 后端求值后的可执行文件和参数（包括 `!!js` 表达式）运行有时限的只读 Bash 命令；WSL 保留配置的发行版和用户。`ready` 确认 Kali 的系统身份和 Bash 执行能力，不代表 PTY 启动、沙箱访问、网络访问或工具安装状态。探测可能启动已停止的 WSL 发行版。`kaliStatusTimeoutMs` 默认为 10,000 毫秒；`kaliStatusIntervalMs` 默认为每次探测结束后等待 30,000 毫秒。探测不会重叠，TUI 卸载时停止；不会创建终端会话、读取现有 shell 输出、发送模型请求或更改会话历史。
 
-组合中的 [VPN 状态服务](../../host/vpn-status/README.zh.md) 增加宿主 HTTPS 采样验证和上次检查时间。启用 `vpn-status` 条目即可使用；TUI 每 15 秒刷新缓存显示，不触发网络检查。
+组合中的 [VPN 状态服务](../../host/vpn-status/README.zh.md) 增加宿主 HTTPS 采样验证和上次检查时间。尚未过期且已验证的样本如果包含出口国家元数据，会附加双字母代码，例如 `VPN verified (mullvad) · SG`；国家未知、样本过期或未验证时不显示国家。启用 `vpn-status` 条目即可使用；TUI 每 15 秒刷新缓存显示，不触发网络检查。
 
 `/vpn` 打开操作选择菜单；使用方向键或数字选择、Enter 执行、Esc 取消，取消时不执行操作。输入 `/vpn ` 也会显示 `View VPN status` 和 `Reconnect VPN` 建议：使用方向键选择并按 Enter 填入命令，再按一次 Enter 执行。Esc 关闭建议，不执行命令。`/vpn status` 显示本机 tunnel 和缓存的 HTTPS 证据。`/vpn reconnect` 重连 Mullvad 后重新检查出口；重连本身不代表验证通过。操作会短暂影响共享 Web/TUI 流量，并保留 policy。参阅 [Windows/Linux 控制和隔离 Server 设置](../../host/vpn-status/README.zh.md#tui-control)。
 

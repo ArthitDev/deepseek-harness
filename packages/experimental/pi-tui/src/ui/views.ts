@@ -534,9 +534,10 @@ export class StatusBar extends Loader {
     if (data.vpn !== undefined) {
       const fresh = data.vpn.validUntil !== null && Date.now() < data.vpn.validUntil
       const state = data.vpn.state === 'verified' && !fresh ? 'unknown' : data.vpn.state
+      const country = state === 'verified' && data.vpn.country !== undefined ? ' · ' + data.vpn.country : ''
       const checked = data.vpn.checkedAt === null ? '' : ' · ' + new Date(data.vpn.checkedAt).toISOString().slice(11, 19) + 'Z'
       parts.push((state === 'verified' ? chalk.green : chalk.yellow)(
-        'VPN ' + state + (state === 'verified' && data.vpn.evidence !== null ? ' (' + data.vpn.evidence + ')' : '') + checked + ' · Host HTTPS',
+        'VPN ' + state + (state === 'verified' && data.vpn.evidence !== null ? ' (' + data.vpn.evidence + ')' : '') + country + checked + ' · Host HTTPS',
       ))
     }
     if (data.jev !== undefined) {

@@ -33,7 +33,7 @@ it('routes operator VPN commands without model turns and distinguishes reconnect
   const visible = (): string => { tui.renderNow(); return stripVTControlCharacters(tui.getScreenLines().join('\n')) }
   const input = (data: string): void => { startInput.mock.calls[0]?.[0](data) }
   try {
-    vi.mocked(fetchEgress).mockResolvedValue({ ip: '203.0.113.7', mullvad_exit_ip: true })
+    vi.mocked(fetchEgress).mockResolvedValue({ ip: '203.0.113.7', mullvad_exit_ip: true, mullvad_exit_ip_hostname: 'sg-sin-wg-101' })
     vi.mocked(controlVpn).mockResolvedValue({ kind: 'ok', tunnel: 'connected' })
     await ctx.plugin(Loader)
     Object.assign(ctx.loader.builtins, {
@@ -57,6 +57,7 @@ it('routes operator VPN commands without model turns and distinguishes reconnect
     screen.submit('/vpn disconnect')
     await vi.waitFor(() => { expect(visible()).toContain('usage: /vpn [status|reconnect|rotate asia|europe|americas|oceania|africa|any]') })
     await vi.waitFor(() => { expect(ctx.vpnStatus.read().state).toBe('verified') })
+    expect(visible()).toContain('VPN verified (mullvad) · SG')
     const show = vi.spyOn(tui, 'showOverlay')
     screen.submit('/vpn')
     screen.submit('/vpn')

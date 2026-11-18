@@ -18,6 +18,12 @@ Kali unavailable · ◈ Jev ON
 ◌ normal"
 `;
 
+exports[`status bar animation > shows a compact exit country only while the VPN sample is verified and fresh 1`] = `
+"⧉ Shield Break
+VPN verified (mullvad) · SG...
+◌ normal"
+`;
+
 exports[`status bar animation > shows sampled VPN evidence and timestamp, then removes expired verification 1`] = `
 "⧉ Shield Break
 VPN verified (mullvad) · 22...

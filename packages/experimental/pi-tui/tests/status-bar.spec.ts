@@ -7,6 +7,23 @@ import { TEAM_MODE_OPTIONS } from '../src/core/team-mode.ts'
 afterEach(() => { vi.useRealTimers() })
 
 describe('status bar animation', () => {
+  it('shows a compact exit country only while the VPN sample is verified and fresh', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1700000000000)
+    const bar = new StatusBar(new TuiAltScreen(new ProcessTerminal()))
+    const vpn = { state: 'verified', evidence: 'mullvad', country: 'SG', checkedAt: Date.now(), validUntil: Date.now() + 1000 } as const
+    try {
+      bar.update({ vpn })
+      expect(stripVTControlCharacters(bar.render(80).join('\n'))).toContain('VPN verified (mullvad) · SG · 22:13:20Z')
+      expect(stripVTControlCharacters(bar.render(30).join('\n'))).toMatchSnapshot()
+      vi.advanceTimersByTime(1000)
+      expect(stripVTControlCharacters(bar.render(80).join('\n'))).not.toContain('SG')
+      for (const state of ['checking', 'unverified', 'unknown'] as const) {
+        bar.update({ vpn: { ...vpn, state, validUntil: Date.now() + 1000 } })
+        expect(stripVTControlCharacters(bar.render(80).join('\n'))).not.toContain('SG')
+      }
+    } finally { bar.stop() }
+  })
   it('shows sampled VPN evidence and timestamp, then removes expired verification', () => {
     vi.useFakeTimers()
     vi.setSystemTime(1700000000000)

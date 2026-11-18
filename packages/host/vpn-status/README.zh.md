@@ -28,6 +28,8 @@ Mullvad 官方的 `mullvad_exit_ip: true` 可验证其出口。其他服务商�
 
 `vpnStatus/read` Remote 和进程内 `ctx.vpnStatus.read()` 返回 checking、verified、unverified 或 unknown，以及依据、上次检查时间和失效时间。不匹配为 unverified；网络、解析或端点失败为 unknown。每次新检查清除旧验证，过期样本不能保持 verified。Web 标注宿主 HTTPS，TUI 使用同一缓存。不同宿主进程各自管理检查周期。
 
+已验证的 Mullvad 样本还可能包含可选的 `country`，即从 `mullvad_exit_ip_hostname` 提取的大写双字母出口国家代码。relay 名称缺失或格式无效时省略代码，不改变验证结果。checking、检查失败、unverified 和过期样本不包含国家代码。其他服务商目前省略国家元数据。提取使用现有 HTTPS 响应，不增加请求；代码描述观测到的出口，而非配置的目标位置或 multihop 入口。
+
 <a id="dev-note"></a>
 
 ## 开发备注

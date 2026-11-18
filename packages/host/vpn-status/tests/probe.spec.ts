@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { exitMatcher, verifyResponse } from '../src/probe.ts'
 
 describe('VPN egress evidence', () => {
+  it('extracts only the exit country from an officially verified relay hostname', () => {
+    const sample = { ip: '203.0.113.2', mullvad_exit_ip: true, mullvad_exit_ip_hostname: 'sg-sin-wg-101' }
+    expect(verifyResponse(sample, exitMatcher([]))).toEqual({ state: 'verified', evidence: 'mullvad', country: 'SG' })
+    expect(verifyResponse({ ...sample, mullvad_exit_ip_hostname: 'JP-osa-wg-101' }, exitMatcher([])).country).toBe('JP')
+    for (const hostname of [undefined, null, 42, '', 'Singapore', 'sg-sin-wg-101\n', 'sg-\x1b[31m']) {
+      expect(verifyResponse({ ...sample, mullvad_exit_ip_hostname: hostname }, exitMatcher([])))
+        .toEqual({ state: 'verified', evidence: 'mullvad' })
+    }
+    expect(verifyResponse({ ...sample, mullvad_exit_ip: false }, exitMatcher(['203.0.113.2'])))
+      .toEqual({ state: 'verified', evidence: 'expected-exit' })
+  })
   it('accepts official Mullvad attestation only with a valid IP and boolean', () => {
     expect(verifyResponse({ ip:'203.0.113.2',mullvad_exit_ip:true },exitMatcher([]))).toEqual({ state:'verified',evidence:'mullvad' })
     for(const value of [null,{}, { ip:'invalid',mullvad_exit_ip:true }, { ip:'203.0.113.2',mullvad_exit_ip:'true' }, { ip:'203.0.113.2' }]) {

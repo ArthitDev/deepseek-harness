@@ -15,21 +15,26 @@ afterEach(async()=>{await ctx.fiber.dispose();vi.useRealTimers()})
 const flush=async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve()}
 describe('shared VPN cache',()=>{
   it('checks once on startup and once per five minutes, never from readers',async()=>{
-    fetchMock.mockResolvedValue({ ip:'203.0.113.7',mullvad_exit_ip:true })
+    fetchMock.mockResolvedValueOnce({ ip:'203.0.113.7',mullvad_exit_ip:true,mullvad_exit_ip_hostname:'sg-sin-wg-101' })
+      .mockResolvedValue({ ip:'203.0.113.7',mullvad_exit_ip:true,mullvad_exit_ip_hostname:'jp-osa-wg-101' })
     await ctx.plugin(VpnStatusService,config);await flush()
     const service=ctx.vpnStatus
     expect(service.read().state).toBe('verified')
+    expect(service.read().country).toBe('SG')
     for(let i=0;i<20;i++)service.read()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(299999);expect(fetchMock).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1);expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(service.read().country).toBe('JP')
     expect(JSON.stringify(service.read())).not.toContain('203.0.113.7')
   })
   it('returns unknown after expiry and replaces success with a failed check',async()=>{
-    fetchMock.mockResolvedValueOnce({ ip:'203.0.113.7',mullvad_exit_ip:true }).mockRejectedValue(new Error('offline'))
+    fetchMock.mockResolvedValueOnce({ ip:'203.0.113.7',mullvad_exit_ip:true,mullvad_exit_ip_hostname:'sg-sin-wg-101' }).mockRejectedValue(new Error('offline'))
     await ctx.plugin(VpnStatusService,config);await flush()
     vi.setSystemTime(Date.now()+300000);expect(ctx.vpnStatus.read()).toMatchObject({ state:'unknown',evidence:null })
+    expect(ctx.vpnStatus.read().country).toBeUndefined()
     await vi.advanceTimersByTimeAsync(300000);expect(ctx.vpnStatus.read()).toMatchObject({ state:'unknown',evidence:null })
+    expect(ctx.vpnStatus.read().country).toBeUndefined()
   })
   it('does not send external traffic while disabled',async()=>{
     await ctx.plugin(VpnStatusService,{ ...config,enabled:false })

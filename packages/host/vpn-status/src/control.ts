@@ -38,6 +38,7 @@ export function tunnelState(value: unknown): VpnControlResult['tunnel'] {
  * @param action - fixed operation chosen by the operator command.
  * @param socketPath - configured broker socket, or empty to use the installed local CLI.
  * @param signal - lifetime/deadline cancellation owned by the service.
+ * @param country - optional location forwarded only to a configured control broker.
  * @returns sanitized control outcome, never CLI output or a verification claim.
  */
 export async function controlVpn(action: 'status' | 'reconnect' | 'rotate', socketPath: string, signal: AbortSignal, country?: string): Promise<VpnControlResult> {

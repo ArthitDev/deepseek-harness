@@ -30,14 +30,18 @@ export function exitMatcher(entries: readonly string[]): (ip: string) => boolean
 /** Validate the external JSON before trusting a provider assertion or matching an exit address.
  * @param value - JSON from the fixed official HTTPS endpoint.
  * @param matches - configured exit matcher.
- * @returns only the verification fields; IP addresses never leave this function.
+ * @returns verification and optional exit country; IP addresses never leave this function.
  */
-export function verifyResponse(value: unknown, matches: (ip: string) => boolean): Pick<VpnStatusSnapshot, 'state' | 'evidence'> {
+export function verifyResponse(value: unknown, matches: (ip: string) => boolean): Pick<VpnStatusSnapshot, 'state' | 'evidence' | 'country'> {
   if (typeof value !== 'object' || value === null || !('ip' in value) || typeof value.ip !== 'string' || !isIP(value.ip)
     || !('mullvad_exit_ip' in value) || typeof value.mullvad_exit_ip !== 'boolean') {
     return { state: 'unknown', evidence: null }
   }
-  if (value.mullvad_exit_ip) return { state: 'verified', evidence: 'mullvad' }
+  if (value.mullvad_exit_ip) {
+    const hostname = 'mullvad_exit_ip_hostname' in value ? value.mullvad_exit_ip_hostname : undefined
+    const country = typeof hostname === 'string' ? /^([a-z]{2})-[a-z0-9-]+$/i.exec(hostname)?.[1]?.toUpperCase() : undefined
+    return { state: 'verified', evidence: 'mullvad', ...(country === undefined ? {} : { country }) }
+  }
   if (matches(value.ip)) return { state: 'verified', evidence: 'expected-exit' }
   return { state: 'unverified', evidence: null }
 }

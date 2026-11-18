@@ -62,10 +62,10 @@ export class VpnStatusService extends TypertRemoteService<Config> {
       const active = (): boolean => !lifetime.signal.aborted
       const poll = async (): Promise<void> => {
         if (!active()) return
-        this.snapshot = { ...this.snapshot, state: 'checking', evidence: null, validUntil: null }
+        this.snapshot = { state: 'checking', evidence: null, checkedAt: this.snapshot.checkedAt, validUntil: null }
         const deadline = AbortSignal.timeout(config.timeoutMs)
         const signal = AbortSignal.any([lifetime.signal, deadline])
-        let result: Pick<VpnStatusSnapshot, 'state' | 'evidence'> = { state: 'unknown', evidence: null }
+        let result: Pick<VpnStatusSnapshot, 'state' | 'evidence' | 'country'> = { state: 'unknown', evidence: null }
         try { result = verifyResponse(await fetchEgress(signal), matches) } catch (error) {
           // Network failures are unknown; never retain an earlier verified result.
           void error
@@ -179,7 +179,7 @@ export class VpnStatusService extends TypertRemoteService<Config> {
   read(signal?: AbortSignal): VpnStatusSnapshot {
     void signal
     if (this.snapshot.validUntil !== null && Date.now() >= this.snapshot.validUntil) {
-      return { ...this.snapshot, state: 'unknown', evidence: null }
+      return { state: 'unknown', evidence: null, checkedAt: this.snapshot.checkedAt, validUntil: this.snapshot.validUntil }
     }
     return this.snapshot
   }

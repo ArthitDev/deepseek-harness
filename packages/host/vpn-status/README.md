@@ -26,6 +26,8 @@ Mullvad's official `mullvad_exit_ip: true` verifies its exit. Other providers, i
 
 The `vpnStatus/read` Remote and in-process `ctx.vpnStatus.read()` return checking, verified, unverified, or unknown plus evidence, last-check time, and expiry. Unmatched responses are unverified; network, parsing and endpoint failures are unknown. Every new check clears the previous verification, and expired samples cannot remain verified. The Web row names Host HTTPS; TUI uses the same cache. Separate Host processes each own their own check cadence.
 
+Verified Mullvad samples can also include optional `country`, an uppercase two-letter exit-country code extracted from `mullvad_exit_ip_hostname`. Missing or malformed relay names omit the code without changing verification. Checking, failed, unverified and expired samples carry no country. Other providers currently omit country metadata. Extraction uses the existing HTTPS response and adds no requests; the code describes the observed exit, not a configured target or multihop entry.
+
 ## Dev Note
 
 ### TUI control

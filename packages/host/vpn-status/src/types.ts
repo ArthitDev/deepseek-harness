@@ -2,6 +2,8 @@
 export interface VpnStatusSnapshot {
   readonly state: 'checking' | 'verified' | 'unverified' | 'unknown'
   readonly evidence: 'mullvad' | 'expected-exit' | null
+  /** Two-letter exit country from a verified relay hostname; absent when unavailable. */
+  readonly country?: string
   readonly checkedAt: number | null
   readonly validUntil: number | null
 }
