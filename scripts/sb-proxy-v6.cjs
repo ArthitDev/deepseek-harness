@@ -1120,6 +1120,9 @@ function classifyEnv(code, lang) {
   if (lang === "powershell") w += 5;
   if (k > w) return "kali";
   if (w > k) return "windows";
+  // Tie: on the server workload (kali container configured) prefer kali;
+  // on the Windows host the default stays windows.
+  if (EXEC_CONFIG.dockerContainer || EXEC_CONFIG.dockerSocket) return "kali";
   return "windows";
 }
 
@@ -1247,8 +1250,9 @@ Rules: fix ONLY the error shown. Keep the same target the script already uses (d
         { role: "system", content: `You are the fix stage of an authorized offensive-security automation pipeline. Fix ONLY the reported error. Keep the same language and target. No new features or dependencies. Output the COMPLETE corrected script as one code block and nothing else.` },
         { role: "user", content: analysisPrompt },
       ],
-      max_tokens: 8000,
+      max_tokens: 12000,
       temperature: 0.4,
+      thinking: { type: "disabled" },
     });
 
     const response = await new Promise((resolve, reject) => {
