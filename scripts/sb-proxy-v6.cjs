@@ -837,7 +837,7 @@ async function runRecon(targets) {
       const args = (tool === "theHarvester")
         ? ["-d", target.value.split("@")[1], "-b", "duckduckgo"]
         : [target.value, "--print-found", "--timeout", "10"];
-      const osint = await runKaliCommand(tool, args, EXEC_CONFIG.reconTimeout);
+      const osint = await runKaliCommandWithRotate(tool, args, EXEC_CONFIG.reconTimeout, `${tool} ${target.value}`);
       results.push({ tool, target: target.value, success: osint.success, output: osint.output?.substring(0, 3000) });
       console.log(`[SB v6 RECON] ${tool} on ${target.value}: ${osint.success ? "✓" : "✗"} (${osint.output?.split("\n").length || 0} lines)`);
       continue;
@@ -850,7 +850,7 @@ async function runRecon(targets) {
     console.log(`[SB v6 RECON] Scanning ${host}...`);
 
     // Phase 1: Quick port scan (top 100 ports)
-    const nmap = await runKaliCommand("nmap", ["-sV", "-T4", "--top-ports", "100", host], EXEC_CONFIG.reconTimeout);
+    const nmap = await runKaliCommandWithRotate("nmap", ["-sV", "-T4", "--top-ports", "100", host], EXEC_CONFIG.reconTimeout, `nmap ${host}`);
     results.push({ tool: "nmap", target: host, success: nmap.success, output: nmap.output?.substring(0, 3000) });
     console.log(`[SB v6 RECON] nmap: ${nmap.success ? "✓" : "✗"} (${nmap.output?.split("\n").length || 0} lines)`);
 
@@ -985,6 +985,58 @@ const DETECT = [
   ["kubernetes", ["kubernetes", "k8s", "pod escape"]],
 ];
 
+// ── VPN auto-rotation on target blocks ──────────────────────────────────────
+// A blocked exit (403/429/captcha/CF interstitial) gets one rotation and one
+// retry. Server containers rotate through the restricted broker socket; a
+// Windows host rotates through the installed Mullvad CLI. Best-effort only.
+const BLOCK_RE = /(?:\b403\b|\b429\b|too many requests|access denied|just a moment|attention required|captcha|cloudflare|rate.?limit|blocked)/i;
+const VPN_SOCKET = process.env.SB_VPN_SOCKET || "/run/dsh-kali-broker/vpn.sock";
+const VPN_ROTATE_TARGET = process.env.SB_VPN_ROTATE_TARGET || "any";
+
+function looksBlocked(text) {
+  return typeof text === "string" && text.length > 0 && BLOCK_RE.test(text.slice(0, 4000));
+}
+
+async function rotateVpn() {
+  // 1) Broker socket (server workload): Bun supports unix-socket fetch.
+  try {
+    if (fs.existsSync(VPN_SOCKET) && typeof Bun !== "undefined") {
+      const q = /^[a-z]{2}$/.test(VPN_ROTATE_TARGET) ? `country=${VPN_ROTATE_TARGET}` : `region=${VPN_ROTATE_TARGET}`;
+      const res = await Bun.fetch(`http://localhost/rotate?${q}`, { unix: VPN_SOCKET, method: "POST" });
+      if (res.ok) return (await res.json()).relay || "rotated";
+    }
+  } catch { }
+  // 2) Local Windows CLI: same constraint clearing the broker performs.
+  try {
+    const exe = `${process.env.ProgramFiles || "C:\\Program Files"}\\Mullvad VPN\\resources\\mullvad.exe`;
+    if (fs.existsSync(exe)) {
+      const run = (args) => new Promise((resolve) => {
+        const child = spawn(exe, args, { windowsHide: true, stdio: "ignore" });
+        child.on("close", () => resolve());
+        child.on("error", () => resolve());
+      });
+      for (const args of [["relay", "set", "multihop", "off"], ["relay", "set", "entry", "location", "any"], ["relay", "set", "ownership", "any"]]) await run(args);
+      const target = /^[a-z]{2}$/.test(VPN_ROTATE_TARGET) ? VPN_ROTATE_TARGET : "any";
+      await run(["relay", "set", "location", target]);
+      await run(["reconnect", "--wait"]);
+      return "rotated";
+    }
+  } catch { }
+  return null;
+}
+
+// Run one Kali command; on a block signature rotate once and retry.
+async function runKaliCommandWithRotate(cmd, args, timeoutMs, label) {
+  const first = await runKaliCommand(cmd, args, timeoutMs);
+  if (!looksBlocked(first.output)) return first;
+  const rotated = await rotateVpn();
+  if (!rotated) return first;
+  console.log(`[SB v6 ROTATE] ${label || cmd} blocked — exit rotated (${rotated}), retrying`);
+  const second = await runKaliCommand(cmd, args, timeoutMs);
+  second.autoRotated = rotated;
+  second.output = `[auto-rotated exit → ${rotated}]\n` + (second.output || "");
+  return second;
+}
 function detectIntent(text) {
   const lower = text.toLowerCase();
   for (const [intent, keywords] of DETECT) {
@@ -1340,7 +1392,7 @@ async function processBody(raw) {
 
     if (directOp) {
       console.log(`[SB v6 DIRECT] ${directOp.desc}`);
-      const result = await runKaliCommand(directOp.tool, directOp.args, EXEC_CONFIG.directTimeout);
+      const result = await runKaliCommandWithRotate(directOp.tool, directOp.args, EXEC_CONFIG.directTimeout, directOp.desc);
       console.log(`[SB v6 DIRECT] ${result.success ? "✓" : "✗"} (${result.output?.split("\n").length || 0} lines)`);
 
       // Return direct result without LLM round-trip; sb_* metadata rides the
@@ -1847,4 +1899,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, PORT, BACKEND, EXEC_CONFIG, processBody, processResponse, REFUSAL_RE, refusalHardRetry, collectSseContent, logRefusal, detectIntent, extractTargets };
+module.exports = { server, PORT, BACKEND, EXEC_CONFIG, processBody, processResponse, REFUSAL_RE, refusalHardRetry, collectSseContent, logRefusal, detectIntent, extractTargets, looksBlocked, rotateVpn, runKaliCommandWithRotate };
