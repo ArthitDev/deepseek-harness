@@ -5,7 +5,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from 'zod'
 import { exitMatcher, fetchEgress, verifyResponse } from './probe.ts'
 import type { VpnStatusSnapshot } from './types.ts'
-import type { VpnReconnectResult } from './types.ts'
+import type { VpnReconnectResult, VpnRotateResult } from './types.ts'
 import { controlVpn, type VpnControlResult } from './control.ts'
 
 /** Deployment-specific probe policy; disabled by default to avoid unsolicited third-party requests. */
@@ -46,6 +46,7 @@ export class VpnStatusService extends TypertRemoteService<Config> {
   private snapshot: VpnStatusSnapshot = { state: 'unknown', evidence: null, checkedAt: null, validUntil: null }
   private reconnectTask: Promise<VpnReconnectResult> | undefined
   private performReconnect: (() => Promise<VpnReconnectResult>) | undefined
+  private performRotate: ((country: string) => Promise<VpnRotateResult>) | undefined
   private resumePolling: (() => void) | undefined
   private readonly lifetime = new AbortController()
   private readonly policy: Config
@@ -98,11 +99,30 @@ export class VpnStatusService extends TypertRemoteService<Config> {
         await pending
         return { kind: 'reconnected', snapshot: this.read() }
       }
+      this.performRotate = async (country: string) => {
+        clearTimeout(timer)
+        await pending
+        if (!active()) return { kind: 'failed', snapshot: this.read() } as VpnRotateResult
+        this.snapshot = { state: 'checking', evidence: null, checkedAt: null, validUntil: null }
+        const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(config.controlTimeoutMs ?? 45000)])
+        const control = await controlVpn('rotate', config.controlSocketPath ?? '', signal, country)
+        if (!active()) return { kind: 'failed', snapshot: this.read() }
+        if (control.kind !== 'ok') {
+          this.snapshot = { state: 'unknown', evidence: null, checkedAt: null, validUntil: null }
+          return { kind: control.kind, snapshot: this.read() }
+        }
+        pending = poll()
+        await pending
+        return control.relay === undefined
+          ? { kind: 'reconnected', snapshot: this.read() }
+          : { kind: 'reconnected', snapshot: this.read(), relay: control.relay }
+      }
       return async () => {
         lifetime.abort(); clearTimeout(timer)
         await pending
         await this.reconnectTask
         this.performReconnect = undefined
+        this.performRotate = undefined
         this.resumePolling = undefined
       }
     })
@@ -129,6 +149,24 @@ export class VpnStatusService extends TypertRemoteService<Config> {
     finally {
       this.reconnectTask = undefined
       // The poll inside reconnect does not schedule while reconnectTask is owned.
+      this.resumePolling?.()
+    }
+  }
+
+  /** Rotate the Mullvad exit to one whitelisted Asia location through the control broker, then replace the
+   * HTTPS sample. Shares the reconnect guard: only one control operation runs at a time.
+   * @param country - whitelisted Asia country code; the broker enforces the location whitelist.
+   * @returns control outcome, fresh egress result, and the exit relay the broker reported.
+   */
+  async rotate(country: string): Promise<VpnRotateResult> {
+    if (this.reconnectTask !== undefined) return { kind: 'busy', snapshot: this.read() }
+    if (this.performRotate === undefined) return { kind: 'unavailable', snapshot: this.read() }
+    const task = this.performRotate(country)
+    this.reconnectTask = task
+    try { return await task }
+    finally {
+      this.reconnectTask = undefined
+      // The poll inside rotate does not schedule while reconnectTask is owned.
       this.resumePolling?.()
     }
   }

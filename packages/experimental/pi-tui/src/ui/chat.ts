@@ -1035,7 +1035,7 @@ export class ChatScreen {
       { name: 'suppress-prompt', description: 'Show strict prompt protection status' },
       { name: 'mcp', description: 'Enable or disable MCP tools' },
       { name: 'jev', description: 'Enable or disable JEV tools and policy context' },
-      { name: 'vpn', description: 'VPN: status | reconnect (affects every session on this Host)' },
+      { name: 'vpn', description: 'VPN: status | reconnect | rotate sg|hk|jp|my|th (affects every session on this Host)' },
       { name: 'team-mode', description: 'Switch the team mode' },
       { name: 'thinking', description: 'Choose reasoning level for the selected model' },
       { name: 'runs', description: 'Pentest runs: new|start|stop|status|pause|resume|terminate' },
@@ -1534,8 +1534,15 @@ export class ChatScreen {
   }
 
   private async cmdVpn(action: string): Promise<void> {
-    if (action !== '' && action !== 'status' && action !== 'reconnect') {
-      this.pushNotice('usage: /vpn [status|reconnect]', 'error')
+    const parts = action.split(/\s+/).filter(part => part !== '')
+    const [verb, argument] = [parts[0] ?? '', parts[1] ?? '']
+    const rotateCountries = ['sg', 'hk', 'jp', 'my', 'th']
+    if (verb !== '' && verb !== 'status' && verb !== 'reconnect' && verb !== 'rotate') {
+      this.pushNotice('usage: /vpn [status|reconnect|rotate sg|hk|jp|my|th]', 'error')
+      return
+    }
+    if (verb === 'rotate' && !rotateCountries.includes(argument)) {
+      this.pushNotice('usage: /vpn rotate sg|hk|jp|my|th', 'error')
       return
     }
     const vpn = this.ctx.get('vpnStatus')
@@ -1543,7 +1550,7 @@ export class ChatScreen {
       this.pushNotice('VPN service unavailable in this profile', 'error')
       return
     }
-    if (action === '') {
+    if (verb === '') {
       if (this.tui.hasOverlay()) return
       const picked = await pickFromList(this.tui, {
         title: 'VPN',
@@ -1551,6 +1558,11 @@ export class ChatScreen {
         items: [
           { value: 'status', label: '1. Status', description: 'Local tunnel and cached Host HTTPS verification' },
           { value: 'reconnect', label: '2. Reconnect', description: 'Reconnect Mullvad, then verify HTTPS; shared traffic may pause' },
+          ...rotateCountries.map((code, index) => ({
+            value: `rotate ${code}`,
+            label: `${index + 3}. Rotate → ${code.toUpperCase()}`,
+            description: 'Switch the exit relay to this Asia location, then verify HTTPS; shared traffic may pause',
+          })),
         ],
         initial: 'status',
         numberKeys: true,
@@ -1568,6 +1580,20 @@ export class ChatScreen {
       }
       if (result.snapshot.state === 'verified') this.pushNotice('VPN reconnected; Host HTTPS egress verified.')
       else this.pushNotice(`VPN reconnect completed; Host HTTPS ${result.snapshot.state}. Egress is not confirmed.`, 'error')
+      return
+    }
+    if (action.startsWith('rotate')) {
+      const country = action.split(/\s+/)[1] ?? ''
+      this.pushNotice(`Rotating VPN exit to ${country.toUpperCase()} (Asia); shared Web/TUI traffic may pause. Policy remains unchanged.`)
+      const result = await vpn.rotate(country)
+      this.sync()
+      if (result.kind !== 'reconnected') {
+        this.pushNotice(`VPN rotate ${result.kind}; egress is not confirmed. Check Mullvad or the configured control broker.`, 'error')
+        return
+      }
+      const relay = result.relay === undefined ? '' : ` Exit relay: ${result.relay}.`
+      if (result.snapshot.state === 'verified') this.pushNotice(`VPN rotated to ${country.toUpperCase()}; Host HTTPS egress verified.${relay}`)
+      else this.pushNotice(`VPN rotated to ${country.toUpperCase()}; Host HTTPS ${result.snapshot.state}. Egress is not confirmed.${relay}`, 'error')
       return
     }
     const tunnel = await vpn.tunnel()

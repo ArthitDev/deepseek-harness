@@ -5,6 +5,11 @@ exports[`routes operator VPN commands without model turns and distinguishes reco
   "                         ↑/↓ or number · Enter select · Esc cancel                                                                                              ",
   "                        → 1. Status                       Local tunnel and cached Host HTTPS verification                                                       ",
   "                          2. Reconnect                    Reconnect Mullvad, then verify HTTPS; shared traffic may pause                                        ",
+  "                          3. Rotate → SG                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
+  "                          4. Rotate → HK                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
+  "                          5. Rotate → JP                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
+  "                          6. Rotate → MY                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
+  "                          7. Rotate → TH                  Switch the exit relay to this Asia location, then verify HTTPS; shared traff                          ",
 ]
 `;
 

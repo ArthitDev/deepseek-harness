@@ -7,6 +7,8 @@ import { win32 } from 'node:path'
 export interface VpnControlResult {
   kind: 'ok' | 'busy' | 'unavailable' | 'failed'
   tunnel: 'connected' | 'connecting' | 'disconnected' | 'disconnecting' | 'error' | 'unknown'
+  /** Exit relay hostname reported by the broker, when the operation returned one. */
+  relay?: string
 }
 
 /** Resolve the installed CLI, without searching the project working directory.
@@ -38,9 +40,9 @@ export function tunnelState(value: unknown): VpnControlResult['tunnel'] {
  * @param signal - lifetime/deadline cancellation owned by the service.
  * @returns sanitized control outcome, never CLI output or a verification claim.
  */
-export async function controlVpn(action: 'status' | 'reconnect', socketPath: string, signal: AbortSignal): Promise<VpnControlResult> {
+export async function controlVpn(action: 'status' | 'reconnect' | 'rotate', socketPath: string, signal: AbortSignal, country?: string): Promise<VpnControlResult> {
   if (signal.aborted) return { kind: 'failed', tunnel: 'unknown' }
-  if (socketPath !== '') return socketControl(action, socketPath, signal)
+  if (socketPath !== '') return socketControl(action, socketPath, signal, country)
   const executable = mullvadExecutable(process.platform, process.env.ProgramFiles ?? 'C:\\Program Files')
   if (executable === undefined) return { kind: 'unavailable', tunnel: 'unknown' }
   const args = action === 'status' ? ['status', '--json'] : ['reconnect', '--wait']
@@ -64,16 +66,21 @@ export async function controlVpn(action: 'status' | 'reconnect', socketPath: str
   })
 }
 
-function socketControl(action: 'status' | 'reconnect', socketPath: string, signal: AbortSignal): Promise<VpnControlResult> {
+function socketControl(action: 'status' | 'reconnect' | 'rotate', socketPath: string, signal: AbortSignal, country?: string): Promise<VpnControlResult> {
   return new Promise((resolve) => {
-    const req = request({ socketPath, path: '/' + action, method: action === 'status' ? 'GET' : 'POST', signal, agent: false }, (res) => {
+    const path = action === 'rotate' ? `/rotate?country=${encodeURIComponent(country ?? '')}` : '/' + action
+    const req = request({ socketPath, path, method: action === 'status' ? 'GET' : 'POST', signal, agent: false }, (res) => {
       let body = ''
       res.on('data', (part: Buffer) => { body += part.toString('utf8'); if (body.length > 16384) res.destroy(new Error('VPN control response too large')) })
       res.on('error', () => { resolve({ kind: 'failed', tunnel: 'unknown' }) })
       res.on('end', () => {
         if (res.statusCode === 409) { resolve({ kind: 'busy', tunnel: 'unknown' }); return }
         if (res.statusCode !== 200) { resolve({ kind: 'failed', tunnel: 'unknown' }); return }
-        try { resolve({ kind: 'ok', tunnel: tunnelState(JSON.parse(body)) }) }
+        try {
+          const parsed = JSON.parse(body) as { state?: unknown; relay?: unknown }
+          const relay = typeof parsed.relay === 'string' && parsed.relay.length > 0 ? parsed.relay : undefined
+          resolve({ kind: 'ok', tunnel: tunnelState(parsed), ...(relay === undefined ? {} : { relay }) })
+        }
         catch (error) { void error; resolve({ kind: 'failed', tunnel: 'unknown' }) }
       })
     })
