@@ -83,7 +83,7 @@ def try_playwright(url, opts, credentials):
                 "Object.defineProperty(navigator,'languages',{get:()=>['en-US','en']});"
             )
             page = context.new_page()
-            for header in opts.headers:
+            for header in opts.header:
                 key, _, value = header.partition(":")
                 page.set_extra_http_headers({key.strip(): value.strip()})
                 break
@@ -122,7 +122,7 @@ def try_curl(url, opts):
     import subprocess
     cmd = ["curl", "-sk", "--compressed", "--max-time", "40", "-o", "/tmp/browser-fetch.body",
            "-w", "%{http_code} %{url_effective}", url]
-    for header in opts.headers:
+    for header in opts.header:
         cmd[1:1] = ["-H", header]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout.split()
