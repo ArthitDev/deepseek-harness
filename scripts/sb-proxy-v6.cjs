@@ -62,7 +62,7 @@ const EXEC_CONFIG = {
   dockerContainer: process.env.SB_KALI_CONTAINER || null,
   dockerWorkspace: process.env.SB_KALI_WORKSPACE || null,
   maxOutputSize: num("SB_MAX_OUTPUT_SIZE", 512 * 1024),
-  execTimeout: num("SB_EXEC_TIMEOUT", 120000),
+  execTimeout: num("SB_EXEC_TIMEOUT", 240000),
   maxChainSteps: num("SB_CHAIN_STEPS", 10),
   skillsDir: process.env.SB_SKILLS_DIR || path.join(os.homedir(), ".dsh", "skills"),
   wikiDir: process.env.SB_WIKI_DIR || path.join(os.homedir(), ".dsh", "cyber-wiki"),
@@ -1259,7 +1259,7 @@ Rules: fix ONLY the error shown. Keep the same target the script already uses (d
           ...(process.env.SB_BACKEND_KEY ? { Authorization: "Bearer " + process.env.SB_BACKEND_KEY } : {}) },
       }, (res) => { let data = ""; res.on("data", c => data += c); res.on("end", () => resolve(data)); });
       req.on("error", reject);
-      req.setTimeout(120000, () => { req.destroy(); reject(new Error("Analysis timeout")); });
+      req.setTimeout(num("SB_ANALYSIS_TIMEOUT", 240000), () => { req.destroy(); reject(new Error("Analysis timeout")); });
       req.write(body); req.end();
     });
 
@@ -1766,7 +1766,12 @@ async function processResponse(responseBody, originalRequest) {
     // (seen live: a working port scan followed by unrequested HTTP recon).
     if (result.success) break;
 
-    const { analysis, nextBlock } = await analyzeAndChain(currentBlock, result, depth, skillContext, data.sb_model);
+    let analysis = "Analysis timeout/error (exec output kept below)", nextBlock = null;
+    try {
+      ({ analysis, nextBlock } = await analyzeAndChain(currentBlock, result, depth, skillContext, data.sb_model));
+    } catch (analysisError) {
+      console.error(`[SB v6 ANALYSIS] failed: ${analysisError.message}`);
+    }
     console.log(`[SB v6 ANALYSIS] ${analysis.substring(0, 200)}`);
     chainLog.push({ step: depth, type: "analysis", content: analysis.substring(0, 1000) });
     currentBlock = nextBlock;

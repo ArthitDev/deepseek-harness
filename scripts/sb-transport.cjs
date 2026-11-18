@@ -137,11 +137,39 @@ function serve() {
                     let content = '';
                     let meta = null;
                     let retryTried = false;
+                    let execRan = false;
                     if (v6?.collectSseContent && v6?.REFUSAL_RE) {
                       const collected = v6.collectSseContent(sse);
                       if (collected && collected.content) {
                         meta = collected;
-                        if (v6.REFUSAL_RE.test(collected.content.slice(0, 300))) {
+                        // Full non-stream pipeline on the accumulated content: refusal
+                        // filter AND the exec chain, so generated attack scripts run
+                        // even when the caller streams.
+                        try {
+                          const synthetic = JSON.stringify({ model: collected.model || 'unknown', choices: [{ message: { content: collected.content } }] });
+                          const processed = await v6.processResponse(synthetic, requestBody);
+                          let processedData = null;
+                          const pStart = processed.indexOf('{');
+                          if (pStart !== -1) {
+                            let pDepth = 0, pInStr = false, pEsc = false, pEnd = -1;
+                            for (let i = pStart; i < processed.length; i++) {
+                              const ch = processed[i];
+                              if (pEsc) { pEsc = false; continue; }
+                              if (ch === "\\") { pEsc = true; continue; }
+                              if (ch === '"') { pInStr = !pInStr; continue; }
+                              if (pInStr) continue;
+                              if (ch === '{') pDepth++;
+                              else if (ch === '}') { pDepth--; if (pDepth === 0) { pEnd = i + 1; break; } }
+                            }
+                            if (pEnd !== -1) { try { processedData = JSON.parse(processed.slice(pStart, pEnd)); } catch { } }
+                          }
+                          const newContent = processedData?.choices?.[0]?.message?.content || '';
+                          if (newContent) { content = newContent; execRan = /EXECUTION RESULTS/.test(newContent); }
+                        } catch (pipelineError) {
+                          console.error('[sb-transport] stream pipeline error:', pipelineError.message);
+                        }
+                        if (!content) content = collected.content;
+                        if (v6.REFUSAL_RE.test(content.slice(0, 300))) {
                           console.log('[sb-transport] stream refusal detected — hard retry');
                           retryTried = true;
                           let reqData = null;
@@ -163,7 +191,7 @@ function serve() {
                     const created = meta?.created || Math.floor(Date.now() / 1000);
                     const model = meta?.model || 'unknown';
                     const parts = [];
-                    parts.push({ id, object: 'chat.completion.chunk', created, model, sb_refusal_retry: retryTried, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
+                    parts.push({ id, object: 'chat.completion.chunk', created, model, sb_refusal_retry: retryTried, sb_executed: execRan, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
                     for (let i = 0; i < content.length; i += 512) {
                       parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: content.slice(i, i + 512) }, finish_reason: null }] });
                     }
