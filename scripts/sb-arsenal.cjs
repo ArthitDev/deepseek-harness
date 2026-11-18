@@ -57,7 +57,29 @@ const q = (v) => "'" + String(v ?? '').replace(/'/g, `'\\''`) + "'";
 
 const TOOLS = {
   // ── RECON ─────────────────────────────────────────────────
-  "nmap_scan": {
+  "screenshots": {
+    desc: "Screenshot capture for a list of URLs (gowitness scan file)",
+    params: ["urls_file", "outdir", "chrome_path"],
+    build: (p) => {
+      const urls = p.urls_file || "/tmp/urls.txt";
+      const outdir = p.outdir || "/workspace/screenshots";
+      const chrome = p.chrome_path ? `--chrome-path ${q(p.chrome_path)} ` : "";
+      return `mkdir -p ${q(outdir)} &&gowitness scan file --file ${q(urls)} --screenshot-path ${q(outdir)} ${chrome}--no-http 2>&1 | tail -5; ls -l ${q(outdir)} | head -20`;
+    },
+  },
+  "browser_fetch": {
+    desc: "Page fetch through the stealth engine ladder (CloakBrowser -> Playwright -> curl)",
+    params: ["url", "engine", "wait_ms", "out", "cookies_out", "vault"],
+    build: (p) => {
+      const parts = ["/usr/local/bin/browser-fetch", `--url ${q(p.url)}`];
+      if (p.engine) parts.push(`--engine ${q(p.engine)}`);
+      if (p.wait_ms) parts.push(`--wait-ms ${q(p.wait_ms)}`);
+      if (p.out) parts.push(`--out ${q(p.out)}`);
+      if (p.cookies_out) parts.push(`--cookies-out ${q(p.cookies_out)}`);
+      if (p.vault) parts.push(`--vault ${q(p.vault)}`);
+      return parts.join(" ");
+    },
+  },"nmap_scan": {
     desc: "Port scan with service detection",
     params: ["target", "ports", "scan_type", "additional_args"],
     build: (p) => `nmap ${p.scan_type || "-sT"} ${p.ports ? "-p " + p.ports : "--top-ports 100"} ${p.additional_args || "-T4 -n --max-retries 1 --host-timeout 60s"} ${q(p.target)}`,
