@@ -40,7 +40,13 @@ ZAP 和 Nuclei 通过现有 Harness Terminal 运行；[web-agent-scanning](web-a
 
 将验证后的镜像设为现有 Kali 服务的 `image`。保留部署的挂载、root 用户、`network_mode: none`、`cap_drop: [ALL]`、`cap_add: [NET_RAW]` 和 `security_opt: [no-new-privileges:true]`。可信的宿主机生命周期程序负责 VPN 网络连接与 broker 身份。本目录不安装部署专用的生命周期程序，也不向 Agent 授予 Docker 访问权限。
 
-替换运行中的服务之前，保存 Compose 配置和旧镜像标识，检查活动任务，再通过该部署的网络生命周期程序重建容器并刷新 broker 身份。使用真实 Harness 执行身份运行在线检查，然后测试 broker 访问和 VPN 断开行为。任何检查失败时，都通过相同生命周期恢复旧镜像和配置。对于由外部管理网络命名空间的容器，仅重启 Compose 无法安全地完成替换。
+替换运行中的服务之前，保存 Compose 配置和旧镜像标识，检查活动任务，再通过该部署的网络生命周期程序重建容器并恢复网络连接。使用真实 Harness 执行身份运行在线检查，然后测试 broker 访问和 VPN 断开行为。任何检查失败时，都通过相同生命周期恢复旧镜像和配置。对于由外部管理网络命名空间的容器，仅重启 Compose 无法安全地完成替换。
+
+[`exec-broker.mjs`](exec-broker.mjs) 是 Agent-Server 的受限 Docker API broker。每次检查容器或创建新 exec 前，它都会重新解析 `dsh-vpn-kali`，并验证完整隔离策略及精确的绑定挂载列表，包括只读 broker 目录和显式只读 `vpn.sock` 挂载。获准的容器重建后无需重启 broker 即可使用；容器不存在时返回 503，不符合策略的替代容器会被拒绝。创建请求固定到已检查的不可变 ID，绝不自动重放。现有 exec ID 仍绑定原容器。启动 broker 时仍要求获准容器正在运行。重建后的 VPN 网络连接仍由宿主机生命周期程序恢复。
+
+仅在备份现有文件及其所有者、权限模式和 ACL 后，将 broker 安装为 `/usr/local/libexec/dsh-kali-broker.mjs`。替换运行中的 broker 进程会关闭其控制与 exec 连接，应先检查活动任务。回滚时恢复备份文件及元数据。运行 `pnpm exec vitest run scripts/kali/exec-broker.spec.ts` 检查隔离策略和重建回归；Unix socket 集成测试需要 Linux 或 macOS，在 Windows 上跳过。
+
+将 [`exec-broker.service.conf`](exec-broker.service.conf) 安装为 `/etc/systemd/system/dsh-kali-broker.service.d/50-dynamic-container.conf`，并在首次重启 broker 前运行 `systemctl daemon-reload`。它在重启期间保留共享运行时目录的 inode，使容器的只读目录挂载能够看到替换后的 socket。Agent-Server 重启 broker 时，也会重启依赖它的 Web 和 VPN-control 服务；仅在允许中断任务时执行该激活操作。VPN tunnel 和容器无需重启。回滚期间也应保留运行时目录；删除它可能使运行中容器的目录挂载脱离当前宿主机目录。
 
 通过需要认证的镜像仓库按摘要迁移验证后的镜像，或导出并导入 Docker 镜像文件，再比较两台服务器上的镜像标识。单独传输私有配置、挂载和数据。不要将运行中容器的快照作为构建方案。固定基础镜像使构建输入明确，但 Kali Rolling 软件包版本会变化；日后重新构建无法保证软件包完全相同。镜像在 `/usr/local/share/dsh-kali/versions.tsv` 保存已安装版本。需要精确版本时应迁移已构建的镜像文件。
 
