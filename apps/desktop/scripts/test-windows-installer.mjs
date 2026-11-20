@@ -84,7 +84,9 @@ try {
         const brand = theme === 'dark' ? 'brand-dark-2x.bmp' : 'brand-2x.bmp'
         const prefix = theme === 'dark' ? 'INSTALLER_DARK_CONTROL' : 'INSTALLER_CONTROL'
         const result = await execute(renderTest, [join(output, 'ui', brand), String(dpi), theme,
-          captionColor(`${prefix}_HOVER`), captionColor(`${prefix}_PRESSED`)], childOptions)
+          captionColor(`${prefix}_HOVER`), captionColor(`${prefix}_PRESSED`)], childOptions).catch(error => {
+          throw new Error(`Installer render fixture failed at ${dpi} DPI (${theme})\n${error.stdout ?? ''}${error.stderr ?? ''}`, { cause: error })
+        })
         renderResults.push(result.stdout)
       }
     }
@@ -132,10 +134,12 @@ SectionEnd
     await writeFile(strings, renderInstallerStrings([locale]), 'utf8')
     const include = join(languageOutput, 'include.nsh')
     await writeFile(include, `!define INSTALLER_BUILD_DIR "${join(output, 'ui')}"\n!define INSTALLER_STRINGS_FILE "${strings}"\n!include "${join(appRoot, 'scripts', 'installer.nsh')}"\n`)
+    const sidebar = join(output, 'ui', 'uninstaller-sidebar.bmp')
     await build({ projectDir: appRoot, prepackaged: payload, targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64), publish: 'never',
       config: { ...config, productName, extraMetadata: { ...config.extraMetadata, name: packageName },
         artifactName: 'installer-test.exe', directories: { output: languageOutput },
-        nsis: { ...config.nsis, guid, include, installerLanguages: [language] }, beforeBuild: undefined, afterPack: undefined, afterSign: undefined, artifactBuildCompleted: undefined },
+        nsis: { ...config.nsis, guid, include, installerLanguages: [language], installerSidebar: sidebar, uninstallerSidebar: sidebar },
+        beforeBuild: undefined, afterPack: undefined, afterSign: undefined, artifactBuildCompleted: undefined },
     })
     if (process.argv.includes('--compile-only')) continue
     const result = await execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
