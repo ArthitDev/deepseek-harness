@@ -14,6 +14,7 @@ import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { TuiAltScreen, type ViewportTUI } from '@earendil-works/pi-tui'
 import { parseArgs, USAGE } from './args.js'
+import { routeDeepSeekDiagnostics } from './core/deepseek-diagnostics.js'
 import {
   discardEmptySession,
   hasUserContent,
@@ -88,13 +89,13 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   const proxyStartupAbort = new AbortController()
   const profile = ctx.get('profileContext') as { installAnchor: string }
   const startupWarnings: string[] = []
-  let pushProxyWarning = (warning: string): void => { startupWarnings.push(warning) }
+  let pushWarning = (warning: string): void => { startupWarnings.push(warning) }
   const proxyStartups = ctx.get('proxyServers') === undefined ? [
     ensureSbProxy(profile.installAnchor, proxyStartupAbort.signal)
       .then(() => undefined, () => 'SB transport startup failed. Direct providers remain available. Run pnpm sb:status and check the SB log or port conflict.'),
   ] : []
   installZcodeStartup(ctx, profile.installAnchor, () => {
-    pushProxyWarning('ZCode proxy startup failed. Use /model to select another provider. Run pnpm zcode:setup and check ZCode login.')
+    pushWarning('ZCode proxy startup failed. Use /model to select another provider. Run pnpm zcode:setup and check ZCode login.')
   })
   ctx.effect(() => async () => {
     proxyStartupAbort.abort()
@@ -104,6 +105,15 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
 
   const terminal = new ClipboardTerminal()
   const tui: ViewportTUI = new TuiAltScreen(terminal)
+  const restoreDiagnostics = routeDeepSeekDiagnostics((warning) => { pushWarning(warning) })
+  const stopTui = (): void => {
+    restoreDiagnostics()
+    tui.stop()
+  }
+  ctx.effect(() => () => {
+    stopTui()
+    void terminal.drainInput(1000, 50)
+  })
   tui.start()
 
   const agentOptions: AgentOptions = {
@@ -206,7 +216,7 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
       ...(preset !== undefined ? { preset } : {}),
     },
     onQuit: (hint) => {
-      tui.stop()
+      stopTui()
       disposeRootAndExit(ctx, 0, hint, async () => {
         for (const sessionId of [...freshEmptySessions]) {
           freshEmptySessions.delete(sessionId)
@@ -242,8 +252,9 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   // (after replay, so the hint lands below the transcript, above live input).
   screen.pushRecentSessionHint()
 
-  pushProxyWarning = (warning) => { screen.pushNotice(warning, 'error') }
-  for (const warning of startupWarnings) pushProxyWarning(warning)
+  pushWarning = (warning) => { screen.pushNotice(warning, 'error') }
+  for (const warning of startupWarnings) pushWarning(warning)
+  startupWarnings.length = 0
   for (const startup of proxyStartups) {
     void startup.then((warning) => {
       if (!proxyStartupAbort.signal.aborted && warning !== undefined) screen.pushNotice(warning, 'error')
@@ -264,14 +275,6 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   // prunes TUI-created sessions from their workspace. Re-attach persisted
   // sessions to their cwd workspace on boot (additive, best effort).
   void reconcileWorkspaceAttachments(ctx)
-
-  // If the surrounding tree goes down (reload, teardown), take the TUI
-  // with it: stop the renderer and drain queued stdin so kitty key-release
-  // bytes don't leak to the parent shell.
-  ctx.effect(() => () => {
-    tui.stop()
-    void terminal.drainInput(1000, 50)
-  })
 }
 
 /**
