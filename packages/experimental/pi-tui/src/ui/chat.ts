@@ -84,6 +84,7 @@ import {
   type ExitArm,
 } from '../core/keys.js'
 import { collectProjection } from '../core/projection.js'
+import { pickSession, resumeSessionItems } from './session-picker.js'
 import { BRAND_RED, editorTheme, selectListTheme, style } from './theme.js'
 import { createView, ReasoningView, StatusBar, ToolCardView, updateView, type StatusBarData } from './views.js'
 import { listAllModels, pickModel, type LlmRuntimeLike, type ModelRoute } from './model-picker.js'
@@ -97,7 +98,6 @@ import {
   resolveAgent,
   resolveModelPreset,
   resumeCommand,
-  sessionSummaries,
   type ResolvedAgent,
 } from '../core/session.js'
 import { parseDocument } from 'yaml'
@@ -1182,30 +1182,12 @@ export class ChatScreen {
     }
     let target = raw.trim()
     if (target === '') {
-      const headers = await listSessions(this.ctx)
-      if (headers.length === 0) {
+      const items = await resumeSessionItems(this.ctx)
+      if (items.length === 0) {
         this.pushNotice('no persisted sessions')
         return
       }
-      const summaries = await sessionSummaries(this.ctx, headers)
-      target =
-        (await pickFromListWithSearch(this.tui, {
-          title: 'Resume session',
-          items: headers.map((header) => {
-            const id = String(header.id)
-            const summary = summaries.get(id)
-            const title = summary?.title
-            return {
-              value: id,
-              label: title ?? (basename(header.cwd ?? '') || `session ${id.slice(0, 8)}`),
-              description: `${id.slice(0, 8)} · ${new Date(header.createdAt).toLocaleString()} · ${
-                summary?.events ?? '?'
-              } events${header.parentSession !== undefined ? ' · fork' : ''}${
-                title !== undefined && header.cwd !== undefined ? ` · ${basename(header.cwd)}` : ''
-              }`,
-            }
-          }),
-        })) ?? ''
+      target = (await pickSession(this.tui, items)) ?? ''
     }
     if (target === '') return
     try {

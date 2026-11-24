@@ -296,7 +296,7 @@ async function persistedPreset(ctx: Context, id: string): Promise<string | undef
 /** Resolve a live or persisted session, or create one with the explicit preset
  * or the preset bound to its model. Resumed sessions retain their recorded preset.
  * @param ctx - TUI context with agent, preset, persistence, and workspace services.
- * @param requestedSessionId - Session id to resume; undefined or a failed resume falls back to a fresh session.
+ * @param requestedSessionId - Session id to resume. Only an omitted id creates a fresh session.
  * @param agentOptions - Provider and model options for a newly created session.
  * @param meta - Session-creation metadata (cwd and optional agent preset).
  * @returns the attached, resumed, or freshly created agent with its handle.
@@ -311,25 +311,14 @@ export async function resolveAgent(
     const resumeId = SessionId(requestedSessionId)
     const existing = ctx.agents.get(resumeId)
     if (existing !== undefined) return { agent: existing }
-    try {
-      // Only mount a preset composition when the persisted session records
-      // one — a failed probe must not silently re-compose a preset-less
-      // session under the default.
-      const sessionPreset = await persistedPreset(ctx, requestedSessionId)
-      const composition = sessionPreset !== undefined ? await composeSetup(ctx, sessionPreset) : {}
-      const resumed = await ctx.agents.resume({
-        resumeSessionId: resumeId,
-        agentOptions,
-        ...(composition.setup !== undefined ? { setup: composition.setup } : {}),
-      })
-      return { agent: resumed.agent, handle: resumed }
-    } catch (error) {
-      ctx.logger.warn(
-        `pi-tui: resume of "${requestedSessionId}" failed, starting fresh: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      )
-    }
+    const sessionPreset = await persistedPreset(ctx, requestedSessionId)
+    const composition = sessionPreset !== undefined ? await composeSetup(ctx, sessionPreset) : {}
+    const resumed = await ctx.agents.resume({
+      resumeSessionId: resumeId,
+      agentOptions,
+      ...(composition.setup !== undefined ? { setup: composition.setup } : {}),
+    })
+    return { agent: resumed.agent, handle: resumed }
   }
   let presetId = meta.agentPreset
   if (presetId === undefined && agentOptions.provider !== undefined && agentOptions.model !== undefined) {
@@ -499,46 +488,45 @@ export async function listSessions(ctx: Context): Promise<SessionHeader[]> {
   }
 }
 
-/** Display summary for one persisted session: its newest title and log size. */export interface SessionSummary {
+/** Display summary for one persisted session. */
+export interface SessionSummary {
   /** Newest non-empty `session/title` value in the durable log. */
   title?: string
   /** Number of events in the durable log. */
   events: number
+  /** True when the log contains only session setup events. */
+  blank: boolean
 }
 
 /**
  * Summaries for the newest `limit` headers, keyed by session id. Loading full
- * logs is I/O, so callers bound it — boot/resume pickers pass the
- * already-sorted, already-capped header list.
+ * logs is I/O, so bound both the number of reads and their concurrency.
  * @param ctx - TUI context with the session-persistence service.
  * @param headers - Session headers in newest-first order.
- * @param limit - Maximum number of headers to scan; defaults to 15.
+ * @param limit - Maximum number of headers to scan; defaults to 100.
  * @returns Summaries keyed by session id; sessions that fail to load are absent.
  */
 export async function sessionSummaries(
   ctx: Context,
   headers: readonly SessionHeader[],
-  limit = 15,
+  limit = 100,
 ): Promise<Map<string, SessionSummary>> {
   const summaries = new Map<string, SessionSummary>()
-  for (const header of headers.slice(0, limit)) {
-    const id = String(header.id)
-    try {
-      const loaded = await loadPersistedSession(ctx, id)
-      if (loaded === undefined) continue
-      let title: string | undefined
-      for (const event of [...loaded.events].reverse()) {
-        // `session/title` is plugin-merged; read it structurally.
-        const raw = event as { type?: string; data?: { title?: unknown } }
-        if (raw.type !== 'session/title') continue
-        if (typeof raw.data?.title !== 'string') continue
-        if (raw.data.title === '') continue
-        title = raw.data.title
-        break
-      }
-      summaries.set(id, { events: loaded.events.length, ...(title !== undefined ? { title } : {}) })
-    } catch {
-      continue
+  const selected = headers.slice(0, limit)
+  for (let offset = 0; offset < selected.length; offset += 8) {
+    const results = await Promise.allSettled(selected.slice(offset, offset + 8).map(async (header) => {
+      const loaded = await loadPersistedSession(ctx, header.id)
+      if (loaded === undefined) return undefined
+      const { events } = loaded
+      const titleEvent = events.findLast((event) => {
+        const raw = event as { type: string; data?: { title?: unknown } }
+        return raw.type === 'session/title' && typeof raw.data?.title === 'string' && raw.data.title.trim() !== ''
+      }) as { data: { title: string } } | undefined
+      const blank = !events.some(({ type }) => CONTENT_EVENT_TYPES.has(type) || type === 'turn/start' || type === 'assistant/message')
+      return [header.id, { events: events.length, blank, ...(titleEvent === undefined ? {} : { title: titleEvent.data.title }) }] as const
+    }))
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value !== undefined) summaries.set(...result.value)
     }
   }
   return summaries

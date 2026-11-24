@@ -1,93 +1,41 @@
-/**
- * Boot-time session picker: a centered overlay listing persisted sessions
- * (newest first) with a leading "new session" entry. Resolves the picked
- * session id, or undefined when cancelled.
- *
- * The overlay content must be a single component that implements
- * `handleInput` (pi-tui routes focused-overlay input to the content root,
- * and a plain Container drops it) — hence the forwarding wrapper, matching
- * pi's own ModelSelectorComponent pattern.
- */
-import { basename } from 'node:path'
+import type { Context } from '@deepseek-ai/cordis'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
-import { Container, SelectList, Text, type TUI } from '@earendil-works/pi-tui'
-import type { SessionSummary } from '../core/session.js'
-import { selectListTheme, style } from './theme.js'
+import type { TUI } from '@earendil-works/pi-tui'
+import { listSessions, sessionSummaries } from '../core/session.js'
+import { pickFromListWithSearch, type ListPickItem } from './overlays.js'
 
-class SessionPicker extends Container {
-  private readonly list: SelectList
-
-  constructor(title: string, items: { value: string; label: string; description: string }[]) {
-    super()
-    this.addChild(new Text(style.accent(title), 1, 0))
-    this.list = new SelectList(items, Math.min(12, Math.max(3, items.length)), selectListTheme)
-    this.addChild(this.list)
-  }
-
-  handleInput(data: string): void {
-    this.list.handleInput(data)
-  }
-
-  set onSelect(callback: (value: string) => void) {
-    this.list.onSelect = (item) => {
-      callback(item.value)
-    }
-  }
-
-  set onCancel(callback: () => void) {
-    this.list.onCancel = callback
+function cachedSessionTitle(ctx: Context, header: SessionHeader): string {
+  const cache = ctx.get('sessionProjectionCache')
+  try {
+    const cached = cache?.cachedSnapshot(header, ['title']) ?? cache?.cachedPredecessorTitle(header)
+    return cached?.values.title?.trim() ?? ''
+  } catch (error) {
+    ctx.logger.debug('Could not read the cached session title for the resume picker.', error)
+    return ''
   }
 }
 
-function formatTime(epochMs: number): string {
-  const date = new Date(epochMs)
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-/**
- * Show the resume picker and resolve the chosen session. The leading
- * "new session" entry and a cancellation both resolve undefined. Rows show
- * the session's event count and fork lineage so same-title forks (model and
- * preset switches fork the conversation) stay distinguishable.
- * @param tui - the renderer the overlay mounts on.
- * @param headers - persisted-session headers, newest first.
- * @param summaries - session id → title and event count, used per row when available.
- * @returns the picked session id, or undefined for "new session"/cancel.
- */
-export function pickSession(
-  tui: TUI,
-  headers: readonly SessionHeader[],
-  summaries?: ReadonlyMap<string, SessionSummary>,
-): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const items = [
-      { value: '', label: '＋ New session', description: 'start fresh' },
-      ...headers.map((header) => {
-        const id = String(header.id)
-        const summary = summaries?.get(id)
-        const title = summary?.title
-        return {
-          value: id,
-          label: title ?? (basename(header.cwd ?? '') || `session ${id.slice(0, 8)}`),
-          description: `${id.slice(0, 8)} · ${formatTime(header.createdAt)} · ${
-            summary?.events ?? '?'
-          } events${header.parentSession !== undefined ? ' · fork' : ''}${
-            title !== undefined ? ` · ${basename(header.cwd ?? '') || 'no cwd'}` : ''
-          }`,
-        }
-      }),
-    ]
-    const picker = new SessionPicker('Resume a session', items)
-    const handle = tui.showOverlay(picker, { width: '70%', maxHeight: '60%' })
-    picker.onSelect = (value) => {
-      handle.hide()
-      resolve(value === '' ? undefined : value)
-    }
-    picker.onCancel = () => {
-      handle.hide()
-      resolve(undefined)
-    }
-    tui.requestRender()
+/** Build the newest-first resume list from persisted user conversations. */
+export async function resumeSessionItems(ctx: Context): Promise<ListPickItem[]> {
+  const archived = new Set(ctx.get('workspaceRegistry')?.archivedSessionIds)
+  const headers = (await listSessions(ctx)).filter(header => header.origin !== 'subagent' && !archived.has(header.id))
+  const summaries = await sessionSummaries(ctx, headers)
+  return headers.flatMap((header) => {
+    const summary = summaries.get(header.id)
+    if (summary?.blank === true) return []
+    const id = String(header.id)
+    const shortId = id.startsWith('session-') ? id.slice(8).slice(-8) || id : id.slice(0, 8)
+    const project = header.cwd?.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+    const title = summary?.title ?? cachedSessionTitle(ctx, header)
+    const label = title || (project === '' ? `Session ${shortId}` : `${project} · ${shortId}`)
+    const description = [title === '' ? '' : shortId, new Date(header.createdAt).toLocaleString(),
+      summary === undefined ? '' : `${summary.events} events`, header.parentSession === undefined ? '' : 'fork',
+    ].filter(Boolean).join(' · ')
+    return [{ value: id, label, description, searchText: `${label} ${id} ${project}` }]
   })
+}
+
+/** Select a persisted session by title or ID, or return undefined on cancel. */
+export function pickSession(tui: TUI, items: ListPickItem[]): Promise<string | undefined> {
+  return pickFromListWithSearch(tui, { title: 'Resume session', items })
 }

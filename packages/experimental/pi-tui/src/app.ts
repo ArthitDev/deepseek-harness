@@ -19,18 +19,16 @@ import {
   discardEmptySession,
   hasUserContent,
   listPresets,
-  listSessions,
   reconcileWorkspaceAttachments,
   remoteCwd,
   resolveAgent,
-  sessionSummaries,
   type ResolvedAgent,
 } from './core/session.js'
 import { defaultModelSelection } from './core/web-settings.js'
 import { installWebPromptSettings } from './core/prompt-settings.js'
 import { ensureSbProxy, installZcodeStartup } from './core/zcode-proxy.js'
 import { ClipboardTerminal } from './ui/clipboard-terminal.js'
-import { pickSession } from './ui/session-picker.js'
+import { pickSession, resumeSessionItems } from './ui/session-picker.js'
 import { pickFromListWithSearch } from './ui/overlays.js'
 import { confirmApproval, askQuestions } from './ui/overlays.js'
 import { ChatScreen } from './ui/chat.js'
@@ -156,9 +154,11 @@ export async function apply(ctx: Context, config: AppConfig): Promise<void> {
   // Session picker when `--resume` is given without an id.
   let sessionId = args.resumeId ?? sessionConfig
   if (sessionId === undefined && args.pickSession) {
-    const headers = await listSessions(ctx)
-    const summaries = await sessionSummaries(ctx, headers)
-    sessionId = await pickSession(tui, headers, summaries)
+    const items = await resumeSessionItems(ctx)
+    if (items.length > 0) {
+      const selected = await pickSession(tui, [{ value: '', label: 'New session' }, ...items])
+      sessionId = selected === '' ? undefined : selected
+    }
   }
 
   const resolved = await resolveAgent(ctx, sessionId, agentOptions, meta)

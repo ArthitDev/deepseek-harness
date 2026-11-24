@@ -548,21 +548,18 @@ describe('resolveAgent', () => {
     expect(agents.calls.resume[0]).not.toHaveProperty('setup')
   })
 
-  it('falls back to a fresh create when the resume fails', async () => {
+  it('surfaces a resume failure without creating another session', async () => {
     const agents = agentsService()
+    const error = new Error('log unreadable')
     agents.service.resume = async () => {
-      throw new Error('log unreadable')
+      throw error
     }
     const ctx = harness({ agents: agents.service })
-    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-    const resolved = await resolveAgent(ctx, 'ghost-session', { provider: 'p1' }, meta('/tmp/fresh'))
-    expect(resolved.agent.id).toBe(SessionId('created-session'))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('resume of "ghost-session" failed'))
-    expect(agents.calls.create).toHaveLength(1)
-    expect(agents.calls.create[0]).toMatchObject({ meta: { cwd: '/tmp/fresh' }, agentOptions: { provider: 'p1' } })
+    await expect(resolveAgent(ctx, 'ghost-session', { provider: 'p1' }, meta('/tmp/fresh'))).rejects.toBe(error)
+    expect(agents.calls.create).toHaveLength(0)
   })
 
-  it('starts fresh when the persistence probe is unavailable', async () => {
+  it('resumes without a preset override when the persistence probe is unavailable', async () => {
     const agents = agentsService()
     const ctx = harness({ agents: agents.service })
     silence(ctx)
@@ -600,16 +597,14 @@ describe('resolveAgent', () => {
     expect(registry.attached).toEqual([String(agents.calls.create[0]?.sessionId)])
   })
 
-  it('stringifies non-Error resume failures in the fallback warning', async () => {
+  it('propagates non-Error resume failures without creating another session', async () => {
     const agents = agentsService()
     agents.service.resume = async () => {
       throw 'resume string failure'
     }
     const ctx = harness({ agents: agents.service })
-    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-    await resolveAgent(ctx, 'ghost-session', {}, meta())
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('resume string failure'))
-    expect(agents.calls.create).toHaveLength(1)
+    await expect(resolveAgent(ctx, 'ghost-session', {}, meta())).rejects.toBe('resume string failure')
+    expect(agents.calls.create).toHaveLength(0)
   })
 
   it('fails loud when the fresh create fails', async () => {
@@ -831,8 +826,8 @@ describe('sessionSummaries', () => {
       }),
     })
     const summaries = await sessionSummaries(ctx, [header('untitled', 2), header('titled', 1)])
-    expect(summaries.get('titled')).toEqual({ title: 'second', events: 2 })
-    expect(summaries.get('untitled')).toEqual({ events: 0 })
+    expect(summaries.get('titled')).toEqual({ title: 'second', events: 2, blank: true })
+    expect(summaries.get('untitled')).toEqual({ events: 0, blank: true })
   })
 
   it('counts log events alongside the title', async () => {
@@ -851,7 +846,7 @@ describe('sessionSummaries', () => {
       }),
     })
     const summaries = await sessionSummaries(ctx, [header('titled', 1)])
-    expect(summaries.get('titled')).toEqual({ title: 'current', events: 5 })
+    expect(summaries.get('titled')).toEqual({ title: 'current', events: 5, blank: false })
   })
 
   it('answers nothing for sessions persistence cannot load', async () => {
