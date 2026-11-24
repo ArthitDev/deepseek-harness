@@ -461,7 +461,7 @@ const KALI_DIRECT = {
   }),
   "osint_harvest": (target) => ({
     tool: "theHarvester",
-    args: ["-d", target, "-b", "duckduckgo"],
+    args: ["-d", target, "-b", "duckduckgo,rapiddns,otx"],
     desc: `theHarvester email/subdomain harvest on ${target} (passive sources)`,
   }),
   "person_recon": (target) => (target.includes("@")
@@ -477,7 +477,7 @@ const KALI_DIRECT = {
     }),
   "email_harvest": (target) => ({
     tool: "theHarvester",
-    args: ["-d", target, "-b", "duckduckgo,yahoo,otx"],
+    args: ["-d", target, "-b", "duckduckgo,yahoo,otx,rapiddns"],
     desc: `email harvest on ${target} (duckduckgo+yahoo+otx)`,
   }),
   "subdomain_enum": (target) => ({
@@ -502,7 +502,7 @@ const KALI_DIRECT = {
   }),
   "people_harvest": (target) => ({
     tool: "theHarvester",
-    args: ["-d", target, "-b", "duckduckgo,yahoo"],
+    args: ["-d", target, "-b", "duckduckgo,yahoo,rapiddns"],
     desc: `people/name harvest on ${target} via theHarvester`,
   }),
   "meta_harvest": (target) => ({
@@ -527,7 +527,7 @@ const KALI_DIRECT = {
   }),
   "dns_harvest": (target) => ({
     tool: "dnsrecon",
-    args: ["-d", target, "-t", "std,brt", "-f"],
+    args: ["-d", target, "-t", "std,brt,axfr", "-f"],
     desc: `dnsrecon record + brute-force harvest on ${target}`,
   }),
 };
