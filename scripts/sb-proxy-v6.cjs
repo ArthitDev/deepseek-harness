@@ -1656,7 +1656,10 @@ async function processResponse(responseBody, originalRequest) {
   if (!data.sb_model) data.sb_model = EXEC_CONFIG.model;
 
   // Hard-line refusal filter: refusal-shaped replies get ONE strict retry.
-  if (REFUSAL_RE.test(content.slice(0, 300)) && originalRequest) {
+  // Empty upstream content behaves like a refusal for the chain: retry it.
+  const contentBlank = !content || content.trim().length < 20;
+  if ((REFUSAL_RE.test(content.slice(0, 300)) || contentBlank) && originalRequest) {
+    if (!content.trim()) logRefusal({ kind: "detected", model: data.sb_model, excerpt: "<empty response>" });
     try {
       const reqData = JSON.parse(originalRequest);
       logRefusal({ kind: "detected", model: data.sb_model, excerpt: content.slice(0, 120) });
