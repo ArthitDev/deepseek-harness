@@ -174,7 +174,12 @@ function serve() {
                           retryTried = true;
                           let reqData = null;
                           try { reqData = JSON.parse(requestBody); } catch { }
-                          const retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true });
+                          let retried = null;
+                          for (let attempt = 1; attempt <= 3 && !retried; attempt++) {
+                            retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true, attempt, taskOnly: attempt === 3 });
+                            if (retried) console.log(`[sb-transport] stream refusal recovered on attempt ${attempt} (${retried.length} chars)`);
+                            else console.log(`[sb-transport] stream retry attempt ${attempt} still refused`);
+                          }
                           if (retried) content = retried;
                         } else {
                           content = collected.content;
