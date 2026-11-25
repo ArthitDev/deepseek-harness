@@ -25,4 +25,10 @@ export {
   type ProxyRoute,
 } from './install.ts'
 
-export { installModelProxyDispatcher, modelProxyEndpointForCall, type ModelProxyScope } from './model-routing.ts'
+export {
+  installModelProxyDispatcher,
+  modelProxyEndpointForCall,
+  modelProxyOutcomeForCall,
+  type ModelProxyOutcome,
+  type ModelProxyScope,
+} from './model-routing.ts'

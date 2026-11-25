@@ -457,9 +457,12 @@ export function applyEvent(model: ChatModel, event: SessionEvent): ChatModel {
       const reason = event.data.reason
       if (reason.kind === 'error') {
         const failure = reason.error
+        // The dispatched route (from request/header) names the provider whose
+        // request failed, so a generic transport notice still names its hop.
+        const route = model.route
         push({
           kind: 'notice',
-          text: `turn failed: ${failure.code}${failure.message ? ` — ${failure.message}` : ''}`,
+          text: `turn failed: ${failure.code}${route?.provider !== undefined ? ` [${route.provider}]` : ''}${failure.message ? ` — ${failure.message}` : ''}`,
           streaming: false,
           seq: event.seq,
           notice: 'error',

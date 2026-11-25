@@ -44,7 +44,8 @@ import {
   LlmError,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
-import { modelProxyEndpointForCall } from '@deepseek-ai/dsh-http-proxy'
+import { modelProxyEndpointForCall, modelProxyOutcomeForCall } from '@deepseek-ai/dsh-http-proxy'
+import { sharpenTransportFinish } from './stream.ts'
 import type {
   GenerateOptions,
   ImageAttachmentAccess,
@@ -487,6 +488,7 @@ export class PiAiAdapter extends LlmAdapter {
         headers: requestHeaders(profile.headers, options, model.baseUrl, this.config.prepareHeaders),
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id, digest)[Symbol.asyncIterator]()
+      const outcome = modelProxyOutcomeForCall()
       let exhausted = false
       try {
         while (true) {
@@ -495,7 +497,7 @@ export class PiAiAdapter extends LlmAdapter {
             exhausted = true
             return
           }
-          yield result.value
+          yield sharpenTransportFinish(result.value, outcome)
         }
       } finally {
         if (!exhausted) {

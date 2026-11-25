@@ -11,6 +11,7 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, LlmError, QUOTA_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
 import type { BuiltinLlmFailureCode, FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { ModelProxyOutcome } from '@deepseek-ai/dsh-http-proxy'
 import { isContextOverflow } from '@earendil-works/pi-ai/utils/overflow'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
 import { toPiReplayState } from './replay.ts'
@@ -251,4 +252,71 @@ export async function* toStreamChunks(
     }
   }
   throw new LlmError('pi-ai event stream ended without done/error', 'STREAM_CLOSED')
+}
+
+/** A failure shape as delivered on a finish chunk. */
+interface FailureShape {
+  readonly message: string
+  readonly code: BuiltinLlmFailureCode
+}
+
+/** Endpoint label safe for user-facing messages: origin only, credentials never. */
+function proxyOriginLabel(endpoint: string): string {
+  try { return new URL(endpoint).origin } catch { return 'model proxy' }
+}
+
+/**
+ * Sharpen a TRANSPORT-classified failure with what the model-proxy arm actually observed.
+ *
+ * pi-ai flattens provider errors to text, so an SDK "Connection error." carries no status. When
+ * the proxy arm recorded the tunneled answer's status, this maps it to the same codes the message
+ * text would have produced (401/403 → AUTH, 429 → RATE_LIMIT, 5xx → SERVER, 400/413 →
+ * INVALID_REQUEST), which the default retry policy does not retry. When only transport-level
+ * error text exists, the failure stays TRANSPORT but names the proxy origin, distinguishing a
+ * proxy CONNECT failure from a provider answer. Provider status wins over a proxy transport
+ * error: the answer arrived, so AUTH/RATE_LIMIT/SERVER beat the generic transport story.
+ * @param failure - the failure delivered on the finish chunk, already classified TRANSPORT.
+ * @param outcome - the model-proxy outcome recorded for this request, when it was proxied.
+ * @returns the replacement failure: reclassified code and a message naming the proxy origin.
+ */
+export function reclassifyTransportFailure(
+  failure: FailureShape,
+  outcome: ModelProxyOutcome | undefined,
+): FailureShape {
+  if (outcome === undefined) return failure
+  const origin = proxyOriginLabel(outcome.endpoint)
+  if (outcome.lastStatus !== undefined) {
+    const status = outcome.lastStatus
+    const code: BuiltinLlmFailureCode = status === 401 || status === 403 ? 'AUTH'
+      : status === 429 ? 'RATE_LIMIT'
+        : status >= 500 ? 'SERVER'
+          : status === 400 || status === 413 ? 'INVALID_REQUEST'
+            : 'TRANSPORT'
+    return { code, message: `provider answered HTTP ${status} via ${origin} — ${failure.message}` }
+  }
+  if (outcome.lastError !== undefined) {
+    return { code: 'TRANSPORT', message: `proxy ${origin} transport failed: ${outcome.lastError} — ${failure.message}` }
+  }
+  return failure
+}
+
+/**
+ * Rewrap one finish chunk's transport failure with the model-proxy outcome, when the chunk
+ * traveled through the model proxy and the failure classified as TRANSPORT.
+ * @param chunk - the finish chunk as translated from pi-ai.
+ * @param outcome - the proxy outcome recorded for this request, when proxied.
+ * @returns the original chunk, or a replacement whose error failure names the proxy hop.
+ */
+export function sharpenTransportFinish(chunk: StreamChunk, outcome: ModelProxyOutcome | undefined): StreamChunk {
+  if (outcome === undefined || chunk.type !== 'finish' || chunk.reason.kind !== 'error') return chunk
+  const failure = chunk.reason.failure
+  if (failure.code !== 'TRANSPORT') return chunk
+  const sharp = reclassifyTransportFailure(
+    { message: failure.message, code: 'TRANSPORT' },
+    outcome,
+  )
+  return {
+    ...chunk,
+    reason: { kind: 'error', failure: { ...failure, code: sharp.code, message: sharp.message } },
+  }
 }

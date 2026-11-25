@@ -1,5 +1,5 @@
 import { expect, it, onTestFinished } from 'vitest'
-import { installModelProxyDispatcher, modelProxyEndpointForCall } from '../src/model-routing.ts'
+import { installModelProxyDispatcher, modelProxyEndpointForCall, modelProxyOutcomeForCall } from '../src/model-routing.ts'
 
 it('retains the outer model proxy when a later installation has no active call', async () => {
   const outerUrl = new URL('http://127.0.0.1:18899')
@@ -27,4 +27,16 @@ it('keeps concurrent model scopes and unrelated async work independent', async (
   barrier.resolve(undefined)
 
   expect(await Promise.all([outerCall, innerCall, unrelated])).toEqual([outerUrl.origin, innerUrl.origin, undefined])
+})
+
+it('reports no outcome outside a model scope', () => {
+  expect(modelProxyOutcomeForCall()).toBeUndefined()
+})
+
+it('restores the previous outcome reader in reverse installation order', async () => {
+  const outer = await installModelProxyDispatcher(new URL('http://127.0.0.1:18899'))
+  const inner = await installModelProxyDispatcher(new URL('http://127.0.0.1:18900'))
+  onTestFinished(async () => { await outer.dispose() })
+  await inner.dispose()
+  expect(await outer.run(() => modelProxyOutcomeForCall())?.endpoint).toBe('http://127.0.0.1:18899')
 })

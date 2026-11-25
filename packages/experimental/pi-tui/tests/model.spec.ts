@@ -1033,18 +1033,6 @@ describe('turn boundary folding', () => {
     ])
   })
 
-  it('surfaces failed endings with the failure code and message', () => {
-    const model = createModel()
-    applyEvent(
-      model,
-      turnEndEvent({
-        turn: 1,
-        reason: { kind: 'error', error: { message: 'boom', code: 'PROVIDER_DOWN' } },
-      }),
-    )
-    expect(model.items[0]).toMatchObject({ notice: 'error', text: 'turn failed: PROVIDER_DOWN — boom' })
-  })
-
   it('renders empty failure messages without decoration', () => {
     const model = createModel()
     applyEvent(
@@ -1052,6 +1040,19 @@ describe('turn boundary folding', () => {
       turnEndEvent({ turn: 1, reason: { kind: 'error', error: { message: '', code: 'MYSTERY' } } }),
     )
     expect(model.items[0]?.text).toBe('turn failed: MYSTERY')
+  })
+
+  it('names the dispatched provider on a transport failure notice', () => {
+    const model = createModel()
+    applyEvent(model, requestHeaderEvent({ header: { config: { provider: 'abliterated-llm', model: 'glm-5.3-flash-abliterated' } }, reason: 'initial' }))
+    applyEvent(
+      model,
+      turnEndEvent({
+        turn: 1,
+        reason: { kind: 'error', error: { message: 'Connection error.', code: 'TRANSPORT' } },
+      }),
+    )
+    expect(model.items[0]?.text).toBe('turn failed: TRANSPORT [abliterated-llm] — Connection error.')
   })
 })
 
