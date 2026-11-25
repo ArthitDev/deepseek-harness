@@ -121,10 +121,13 @@ function serve() {
       let forwardBody = requestBody;
       try {
         const stashObj = JSON.parse(requestBody);
+        // One unified pipeline: the upstream always streams; the guard buffers
+        // the SSE and re-emits in the shape the caller asked for.
+        stashObj.stream = true;
         if (Object.prototype.hasOwnProperty.call(stashObj, 'sb_stash')) {
           delete stashObj.sb_stash;
-          forwardBody = JSON.stringify(stashObj);
         }
+        forwardBody = JSON.stringify(stashObj);
       } catch { }
             const outgoing = headers(req.headers);
             outgoing.host = backend.host;
@@ -136,132 +139,99 @@ function serve() {
             }, response => {
               clearTimeout(deadline);
               response.on('error', () => res.destroy());
-              if (isStream) {
-                // Stream refusal guard: buffer the SSE body, check the final
-                // content for refusal-shaped replies, hard-retry once, then
-                // re-emit as proper chat.completion.chunk SSE. Falls back to
-                // the buffered original on any error.
-                let sse = '';
-                response.on('data', c => { sse += c; });
-                response.on('end', async () => {
-                  try {
-                    let content = '';
-                    let meta = null;
-                    let retryTried = false;
-                    let execRan = false;
-                    if (v6?.collectSseContent && v6?.REFUSAL_RE) {
-                      const collected = v6.collectSseContent(sse);
-                      if (collected && collected.content) {
-                        meta = collected;
-                        // Full non-stream pipeline on the accumulated content: refusal
-                        // filter AND the exec chain, so generated attack scripts run
-                        // even when the caller streams.
-                        try {
-                          const synthetic = JSON.stringify({ model: collected.model || 'unknown', choices: [{ message: { content: collected.content } }] });
-                          const processed = await v6.processResponse(synthetic, requestBody);
-                          let processedData = null;
-                          const pStart = processed.indexOf('{');
-                          if (pStart !== -1) {
-                            let pDepth = 0, pInStr = false, pEsc = false, pEnd = -1;
-                            for (let i = pStart; i < processed.length; i++) {
-                              const ch = processed[i];
-                              if (pEsc) { pEsc = false; continue; }
-                              if (ch === "\\") { pEsc = true; continue; }
-                              if (ch === '"') { pInStr = !pInStr; continue; }
-                              if (pInStr) continue;
-                              if (ch === '{') pDepth++;
-                              else if (ch === '}') { pDepth--; if (pDepth === 0) { pEnd = i + 1; break; } }
-                            }
-                            if (pEnd !== -1) { try { processedData = JSON.parse(processed.slice(pStart, pEnd)); } catch { } }
-                          }
-                          const newContent = processedData?.choices?.[0]?.message?.content || '';
-                          if (newContent) { content = newContent; execRan = /EXECUTION RESULTS/.test(newContent); }
-                        } catch (pipelineError) {
-                          console.error('[sb-transport] stream pipeline error:', pipelineError.message);
-                        }
-                        if (!content) content = collected.content;
-                        if (v6.REFUSAL_RE.test(content.slice(0, 300))) {
-                          console.log('[sb-transport] stream refusal detected — hard retry');
-                          retryTried = true;
-                          let reqData = null;
-                          try { reqData = JSON.parse(requestBody); } catch { }
-                          let retried = null;
-                          for (let attempt = 1; attempt <= 5 && !retried; attempt++) {
-                            retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true, attempt, taskOnly: attempt >= 3 });
-                            if (retried) console.log(`[sb-transport] stream refusal recovered on attempt ${attempt} (${retried.length} chars)`);
-                            else console.log(`[sb-transport] stream retry attempt ${attempt} still refused`);
-                          }
-                          if (retried) content = retried;
-                        } else {
-                          content = collected.content;
-                        }
-                      }
-                    }
-                    if (!content) {
-                      // passthrough the buffered SSE unchanged
-                      res.writeHead(response.statusCode, headers(response.headers));
-                      res.end(sse);
-                      return;
-                    }
-                    const id = meta?.id || 'sb-stream-guard';
-                    const created = meta?.created || Math.floor(Date.now() / 1000);
-                    const model = meta?.model || 'unknown';
-                    const parts = [];
-                    parts.push({ id, object: 'chat.completion.chunk', created, model, sb_refusal_retry: retryTried, sb_executed: execRan, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
-                    for (let i = 0; i < content.length; i += 512) {
-                      parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: content.slice(i, i + 512) }, finish_reason: null }] });
-                    }
-                    parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
-                    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-                    const out = parts.map(p => `data: ${JSON.stringify(p)}\n\n`).join('') + 'data: [DONE]\n\n';
-                    res.end(out);
-                  } catch (guardError) {
-                    console.error('[sb-transport] stream guard error:', guardError.message);
-                    try {
-                      res.writeHead(response.statusCode, headers(response.headers));
-                      res.end(sse);
-                    } catch { }
-                  }
-                });
-                return;
-              }
-              let respBody = '';
-              response.on('data', c => { respBody += c; });
-              response.on('end', async () => {
+                            response.on('end', async () => {
+                let content = '';
+                let meta = null;
+                let retryTried = false;
+                let execRan = false;
+                let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
                 try {
-                  const processed = await v6.processResponse(respBody, requestBody);
-                  let clean = processed;
-                  const objStart = processed.indexOf('{');
-                  if (objStart !== -1) {
-                    let depth = 0, inStr = false, esc = false, objEnd = -1;
-                    for (let i = objStart; i < processed.length; i++) {
-                      const ch = processed[i];
-                      if (esc) { esc = false; continue; }
-                      if (ch === '\\') { esc = true; continue; }
-                      if (ch === '"') { inStr = !inStr; continue; }
-                      if (inStr) continue;
-                      if (ch === '{') depth++;
-                      else if (ch === '}') { depth--; if (depth === 0) { objEnd = i + 1; break; } }
-                    }
-                    if (objEnd !== -1) {
-                      try { clean = JSON.stringify(JSON.parse(processed.slice(objStart, objEnd))); }
-                      catch { /* keep raw body when the object does not parse */ }
+                  if (v6?.collectSseContent && v6?.REFUSAL_RE) {
+                    const collected = v6.collectSseContent(sse);
+                    if (collected && collected.content) {
+                      meta = collected;
+                      // Full pipeline on the accumulated content: refusal
+                      // filter AND the exec chain, so generated attack scripts
+                      // run even when the caller streams.
+                      try {
+                        const synthetic = JSON.stringify({ model: collected.model || 'unknown', choices: [{ message: { content: collected.content } }] });
+                        const processed = await v6.processResponse(synthetic, requestBody);
+                        let processedData = null;
+                        const pStart = processed.indexOf('{');
+                        if (pStart !== -1) {
+                          let pDepth = 0, pInStr = false, pEsc = false, pEnd = -1;
+                          for (let i = pStart; i < processed.length; i++) {
+                            const ch = processed[i];
+                            if (pEsc) { pEsc = false; continue; }
+                            if (ch === '"') { pInStr = !pInStr; continue; }
+                            if (pInStr) continue;
+                            if (ch === '{') pDepth++;
+                            else if (ch === '}') { pDepth--; if (pDepth === 0) { pEnd = i + 1; break; } }
+                          }
+                          if (pEnd !== -1) { try { processedData = JSON.parse(processed.slice(pStart, pEnd)); } catch { } }
+                        }
+                        const newContent = processedData?.choices?.[0]?.message?.content || '';
+                        if (newContent) { content = newContent; execRan = /EXECUTION RESULTS/.test(newContent); }
+                      } catch (pipelineError) {
+                        console.error('[sb-transport] stream pipeline error:', pipelineError.message);
+                      }
+                      if (!content) content = collected.content;
+                      if (v6.REFUSAL_RE.test(content.slice(0, 300))) {
+                        console.log('[sb-transport] stream refusal detected — hard retry');
+                        retryTried = true;
+                        let reqData = null;
+                        try { reqData = JSON.parse(requestBody); } catch { }
+                        let retried = null;
+                        for (let attempt = 1; attempt <= 5 && !retried; attempt++) {
+                          retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true, attempt, taskOnly: attempt >= 3 });
+                          if (retried) console.log(`[sb-transport] stream refusal recovered on attempt ${attempt} (${retried.length} chars)`);
+                          else console.log(`[sb-transport] stream retry attempt ${attempt} still refused`);
+                        }
+                        if (retried) content = retried;
+                      } else {
+                        content = collected.content;
+                      }
+                      if (collected.usage) usage = collected.usage;
                     }
                   }
-                  const buf = Buffer.from(clean, 'utf8');
-                  const { 'content-encoding': _enc, 'content-length': _len, ...respHeaders } = headers(response.headers);
-                  res.writeHead(response.statusCode, { ...respHeaders,
-                    'content-length': buf.length,
-                    'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
-                  res.end(buf);
-                } catch (error) {
-                  console.error('[sb-transport] v6 response error, raw passthrough:', error.message);
-                  res.writeHead(response.statusCode, headers(response.headers));
-                  res.end(respBody);
+                } catch (guardError) {
+                  console.error('[sb-transport] stream guard error:', guardError.message);
+                  try {
+                    res.writeHead(response.statusCode, headers(response.headers));
+                    res.end(sse);
+                  } catch { }
+                  return;
                 }
+                if (!content) {
+                  // passthrough the buffered SSE unchanged
+                  res.writeHead(response.statusCode, headers(response.headers));
+                  res.end(sse);
+                  return;
+                }
+                const id = meta?.id || 'sb-stream-guard';
+                const created = meta?.created || Math.floor(Date.now() / 1000);
+                const model = meta?.model || 'unknown';
+                if (isStream) {
+                  const parts = [];
+                  parts.push({ id, object: 'chat.completion.chunk', created, model, sb_refusal_retry: retryTried, sb_executed: execRan, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
+                  for (let i = 0; i < content.length; i += 512) {
+                    parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: content.slice(i, i + 512) }, finish_reason: null }] });
+                  }
+                  parts.push({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
+                  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+                  res.end(parts.map(p => `data: ${JSON.stringify(p)}\n\n`).join('') + 'data: [DONE]\n\n');
+                  return;
+                }
+                const complete = { id, object: 'chat.completion', created, model,
+                  sb_refusal_retry: retryTried, sb_executed: execRan,
+                  choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }] };
+                const buf = Buffer.from(JSON.stringify(complete), 'utf8');
+                res.writeHead(200, { 'Content-Type': 'application/json', 'content-length': buf.length,
+                  'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
+                res.end(buf);
               });
-            });
-            let timedOut = false;
+              return;
+            });            let timedOut = false;
             const expire = () => { timedOut = true; upstream.destroy(new Error('Upstream timeout')); };
             const deadline = setTimeout(expire, timeout);
             upstream.once('close', () => clearTimeout(deadline));
