@@ -115,9 +115,20 @@ function serve() {
               return;
             }
             const requestBody = typeof processedBody === 'string' ? processedBody : rawBody.toString('utf8');
+      // sb_stash is pipeline-internal; strict upstreams (9router vLLM) reject
+      // unknown top-level fields, so forward without it and keep it for
+      // processResponse, which reads the stash back from originalRequest.
+      let forwardBody = requestBody;
+      try {
+        const stashObj = JSON.parse(requestBody);
+        if (Object.prototype.hasOwnProperty.call(stashObj, 'sb_stash')) {
+          delete stashObj.sb_stash;
+          forwardBody = JSON.stringify(stashObj);
+        }
+      } catch { }
             const outgoing = headers(req.headers);
             outgoing.host = backend.host;
-            outgoing['content-length'] = Buffer.byteLength(requestBody);
+            outgoing['content-length'] = Buffer.byteLength(forwardBody);
             if (process.env.SB_BACKEND_KEY) outgoing.authorization = `Bearer ${process.env.SB_BACKEND_KEY}`;
             const upstream = (backend.protocol === 'https:' ? https : http).request({
               hostname: backend.hostname, port: backend.port || undefined, method: req.method,
