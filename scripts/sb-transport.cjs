@@ -272,7 +272,7 @@ function serve() {
               res.writeHead(timedOut ? 504 : 502, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: { message: timedOut ? 'Upstream idle timeout' : 'Upstream unavailable' } }));
             });
-            upstream.end(requestBody);
+            upstream.end(forwardBody);
           } catch (error) {
             console.error('[sb-transport] v6 request error, raw passthrough:', error.message);
             // Fall through to a plain passthrough with the original body.
