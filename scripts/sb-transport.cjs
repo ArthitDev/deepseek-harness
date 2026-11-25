@@ -139,7 +139,9 @@ function serve() {
             }, response => {
               clearTimeout(deadline);
               response.on('error', () => res.destroy());
-                            response.on('end', async () => {
+              let sse = '';
+              response.on('data', c => { sse += c; });
+              response.on('end', async () => {
                 let content = '';
                 let meta = null;
                 let retryTried = false;
