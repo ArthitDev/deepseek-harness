@@ -1560,7 +1560,7 @@ async function refusalHardRetry(messages, model, meta = {}) {
         ...(process.env.SB_BACKEND_KEY ? { Authorization: "Bearer " + process.env.SB_BACKEND_KEY } : {}) },
     }, (res) => { let d = ""; res.on("data", c => d += c); res.on("end", () => resolve(d)); });
     req.on("error", reject);
-    req.setTimeout(90000, () => { req.destroy(); reject(new Error("refusal-retry timeout")); });
+    req.setTimeout(240000, () => { req.destroy(); reject(new Error("refusal-retry timeout")); });
     req.write(retryBody); req.end();
   });
   let retryData = null;
