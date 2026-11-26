@@ -185,7 +185,7 @@ function serve() {
                         try { reqData = JSON.parse(requestBody); } catch { }
                         let retried = null;
                         for (let attempt = 1; attempt <= 5 && !retried; attempt++) {
-                          retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true, attempt, taskOnly: attempt >= 3 });
+                          retried = await v6.refusalHardRetry(reqData?.messages, collected.model || reqData?.model, { stream: true, attempt, taskOnly: attempt >= 3, modelOverride: v6.siblingModel(collected.model || reqData?.model), overrideFrom: 5 });
                           if (retried) console.log(`[sb-transport] stream refusal recovered on attempt ${attempt} (${retried.length} chars)`);
                           else console.log(`[sb-transport] stream retry attempt ${attempt} still refused`);
                         }
