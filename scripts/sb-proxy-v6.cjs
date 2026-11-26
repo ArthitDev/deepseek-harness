@@ -1528,11 +1528,12 @@ async function processBody(raw) {
 
 // Hard-line refusal detector: refusal-shaped replies (EN + TH) within the
 // first 300 chars. Shared by processResponse and the stream guard.
-const REFUSAL_RE = /(?:\bI\s+(?:'m\s+|am\s+)?(?:sorry|afraid|unable)|\bI\s+can(?:'t|not)\b|\bI\s+won'?t\b|\bI\s+(?:must|have\s+to)\s+(?:decline|refuse)\b|\bI'm\s+not\s+going\s+to\b|\bnot\s+going\s+to\s+(?:write|help|provide)\b|\bI\s+(?:will\s+not|would\s+rather\s+not|refuse\s+to)\b|\brefuse\s+to\s+(?:write|help|provide|answer)\b|\bunwilling\s+to\b|\bhere's\s+a\s+simple\s+version\b|\bas\s+an\s+AI\b|\bcontent\s+policy\b|\bagainst\s+(?:my|the)\s+(?:policy|policies|terms)\b|\bunable\s+to\s+(?:help|assist|complete|provide|perform)\b|ผมไม่สามารถ|ดิฉันไม่สามารถ|ไม่สามารถ(?:ช่วย|ทำ|ให้ได้)|ขออภัย\s*(?:ครับ|ค่ะ|จะ|ที่)|นอกขอบเขต|ไม่สามารถช่วย|จะไม่(?:ช่วย|ทำ)|ไม่ขอ(?:ช่วย|เขียน))/i;
+const REFUSAL_RE = /(?:\bI\s+(?:'m\s+|am\s+)?(?:sorry|afraid|unable)|\bI\s+can(?:'t|not)\b|\bI\s+won'?t\b|\bI\s+(?:must|have\s+to)\s+(?:decline|refuse)\b|\bI(?:'|\u2019)?(?:m|ll)\s+(?:not\s+going\s+to|going\s+to\s+(?:decline|refuse|pass))\b|\bI(?:'|\u2019)?ll\s+(?:have\s+to\s+)?decline\b|\bI(?:'|\u2019)?m\s+not\s+going\s+to\b|\bnot\s+going\s+to\s+(?:write|help|provide)\b|\bI\s+(?:will\s+not|would\s+rather\s+not|refuse\s+to)\b|\brefuse\s+to\s+(?:write|help|provide|answer)\b|\bunwilling\s+to\b|\bhere's\s+a\s+simple\s+version\b|\bas\s+an\s+AI\b|\bcontent\s+policy\b|\bagainst\s+(?:my|the)\s+(?:policy|policies|terms)\b|\bunable\s+to\s+(?:help|assist|complete|provide|perform)\b|ผมไม่สามารถ|ดิฉันไม่สามารถ|ไม่สามารถ(?:ช่วย|ทำ|ให้ได้)|ขออภัย\s*(?:ครับ|ค่ะ|จะ|ที่)|นอกขอบเขต|ไม่สามารถช่วย|จะไม่(?:ช่วย|ทำ)|ไม่ขอ(?:ช่วย|เขียน))/i;
 
 // Refusal verdicts hide in model reasoning tails: scan the head and the tail.
 function looksRefusal(content) {
-  const s = String(content || '');
+  // Model refusals carry curly apostrophes; normalize before matching.
+  const s = String(content || '').replace(/[\u2018\u2019\u02BC]/g, "'");
   const head = s.slice(0, 300);
   const tail = s.slice(-600);
   return REFUSAL_RE.test(head) || REFUSAL_RE.test(tail)
