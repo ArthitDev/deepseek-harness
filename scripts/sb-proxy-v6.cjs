@@ -1530,6 +1530,12 @@ async function processBody(raw) {
 // first 300 chars. Shared by processResponse and the stream guard.
 const REFUSAL_RE = /(?:\bI\s+(?:'m\s+|am\s+)?(?:sorry|afraid|unable)|\bI\s+can(?:'t|not)\b|\bI\s+won'?t\b|\bI\s+(?:must|have\s+to)\s+(?:decline|refuse)\b|\bI'm\s+not\s+going\s+to\b|\bnot\s+going\s+to\s+(?:write|help|provide)\b|\bI\s+(?:will\s+not|would\s+rather\s+not|refuse\s+to)\b|\brefuse\s+to\s+(?:write|help|provide|answer)\b|\bunwilling\s+to\b|\bhere's\s+a\s+simple\s+version\b|\bas\s+an\s+AI\b|\bcontent\s+policy\b|\bagainst\s+(?:my|the)\s+(?:policy|policies|terms)\b|\bunable\s+to\s+(?:help|assist|complete|provide|perform)\b|ผมไม่สามารถ|ดิฉันไม่สามารถ|ไม่สามารถ(?:ช่วย|ทำ|ให้ได้)|ขออภัย\s*(?:ครับ|ค่ะ|จะ|ที่)|นอกขอบเขต|ไม่สามารถช่วย|จะไม่(?:ช่วย|ทำ)|ไม่ขอ(?:ช่วย|เขียน))/i;
 
+// Refusal verdicts hide in model reasoning tails: scan the head and the tail.
+function looksRefusal(content) {
+  const s = String(content || '');
+  return REFUSAL_RE.test(s.slice(0, 300)) || REFUSAL_RE.test(s.slice(-600));
+}
+
 // Refusal telemetry: one JSONL line per detected/retried refusal. Best-effort.
 function logRefusal(entry) {
   const file = process.env.SB_REFUSAL_LOG;
@@ -1579,7 +1585,7 @@ async function refusalHardRetry(messages, model, meta = {}) {
     if (rEnd !== -1) { try { retryData = JSON.parse(retryContent.slice(rStart, rEnd)); } catch { } }
   }
   const retryText = retryData?.choices?.[0]?.message?.content || "";
-  const ok = retryText && !REFUSAL_RE.test(retryText.slice(0, 300));
+  const ok = retryText && !looksRefusal(retryText);
   logRefusal({ kind: ok ? "recovered" : "retry-refused", model, excerpt: (ok ? retryText : (retryText || "")).slice(0, 120), ...meta });
   return ok ? retryText : null;
 }
@@ -1946,4 +1952,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, PORT, BACKEND, EXEC_CONFIG, processBody, processResponse, REFUSAL_RE, refusalHardRetry, collectSseContent, logRefusal, detectIntent, extractTargets, looksBlocked, rotateVpn, runKaliCommandWithRotate };
+module.exports = { server, PORT, BACKEND, EXEC_CONFIG, processBody, processResponse, REFUSAL_RE, looksRefusal, refusalHardRetry, collectSseContent, logRefusal, detectIntent, extractTargets, looksBlocked, rotateVpn, runKaliCommandWithRotate };

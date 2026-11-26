@@ -178,7 +178,7 @@ function serve() {
                         console.error('[sb-transport] stream pipeline error:', pipelineError.message);
                       }
                       if (!content) content = collected.content;
-                      if (v6.REFUSAL_RE.test(content.slice(0, 300))) {
+                      if (v6.looksRefusal(content)) {
                         console.log('[sb-transport] stream refusal detected — hard retry');
                         retryTried = true;
                         let reqData = null;
@@ -224,7 +224,10 @@ function serve() {
                   res.end(parts.map(p => `data: ${JSON.stringify(p)}\n\n`).join('') + 'data: [DONE]\n\n');
                   return;
                 }
+                let stashMeta = {};
+                try { stashMeta = JSON.parse(requestBody).sb_stash || {}; } catch { }
                 const complete = { id, object: 'chat.completion', created, model,
+                  sb_intent: stashMeta.sb_intent ?? null, sb_target: stashMeta.sb_target ?? null,
                   sb_refusal_retry: retryTried, sb_executed: execRan,
                   choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }] };
                 const buf = Buffer.from(JSON.stringify(complete), 'utf8');
