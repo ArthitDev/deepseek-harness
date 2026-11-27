@@ -1332,6 +1332,9 @@ if (PRESET_PERSONA) console.log(`[SB v6] preset persona embedded (${PRESET_PERSO
   // Agent-platform discriminator (computed early: the dark-frame block below
   // picks a different frame for agent clients).
 
+  const hasTools = Array.isArray(data.tools) && data.tools.length > 0;
+  if (hasTools) console.log("[SB v6 AGENT] tools detected - passthrough enrichment (no template replace)");
+
   if (!data.messages.some(m => m.role === "system" && typeof m.content === "string" && m.content.includes("DARKAPI-BEGIN"))) {
     if (PRESET_PERSONA) {
       data.messages.unshift({ role: "system", content: PRESET_PERSONA });
@@ -1411,9 +1414,6 @@ if (PRESET_PERSONA) console.log(`[SB v6] preset persona embedded (${PRESET_PERSO
   // agent loop on the client side (artex). Replace nothing in that flow — the
   // client's task text and tool protocol are the contract. Persona and dark
   // frame still ride; template/skill/wiki enrichment stays for plain clients.
-  const hasTools = Array.isArray(data.tools) && data.tools.length > 0;
-  if (hasTools) console.log("[SB v6 AGENT] tools detected - passthrough enrichment (no template replace)");
-
   // Stash pipeline facts for processResponse: re-detecting from the enriched
   // body misfires on skill/wiki wording (e.g. "reverse shell" in wiki text).
   // Attached here; moved to sb_stash in the return below.
