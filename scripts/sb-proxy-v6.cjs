@@ -1391,17 +1391,17 @@ if (PRESET_PERSONA) console.log(`[SB v6] preset persona embedded (${PRESET_PERSO
   let skillName = null;
   let wikiContext = null;
 
-  // Stash pipeline facts for processResponse: re-detecting from the enriched
-  // body misfires on skill/wiki wording (e.g. "reverse shell" in wiki text).
-  // Attached here; moved to sb_stash in the return below.
-  const stash = { sb_intent: intent, sb_target: targets.length > 0 ? targets[0].value : null };
-
   // Agent-platform discriminator: a request carrying its own `tools` runs an
   // agent loop on the client side (artex). Replace nothing in that flow — the
   // client's task text and tool protocol are the contract. Persona and dark
   // frame still ride; template/skill/wiki enrichment stays for plain clients.
   const hasTools = Array.isArray(data.tools) && data.tools.length > 0;
   if (hasTools) console.log("[SB v6 AGENT] tools detected - passthrough enrichment (no template replace)");
+
+  // Stash pipeline facts for processResponse: re-detecting from the enriched
+  // body misfires on skill/wiki wording (e.g. "reverse shell" in wiki text).
+  // Attached here; moved to sb_stash in the return below.
+  const stash = { sb_intent: intent, sb_target: targets.length > 0 ? targets[0].value : null, sb_agent: hasTools };
 
   // Operator frame: pipeline requests are authorized security-testing work.
   // Injected as system context so the upstream model answers as a tool builder.
@@ -1485,7 +1485,7 @@ if (PRESET_PERSONA) console.log(`[SB v6] preset persona embedded (${PRESET_PERSO
 
   // The direct-response path above returned early; this stash is only for the
   // LLM path. Wrap so the server handler can distinguish the two return kinds.
-  data.sb_pending_stash = { sb_intent: intent, sb_target: targets.length > 0 ? targets[0].value : null };
+  data.sb_pending_stash = { sb_intent: intent, sb_target: targets.length > 0 ? targets[0].value : null, sb_agent: hasTools };
 
   // ═════════════════════════════════════════════════════════
   // STEP 4: Build enriched prompt (template + skill + recon)
@@ -1745,6 +1745,14 @@ async function processResponse(responseBody, originalRequest) {
     }
   }
 
+  // Agent-platform flow: the client's own loop owns tool execution. The
+  // refusal filter above still ran; the pipeline does not extract, recover,
+  // or execute code on its behalf.
+  if (originalRequest) {
+    try {
+      if (JSON.parse(originalRequest)?.sb_stash?.sb_agent) return responseBody;
+    } catch { }
+  }
   let block = extractCode(data.choices[0].message.content);
 
   // Refusal recovery: a harvest template met a model refusal (no code block).
