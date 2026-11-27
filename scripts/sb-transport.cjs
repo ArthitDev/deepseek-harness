@@ -130,6 +130,9 @@ function serve() {
         forwardBody = JSON.stringify(stashObj);
       } catch { }
             const outgoing = headers(req.headers);
+            // SSE bodies pass the guard as text: forbid upstream compression so the
+            // string buffering cannot corrupt a gzip stream.
+            outgoing['accept-encoding'] = 'identity';
             outgoing.host = backend.host;
             outgoing['content-length'] = Buffer.byteLength(forwardBody);
             if (process.env.SB_BACKEND_KEY) outgoing.authorization = `Bearer ${process.env.SB_BACKEND_KEY}`;
@@ -260,6 +263,7 @@ function serve() {
     });
     function passthrough(req, res, rawBody, started) {
       const outgoing = headers(req.headers);
+      outgoing['accept-encoding'] = 'identity';
       outgoing.host = backend.host;
       outgoing['content-length'] = rawBody.length;
       // The caller supplies its router credential; an explicit deployment key may override it.
