@@ -1566,7 +1566,10 @@ const REFUSAL_RE = /(?:\bI\s+(?:'m\s+|am\s+)?(?:sorry|afraid|unable)|\bI\s+can(?
 function siblingModel(model) {
   const m = String(model || '');
   if (/[-_ ]flash$/i.test(m)) return m.replace(/[-_ ]flash$/i, '');
-  return m + '-flash';
+  // Combo/pool names without the flash suffix: no genuine sibling — the
+  // rotation attempt stays on the same model (taskOnly still applies).
+  if (/flash/i.test(m)) return m.replace(/[-_ ]?flash/i, '');
+  return m;
 }
 function looksRefusal(content) {
   // Model refusals carry curly apostrophes; normalize before matching.
