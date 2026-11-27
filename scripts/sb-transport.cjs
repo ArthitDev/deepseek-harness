@@ -229,10 +229,13 @@ function serve() {
                 }
                 let stashMeta = {};
                 try { stashMeta = JSON.parse(requestBody).sb_stash || {}; } catch { }
+                const msg = { role: 'assistant', content: content || null };
+                if (collected.reasoning) msg.reasoning_content = collected.reasoning;
+                if (collected.toolCalls) msg.tool_calls = collected.toolCalls;
                 const complete = { id, object: 'chat.completion', created, model,
                   sb_intent: stashMeta.sb_intent ?? null, sb_target: stashMeta.sb_target ?? null,
                   sb_refusal_retry: retryTried, sb_executed: execRan,
-                  choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }] };
+                  choices: [{ index: 0, message: msg, finish_reason: collected.finishReason || 'stop' }] };
                 const buf = Buffer.from(JSON.stringify(complete), 'utf8');
                 res.writeHead(200, { 'Content-Type': 'application/json', 'content-length': buf.length,
                   'server-timing': `sb-upstream;dur=${(performance.now() - started).toFixed(1)}` });
