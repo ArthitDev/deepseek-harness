@@ -1335,7 +1335,9 @@ if (PRESET_PERSONA) console.log(`[SB v6] preset persona embedded (${PRESET_PERSO
   const hasTools = Array.isArray(data.tools) && data.tools.length > 0;
   if (hasTools) console.log("[SB v6 AGENT] tools detected - passthrough enrichment (no template replace)");
 
-  if (!data.messages.some(m => m.role === "system" && typeof m.content === "string" && m.content.includes("DARKAPI-BEGIN"))) {
+  // Agent clients (artex) ship their own upstream-tuned system prompt; the
+  // 12k persona dilutes it. Persona embeds for plain clients only.
+  if (!hasTools && !data.messages.some(m => m.role === "system" && typeof m.content === "string" && m.content.includes("DARKAPI-BEGIN"))) {
     if (PRESET_PERSONA) {
       data.messages.unshift({ role: "system", content: PRESET_PERSONA });
       console.log("[SB v6 PRESET] persona embedded from all-model-preset");
